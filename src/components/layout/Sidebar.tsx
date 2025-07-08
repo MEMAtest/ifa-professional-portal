@@ -147,8 +147,8 @@ export const Sidebar: React.FC = () => {
       // Get unique clients with analysis
       const { data: clientsData } = await supabase
         .from('cash_flow_scenarios')
-        .select('client_id:clientId')
-        .eq('isActive', true);
+        .select('client_id') 
+.eq('is_active', true)
       
       const uniqueClients = new Set(clientsData?.map(s => s.client_id) || []).size;
 
