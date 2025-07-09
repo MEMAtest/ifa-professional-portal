@@ -125,7 +125,7 @@ export class MonteCarloDatabase {
   ): Promise<DatabaseResult<MonteCarloAssumptionRecord>> {
     try {
       // Convert AssetAllocation to Record<string, number>
-      const assetAllocationRecord: Record<string, number> = input.assetAllocation 
+      const assetAllocationRecord: Record<string, number> = input.assetAllocation
         ? {
             equity: input.assetAllocation.equity,
             bonds: input.assetAllocation.bonds,
@@ -330,7 +330,7 @@ export class MonteCarloDatabase {
     try {
       const { error } = await this.supabase
         .from('monte_carlo_results')
-        .update({ 
+        .update({
           calculation_status: status,
           updated_at: new Date().toISOString()
         })
@@ -419,14 +419,15 @@ export class MonteCarloDatabase {
   /**
    * Get database health status
    */
-  async getHealthStatus(): Promise<DatabaseResult<{ status: string; timestamp: string }>> {
+  async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
     try {
-      const { data, error } = await this.supabase
+      // ✅ CORRECTED QUERY: Use 'exact' count on a specific table
+      const { count, error } = await this.supabase
         .from('monte_carlo_results')
-        .select('count(*)')
-        .limit(1);
+        .select('*', { count: 'exact', head: true });
 
       if (error) {
+        // This will now properly catch and report the error during the build
         throw new Error(`Database health check failed: ${error.message}`);
       }
 
@@ -434,7 +435,7 @@ export class MonteCarloDatabase {
         success: true,
         data: {
           status: 'healthy',
-          timestamp: new Date().toISOString()
+          count: count
         }
       };
 
@@ -467,8 +468,8 @@ export function getMonteCarloDatabase(): MonteCarloDatabase {
   return dbInstance;
 }
 
-export type { 
-  MonteCarloResultRecord, 
-  MonteCarloAssumptionRecord, 
-  DatabaseResult 
+export type {
+  MonteCarloResultRecord,
+  MonteCarloAssumptionRecord,
+  DatabaseResult
 };
