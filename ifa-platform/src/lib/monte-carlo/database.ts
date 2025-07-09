@@ -419,34 +419,34 @@ export class MonteCarloDatabase {
   /**
    * Get database health status
    */
-  async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
-    try {
-      // ✅ CORRECTED QUERY: Use 'exact' count on a specific table
-      const { count, error } = await this.supabase
-        .from('monte_carlo_results')
-        .select('*', { count: 'exact', head: true });
+  // ✅ THIS IS THE NEW, CORRECTED FUNCTION
+async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
+  try {
+    // Corrected query using the proper Supabase syntax
+    const { count, error } = await this.supabase
+      .from('monte_carlo_results')
+      .select('*', { count: 'exact', head: true });
 
-      if (error) {
-        // This will now properly catch and report the error during the build
-        throw new Error(`Database health check failed: ${error.message}`);
-      }
-
-      return {
-        success: true,
-        data: {
-          status: 'healthy',
-          count: count
-        }
-      };
-
-    } catch (error) {
-      console.error('Database health check failed:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Database unhealthy'
-      };
+    if (error) {
+      // This will now correctly catch and report the error during the build
+      throw new Error(`Database health check failed: ${error.message}`);
     }
+
+    return {
+      success: true,
+      data: {
+        status: 'healthy',
+        count: count
+      }
+    };
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Database unhealthy'
+    };
   }
+}
 }
 
 /**
