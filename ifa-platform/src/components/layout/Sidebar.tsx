@@ -26,7 +26,7 @@ import {
   Target,
   FileCheck,
   Calculator,
-  Zap  // ADD: Advanced Analytics icon
+  Zap
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase';
 
@@ -42,15 +42,13 @@ interface NavSection {
   items: NavItem[]
 }
 
-// ADD: Cash flow statistics tracking
 interface CashFlowStats {
   totalScenarios: number;
   clientsWithAnalysis: number;
   scenariosNeedingReview: number;
-  advancedAnalysisCount: number; // NEW: Track advanced analytics runs
+  advancedAnalysisCount: number;
 }
 
-// UPDATE: Your existing navigation with Advanced Analytics added
 const navigation: NavSection[] = [
   {
     title: 'Dashboard',
@@ -66,7 +64,7 @@ const navigation: NavSection[] = [
       { name: 'All Clients', href: '/clients', icon: Users, count: 5 },
       { name: 'Suitability Assessments', href: '/assessments', icon: FileText },
       { name: 'Cash Flow Modeling', href: '/cashflow', icon: Calculator },
-      { name: 'Advanced Analytics', href: '/cashflow/advanced-analytics', icon: Zap }, // NEW: Advanced Analytics
+      { name: 'Advanced Analytics', href: '/cashflow/advanced-analytics', icon: Zap },
       { name: 'Risk Profiling', href: '/risk', icon: Shield },
     ],
   },
@@ -123,7 +121,6 @@ const navigation: NavSection[] = [
 export const Sidebar: React.FC = () => {
   const pathname = usePathname()
   
-  // UPDATE: Enhanced cash flow statistics
   const [cashFlowStats, setCashFlowStats] = useState<CashFlowStats>({
     totalScenarios: 0,
     clientsWithAnalysis: 0,
@@ -131,40 +128,49 @@ export const Sidebar: React.FC = () => {
     advancedAnalysisCount: 0
   });
 
-  // UPDATE: Load enhanced cash flow statistics
+  // ADD: Loading and error states for better user feedback
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     loadCashFlowStats();
   }, []);
 
+  // UPDATE: More efficient data fetching with proper error and loading state handling
   const loadCashFlowStats = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      // Get total scenarios
-      const { count: totalScenarios } = await supabase
-        .from('cash_flow_scenarios')
-        .select('id', { count: 'exact' })
-        .eq('isActive', true);
-
-      // Get unique clients with analysis
-      const { data: clientsData } = await supabase
-        .from('cash_flow_scenarios')
-        .select('client_id:clientId')
-        .eq('isActive', true);
-      
-      const uniqueClients = new Set(clientsData?.map(s => s.client_id) || []).size;
-
-      // Get scenarios needing review (older than 30 days)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { count: staleScenarios } = await supabase
-        .from('cash_flow_scenarios')
-        .select('id', { count: 'exact' })
-        .eq('isActive', true)
-        .lt('lastAssumptionsReview', thirtyDaysAgo.toISOString());
 
-      // NEW: Get advanced analytics count (you can add this table later)
-      // For now, we'll use a mock count
-      const advancedAnalysisCount = 0; // Replace with actual query when you add analytics tracking
+      // Fetch data in parallel for better performance
+      const [
+        { count: totalScenarios, error: scenariosError },
+        { data: clientsData, error: clientsError },
+        { count: staleScenarios, error: staleError }
+      ] = await Promise.all([
+        supabase
+          .from('cash_flow_scenarios')
+          .select('*', { count: 'exact', head: true })
+          .eq('isActive', true),
+        supabase
+          .from('cash_flow_scenarios')
+          .select('client_id')
+          .eq('isActive', true),
+        supabase
+          .from('cash_flow_scenarios')
+          .select('*', { count: 'exact', head: true })
+          .eq('isActive', true)
+          .lt('lastAssumptionsReview', thirtyDaysAgo.toISOString())
+      ]);
+
+      if (scenariosError || clientsError || staleError) {
+        throw new Error('Failed to fetch cash flow data from Supabase.');
+      }
+
+      const uniqueClients = new Set(clientsData?.map(s => s.client_id) || []).size;
+      const advancedAnalysisCount = 0; // Mock count, replace with actual query later
 
       setCashFlowStats({
         totalScenarios: totalScenarios || 0,
@@ -173,12 +179,14 @@ export const Sidebar: React.FC = () => {
         advancedAnalysisCount
       });
 
-    } catch (error) {
-      console.error('Error loading cash flow stats:', error);
+    } catch (err) {
+      console.error('Error loading cash flow stats:', err);
+      setError('Failed to load cash flow stats.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // UPDATE: Add advanced analytics count to navigation
   const navigationWithCounts = navigation.map(section => {
     if (section.title === 'Client Management') {
       return {
@@ -254,9 +262,15 @@ export const Sidebar: React.FC = () => {
           </div>
         ))}
         
-        {/* UPDATE: Enhanced Cash Flow Quick Stats */}
-        {cashFlowStats.totalScenarios > 0 && (
-          <div className="border-t pt-4">
+        {/* UPDATE: Show loading or error state, or the enhanced stats */}
+        <div className="border-t pt-4">
+          {loading && (
+            <div className="p-3 text-xs text-gray-500">Loading stats...</div>
+          )}
+          {error && (
+            <div className="bg-red-50 rounded-lg p-3 text-xs text-red-700">{error}</div>
+          )}
+          {!loading && !error && cashFlowStats.totalScenarios > 0 && (
             <div className="bg-blue-50 rounded-lg p-3">
               <h4 className="text-sm font-medium text-blue-900 mb-2">Cash Flow Summary</h4>
               <div className="space-y-1 text-xs text-blue-700">
@@ -282,8 +296,8 @@ export const Sidebar: React.FC = () => {
                 )}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </nav>
     </div>
   )

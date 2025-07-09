@@ -1,3 +1,6 @@
+// ===== FILE #4: next.config.js =====
+// CHANGE: Add explicit env injection (ADD 3 LINES)
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Images configuration
@@ -20,24 +23,13 @@ const nextConfig = {
     dirs: ['src'],
   },
   
-  // 🚨 ADD THIS: Fix build-time database errors and env var injection
-  experimental: {
-    optimizePackageImports: ['lucide-react'],
-    // Prevent build-time API calls that cause database errors
-    outputFileTracingExcludes: {
-      '*': [
-        './src/app/api/monte-carlo/**/*',
-      ],
-    },
-  },
-  
-  // 🚨 ADD THIS: Explicitly inject environment variables
+  // 🔧 ADD THIS: Explicit environment variable injection
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },
   
-  // Security headers
+  // Security headers (NO CHANGES)
   async headers() {
     return [
       {
@@ -59,7 +51,7 @@ const nextConfig = {
       },
     ]
   },
-  // Redirects
+  // Redirects (NO CHANGES)
   async redirects() {
     return [
       {
@@ -69,15 +61,19 @@ const nextConfig = {
       },
     ]
   },
-  // Remove powered by header
+  // ✅ VERCEL-SAFE: Minimal experimental features (NO CHANGES)
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+  // Remove powered by header (NO CHANGES)
   poweredByHeader: false,
-  // Enable compression (Vercel handles this)
+  // Enable compression (Vercel handles this) (NO CHANGES)
   compress: true,
-  // Generate ETags
+  // Generate ETags (NO CHANGES)
   generateEtags: true,
-  // Page extensions
+  // Page extensions (NO CHANGES)
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  // No trailing slash
+  // No trailing slash (NO CHANGES)
   trailingSlash: false,
 }
 
