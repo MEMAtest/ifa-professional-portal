@@ -1,5 +1,5 @@
 // src/lib/monte-carlo/database.ts
-// Database service for Monte Carlo simulation results
+// FINAL, COMPLETE, AND CORRECTED CODE
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { MonteCarloResults, SimulationInput } from './engine';
@@ -419,34 +419,33 @@ export class MonteCarloDatabase {
   /**
    * Get database health status
    */
-  // ✅ THIS IS THE NEW, CORRECTED FUNCTION
-async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
-  try {
-    // Corrected query using the proper Supabase syntax
-    const { count, error } = await this.supabase
-      .from('monte_carlo_results')
-      .select('*', { count: 'exact', head: true });
+  async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
+    try {
+      // ✅ THIS IS THE CORRECTED QUERY
+      const { count, error } = await this.supabase
+        .from('monte_carlo_results')
+        .select('*', { count: 'exact', head: true });
 
-    if (error) {
-      // This will now correctly catch and report the error during the build
-      throw new Error(`Database health check failed: ${error.message}`);
-    }
-
-    return {
-      success: true,
-      data: {
-        status: 'healthy',
-        count: count
+      if (error) {
+        throw new Error(`Database health check failed: ${error.message}`);
       }
-    };
-  } catch (error) {
-    console.error('Database health check failed:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Database unhealthy'
-    };
+
+      return {
+        success: true,
+        data: {
+          status: 'healthy',
+          count: count
+        }
+      };
+
+    } catch (error) {
+      console.error('Database health check failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Database unhealthy'
+      };
+    }
   }
-}
 }
 
 /**
