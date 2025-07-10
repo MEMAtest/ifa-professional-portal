@@ -1,11 +1,18 @@
+// src/app/api/clients/route.ts
+// ✅ FIXED: Static generation compatible
+
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+
+// ✅ CRITICAL FIX: Force this route to be dynamic
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('📋 GET /api/clients - Fetching clients...');
     
-    const { searchParams } = new URL(request.url);
+    // ✅ FIXED: Use request.nextUrl.searchParams instead of new URL(request.url)
+    const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     

@@ -4,6 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 
+// ✅ CRITICAL FIX: Force this route to be dynamic
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/monte-carlo/status
  * Returns the health status of the Monte Carlo simulation system
