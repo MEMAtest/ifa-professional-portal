@@ -51,6 +51,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // ✅ IMPROVED: Get scenarios with proper error handling
     let hasData: boolean = false;
     let scenarioCount: number = 0;
+    let recordCount: number = 0;
     
     try {
       const scenariosResponse = await db.listScenarios(1, 5); // Check first 5 scenarios
@@ -61,11 +62,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         scenariosResponse.data.length > 0
       );
       scenarioCount = scenariosResponse?.data?.length || 0;
+      
+      // ✅ ROBUST: Handle both old and new database interface versions
+      const healthData = healthResponse.data || {};
+      recordCount = ('count' in healthData && typeof healthData.count === 'number') 
+        ? healthData.count 
+        : 0;
+        
     } catch (scenarioError) {
       console.warn('Could not fetch scenario data for status check:', scenarioError);
       // Continue with health check even if scenario fetch fails
       hasData = false;
       scenarioCount = 0;
+      recordCount = 0;
     }
 
     // ✅ STANDARDIZED: Return comprehensive status
@@ -76,7 +85,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         database: {
           connection: 'ok',
           health: healthResponse.data?.status || 'unknown',
-          totalRecords: healthResponse.data?.count || 0
+          totalRecords: recordCount
         },
         features: {
           simulation: true,
