@@ -10,20 +10,32 @@ const nextConfig = {
       },
     ],
   },
-  
   // TypeScript configuration
   typescript: {
     ignoreBuildErrors: false,
   },
-  
-  // ESLint configuration  
+  // ESLint configuration
   eslint: {
     ignoreDuringBuilds: false,
     dirs: ['src'],
   },
   
-  // 🚨 REMOVED: output: 'standalone' - This breaks Vercel deployment
-  // 🚨 REMOVED: removeConsole compiler option - Can cause build issues
+  // 🚨 ADD THIS: Fix build-time database errors and env var injection
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+    // Prevent build-time API calls that cause database errors
+    outputFileTracingExcludes: {
+      '*': [
+        './src/app/api/monte-carlo/**/*',
+      ],
+    },
+  },
+  
+  // 🚨 ADD THIS: Explicitly inject environment variables
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  },
   
   // Security headers
   async headers() {
@@ -36,7 +48,7 @@ const nextConfig = {
             value: 'DENY',
           },
           {
-            key: 'X-Content-Type-Options', 
+            key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
           {
@@ -47,35 +59,24 @@ const nextConfig = {
       },
     ]
   },
-  
   // Redirects
   async redirects() {
     return [
       {
         source: '/assessment',
-        destination: '/assessments', 
+        destination: '/assessments',
         permanent: true,
       },
     ]
   },
-  
-  // ✅ VERCEL-SAFE: Minimal experimental features
-  experimental: {
-    optimizePackageImports: ['lucide-react'],
-  },
-  
   // Remove powered by header
   poweredByHeader: false,
-  
   // Enable compression (Vercel handles this)
   compress: true,
-  
   // Generate ETags
   generateEtags: true,
-  
   // Page extensions
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  
   // No trailing slash
   trailingSlash: false,
 }
