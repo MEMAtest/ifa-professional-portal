@@ -419,33 +419,33 @@ export class MonteCarloDatabase {
   /**
    * Get database health status
    */
-  async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
-    try {
-      // ✅ THIS IS THE CORRECTED QUERY
-      const { count, error } = await this.supabase
-        .from('monte_carlo_results')
-        .select('*', { count: 'exact', head: true });
+async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number | null }>> {
+  try {
+    // ✅ USE THIS EXACT SYNTAX IN ALL FILES
+    const { count, error } = await this.supabase
+      .from('monte_carlo_results')
+      .select('*', { count: 'exact', head: true });
 
-      if (error) {
-        throw new Error(`Database health check failed: ${error.message}`);
-      }
-
-      return {
-        success: true,
-        data: {
-          status: 'healthy',
-          count: count
-        }
-      };
-
-    } catch (error) {
-      console.error('Database health check failed:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Database unhealthy'
-      };
+    if (error) {
+      throw new Error(`Database health check failed: ${error.message}`);
     }
+
+    return {
+      success: true,
+      data: {
+        status: 'healthy',
+        count: count
+      }
+    };
+
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Database unhealthy'
+    };
   }
+}
 }
 
 /**
