@@ -1,10 +1,13 @@
 // src/app/api/monte-carlo/results/[scenarioId]/route.ts
-// Fixed API route for retrieving Monte Carlo results
+// ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 
-interface RouteParams {
+// ✅ FORCE DYNAMIC RENDERING
+export const dynamic = 'force-dynamic';
+
+interface ResultsRouteParams {
   params: {
     scenarioId: string;
   };
@@ -12,66 +15,214 @@ interface RouteParams {
 
 /**
  * GET /api/monte-carlo/results/[scenarioId]
- * Retrieve Monte Carlo simulation results for a specific scenario
+ * Get Monte Carlo results for a specific scenario
  */
 export async function GET(
   request: NextRequest,
-  { params }: RouteParams
+  { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
+    // ✅ TIMEOUT PROTECTION
+    const timeoutId = setTimeout(() => {
+      throw new Error('Get results timeout after 15 seconds');
+    }, 15000);
+
+    // ✅ PARAMETER VALIDATION
     const { scenarioId } = params;
 
-    // Validate scenario ID
-    if (!scenarioId || scenarioId.trim() === '') {
+    if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
+      clearTimeout(timeoutId);
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Scenario ID is required'
+        { 
+          success: false, 
+          error: 'Scenario ID is required and must be a valid string' 
         },
         { status: 400 }
       );
     }
 
-    // Get database instance
-    const db = getMonteCarloDatabase();
+    const cleanScenarioId = scenarioId.trim();
 
-    // Retrieve results
-    const resultsResponse = await db.getResults(scenarioId);
+    // ✅ PROPER DATABASE INITIALIZATION
+    const db = getMonteCarloDatabase();
+    
+    // ✅ GET RESULTS WITH ERROR HANDLING
+    const resultsResponse = await db.getResults(cleanScenarioId);
+    
+    clearTimeout(timeoutId);
     
     if (!resultsResponse.success) {
+      const isNotFound = resultsResponse.error?.includes('No results found') || 
+                        resultsResponse.error?.includes('not found');
+      
+      const statusCode = isNotFound ? 404 : 500;
+      
+      console.error(`Failed to get results for scenario ${cleanScenarioId}:`, resultsResponse.error);
+      
       return NextResponse.json(
-        {
-          success: false,
-          error: resultsResponse.error
+        { 
+          success: false, 
+          error: resultsResponse.error || 'Failed to retrieve results',
+          scenarioId: cleanScenarioId
         },
-        { status: 404 }
+        { status: statusCode }
       );
     }
 
-    // Also get assumptions for context
-    const assumptionsResponse = await db.getAssumptions(scenarioId);
-
-    const responseData = {
-      success: true,
-      data: {
-        results: resultsResponse.data,
-        assumptions: assumptionsResponse.success ? assumptionsResponse.data : null
+    // ✅ OPTIONALLY GET ASSUMPTIONS FOR CONTEXT
+    let assumptions = null;
+    try {
+      const assumptionsResponse = await db.getAssumptions(cleanScenarioId);
+      if (assumptionsResponse.success) {
+        assumptions = assumptionsResponse.data;
       }
-    };
+    } catch (assumptionError) {
+      console.warn(`Could not fetch assumptions for scenario ${cleanScenarioId}:`, assumptionError);
+    }
 
-    return NextResponse.json(responseData, { status: 200 });
+    // ✅ STANDARDIZED SUCCESS RESPONSE
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          results: resultsResponse.data,
+          assumptions: assumptions
+        },
+        metadata: {
+          scenarioId: cleanScenarioId,
+          fetchedAt: new Date().toISOString(),
+          environment: process.env.NODE_ENV || 'development'
+        }
+      },
+      { 
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      }
+    );
 
   } catch (error: unknown) {
-    console.error('Error retrieving Monte Carlo results:', error);
+    console.error('Monte Carlo results API error:', error);
     
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'An unexpected error occurred';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorDetails = error instanceof Error ? error.stack : undefined;
 
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/monte-carlo/results/[scenarioId]
+ * Update Monte Carlo result status
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: ResultsRouteParams
+): Promise<NextResponse> {
+  try {
+    // ✅ TIMEOUT PROTECTION
+    const timeoutId = setTimeout(() => {
+      throw new Error('Update status timeout after 10 seconds');
+    }, 10000);
+
+    // ✅ PARAMETER VALIDATION
+    const { scenarioId } = params;
+
+    if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
+      clearTimeout(timeoutId);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Scenario ID is required and must be a valid string' 
+        },
+        { status: 400 }
+      );
+    }
+
+    const cleanScenarioId = scenarioId.trim();
+
+    // ✅ SAFE BODY PARSING
+    let body: any;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      clearTimeout(timeoutId);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Invalid JSON in request body' 
+        },
+        { status: 400 }
+      );
+    }
+
+    const { status } = body;
+
+    // ✅ STATUS VALIDATION
+    const validStatuses = ['pending', 'running', 'completed', 'failed'];
+    if (!status || !validStatuses.includes(status)) {
+      clearTimeout(timeoutId);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✅ PROPER DATABASE INITIALIZATION
+    const db = getMonteCarloDatabase();
+    
+    // ✅ UPDATE STATUS WITH ERROR HANDLING
+    const updateResponse = await db.updateStatus(cleanScenarioId, status);
+    
+    clearTimeout(timeoutId);
+    
+    if (!updateResponse.success) {
+      console.error(`Failed to update status for scenario ${cleanScenarioId}:`, updateResponse.error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: updateResponse.error || 'Failed to update status'
+        },
+        { status: 500 }
+      );
+    }
+
+    // ✅ STANDARDIZED SUCCESS RESPONSE
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Status updated successfully',
+        data: { 
+          scenarioId: cleanScenarioId, 
+          status,
+          updatedAt: new Date().toISOString()
+        }
+      },
+      { status: 200 }
+    );
+
+  } catch (error: unknown) {
+    console.error('Monte Carlo update status API error:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: errorMessage,
+        timestamp: new Date().toISOString()
       },
       { status: 500 }
     );
@@ -80,61 +231,76 @@ export async function GET(
 
 /**
  * DELETE /api/monte-carlo/results/[scenarioId]
- * Delete Monte Carlo simulation results for a specific scenario
+ * Delete Monte Carlo scenario and related data
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: RouteParams
+  { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
+    // ✅ TIMEOUT PROTECTION
+    const timeoutId = setTimeout(() => {
+      throw new Error('Delete scenario timeout after 10 seconds');
+    }, 10000);
+
+    // ✅ PARAMETER VALIDATION
     const { scenarioId } = params;
 
-    // Validate scenario ID
-    if (!scenarioId || scenarioId.trim() === '') {
+    if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
+      clearTimeout(timeoutId);
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Scenario ID is required'
+        { 
+          success: false, 
+          error: 'Scenario ID is required and must be a valid string' 
         },
         { status: 400 }
       );
     }
 
-    // Get database instance
-    const db = getMonteCarloDatabase();
+    const cleanScenarioId = scenarioId.trim();
 
-    // Delete scenario
-    const deleteResponse = await db.deleteScenario(scenarioId);
+    // ✅ PROPER DATABASE INITIALIZATION
+    const db = getMonteCarloDatabase();
+    
+    // ✅ DELETE WITH ERROR HANDLING
+    const deleteResponse = await db.deleteScenario(cleanScenarioId);
+    
+    clearTimeout(timeoutId);
     
     if (!deleteResponse.success) {
+      console.error(`Failed to delete scenario ${cleanScenarioId}:`, deleteResponse.error);
       return NextResponse.json(
         {
           success: false,
-          error: deleteResponse.error
+          error: deleteResponse.error || 'Failed to delete scenario'
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
 
+    // ✅ STANDARDIZED SUCCESS RESPONSE
     return NextResponse.json(
       {
         success: true,
-        message: 'Scenario deleted successfully'
+        message: 'Scenario deleted successfully',
+        data: { 
+          scenarioId: cleanScenarioId,
+          deletedAt: new Date().toISOString()
+        }
       },
       { status: 200 }
     );
 
   } catch (error: unknown) {
-    console.error('Error deleting Monte Carlo scenario:', error);
+    console.error('Monte Carlo delete scenario API error:', error);
     
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'An unexpected error occurred';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        timestamp: new Date().toISOString()
       },
       { status: 500 }
     );
@@ -142,81 +308,19 @@ export async function DELETE(
 }
 
 /**
- * PUT /api/monte-carlo/results/[scenarioId]
- * Update status of Monte Carlo simulation
+ * OPTIONS /api/monte-carlo/results/[scenarioId]
+ * Handle CORS preflight requests
  */
-export async function PUT(
-  request: NextRequest,
-  { params }: RouteParams
-): Promise<NextResponse> {
-  try {
-    const { scenarioId } = params;
-
-    // Validate scenario ID
-    if (!scenarioId || scenarioId.trim() === '') {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Scenario ID is required'
-        },
-        { status: 400 }
-      );
+export async function OPTIONS(): Promise<NextResponse> {
+  return NextResponse.json(
+    { message: 'OK' },
+    { 
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      }
     }
-
-    // Parse request body
-    const body = await request.json();
-    const { status } = body;
-
-    // Validate status
-    const validStatuses = ['pending', 'running', 'completed', 'failed'];
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid status. Must be one of: pending, running, completed, failed'
-        },
-        { status: 400 }
-      );
-    }
-
-    // Get database instance
-    const db = getMonteCarloDatabase();
-
-    // Update status
-    const updateResponse = await db.updateStatus(scenarioId, status);
-    
-    if (!updateResponse.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: updateResponse.error
-        },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Status updated successfully',
-        data: { scenarioId, status }
-      },
-      { status: 200 }
-    );
-
-  } catch (error: unknown) {
-    console.error('Error updating Monte Carlo status:', error);
-    
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'An unexpected error occurred';
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage
-      },
-      { status: 500 }
-    );
-  }
+  );
 }

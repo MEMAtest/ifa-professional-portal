@@ -9,7 +9,7 @@ export async function GET() {
     // Test query
     const { data, error } = await supabase
       .from('clients')
-      .select('count')
+      .select('*', { count: 'exact', head: true })
       .limit(1);
     
     if (error) {

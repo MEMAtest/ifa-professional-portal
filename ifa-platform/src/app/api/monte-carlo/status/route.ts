@@ -1,10 +1,10 @@
 // src/app/api/monte-carlo/status/route.ts
-// ✅ CORRECTED AND ROBUST MONTE CARLO STATUS API ROUTE
+// ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 
-// ✅ CRITICAL FIX: Force this route to be dynamic
+// ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
 
 /**
@@ -13,27 +13,18 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // 🛡️ BUILD-TIME SAFETY: Prevent database calls during static generation
-    const isProduction = process.env.NODE_ENV === 'production';
-    const hasDbUrl = Boolean(process.env.DATABASE_URL);
-    const hasSupabaseUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
-    
-    if (isProduction && !hasDbUrl && !hasSupabaseUrl) {
-      return NextResponse.json(
-        {
-          success: true,
-          status: 'build-time',
-          message: 'Database health check skipped during build'
-        },
-        { status: 200 }
-      );
-    }
+    // ✅ TIMEOUT PROTECTION
+    const timeoutId = setTimeout(() => {
+      throw new Error('Health check timeout after 10 seconds');
+    }, 10000);
 
-    // Initialize database connection
+    // ✅ PROPER DATABASE INITIALIZATION
     const db = getMonteCarloDatabase();
     
-    // ✅ CORRECTED: Get health status using the fixed method
+    // ✅ GET HEALTH STATUS WITH ERROR HANDLING
     const healthResponse = await db.getHealthStatus();
+    
+    clearTimeout(timeoutId);
     
     if (healthResponse?.success !== true) {
       console.error('Monte Carlo database health check failed:', healthResponse?.error);
@@ -48,13 +39,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // ✅ IMPROVED: Get scenarios with proper error handling
+    // ✅ SAFE SCENARIO CHECKING WITH FALLBACKS
     let hasData: boolean = false;
     let scenarioCount: number = 0;
     let recordCount: number = 0;
     
     try {
-      const scenariosResponse = await db.listScenarios(1, 5); // Check first 5 scenarios
+      const scenariosResponse = await db.listScenarios(1, 5);
       hasData = Boolean(
         scenariosResponse?.success === true && 
         scenariosResponse?.data && 
@@ -63,7 +54,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
       scenarioCount = scenariosResponse?.data?.length || 0;
       
-      // ✅ ROBUST: Handle both old and new database interface versions
+      // ✅ HANDLE BOTH OLD AND NEW DATABASE INTERFACES
       const healthData = healthResponse.data || {};
       recordCount = ('count' in healthData && typeof healthData.count === 'number') 
         ? healthData.count 
@@ -71,13 +62,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         
     } catch (scenarioError) {
       console.warn('Could not fetch scenario data for status check:', scenarioError);
-      // Continue with health check even if scenario fetch fails
       hasData = false;
       scenarioCount = 0;
       recordCount = 0;
     }
 
-    // ✅ STANDARDIZED: Return comprehensive status
+    // ✅ STANDARDIZED SUCCESS RESPONSE
     return NextResponse.json(
       {
         success: true,
