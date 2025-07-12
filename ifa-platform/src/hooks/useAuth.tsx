@@ -1,9 +1,18 @@
-// File: src/hooks/useAuth.ts
+// ================================================================
+// FIXED: src/hooks/useAuth.tsx 
+// This version works with your existing src/types/auth.ts
+// REPLACE YOUR EXISTING FILE WITH THIS
+// ================================================================
+
 'use client'
 import { useState, useEffect, createContext, useContext } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User, AuthState, LoginCredentials, SignUpData } from '@/types/auth'
 import type { Session } from '@supabase/supabase-js'
+
+// ================================================================
+// CONTEXT SETUP
+// ================================================================
 
 const AuthContext = createContext<AuthState & {
   signIn: (credentials: LoginCredentials) => Promise<{ error?: string }>
@@ -28,99 +37,148 @@ export const useAuth = () => {
   return context
 }
 
+// ================================================================
+// PROVIDER - FIXED TO REMOVE HANGING DATABASE QUERY
+// ================================================================
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Get initial session
+    let isMounted = true
+
     const getInitialSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        if (error) throw error
+        console.log('🔍 Getting initial session...')
+        
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Auth session timeout')), 8000)
+        })
+        
+        const sessionPromise = supabase.auth.getSession()
+        
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any
+        
+        if (!isMounted) return
+        
+        if (error) {
+          console.error('❌ Session error:', error)
+          setError(`Failed to load session: ${error.message}`)
+          setLoading(false)
+          return
+        }
         
         if (session?.user) {
-          await fetchUserProfile(session.user.id)
+          console.log('✅ Session found, creating user profile from metadata...')
+          
+          // ================================================================
+          // 🔧 CRITICAL FIX: Create user WITHOUT database query
+          // Use only Supabase Auth metadata - no profile table query
+          // ================================================================
+          
+          const authUser = session.user
+          const metadata = authUser.user_metadata || {}
+          
+          const simpleUser: User = {
+            id: authUser.id,
+            email: authUser.email || '',
+            role: (metadata.role as User['role']) || 'advisor',
+            firmId: metadata.firm_id || metadata.firmId || 'default-firm',
+            firstName: metadata.first_name || metadata.firstName || '',
+            lastName: metadata.last_name || metadata.lastName || '',
+            avatarUrl: metadata.avatar_url || metadata.avatarUrl,
+            phone: metadata.phone,
+            lastLoginAt: authUser.last_sign_in_at,
+            createdAt: authUser.created_at,
+            updatedAt: authUser.updated_at || authUser.created_at
+          }
+          
+          setUser(simpleUser)
+          setError(null)
+          console.log('✅ Auth initialized successfully (no database query)')
+        } else {
+          console.log('ℹ️ No session found')
+          setUser(null)
+          setError(null)
         }
+        
       } catch (err) {
-        console.error('Error getting initial session:', err)
-        setError('Failed to load session')
+        console.error('❌ Auth initialization error:', err)
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Failed to initialize authentication')
+        }
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     getInitialSession()
 
-    // Listen for auth changes
+    // ================================================================
+    // AUTH STATE LISTENER - ALSO FIXED
+    // ================================================================
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!isMounted) return
+        
+        console.log('🔄 Auth state changed:', event)
+        
         try {
           if (session?.user) {
-            await fetchUserProfile(session.user.id)
+            const authUser = session.user
+            const metadata = authUser.user_metadata || {}
+            
+            const simpleUser: User = {
+              id: authUser.id,
+              email: authUser.email || '',
+              role: (metadata.role as User['role']) || 'advisor',
+              firmId: metadata.firm_id || metadata.firmId || 'default-firm',
+              firstName: metadata.first_name || metadata.firstName || '',
+              lastName: metadata.last_name || metadata.lastName || '',
+              avatarUrl: metadata.avatar_url || metadata.avatarUrl,
+              phone: metadata.phone,
+              lastLoginAt: authUser.last_sign_in_at,
+              createdAt: authUser.created_at,
+              updatedAt: authUser.updated_at || authUser.created_at
+            }
+            
+            setUser(simpleUser)
           } else {
             setUser(null)
           }
+          setError(null)
         } catch (err) {
-          console.error('Auth state change error:', err)
-          setError('Authentication error')
+          console.error('❌ Auth state change error:', err)
+          setError('Authentication error occurred')
         }
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const fetchUserProfile = async (userId: string): Promise<void> => {
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          firms (*)
-        `)
-        .eq('id', userId)
-        .single()
-
-      if (error) {
-        console.error('Profile fetch error:', error)
-        // If no profile exists, user needs to complete setup
-        setUser(null)
-        return
-      }
-
-      if (profile) {
-        setUser({
-          id: profile.id,
-          email: profile.email || '',
-          role: profile.role,
-          firmId: profile.firm_id,
-          firstName: profile.first_name,
-          lastName: profile.last_name,
-          avatarUrl: profile.avatar_url,
-          phone: profile.phone,
-          lastLoginAt: profile.last_login_at,
-          createdAt: profile.created_at,
-          updatedAt: profile.updated_at
-        })
-
-        // Update last login
-        await supabase
-          .from('profiles')
-          .update({ last_login_at: new Date().toISOString() })
-          .eq('id', userId)
-      }
-    } catch (err) {
-      console.error('Error fetching user profile:', err)
-      setError('Failed to load profile')
-    }
-  }
+  // ================================================================
+  // AUTH METHODS - SIMPLIFIED
+  // ================================================================
 
   const signIn = async (credentials: LoginCredentials) => {
     try {
       setLoading(true)
       setError(null)
+      
+      console.log('🔐 Signing in user...')
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
@@ -128,13 +186,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
 
       if (error) {
+        console.error('❌ Sign in error:', error)
         setError(error.message)
         return { error: error.message }
       }
 
+      console.log('✅ Sign in successful')
       return {}
     } catch (err) {
-      const errorMessage = 'Failed to sign in'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in'
+      console.error('❌ Sign in error:', err)
       setError(errorMessage)
       return { error: errorMessage }
     } finally {
@@ -146,57 +207,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true)
       setError(null)
+      
+      console.log('📝 Signing up user...')
 
-      // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
+        options: {
+          data: {
+            first_name: data.firstName,
+            last_name: data.lastName,
+            firm_id: 'default-firm',
+            role: 'advisor',
+            firm_name: data.firmName || '',
+            fca_number: data.fcaNumber || ''
+          }
+        }
       })
 
       if (authError) {
+        console.error('❌ Sign up error:', authError)
         setError(authError.message)
         return { error: authError.message }
       }
 
-      if (authData.user) {
-        // Create or find firm
-        let firmId = '00000000-0000-0000-0000-000000000001' // Default firm
-        
-        if (data.firmName) {
-          const { data: firm, error: firmError } = await supabase
-            .from('firms')
-            .insert({
-              name: data.firmName,
-              fca_number: data.fcaNumber,
-            })
-            .select()
-            .single()
-
-          if (!firmError && firm) {
-            firmId = firm.id
-          }
-        }
-
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: authData.user.id,
-            first_name: data.firstName,
-            last_name: data.lastName,
-            role: 'advisor', // Default role
-            firm_id: firmId,
-          })
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError)
-          return { error: 'Failed to create profile' }
-        }
-      }
-
+      console.log('✅ Sign up successful')
       return {}
     } catch (err) {
-      const errorMessage = 'Failed to sign up'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign up'
+      console.error('❌ Sign up error:', err)
       setError(errorMessage)
       return { error: errorMessage }
     } finally {
@@ -207,10 +246,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       setLoading(true)
+      console.log('🚪 Signing out...')
+      
       await supabase.auth.signOut()
       setUser(null)
+      setError(null)
+      
+      console.log('✅ Sign out successful')
     } catch (err) {
-      console.error('Sign out error:', err)
+      console.error('❌ Sign out error:', err)
+      setError('Failed to sign out')
     } finally {
       setLoading(false)
     }
@@ -220,27 +265,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (!user) return { error: 'No user logged in' }
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({
+      console.log('📝 Updating user profile...')
+
+      const { error } = await supabase.auth.updateUser({
+        data: {
           first_name: updates.firstName,
           last_name: updates.lastName,
           phone: updates.phone,
           avatar_url: updates.avatarUrl,
-        })
-        .eq('id', user.id)
+        }
+      })
 
       if (error) {
+        console.error('❌ Profile update error:', error)
         return { error: error.message }
       }
 
       // Update local user state
       setUser(prev => prev ? { ...prev, ...updates } : null)
+      console.log('✅ Profile updated successfully')
+      
       return {}
     } catch (err) {
-      return { error: 'Failed to update profile' }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update profile'
+      console.error('❌ Profile update error:', err)
+      return { error: errorMessage }
     }
   }
+
+  // ================================================================
+  // RENDER
+  // ================================================================
 
   return (
     <AuthContext.Provider value={{
