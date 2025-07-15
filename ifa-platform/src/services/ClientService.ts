@@ -40,106 +40,88 @@ export class ClientService {
     return ClientService.instance;
   }
 
-  /**
-   * Get all clients with optional filtering and pagination
-   */
-  async getAllClients(
-    filters?: ClientFilters,
-    page: number = 1,
-    limit: number = 20
-  ): Promise<ClientListResponse> {
-    try {
-      const searchParams = new URLSearchParams();
-      
-      searchParams.append('page', page.toString());
-      searchParams.append('limit', limit.toString());
+/**
+ * Get all clients with optional filtering and pagination
+ */
+async getAllClients(
+  filters?: ClientFilters,
+  page: number = 1,
+  limit: number = 20
+): Promise<ClientListResponse> {
+  try {
+    const searchParams = new URLSearchParams();
+    
+    searchParams.append('page', page.toString());
+    searchParams.append('limit', limit.toString());
 
-      if (filters) {
-        if (filters.status?.length) {
-          filters.status.forEach(status => searchParams.append('status', status));
-        }
-        
-        if (filters.advisorId) {
-          searchParams.append('advisorId', filters.advisorId);
-        }
-        
-        if (filters.riskLevel?.length) {
-          filters.riskLevel.forEach(level => searchParams.append('riskLevel', level));
-        }
-        
-        if (filters.vulnerabilityStatus !== undefined) {
-          searchParams.append('vulnerabilityStatus', filters.vulnerabilityStatus.toString());
-        }
-        
-        if (filters.dateRange) {
-          searchParams.append('startDate', filters.dateRange.start);
-          searchParams.append('endDate', filters.dateRange.end);
-        }
-        
-        if (filters.searchQuery) {
-          searchParams.append('search', filters.searchQuery);
-        }
-        
-        // ✅ FIXED: Now search property exists
-        if (filters.search) {
-          searchParams.append('q', filters.search);
-        }
+    if (filters) {
+      if (filters.status?.length) {
+        filters.status.forEach(status => searchParams.append('status', status));
       }
-
-      // Apply filters based on vulnerability status
-      const filteredClients = await this.filterClientsByVulnerability(filters);
       
-      // Mock vulnerability assessment filtering
-      const vulnerabilityFiltered = filteredClients.filter(client => {
-        if (filters?.vulnerabilityStatus === undefined) return true;
-        const isVulnerable = getVulnerabilityStatus(client.vulnerabilityAssessment);
-        return filters.vulnerabilityStatus ? isVulnerable === true : isVulnerable !== true;
-      });
-
-      // Apply additional filters
-      const statusFiltered = vulnerabilityFiltered.filter(client => {
-        if (!filters?.status?.length) return true;
-        return filters.status.includes(client.status);
-      });
-
-      const finalFiltered = statusFiltered.filter(client => {
-        if (!filters?.riskLevel?.length) return true;
-        return filters.riskLevel.includes(client.riskProfile?.riskTolerance || 'unknown');
-      });
-
-      // Apply sorting
-      // ✅ FIXED: Now sortBy and sortOrder properties exist
-      if (filters?.sortBy) {
-        finalFiltered.sort((a, b) => {
-          const aVal = this.getNestedProperty(a, filters.sortBy!);
-          const bVal = this.getNestedProperty(b, filters.sortBy!);
-          
-          if (filters.sortOrder === 'desc') {
-            return bVal > aVal ? 1 : -1;
-          }
-          return aVal > bVal ? 1 : -1;
-        });
+      if (filters.advisorId) {
+        searchParams.append('advisorId', filters.advisorId);
       }
-
-      // Pagination
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedClients = finalFiltered.slice(startIndex, endIndex);
-      const totalPages = Math.ceil(finalFiltered.length / limit);
-
-      return {
-        clients: paginatedClients,
-        total: finalFiltered.length, // ✅ FIXED: Changed from totalCount
-        page,
-        limit,
-        totalPages
-      };
-
-    } catch (error) {
-      console.error('Error fetching clients:', error);
-      throw new Error('Failed to fetch clients');
+      
+      if (filters.riskLevel?.length) {
+        filters.riskLevel.forEach(level => searchParams.append('riskLevel', level));
+      }
+      
+      if (filters.vulnerabilityStatus !== undefined) {
+        searchParams.append('vulnerabilityStatus', filters.vulnerabilityStatus.toString());
+      }
+      
+      if (filters.dateRange) {
+        searchParams.append('startDate', filters.dateRange.start);
+        searchParams.append('endDate', filters.dateRange.end);
+      }
+      
+      if (filters.searchQuery) {
+        searchParams.append('search', filters.searchQuery);
+      }
+      
+      if (filters.search) {
+        searchParams.append('q', filters.search);
+      }
+      
+      if (filters.sortBy) {
+        searchParams.append('sortBy', filters.sortBy);
+      }
+      
+      if (filters.sortOrder) {
+        searchParams.append('sortOrder', filters.sortOrder);
+      }
     }
+
+    // Fetch from API
+    const response = await fetch(`${this.baseUrl}?${searchParams.toString()}`);
+    const data = await response.json();
+    
+    console.log('API Response:', data); // Debug log
+    
+    if (!response.ok) {
+      throw new Error(data.error || `Failed to fetch clients: ${response.statusText}`);
+    }
+
+    // Transform the API response to match our interface
+    // The API returns clients with snake_case, we need to transform them
+    const transformedClients = (data.clients || []).map((rawClient: any) => 
+      this.transformClientData(rawClient)
+    );
+
+    return {
+      clients: transformedClients,
+      total: data.total || 0,
+      page: data.page || page,
+      limit: data.limit || limit,
+      totalPages: data.totalPages || Math.ceil((data.total || 0) / limit)
+    };
+
+  } catch (error) {
+    console.error('Error fetching clients:', error);
+    throw new Error(error instanceof Error ? error.message : 'Failed to fetch clients');
   }
+}
 
   /**
    * Get client by ID
@@ -704,15 +686,21 @@ export class ClientService {
   // Private helper methods
 
   private async filterClientsByVulnerability(filters?: ClientFilters): Promise<Client[]> {
-    // Mock implementation - in production this would call the API
-    const mockClients: Client[] = []; // This would be populated from API
-    return mockClients;
-  }
+  // Remove mock implementation - filtering should be done server-side
+  console.warn('filterClientsByVulnerability called but should not be used - filtering is done server-side');
+  return [];
+}
 
-  private async getAllClientsForStats(advisorId?: string): Promise<Client[]> {
-    // Mock implementation
+private async getAllClientsForStats(advisorId?: string): Promise<Client[]> {
+  // This should call the API instead of returning mock data
+  try {
+    const response = await this.getAllClients({ advisorId }, 1, 1000); // Get up to 1000 clients
+    return response.clients;
+  } catch (error) {
+    console.error('Error fetching clients for stats:', error);
     return [];
   }
+}
 
   private applyClientFilters(clients: Client[], filters?: ClientFilters): Client[] {
     if (!filters) return clients;

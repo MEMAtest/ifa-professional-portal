@@ -1,10 +1,9 @@
-// ================================================================
-// 2. UPDATED FILE: src/app/layout.tsx
-// ================================================================
-
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+
+// --- context providers ---
+import Providers from './providers'          // wraps Supabase SessionContextProvider
 import { AuthProvider } from '@/hooks/useAuth'
 import { SmartLayoutWrapper } from '@/components/layout/SmartLayoutWrapper'
 
@@ -23,11 +22,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          <SmartLayoutWrapper>
-            {children}
-          </SmartLayoutWrapper>
-        </AuthProvider>
+        {/*
+          1. Providers – makes the Supabase client & session available app‑wide.
+          2. AuthProvider – your existing custom auth context (unchanged).
+          3. SmartLayoutWrapper – keeps your responsive shell.
+        */}
+        <Providers>
+          <AuthProvider>
+            <SmartLayoutWrapper>
+              {children}
+            </SmartLayoutWrapper>
+          </AuthProvider>
+        </Providers>
       </body>
     </html>
   )

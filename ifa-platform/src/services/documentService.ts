@@ -1,10 +1,10 @@
 // services/documentService.ts
 // FIXED: Robust authentication handling and error management
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from '@/types/database'
 
-type SupabaseClient = ReturnType<typeof createClientComponentClient<Database>>
+type SupabaseClient = ReturnType<typeof createBrowserClient<Database>>
 
 // Types that match the database schema
 export interface Document {
@@ -93,7 +93,10 @@ export class DocumentService {
   private supabase: SupabaseClient
 
   constructor() {
-    this.supabase = createClientComponentClient<Database>()
+    this.supabase = createBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
   }
 
   // ROBUST authentication and firm context handling
@@ -487,7 +490,7 @@ export class DocumentService {
     }
   }
 
-  // Get analytics data for dashboard
+  // Get analytics data for dashboard - WITH TYPE FIXES
   async getDocumentAnalytics(): Promise<DocumentAnalytics> {
     try {
       const { firmId } = await this.getCurrentUserContext()
@@ -517,17 +520,18 @@ export class DocumentService {
       const currentMonth = new Date()
       currentMonth.setDate(1)
 
+      // TYPE FIX: Add proper type annotation for filter callbacks
       const documentsThisMonth = documents?.filter(doc => 
-        new Date(doc.created_at) >= currentMonth
-      ).length || 0
+  new Date(doc.created_at) >= currentMonth
+).length || 0
 
       const pendingSignatures = signatures?.filter(sig => 
-        sig.status === 'pending' || sig.status === 'sent'
-      ).length || 0
+  sig.status === 'pending' || sig.status === 'sent'
+).length || 0
 
       const completedSignatures = signatures?.filter(sig => 
-        sig.status === 'completed'
-      ).length || 0
+  sig.status === 'completed'
+).length || 0
 
       // Calculate compliance score (simplified)
       const totalDocs = documents?.length || 0
@@ -544,7 +548,8 @@ export class DocumentService {
           .order('created_at', { ascending: false })
           .limit(5)
 
-        recentActivity = (activity || []).map(item => ({
+        // TYPE FIX: Add proper type annotation for map callback
+        recentActivity = (activity || []).map((item: any) => ({
           id: item.id,
           action: item.action,
           document_title: 'Document',

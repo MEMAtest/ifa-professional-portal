@@ -54,7 +54,6 @@ const navigation: NavSection[] = [
     title: 'Dashboard',
     items: [
       { name: 'Overview', href: '/dashboard', icon: BarChart3 },
-      { name: 'Analytics', href: '/analytics', icon: TrendingUp },
       { name: 'AI Insights', href: '/insights', icon: PieChart },
     ],
   },

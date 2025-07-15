@@ -3,7 +3,7 @@
 // Handles all document operations with Supabase integration
 // ===================================================================
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 
 // ====================================
 // 2. DocumentService.ts - UUID Fix
@@ -137,7 +137,10 @@ export type SignatureStatus = 'pending' | 'sent' | 'completed' | 'declined' | 'e
 // ===================================================================
 
 export class DocumentService {
-  private supabase = createClientComponentClient()
+  private supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   // ===================================================================
   // DOCUMENT OPERATIONS

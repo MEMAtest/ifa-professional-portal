@@ -1,33 +1,76 @@
-import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
-export async function GET() {
-  try {
-    const supabase = createRouteHandlerClient({ cookies });
-    
-    // Test query
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .limit(1);
-    
-    if (error) {
-      return NextResponse.json({ 
-        status: 'error', 
-        message: error.message 
-      }, { status: 500 });
+export async function GET(request: Request) {
+  const cookieStore = cookies();
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: any) {
+          cookieStore.delete({ name, ...options })
+        },
+      },
     }
-    
-    return NextResponse.json({ 
-      status: 'connected', 
-      timestamp: new Date().toISOString() 
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ 
-      status: 'error', 
-      message: error instanceof Error ? error.message : 'Unknown error' 
-    }, { status: 500 });
+  );
+
+  // Get the user session
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+
+  // Example: Fetch some data
+  const { data, error } = await supabase
+    .from('your_table_name')
+    .select('*');
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ data, user });
+}
+
+export async function POST(request: Request) {
+  const cookieStore = cookies();
+  const body = await request.json();
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name: string, options: any) {
+          cookieStore.delete({ name, ...options })
+        },
+      },
+    }
+  );
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  // Handle your POST logic here
+  
+  return NextResponse.json({ success: true, user });
 }
