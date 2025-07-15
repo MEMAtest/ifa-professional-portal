@@ -1,14 +1,11 @@
 'use client'
-import { useState } from 'react'
-import { SessionContextProvider } from '@supabase/auth-helpers-react'
-import { supabaseBrowser } from '@/lib/supabaseBrowser'
+
+import { AuthProvider } from '@/hooks/useAuth'
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  const [supabase] = useState(() => supabaseBrowser)
-
   return (
-    <SessionContextProvider supabaseClient={supabase}>
+    <AuthProvider>
       {children}
-    </SessionContextProvider>
+    </AuthProvider>
   )
 }
