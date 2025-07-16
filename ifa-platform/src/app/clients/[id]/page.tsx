@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { clientService } from '@/services/ClientService';
 import { getVulnerabilityStatus } from '@/types/client';
+import RiskProfileTab from '@/components/clients/RiskProfileTab';
 import type { Client } from '@/types/client';
 
 // Page Params Interface

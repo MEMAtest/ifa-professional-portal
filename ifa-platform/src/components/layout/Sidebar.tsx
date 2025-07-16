@@ -26,7 +26,8 @@ import {
   Target,
   FileCheck,
   Calculator,
-  Zap
+  Zap,
+  LineChart  // Add icon for Monte Carlo
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase';
 
@@ -54,17 +55,25 @@ const navigation: NavSection[] = [
     title: 'Dashboard',
     items: [
       { name: 'Overview', href: '/dashboard', icon: BarChart3 },
-      { name: 'AI Insights', href: '/insights', icon: PieChart },
+      // Change these routes to existing ones:
+{ name: 'AI Insights', href: '/dashboard', icon: PieChart }, // Changed from /insights
+{ name: 'Risk Profiling', href: '/clients', icon: Shield }, // Changed from /risk
     ],
   },
   {
     title: 'Client Management',
     items: [
-      { name: 'All Clients', href: '/clients', icon: Users, count: 5 },
+      { name: 'All Clients', href: '/clients', icon: Users },
       { name: 'Suitability Assessments', href: '/assessments', icon: FileText },
+      { name: 'Risk Profiling', href: '/risk', icon: Shield },
+    ],
+  },
+  {
+    title: 'Financial Analysis',
+    items: [
+      { name: 'Monte Carlo Analysis', href: '/monte-carlo', icon: LineChart },
       { name: 'Cash Flow Modeling', href: '/cashflow', icon: Calculator },
       { name: 'Advanced Analytics', href: '/cashflow/advanced-analytics', icon: Zap },
-      { name: 'Risk Profiling', href: '/risk', icon: Shield },
     ],
   },
   {
@@ -73,6 +82,7 @@ const navigation: NavSection[] = [
       { name: 'Assessment Dashboard', href: '/assessments', icon: ClipboardList },
       { name: 'Suitability Assessment', href: '/assessments/suitability', icon: FileCheck },
       { name: 'Risk Assessment (ATR)', href: '/assessments/atr', icon: Brain },
+      { name: 'Risk Assessment (CFL)', href: '/assessments/cfl', icon: Calculator },
       { name: 'Investor Personas', href: '/assessments/personas', icon: Target },
     ],
   },
@@ -81,116 +91,109 @@ const navigation: NavSection[] = [
     items: [
       { name: 'Document Vault', href: '/documents', icon: Briefcase },
       { name: 'Reports', href: '/reports', icon: BookOpen },
-      { name: 'Digital Signatures', href: '/signatures', icon: CheckCircle },
     ],
   },
   {
     title: 'Communications',
     items: [
-      { name: 'Email Hub', href: '/communications/email', icon: Mail },
-      { name: 'Call Logs', href: '/communications/calls', icon: Phone },
-      { name: 'Meetings', href: '/communications/meetings', icon: Calendar },
+      { name: 'Inbox', href: '/inbox', icon: Mail },
+      { name: 'Messages', href: '/messages', icon: MessageSquare },
+      { name: 'Calls', href: '/calls', icon: Phone },
+      { name: 'Calendar', href: '/calendar', icon: Calendar },
     ],
   },
   {
-    title: 'Compliance',
+    title: 'Reviews & Compliance',
     items: [
-      { name: 'Compliance Dashboard', href: '/compliance', icon: CheckCircle },
-      { name: 'Vulnerable Clients', href: '/compliance/vulnerable', icon: AlertTriangle, count: 2 },
-      { name: 'Review Schedule', href: '/compliance/reviews', icon: RotateCcw },
-      { name: 'Audit Trail', href: '/compliance/audit', icon: BookOpen },
-    ],
-  },
-  {
-    title: 'Market Data',
-    items: [
-      { name: 'Live Prices', href: '/market/prices', icon: TrendingUp },
-      { name: 'Economic Calendar', href: '/market/calendar', icon: Calendar },
+      { name: 'Client Reviews', href: '/reviews', icon: CheckCircle },
+      { name: 'Compliance', href: '/compliance', icon: AlertTriangle },
+      { name: 'Rebalancing', href: '/rebalancing', icon: RotateCcw },
     ],
   },
   {
     title: 'Settings',
     items: [
-      { name: 'Platform Settings', href: '/settings', icon: Settings },
-      { name: 'User Management', href: '/settings/users', icon: Users },
+      { name: 'Settings', href: '/settings', icon: Settings },
     ],
   },
 ]
 
-export const Sidebar: React.FC = () => {
+export function Sidebar() {
   const pathname = usePathname()
-  
   const [cashFlowStats, setCashFlowStats] = useState<CashFlowStats>({
     totalScenarios: 0,
     clientsWithAnalysis: 0,
     scenariosNeedingReview: 0,
     advancedAnalysisCount: 0
-  });
-
-  // ADD: Loading and error states for better user feedback
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  })
+  const [monteCarloCount, setMonteCarloCount] = useState<number>(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadCashFlowStats();
-  }, []);
+    loadStats()
+  }, [])
 
-  // UPDATE: More efficient data fetching with proper error and loading state handling
-  const loadCashFlowStats = async () => {
-    setLoading(true);
-    setError(null);
+  const loadStats = async () => {
     try {
+      setLoading(true)
+      
+      // Load Cash Flow stats
+      const { count: totalScenarios } = await supabase
+        .from('cash_flow_scenarios')
+        .select('id', { count: 'exact' })
+        .eq('isActive', true);
+
+      const { data: clientsData } = await supabase
+        .from('cash_flow_scenarios')
+        .select('client_id')
+        .eq('isActive', true);
+      
+      const uniqueClients = new Set(clientsData?.map(s => s.client_id) || []).size;
+
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { count: staleScenarios } = await supabase
+        .from('cash_flow_scenarios')
+        .select('id', { count: 'exact' })
+        .eq('isActive', true)
+        .lt('lastAssumptionsReview', thirtyDaysAgo.toISOString());
 
-      // Fetch data in parallel for better performance
-      const [
-        { count: totalScenarios, error: scenariosError },
-        { data: clientsData, error: clientsError },
-        { count: staleScenarios, error: staleError }
-      ] = await Promise.all([
-        supabase
-          .from('cash_flow_scenarios')
-          .select('*', { count: 'exact', head: true })
-          .eq('isActive', true),
-        supabase
-          .from('cash_flow_scenarios')
-          .select('client_id')
-          .eq('isActive', true),
-        supabase
-          .from('cash_flow_scenarios')
-          .select('*', { count: 'exact', head: true })
-          .eq('isActive', true)
-          .lt('lastAssumptionsReview', thirtyDaysAgo.toISOString())
-      ]);
-
-      if (scenariosError || clientsError || staleError) {
-        throw new Error('Failed to fetch cash flow data from Supabase.');
-      }
-
-      const uniqueClients = new Set(clientsData?.map(s => s.client_id) || []).size;
-      const advancedAnalysisCount = 0; // Mock count, replace with actual query later
+      // Load Monte Carlo count
+      const { count: monteCarloTotal } = await supabase
+        .from('monte_carlo_results')
+        .select('id', { count: 'exact' });
 
       setCashFlowStats({
         totalScenarios: totalScenarios || 0,
         clientsWithAnalysis: uniqueClients,
         scenariosNeedingReview: staleScenarios || 0,
-        advancedAnalysisCount
+        advancedAnalysisCount: 0
       });
 
+      setMonteCarloCount(monteCarloTotal || 0);
+
     } catch (err) {
-      console.error('Error loading cash flow stats:', err);
-      setError('Failed to load cash flow stats.');
+      console.error('Error loading stats:', err);
+      setError('Failed to load stats');
     } finally {
       setLoading(false);
     }
   };
 
+  // Add counts to navigation items
   const navigationWithCounts = navigation.map(section => {
-    if (section.title === 'Client Management') {
+    if (section.title === 'Financial Analysis') {
       return {
         ...section,
         items: section.items.map(item => {
+          if (item.name === 'Monte Carlo Analysis') {
+            return {
+              ...item,
+              count: monteCarloCount > 0 ? monteCarloCount : undefined
+            };
+          }
           if (item.name === 'Cash Flow Modeling') {
             return {
               ...item,
@@ -261,31 +264,29 @@ export const Sidebar: React.FC = () => {
           </div>
         ))}
         
-        {/* UPDATE: Show loading or error state, or the enhanced stats */}
-        <div className="border-t pt-4">
-          {loading && (
-            <div className="p-3 text-xs text-gray-500">Loading stats...</div>
-          )}
-          {error && (
-            <div className="bg-red-50 rounded-lg p-3 text-xs text-red-700">{error}</div>
-          )}
-          {!loading && !error && cashFlowStats.totalScenarios > 0 && (
+        {/* Stats Summary */}
+        {!loading && !error && (cashFlowStats.totalScenarios > 0 || monteCarloCount > 0) && (
+          <div className="border-t pt-4">
             <div className="bg-blue-50 rounded-lg p-3">
-              <h4 className="text-sm font-medium text-blue-900 mb-2">Cash Flow Summary</h4>
+              <h4 className="text-sm font-medium text-blue-900 mb-2">Analysis Summary</h4>
               <div className="space-y-1 text-xs text-blue-700">
-                <div className="flex justify-between">
-                  <span>Total Scenarios:</span>
-                  <span className="font-medium">{cashFlowStats.totalScenarios}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Clients Analyzed:</span>
-                  <span className="font-medium">{cashFlowStats.clientsWithAnalysis}</span>
-                </div>
-                {cashFlowStats.advancedAnalysisCount > 0 && (
-                  <div className="flex justify-between text-purple-700">
-                    <span>Advanced Analysis:</span>
-                    <span className="font-medium">{cashFlowStats.advancedAnalysisCount}</span>
+                {monteCarloCount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Monte Carlo Runs:</span>
+                    <span className="font-medium">{monteCarloCount}</span>
                   </div>
+                )}
+                {cashFlowStats.totalScenarios > 0 && (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Cash Flow Scenarios:</span>
+                      <span className="font-medium">{cashFlowStats.totalScenarios}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Clients Analyzed:</span>
+                      <span className="font-medium">{cashFlowStats.clientsWithAnalysis}</span>
+                    </div>
+                  </>
                 )}
                 {cashFlowStats.scenariosNeedingReview > 0 && (
                   <div className="flex justify-between text-amber-700">
@@ -295,8 +296,8 @@ export const Sidebar: React.FC = () => {
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </nav>
     </div>
   )

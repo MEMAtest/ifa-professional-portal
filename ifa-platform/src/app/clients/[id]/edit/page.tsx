@@ -1,5 +1,5 @@
 // ===================================================================
-// src/app/clients/[id]/edit/page.tsx - PRODUCTION READY - Complete File
+// src/app/clients/[id]/edit/page.tsx - FIXED VERSION
 // ===================================================================
 
 'use client';
@@ -8,58 +8,11 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams, notFound } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
-import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { clientService } from '@/services/ClientService';
 import type { Client, ClientFormData } from '@/types/client';
 
-// Import the ClientForm component (assuming it exists)
-// If it doesn't exist, you'll need to create it
-interface ClientFormProps {
-  client?: Client;
-  onSave?: (client: ClientFormData) => Promise<void>;
-  onSubmit?: (client: Client) => void;
-  onCancel: () => void;
-  loading?: boolean; // ✅ FIXED: Added loading prop
-  isSubmitting?: boolean;
-  errors?: Record<string, string>;
-}
-
-// Mock ClientForm component for now - replace with actual import
-const ClientForm: React.FC<ClientFormProps> = ({ 
-  client, 
-  onSubmit, 
-  onCancel, 
-  loading = false,
-  errors = {} 
-}) => {
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Edit Client Form</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-600 mb-4">
-            Client editing form would go here. This is a placeholder component.
-          </p>
-          <div className="flex space-x-4">
-            <Button 
-              onClick={() => client && onSubmit?.(client)} 
-              loading={loading}
-              disabled={loading}
-            >
-              {loading ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Button variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-};
+// ✅ FIX: Import the REAL ClientForm component
+import ClientForm from '@/components/clients/ClientForm';
 
 // Page Params Interface
 interface PageParams {
@@ -88,7 +41,6 @@ export default function EditClientPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Load client data
   useEffect(() => {
@@ -115,13 +67,12 @@ export default function EditClientPage() {
     loadClient();
   }, [params.id, toast]);
 
-  // Handle form submission
+  // Handle form submission - Updated to match ClientForm expectations
   const handleSubmit = async (updatedClient: Client) => {
     if (!client) return;
 
     try {
       setSaving(true);
-      setErrors({});
 
       // Convert Client to ClientFormData for the update
       const formData: ClientFormData = {
@@ -166,6 +117,34 @@ export default function EditClientPage() {
     }
   };
 
+  // Handle save (for ClientFormData) - Alternative handler
+  const handleSave = async (formData: ClientFormData) => {
+    if (!client) return;
+
+    try {
+      setSaving(true);
+      await clientService.updateClient(client.id, formData);
+      
+      toast({
+        title: 'Success',
+        description: 'Client updated successfully',
+        variant: 'default'
+      });
+
+      router.push(`/clients/${client.id}?success=${encodeURIComponent('Client updated successfully')}`);
+    } catch (err) {
+      console.error('Error updating client:', err);
+      
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to update client',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Handle cancel
   const handleCancel = () => {
     router.push(`/clients/${params.id}`);
@@ -194,9 +173,12 @@ export default function EditClientPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Client Not Found</h1>
           <p className="text-gray-600 mb-4">{error || 'The requested client could not be found.'}</p>
-          <Button onClick={() => router.push('/clients')}>
+          <button
+            onClick={() => router.push('/clients')}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
             Back to Clients
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -214,13 +196,14 @@ export default function EditClientPage() {
         </p>
       </div>
 
-      {/* Client Form */}
+      {/* ✅ FIXED: Now using the real ClientForm component */}
       <ClientForm
         client={client}
         onSubmit={handleSubmit}
+        onSave={handleSave}
         onCancel={handleCancel}
-        loading={saving} // ✅ FIXED: Now passing loading prop
-        errors={errors}
+        loading={saving}
+        isSubmitting={saving}
       />
     </div>
   );

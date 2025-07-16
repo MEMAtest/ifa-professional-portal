@@ -1,10 +1,11 @@
 // ================================================================
 // File: ifa-platform/src/app/assessments/cfl/page.tsx
-// Capacity for Loss (CFL) Assessment - Financial Resilience Evaluation
+// Updated CFL Assessment with Client Integration
 // ================================================================
 
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -20,12 +21,14 @@ import {
   TrendingDown,
   Shield,
   RefreshCw,
-  FileText
+  FileText,
+  Save,
+  User
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ================================================================
-// CFL ASSESSMENT QUESTIONS
+// CFL ASSESSMENT QUESTIONS (Keep existing questions)
 // ================================================================
 
 interface CFLQuestion {
@@ -84,64 +87,80 @@ const cflQuestions: CFLQuestion[] = [
     id: 'investment_timeframe',
     text: 'How long can you leave this investment untouched?',
     category: 'timeframe',
-    type: 'select',
-    options: [
-      'Less than 2 years',
-      '2-5 years',
-      '5-10 years',
-      '10-15 years',
-      'More than 15 years'
-    ],
-    explanation: 'Longer timeframes allow for recovery from temporary losses',
-    impact: 'high'
-  },
-  {
-    id: 'income_dependency',
-    text: 'Do you need income from this investment to cover living expenses?',
-    category: 'objectives',
     type: 'radio',
     options: [
-      'Yes, I depend on this investment for essential income',
-      'Yes, but only for some discretionary spending',
-      'No, but it would be nice to have some income',
-      'No, I don\'t need any income from this investment'
+      'Less than 1 year',
+      '1-3 years',
+      '3-5 years',
+      '5-10 years',
+      'More than 10 years'
     ],
-    explanation: 'Dependence on investment income reduces capacity for loss',
+    explanation: 'Longer timeframes provide more opportunity to recover from losses',
     impact: 'high'
   },
   {
-    id: 'employment_security',
-    text: 'How secure is your employment or income source?',
+    id: 'loss_impact',
+    text: 'If you lost 20% of your investment, how would it affect your lifestyle?',
+    category: 'financial',
+    type: 'radio',
+    options: [
+      'Severe impact - would affect basic needs',
+      'Significant impact - would need to cut back substantially',
+      'Moderate impact - would need some adjustments',
+      'Minor impact - would not affect lifestyle',
+      'No impact - have substantial other resources'
+    ],
+    explanation: 'Direct measure of capacity to absorb losses',
+    impact: 'high'
+  },
+  {
+    id: 'income_stability',
+    text: 'How would you describe your income stability?',
     category: 'circumstances',
     type: 'radio',
     options: [
-      'Very insecure - likely to lose income soon',
-      'Somewhat insecure - income could change',
-      'Reasonably secure - stable income expected',
-      'Very secure - guaranteed income (pension, etc.)',
-      'Multiple income sources - very diversified'
+      'Very unstable - irregular or at risk',
+      'Somewhat unstable - varies significantly',
+      'Moderately stable - some variation',
+      'Stable - consistent and reliable',
+      'Very stable - multiple secure sources'
     ],
-    explanation: 'Secure income provides confidence to weather investment losses',
+    explanation: 'Stable income increases capacity to handle investment losses',
     impact: 'medium'
   },
   {
-    id: 'family_dependents',
-    text: 'How many people depend on your income financially?',
+    id: 'future_income_expectations',
+    text: 'How do you expect your income to change over the next 5 years?',
     category: 'circumstances',
-    type: 'select',
+    type: 'radio',
     options: [
-      'None - just myself',
-      '1 person (spouse/partner)',
-      '2-3 people (spouse and 1-2 children)',
-      '4-5 people (larger family)',
-      'More than 5 people'
+      'Likely to decrease significantly',
+      'Likely to decrease somewhat',
+      'Likely to remain the same',
+      'Likely to increase somewhat',
+      'Likely to increase significantly'
     ],
-    explanation: 'More dependents typically reduces capacity for loss',
+    explanation: 'Expected income growth affects future capacity for loss',
+    impact: 'medium'
+  },
+  {
+    id: 'dependents',
+    text: 'How many financial dependents do you have?',
+    category: 'circumstances',
+    type: 'radio',
+    options: [
+      'None',
+      '1-2 dependents',
+      '3-4 dependents',
+      '5 or more dependents',
+      'Extended family obligations'
+    ],
+    explanation: 'More dependents reduce capacity to take investment risks',
     impact: 'medium'
   },
   {
     id: 'life_stage',
-    text: 'What life stage are you in?',
+    text: 'Which best describes your current life stage?',
     category: 'circumstances',
     type: 'radio',
     options: [
@@ -153,26 +172,11 @@ const cflQuestions: CFLQuestion[] = [
     ],
     explanation: 'Life stage affects both time horizon and risk tolerance',
     impact: 'medium'
-  },
-  {
-    id: 'unexpected_expenses',
-    text: 'How likely are you to face large unexpected expenses?',
-    category: 'circumstances',
-    type: 'radio',
-    options: [
-      'Very likely - I often have financial surprises',
-      'Somewhat likely - occasional large expenses',
-      'Possible - typical family circumstances',
-      'Unlikely - very stable financial situation',
-      'Very unlikely - everything is planned and secure'
-    ],
-    explanation: 'Potential for unexpected expenses reduces investment loss capacity',
-    impact: 'medium'
   }
 ]
 
 // ================================================================
-// CFL SCORING LOGIC
+// CFL SCORING LOGIC (Keep existing)
 // ================================================================
 
 interface CFLResult {
@@ -203,80 +207,52 @@ const calculateCFLScore = (answers: { [questionId: string]: any }): CFLResult =>
 
   // Emergency fund adequacy (20% weight)
   const emergencyMonths = monthlyExpenses > 0 ? (emergencyFund / monthlyExpenses) : 0
-  const emergencyScore = Math.min(100, (emergencyMonths / 6) * 100) // 6 months = 100%
+  const emergencyScore = Math.min(100, (emergencyMonths / 6) * 100)
   totalScore += emergencyScore * 0.2
   maxScore += 100 * 0.2
 
-  // Time horizon (20% weight)
-  const timeframeScores = {
-    'Less than 2 years': 10,
-    '2-5 years': 30,
-    '5-10 years': 60,
-    '10-15 years': 85,
-    'More than 15 years': 100
-  }
-  const timeScore = timeframeScores[answers.investment_timeframe as keyof typeof timeframeScores] || 50
-  totalScore += timeScore * 0.2
-  maxScore += 100 * 0.2
-
-  // Income dependency (15% weight)
-  const dependencyScores = {
-    'Yes, I depend on this investment for essential income': 0,
-    'Yes, but only for some discretionary spending': 25,
-    'No, but it would be nice to have some income': 75,
-    'No, I don\'t need any income from this investment': 100
-  }
-  const dependencyScore = dependencyScores[answers.income_dependency as keyof typeof dependencyScores] || 50
-  totalScore += dependencyScore * 0.15
+  // Other investments buffer (15% weight)
+  const yearlyIncome = monthlyIncome * 12
+  const investmentRatio = yearlyIncome > 0 ? (otherInvestments / yearlyIncome) : 0
+  const investmentScore = Math.min(100, investmentRatio * 20)
+  totalScore += investmentScore * 0.15
   maxScore += 100 * 0.15
 
-  // Employment security (10% weight)
-  const employmentScores = {
-    'Very insecure - likely to lose income soon': 10,
-    'Somewhat insecure - income could change': 30,
-    'Reasonably secure - stable income expected': 70,
-    'Very secure - guaranteed income (pension, etc.)': 90,
-    'Multiple income sources - very diversified': 100
+  // Time horizon score (15% weight)
+  const timeframeMap: { [key: string]: number } = {
+    'Less than 1 year': 20,
+    '1-3 years': 40,
+    '3-5 years': 60,
+    '5-10 years': 80,
+    'More than 10 years': 100
   }
-  const employmentScore = employmentScores[answers.employment_security as keyof typeof employmentScores] || 50
-  totalScore += employmentScore * 0.1
-  maxScore += 100 * 0.1
+  const timeScore = timeframeMap[answers.investment_timeframe] || 50
+  totalScore += timeScore * 0.15
+  maxScore += 100 * 0.15
 
-  // Other factors (5% weight total)
-  const familyScores = { 'None - just myself': 100, '1 person (spouse/partner)': 80, '2-3 people (spouse and 1-2 children)': 60, '4-5 people (larger family)': 40, 'More than 5 people': 20 }
-  const familyScore = familyScores[answers.family_dependents as keyof typeof familyScores] || 60
-  totalScore += familyScore * 0.025
+  // Other factors (20% weight)
+  const otherFactorsScore = calculateOtherFactors(answers)
+  totalScore += otherFactorsScore * 0.2
+  maxScore += 100 * 0.2
 
-  const expenseScores = {
-    'Very likely - I often have financial surprises': 20,
-    'Somewhat likely - occasional large expenses': 40,
-    'Possible - typical family circumstances': 60,
-    'Unlikely - very stable financial situation': 80,
-    'Very unlikely - everything is planned and secure': 100
-  }
-  const expenseScore = expenseScores[answers.unexpected_expenses as keyof typeof expenseScores] || 60
-  totalScore += expenseScore * 0.025
-
-  maxScore += 100 * 0.05
-
-  // Final score calculation
-  const finalScore = Math.round((totalScore / maxScore) * 100)
+  // Calculate final score as percentage
+  const finalScore = maxScore > 0 ? (totalScore / maxScore) * 100 : 0
 
   // Determine category and recommendations
   let category: CFLResult['category']
   let description: string
-  let recommendations: string[]
   let maxLossPercentage: number
+  let recommendations: string[] = []
 
   if (finalScore >= 80) {
     category = 'Very High'
-    description = 'You have excellent capacity for loss with strong financial resilience'
-    maxLossPercentage = 30
+    description = 'You have excellent capacity for loss with strong financial foundations'
+    maxLossPercentage = 40
     recommendations = [
-      'You can consider growth-focused investments',
-      'Volatility should not significantly impact your financial security',
-      'You have the financial flexibility to ride out market downturns',
-      'Consider higher-risk, higher-return investment strategies'
+      'You can comfortably withstand significant market volatility',
+      'Higher-risk investments may be suitable if aligned with your goals',
+      'Your strong financial buffer allows for aggressive growth strategies',
+      'Consider maximizing long-term growth opportunities'
     ]
   } else if (finalScore >= 65) {
     category = 'High'
@@ -330,15 +306,78 @@ const calculateCFLScore = (answers: { [questionId: string]: any }): CFLResult =>
   }
 }
 
+function calculateOtherFactors(answers: { [key: string]: any }): number {
+  let score = 50 // Base score
+
+  // Loss impact adjustment
+  const lossImpactMap: { [key: string]: number } = {
+    'No impact - have substantial other resources': 100,
+    'Minor impact - would not affect lifestyle': 80,
+    'Moderate impact - would need some adjustments': 50,
+    'Significant impact - would need to cut back substantially': 20,
+    'Severe impact - would affect basic needs': 0
+  }
+  score = (score + (lossImpactMap[answers.loss_impact] || 50)) / 2
+
+  // Income stability adjustment
+  const stabilityMap: { [key: string]: number } = {
+    'Very stable - multiple secure sources': 100,
+    'Stable - consistent and reliable': 80,
+    'Moderately stable - some variation': 60,
+    'Somewhat unstable - varies significantly': 30,
+    'Very unstable - irregular or at risk': 10
+  }
+  score = (score + (stabilityMap[answers.income_stability] || 50)) / 2
+
+  // Dependents adjustment
+  const dependentsMap: { [key: string]: number } = {
+    'None': 100,
+    '1-2 dependents': 70,
+    '3-4 dependents': 40,
+    '5 or more dependents': 20,
+    'Extended family obligations': 10
+  }
+  score = (score + (dependentsMap[answers.dependents] || 50)) / 2
+
+  return Math.max(0, Math.min(100, score))
+}
+
 // ================================================================
-// CFL ASSESSMENT COMPONENT
+// UPDATED CFL ASSESSMENT COMPONENT WITH CLIENT INTEGRATION
 // ================================================================
 
 export default function CFLAssessmentPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const clientId = searchParams?.get('clientId') || null
+  
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<{ [questionId: string]: any }>({})
   const [isComplete, setIsComplete] = useState(false)
   const [cflResult, setCFLResult] = useState<CFLResult | null>(null)
+  const [clientName, setClientName] = useState<string>('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Load client info if clientId provided
+  useEffect(() => {
+    if (clientId) {
+      loadClientInfo()
+    }
+  }, [clientId])
+
+  const loadClientInfo = async () => {
+    try {
+      const response = await fetch(`/api/clients/${clientId}`)
+      if (response.ok) {
+        const data = await response.json()
+        const client = data.client
+        setClientName(`${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim())
+      }
+    } catch (error) {
+      console.error('Error loading client:', error)
+    }
+  }
 
   const handleAnswer = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
@@ -365,6 +404,49 @@ export default function CFLAssessmentPage() {
     setAnswers({})
     setIsComplete(false)
     setCFLResult(null)
+    setSaveError(null)
+  }
+
+  const saveAssessment = async () => {
+    if (!clientId || !cflResult) return
+
+    setIsSaving(true)
+    setSaveError(null)
+
+    try {
+      const response = await fetch('/api/assessments/cfl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          answers,
+          score: cflResult.score,
+          category: cflResult.category,
+          level: Math.round(cflResult.score / 20) || 1, // Convert to 1-5 scale
+          maxLossPercentage: cflResult.maxLossPercentage,
+          confidenceLevel: cflResult.confidenceLevel,
+          recommendations: cflResult.recommendations,
+          financialData: {
+            monthlyIncome: answers.monthly_income,
+            monthlyExpenses: answers.monthly_essential_expenses,
+            emergencyFund: answers.emergency_fund,
+            otherInvestments: answers.other_investments
+          }
+        }),
+      })
+
+      if (response.ok) {
+        // Redirect back to client profile risk tab
+        router.push(`/clients/${clientId}?tab=risk`)
+      } else {
+        throw new Error('Failed to save assessment')
+      }
+    } catch (error) {
+      console.error('Error saving assessment:', error)
+      setSaveError('Failed to save assessment. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const progress = ((currentQuestion + 1) / cflQuestions.length) * 100
@@ -374,8 +456,15 @@ export default function CFLAssessmentPage() {
   if (isComplete && cflResult) {
     return (
       <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header with client info */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Capacity for Loss Result</h1>
+          {clientName && (
+            <div className="flex items-center justify-center text-gray-600 mb-2">
+              <User className="h-4 w-4 mr-2" />
+              <span>Assessment for: {clientName}</span>
+            </div>
+          )}
           <p className="text-gray-600">Based on your financial circumstances and resilience</p>
         </div>
 
@@ -397,291 +486,237 @@ export default function CFLAssessmentPage() {
                 cflResult.category === 'Low' ? 'text-orange-600' : 'text-red-600'
               )} />
               <div>
-                <CardTitle className="text-2xl">{cflResult.category} Capacity</CardTitle>
-                <p className="text-lg font-semibold">{cflResult.score}/100</p>
+                <h2 className="text-4xl font-bold">{cflResult.category}</h2>
+                <p className="text-lg">Capacity for Loss</p>
               </div>
             </div>
-            <p className="text-gray-700">{cflResult.description}</p>
-            <div className="mt-3 flex justify-center space-x-4">
-              <Badge variant="outline">
-                Max Acceptable Loss: {cflResult.maxLossPercentage}%
-              </Badge>
-              <Badge variant="default">
-                {cflResult.confidenceLevel}% Confidence
-              </Badge>
-            </div>
+            <p className="text-lg text-gray-700 max-w-2xl mx-auto">{cflResult.description}</p>
           </CardHeader>
-          
-          <CardContent className="space-y-6 pt-6">
-            {/* Score Breakdown */}
-            <div className="space-y-4">
-              <h4 className="flex items-center space-x-2 font-semibold">
-                <PieChart className="h-5 w-5 text-blue-600" />
-                <span>Financial Resilience Factors</span>
-              </h4>
-              
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Income vs Expenses</span>
-                    <span className="font-medium">
-                      {answers.monthly_income && answers.monthly_essential_expenses 
-                        ? `${Math.round(((Number(answers.monthly_income) - Number(answers.monthly_essential_expenses)) / Number(answers.monthly_income)) * 100)}%`
-                        : 'N/A'} surplus
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Emergency Fund</span>
-                    <span className="font-medium">
-                      {answers.emergency_fund && answers.monthly_essential_expenses
-                        ? `${Math.round(Number(answers.emergency_fund) / Number(answers.monthly_essential_expenses))} months`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Investment Timeframe</span>
-                    <span className="font-medium">{answers.investment_timeframe || 'N/A'}</span>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Income Dependency</span>
-                    <span className="font-medium text-xs">
-                      {answers.income_dependency?.includes('No') ? 'Independent' : 'Some dependency'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Employment Security</span>
-                    <span className="font-medium text-xs">
-                      {answers.employment_security?.includes('secure') ? 'Secure' : 'Variable'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Financial Dependents</span>
-                    <span className="font-medium">{answers.family_dependents || 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
+
+          <CardContent className="p-8">
+            {/* Key Metrics */}
+            <div className="grid md:grid-cols-3 gap-6 mb-8">
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <PieChart className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 mb-1">CFL Score</p>
+                  <p className="text-3xl font-bold text-blue-600">{cflResult.score.toFixed(1)}%</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <TrendingDown className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 mb-1">Maximum Loss Tolerance</p>
+                  <p className="text-3xl font-bold text-orange-600">{cflResult.maxLossPercentage}%</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 mb-1">Confidence Level</p>
+                  <p className="text-3xl font-bold text-green-600">{cflResult.confidenceLevel}%</p>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Recommendations */}
-            <div className="space-y-4">
-              <h4 className="flex items-center space-x-2 font-semibold">
-                <TrendingDown className="h-5 w-5 text-purple-600" />
-                <span>Investment Recommendations</span>
-              </h4>
-              <ul className="space-y-2">
-                {cflResult.recommendations.map((recommendation, i) => (
-                  <li key={i} className="flex items-start space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-sm">{recommendation}</span>
-                  </li>
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2" />
+                Key Recommendations
+              </h3>
+              <div className="space-y-3">
+                {cflResult.recommendations.map((rec, index) => (
+                  <div key={index} className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
+                    <p className="text-gray-700">{rec}</p>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            {/* Warning for Low Capacity */}
-            {(cflResult.category === 'Low' || cflResult.category === 'Very Low') && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex items-center space-x-2 text-orange-800 mb-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span className="font-medium">Important Considerations</span>
-                </div>
-                <p className="text-sm text-orange-700">
-                  Your current financial situation indicates limited capacity for investment losses. 
-                  Consider building emergency funds and improving your financial foundation before 
-                  pursuing higher-risk investments.
-                </p>
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              {clientId ? (
+                <>
+                  <Button 
+                    onClick={saveAssessment} 
+                    className="flex-1"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Assessment & Return to Client
+                      </>
+                    )}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={resetAssessment}
+                    className="flex-1"
+                    disabled={isSaving}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retake Assessment
+                  </Button>
+                </>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  onClick={resetAssessment}
+                  className="w-full"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retake Assessment
+                </Button>
+              )}
+            </div>
+
+            {saveError && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600">{saveError}</p>
               </div>
             )}
-
-            {/* Next Steps */}
-            <div className="space-y-4">
-              <h4 className="flex items-center space-x-2 font-semibold">
-                <Calculator className="h-5 w-5 text-blue-600" />
-                <span>Next Steps</span>
-              </h4>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-800 mb-3">
-                  Your CFL assessment should be combined with your Attitude to Risk (ATR) to determine 
-                  your overall investment strategy.
-                </p>
-                <div className="text-sm text-blue-700">
-                  <strong>Recommended Actions:</strong>
-                  <ul className="mt-2 space-y-1">
-                    <li>• Complete ATR assessment if not done already</li>
-                    <li>• Review portfolio recommendations based on both assessments</li>
-                    <li>• Consider financial planning to improve capacity for loss</li>
-                    <li>• Schedule regular reviews to reassess as circumstances change</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
-
-        {/* Actions */}
-        <div className="flex justify-center space-x-4">
-          <Button onClick={resetAssessment} variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retake Assessment
-          </Button>
-          <Button onClick={() => alert('CFL result saved to client profile!')}>
-            <FileText className="h-4 w-4 mr-2" />
-            Save CFL Result
-          </Button>
-        </div>
       </div>
     )
   }
 
+  // Question display
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Capacity for Loss Assessment</h1>
-        <p className="text-gray-600">Evaluate your financial resilience and ability to withstand investment losses</p>
+        {clientName && (
+          <div className="flex items-center justify-center text-gray-600 mb-2">
+            <User className="h-4 w-4 mr-2" />
+            <span>Assessment for: {clientName}</span>
+          </div>
+        )}
+        <p className="text-gray-600">Evaluating your financial resilience and ability to absorb losses</p>
       </div>
 
       {/* Progress */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="p-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium">Question {currentQuestion + 1} of {cflQuestions.length}</span>
-            <span className="text-sm text-gray-500">{Math.round(progress)}% Complete</span>
+            <span className="text-sm font-medium">{Math.round(progress)}% Complete</span>
           </div>
-          <Progress value={progress} className="w-full" />
+          <Progress value={progress} className="h-2" />
         </CardContent>
       </Card>
 
-      {/* Question */}
-      {currentQuestionData && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2 text-blue-600">
-                <DollarSign className="h-5 w-5" />
-                <span className="text-sm font-medium capitalize">{currentQuestionData.category}</span>
-              </div>
-              <Badge variant={
-                currentQuestionData.impact === 'high' ? 'destructive' :
-                currentQuestionData.impact === 'medium' ? 'warning' : 'secondary'
-              }>
+      {/* Question Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center space-x-3">
+            <div className={cn(
+              "flex items-center justify-center w-10 h-10 rounded-full",
+              currentQuestionData.impact === 'high' ? 'bg-red-100' :
+              currentQuestionData.impact === 'medium' ? 'bg-yellow-100' : 'bg-green-100'
+            )}>
+              <span className="font-bold">{currentQuestion + 1}</span>
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-lg">{currentQuestionData.text}</CardTitle>
+              <Badge 
+                variant={currentQuestionData.impact === 'high' ? 'destructive' : 'secondary'}
+                className="mt-2"
+              >
                 {currentQuestionData.impact} impact
               </Badge>
             </div>
-            <CardTitle className="text-xl leading-relaxed">
-              {currentQuestionData.text}
-            </CardTitle>
-            <p className="text-sm text-gray-600 mt-2">{currentQuestionData.explanation}</p>
-          </CardHeader>
-          <CardContent>
-            {currentQuestionData.type === 'number' && (
-              <div className="space-y-2">
-                <input
-                  type="number"
-                  value={currentAnswer || ''}
-                  onChange={(e) => handleAnswer(currentQuestionData.id, e.target.value)}
-                  placeholder="Enter amount in £"
-                  min={currentQuestionData.validation?.min}
-                  max={currentQuestionData.validation?.max}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Explanation */}
+            <div className="flex items-start space-x-2 p-3 bg-blue-50 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-blue-600 mt-0.5" />
+              <p className="text-sm text-blue-800">{currentQuestionData.explanation}</p>
+            </div>
 
-            {currentQuestionData.type === 'select' && (
-              <select
-                value={currentAnswer || ''}
-                onChange={(e) => handleAnswer(currentQuestionData.id, e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Select an option...</option>
-                {currentQuestionData.options?.map((option, index) => (
-                  <option key={index} value={option}>{option}</option>
-                ))}
-              </select>
-            )}
+            {/* Answer Input */}
+            <div className="space-y-3">
+              {currentQuestionData.type === 'radio' && currentQuestionData.options?.map((option, index) => (
+                <label
+                  key={index}
+                  className={cn(
+                    "flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all",
+                    currentAnswer === option
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name={currentQuestionData.id}
+                    value={option}
+                    checked={currentAnswer === option}
+                    onChange={(e) => handleAnswer(currentQuestionData.id, e.target.value)}
+                    className="sr-only"
+                  />
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 mr-3",
+                    currentAnswer === option
+                      ? "border-blue-500 bg-blue-500"
+                      : "border-gray-300"
+                  )}>
+                    {currentAnswer === option && (
+                      <div className="w-full h-full rounded-full bg-white scale-50" />
+                    )}
+                  </div>
+                  <span className="text-gray-700">{option}</span>
+                </label>
+              ))}
 
-            {currentQuestionData.type === 'radio' && (
-              <div className="space-y-3">
-                {currentQuestionData.options?.map((option, index) => {
-                  const isSelected = currentAnswer === option
-                  
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleAnswer(currentQuestionData.id, option)}
-                      className={cn(
-                        "w-full p-4 text-left border rounded-lg transition-all hover:bg-gray-50",
-                        isSelected 
-                          ? "border-blue-500 bg-blue-50 text-blue-900" 
-                          : "border-gray-200"
-                      )}
-                    >
-                      <div className="flex items-start space-x-3">
-                        <div 
-                          className={cn(
-                            "w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center",
-                            isSelected 
-                              ? "border-blue-500 bg-blue-500" 
-                              : "border-gray-300"
-                          )}
-                        >
-                          {isSelected && (
-                            <div className="w-2 h-2 rounded-full bg-white" />
-                          )}
-                        </div>
-                        <span className="text-sm leading-relaxed">{option}</span>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              {currentQuestionData.type === 'number' && (
+                <div>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="number"
+                      value={currentAnswer || ''}
+                      onChange={(e) => handleAnswer(currentQuestionData.id, e.target.value)}
+                      className="w-full pl-10 pr-3 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                      placeholder="Enter amount"
+                      min={currentQuestionData.validation?.min}
+                      max={currentQuestionData.validation?.max}
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Enter the amount in pounds (£)
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
-      {/* Navigation */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex justify-between">
+          {/* Navigation */}
+          <div className="flex justify-between mt-8">
             <Button
+              variant="outline"
               onClick={prevQuestion}
               disabled={currentQuestion === 0}
-              variant="outline"
             >
               <ChevronLeft className="h-4 w-4 mr-2" />
               Previous
             </Button>
-
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                {Object.keys(answers).length} of {cflQuestions.length} questions answered
-              </p>
-            </div>
-
             <Button
               onClick={nextQuestion}
-              disabled={!currentAnswer}
+              disabled={!currentAnswer && currentQuestionData.validation?.required}
             >
-              {currentQuestion === cflQuestions.length - 1 ? (
-                <>
-                  <Calculator className="h-4 w-4 mr-2" />
-                  Calculate CFL
-                </>
-              ) : (
-                <>
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </>
-              )}
+              {currentQuestion === cflQuestions.length - 1 ? 'Complete' : 'Next'}
+              <ChevronRight className="h-4 w-4 ml-2" />
             </Button>
           </div>
         </CardContent>
