@@ -1,29 +1,61 @@
 // src/app/api/clients/route.ts
-// ✅ FIXED: Ensure all paths return a response
+// ✅ FIXED: Returns RAW database data, no transformation
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// ✅ CRITICAL FIX: Force this route to be dynamic
+// Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('📋 GET /api/clients - Fetching clients...');
     
-    // ✅ FIXED: Use request.nextUrl.searchParams
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
     
+    // Get filter parameters
+    const status = searchParams.getAll('status');
+    const vulnerabilityStatus = searchParams.get('vulnerabilityStatus');
+    const search = searchParams.get('search');
+    const sortBy = searchParams.get('sortBy') || 'updated_at';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
+    
+    // Build query
     let query = supabase
       .from('clients')
       .select('*', { count: 'exact' });
     
+    // Apply filters
+    if (status.length > 0) {
+      query = query.in('status', status);
+    }
+    
+    if (vulnerabilityStatus && vulnerabilityStatus !== 'all') {
+      if (vulnerabilityStatus === 'vulnerable') {
+        // Check for true boolean values in JSONB
+        query = query.eq('vulnerability_assessment->>is_vulnerable', 'true');
+      } else if (vulnerabilityStatus === 'not_vulnerable') {
+        // Check for false or null/missing values
+        query = query.or('vulnerability_assessment->>is_vulnerable.eq.false,vulnerability_assessment.is.null');
+      }
+    }
+    
+    if (search) {
+      query = query.or(`
+        personal_details->first_name.ilike.%${search}%,
+        personal_details->last_name.ilike.%${search}%,
+        client_ref.ilike.%${search}%,
+        contact_info->email.ilike.%${search}%
+      `);
+    }
+    
+    // Apply sorting and pagination
     query = query
-      .range(offset, offset + limit - 1)
-      .order('updated_at', { ascending: false });
+      .order(sortBy, { ascending: sortOrder === 'asc' })
+      .range(offset, offset + limit - 1);
     
     const { data: clients, error, count } = await query;
     
@@ -38,9 +70,10 @@ export async function GET(request: NextRequest) {
     
     console.log(`✅ Found ${clients?.length || 0} clients (total: ${count})`);
     
+    // ✅ CRITICAL: Return RAW data, no transformation!
     return NextResponse.json({
       success: true,
-      clients: clients || [],
+      clients: clients || [], // RAW database data
       total: count || 0,
       page,
       limit,
@@ -49,7 +82,6 @@ export async function GET(request: NextRequest) {
     
   } catch (error) {
     console.error('❌ GET /api/clients error:', error);
-    // ✅ CRITICAL: Always return a response
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
@@ -58,65 +90,54 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ADD THIS POST FUNCTION HERE:
 export async function POST(request: NextRequest) {
   try {
-    console.log('📝 POST /api/clients - Creating new client...');
+    console.log('📋 POST /api/clients - Creating new client...');
     
     const body = await request.json();
     
-    // Basic validation
-    if (!body.personalDetails || !body.contactInfo) {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing required fields: personalDetails and contactInfo'
-      }, { status: 400 });
-    }
-    
-    // Transform the data to match your database schema
+    // Prepare data for database (already in snake_case from frontend)
     const clientData = {
+      client_ref: body.clientRef,
       personal_details: body.personalDetails,
       contact_info: body.contactInfo,
-      financial_profile: body.financialProfile || {},
-      vulnerability_assessment: body.vulnerabilityAssessment || {},
-      risk_profile: body.riskProfile || {},
+      financial_profile: body.financialProfile,
+      vulnerability_assessment: body.vulnerabilityAssessment,
+      risk_profile: body.riskProfile,
       status: body.status || 'prospect',
-      advisor_id: body.advisorId,
-      firm_id: body.firmId,
-      client_ref: body.clientRef,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     
-    const { data, error } = await supabase
+    const { data: client, error } = await supabase
       .from('clients')
-      .insert(clientData)
+      .insert([clientData])
       .select()
       .single();
     
     if (error) {
       console.error('❌ Database error:', error);
-      return NextResponse.json({ 
-        success: false, 
-        error: error.message,
-        details: error
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to create client',
+        details: error.message
       }, { status: 500 });
     }
     
-    console.log('✅ Client created successfully:', data.id);
+    console.log(`✅ Created client: ${client.client_ref}`);
     
+    // ✅ Return RAW data
     return NextResponse.json({
       success: true,
-      client: data,
-      message: 'Client created successfully'
-    });
+      client // RAW database data
+    }, { status: 201 });
     
   } catch (error) {
     console.error('❌ POST /api/clients error:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Invalid request',
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 400 });
+    }, { status: 500 });
   }
 }

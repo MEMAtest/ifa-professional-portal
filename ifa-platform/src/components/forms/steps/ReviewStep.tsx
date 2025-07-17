@@ -25,7 +25,7 @@ interface Assessment {
     finalRiskProfile: number;
   };
   vulnerabilityAssessment: {
-    hasVulnerabilities: boolean;
+    is_vulnerable: boolean;
     vulnerabilityTypes: string[];
   };
   knowledgeExperience: {
@@ -207,7 +207,7 @@ export const ReviewStep = ({ assessment, onSubmit, isSubmitting }: ReviewStepPro
         </CardHeader>
         <CardContent>
           <div className="flex items-center space-x-3">
-            {assessment.vulnerabilityAssessment.hasVulnerabilities ? (
+            {assessment.vulnerabilityAssessment.is_vulnerable ? (
               <>
                 <AlertTriangle className="h-5 w-5 text-amber-600" />
                 <div>

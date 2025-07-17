@@ -1,12 +1,13 @@
 // src/app/api/clients/[id]/route.ts
-// ✅ COMPLETE DYNAMIC CLIENT ROUTE HANDLER
+// ✅ FIXED: Returns RAW database data, no transformation
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { revalidatePath } from 'next/cache';
 
 /**
  * GET /api/clients/[id]
- * Get a single client by ID
+ * Get a single client by ID - returns RAW data
  */
 export async function GET(
   request: NextRequest,
@@ -34,7 +35,6 @@ export async function GET(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        // No rows returned
         return NextResponse.json(
           { 
             success: false, 
@@ -55,11 +55,12 @@ export async function GET(
       );
     }
 
-    console.log(`✅ Found client: ${client.personalDetails?.firstName || 'Unknown'} ${client.personalDetails?.lastName || ''}`);
+    console.log(`✅ Found client: ${client.client_ref}`);
 
+    // ✅ CRITICAL: Return RAW data, no transformation!
     return NextResponse.json({
       success: true,
-      client: client
+      client // RAW database data
     });
 
   } catch (error) {
@@ -77,14 +78,14 @@ export async function GET(
 
 /**
  * PATCH /api/clients/[id]
- * Update a client
+ * Update a client - accepts camelCase, stores as snake_case
  */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    console.log(`📝 PATCH /api/clients/${params.id} - Updating client...`);
+    console.log(`📋 PATCH /api/clients/${params.id} - Updating client...`);
     
     if (!params.id) {
       return NextResponse.json(
@@ -96,27 +97,23 @@ export async function PATCH(
       );
     }
 
-    // Parse request body
     const updates = await request.json();
     
-    if (!updates || Object.keys(updates).length === 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'No update data provided' 
-        }, 
-        { status: 400 }
-      );
-    }
-
-    // Add updated timestamp
-    const updateData = {
-      ...updates,
+    // Prepare update data (convert to snake_case for DB)
+    const updateData: any = {
       updated_at: new Date().toISOString()
     };
-
-    // Update client in database
-    const { data: updatedClient, error } = await supabase
+    
+    // Map camelCase fields to snake_case
+    if (updates.personalDetails) updateData.personal_details = updates.personalDetails;
+    if (updates.contactInfo) updateData.contact_info = updates.contactInfo;
+    if (updates.financialProfile) updateData.financial_profile = updates.financialProfile;
+    if (updates.vulnerabilityAssessment) updateData.vulnerability_assessment = updates.vulnerabilityAssessment;
+    if (updates.riskProfile) updateData.risk_profile = updates.riskProfile;
+    if (updates.status) updateData.status = updates.status;
+    if (updates.clientRef) updateData.client_ref = updates.clientRef;
+    
+    const { data: client, error } = await supabase
       .from('clients')
       .update(updateData)
       .eq('id', params.id)
@@ -145,12 +142,17 @@ export async function PATCH(
       );
     }
 
-    console.log(`✅ Updated client: ${params.id}`);
+    console.log(`✅ Updated client: ${client.client_ref}`);
+    
+    // Revalidate the cache
+    revalidatePath('/api/clients');
+    revalidatePath(`/api/clients/${params.id}`);
+    revalidatePath('/clients');
 
+    // ✅ Return RAW data
     return NextResponse.json({
       success: true,
-      client: updatedClient,
-      message: 'Client updated successfully'
+      client // RAW database data
     });
 
   } catch (error) {
@@ -168,14 +170,14 @@ export async function PATCH(
 
 /**
  * DELETE /api/clients/[id]
- * Delete a client (soft delete - mark as archived)
+ * Delete a client
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    console.log(`🗑️ DELETE /api/clients/${params.id} - Deleting client...`);
+    console.log(`📋 DELETE /api/clients/${params.id} - Deleting client...`);
     
     if (!params.id) {
       return NextResponse.json(
@@ -187,15 +189,13 @@ export async function DELETE(
       );
     }
 
-    // Check if client exists first
-    const { data: existingClient, error: fetchError } = await supabase
+    const { error } = await supabase
       .from('clients')
-      .select('id, personalDetails')
-      .eq('id', params.id)
-      .single();
+      .delete()
+      .eq('id', params.id);
 
-    if (fetchError) {
-      if (fetchError.code === 'PGRST116') {
+    if (error) {
+      if (error.code === 'PGRST116') {
         return NextResponse.json(
           { 
             success: false, 
@@ -205,44 +205,26 @@ export async function DELETE(
         );
       }
       
-      console.error('❌ Database error:', fetchError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to check client existence',
-          details: fetchError.message 
-        }, 
-        { status: 500 }
-      );
-    }
-
-    // Soft delete - mark as archived instead of hard delete
-    const { error: deleteError } = await supabase
-      .from('clients')
-      .update({ 
-        status: 'archived',
-        archived_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', params.id);
-
-    if (deleteError) {
-      console.error('❌ Database error:', deleteError);
+      console.error('❌ Database error:', error);
       return NextResponse.json(
         { 
           success: false, 
           error: 'Failed to delete client',
-          details: deleteError.message 
+          details: error.message 
         }, 
         { status: 500 }
       );
     }
 
-    console.log(`✅ Archived client: ${params.id}`);
+    console.log(`✅ Deleted client: ${params.id}`);
+    
+    // Revalidate the cache
+    revalidatePath('/api/clients');
+    revalidatePath('/clients');
 
     return NextResponse.json({
       success: true,
-      message: 'Client archived successfully'
+      message: 'Client deleted successfully'
     });
 
   } catch (error) {

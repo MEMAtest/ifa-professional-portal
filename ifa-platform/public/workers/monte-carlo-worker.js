@@ -1,5 +1,6 @@
 // public/workers/monte-carlo-worker.js
 // Web Worker for background Monte Carlo simulations
+// UPDATED: Added test handler
 
 /**
  * Monte Carlo Web Worker
@@ -314,6 +315,11 @@ self.onmessage = function(e) {
   
   try {
     switch (type) {
+      case 'test':
+        // Handle test message to confirm worker is ready
+        self.postMessage({ type: 'test', status: 'ready' });
+        break;
+        
       case 'simulate':
         // Add execution timing
         const startTime = performance.now();

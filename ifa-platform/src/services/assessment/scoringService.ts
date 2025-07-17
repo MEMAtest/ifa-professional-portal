@@ -54,12 +54,12 @@ export class AssessmentScoringService {
     clientAge: number,
     netWorth: number
   ): VulnerabilityAssessment {
-    const hasVulnerabilities = vulnerabilityTypes.length > 0 && !vulnerabilityTypes.includes('none')
+    const is_vulnerable = vulnerabilityTypes.length > 0 && !vulnerabilityTypes.includes('none')
     
     // Determine review frequency based on vulnerability severity
     let reviewFrequency: 'standard' | 'enhanced' | 'frequent' = 'standard'
     
-    if (hasVulnerabilities) {
+    if (is_vulnerable) {
       const highRiskVulnerabilities = ['health', 'life_events']
       const hasHighRisk = vulnerabilityTypes.some(v => highRiskVulnerabilities.includes(v))
       
@@ -71,7 +71,7 @@ export class AssessmentScoringService {
     }
 
     return {
-      hasVulnerabilities,
+      is_vulnerable,
       vulnerabilityTypes: vulnerabilityTypes as any,
       healthVulnerabilities: vulnerabilityTypes.includes('health') ? 'Identified' : '',
       lifeEventVulnerabilities: vulnerabilityTypes.includes('life_events') ? 'Identified' : '',
@@ -100,7 +100,7 @@ export class AssessmentScoringService {
     else if (riskAlignment > 1) score -= 10
 
     // Vulnerability impact (25% weight)
-    if (vulnerabilityAssessment.hasVulnerabilities) {
+    if (vulnerabilityAssessment.is_vulnerable) {
       const vulnerabilityCount = vulnerabilityAssessment.vulnerabilityTypes.length
       score -= Math.min(25, vulnerabilityCount * 8)
     }
@@ -204,7 +204,7 @@ export class AssessmentScoringService {
     const flags: string[] = []
     
     if (score < 60) flags.push('LOW_SUITABILITY_SCORE')
-    if (vulnerability.hasVulnerabilities) flags.push('VULNERABLE_CLIENT')
+    if (vulnerability.is_vulnerable) flags.push('VULNERABLE_CLIENT')
     if (knowledge.investmentKnowledge === 'basic') flags.push('LIMITED_KNOWLEDGE')
     if (vulnerability.reviewFrequency === 'frequent') flags.push('FREQUENT_REVIEW_REQUIRED')
     
@@ -230,9 +230,9 @@ export class AssessmentScoringService {
       },
       {
         outcome: 'understanding' as const,
-        status: vulnerability.hasVulnerabilities ? 'partially_met' as const : 'met' as const,
+        status: vulnerability.is_vulnerable ? 'partially_met' as const : 'met' as const,
         evidence: 'Risk warnings and product information provided',
-        actions: vulnerability.hasVulnerabilities ? ['Simplified documentation provided'] : []
+        actions: vulnerability.is_vulnerable ? ['Simplified documentation provided'] : []
       },
       {
         outcome: 'support' as const,

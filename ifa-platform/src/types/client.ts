@@ -146,6 +146,7 @@ export interface ClientFormData {
 export interface ClientFilters {
   status?: ClientStatus[];
   advisorId?: string;
+  firmId?: string; // ✅ ADD THIS LINE
   riskLevel?: string[];
   vulnerabilityStatus?: boolean | 'all' | 'vulnerable' | 'not_vulnerable'; // ✅ FIXED: Allow string values
   dateRange?: {
@@ -398,13 +399,48 @@ export type DocumentType = ClientDocument['documentType'];
 export type AssessmentType = ClientAssessment['assessmentType'];
 
 // Helper Functions
+// Replace the getVulnerabilityStatus function in /src/types/client.ts with this version:
+
 export function getVulnerabilityStatus(
-  vulnerabilityAssessment?: VulnerabilityAssessment | null
-): boolean | undefined {
+  vulnerabilityAssessment?: VulnerabilityAssessment | null | any
+): boolean {
   if (!vulnerabilityAssessment) {
-    return undefined;
+    return false;
   }
-  return vulnerabilityAssessment.is_vulnerable;
+
+  // Handle different data formats from the database
+  // Check direct boolean
+  if (typeof vulnerabilityAssessment.is_vulnerable === 'boolean') {
+    return vulnerabilityAssessment.is_vulnerable;
+  }
+  
+  // Check string boolean
+  if (typeof vulnerabilityAssessment.is_vulnerable === 'string') {
+    return vulnerabilityAssessment.is_vulnerable === 'true';
+  }
+
+  // Check variations in property names
+  if (typeof vulnerabilityAssessment.isVulnerable === 'boolean') {
+    return vulnerabilityAssessment.isVulnerable;
+  }
+  
+  if (typeof vulnerabilityAssessment.isvulnerable === 'boolean') {
+    return vulnerabilityAssessment.isvulnerable;
+  }
+
+  // Check if there are vulnerability factors (alternative way to determine vulnerability)
+  if (Array.isArray(vulnerabilityAssessment.vulnerabilityFactors) && 
+      vulnerabilityAssessment.vulnerabilityFactors.length > 0) {
+    return true;
+  }
+
+  if (Array.isArray(vulnerabilityAssessment.vulnerability_factors) && 
+      vulnerabilityAssessment.vulnerability_factors.length > 0) {
+    return true;
+  }
+
+  // Default to false if we can't determine vulnerability status
+  return false;
 }
 
 export function isValidClientStatus(status: any): status is ClientStatus {

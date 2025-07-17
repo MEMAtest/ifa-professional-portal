@@ -54,7 +54,7 @@ export interface RiskProfile {
 }
 
 export interface VulnerabilityAssessment {
-  hasVulnerabilities: boolean;
+  is_vulnerable: boolean;
   vulnerabilityTypes: string[];
   healthVulnerabilities: string;
   lifeEventVulnerabilities: string;
@@ -175,7 +175,7 @@ export const MOCK_ASSESSMENTS: Assessment[] = [
       expectedReturn: 5.5
     },
     vulnerabilityAssessment: {
-      hasVulnerabilities: false,
+      is_vulnerable: false,
       vulnerabilityTypes: ['none'],
       healthVulnerabilities: '',
       lifeEventVulnerabilities: '',
@@ -281,7 +281,7 @@ export const MOCK_ASSESSMENTS: Assessment[] = [
       expectedReturn: 7.5
     },
     vulnerabilityAssessment: {
-      hasVulnerabilities: true,
+      is_vulnerable: true,
       vulnerabilityTypes: ['life_events'],
       healthVulnerabilities: '',
       lifeEventVulnerabilities: 'Recent divorce proceedings ongoing',

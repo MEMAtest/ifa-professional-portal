@@ -336,17 +336,17 @@ export default function ClientsPage() {
 
       {/* ✅ PRODUCTION: Enhanced clickable statistics dashboard with proper validation */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card 
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => handleStatisticClick('total')}
-          >
-            <CardContent className="p-4">
-              <p className="text-sm font-medium text-gray-600">Total Clients</p>
-              <p className="text-2xl font-bold text-gray-900">{statistics.totalClients}</p>
-              <p className="text-xs text-gray-500 mt-1">Click to view all</p>
-            </CardContent>
-          </Card>
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <Card 
+      className="cursor-pointer hover:shadow-lg transition-shadow"
+      onClick={() => handleStatisticClick('total')}
+    >
+      <CardContent className="p-4">
+        <p className="text-sm font-medium text-gray-600">Total Clients</p>
+        <p className="text-2xl font-bold">{statistics.totalClients || 0}</p>
+        <p className="text-xs text-gray-500 mt-1">Click to view all</p>
+      </CardContent>
+    </Card>
           <Card 
             className="cursor-pointer hover:shadow-lg transition-shadow"
             onClick={() => handleStatisticClick('active')}

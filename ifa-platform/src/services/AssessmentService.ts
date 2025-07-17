@@ -96,7 +96,7 @@ export class AssessmentService {
       // Assumes your assessments table has a 'client_id' foreign key.
       const { data, error } = await supabase
         .from('assessments')
-        .select('payload') // Select only the JSONB column containing the full assessment
+        .select('assessment_data') // Select only the JSONB column containing the full assessment
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
 
@@ -107,7 +107,7 @@ export class AssessmentService {
 
       // The query returns an array of objects like [{ payload: ... }, { payload: ... }]
       // We need to extract the payload from each object.
-      return data?.map(item => item.payload) || [];
+      return data?.map(item => item.assessment_data) || [];
     } catch (err) {
       console.error('Unexpected error in getAssessmentsByClientId:', err);
       return [];
@@ -136,7 +136,7 @@ export class AssessmentService {
     try {
         const { data, error } = await supabase
             .from('assessments')
-            .select('payload')
+            .select('assessment_data')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -144,7 +144,7 @@ export class AssessmentService {
             return [];
         }
 
-        return data?.map(item => item.payload) || [];
+        return data?.map(item => item.assessment_data) || [];
     } catch (err) {
         console.error('Unexpected error in getAllAssessments:', err);
         return [];

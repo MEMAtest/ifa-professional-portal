@@ -24,7 +24,7 @@ interface Assessment {
     finalRiskProfile: number;
   };
   vulnerabilityAssessment: {
-    hasVulnerabilities: boolean;
+    is_vulnerable: boolean;
   };
   suitabilityAssessment: {
     suitabilityScore: number;
@@ -47,7 +47,7 @@ const MOCK_ASSESSMENTS: Assessment[] = [
       finalRiskProfile: 3
     },
     vulnerabilityAssessment: {
-      hasVulnerabilities: false
+      is_vulnerable: false
     },
     suitabilityAssessment: {
       suitabilityScore: 85
@@ -67,7 +67,7 @@ const MOCK_ASSESSMENTS: Assessment[] = [
       finalRiskProfile: 5
     },
     vulnerabilityAssessment: {
-      hasVulnerabilities: true
+      is_vulnerable: true
     },
     suitabilityAssessment: {
       suitabilityScore: 78
@@ -107,9 +107,9 @@ export const AssessmentDashboard = ({ assessments = MOCK_ASSESSMENTS }: Dashboar
 
     // Vulnerability filter
     if (vulnerabilityFilter === 'vulnerable') {
-      filtered = filtered.filter(assessment => assessment.vulnerabilityAssessment.hasVulnerabilities)
+      filtered = filtered.filter(assessment => assessment.vulnerabilityAssessment.is_vulnerable)
     } else if (vulnerabilityFilter === 'not_vulnerable') {
-      filtered = filtered.filter(assessment => !assessment.vulnerabilityAssessment.hasVulnerabilities)
+      filtered = filtered.filter(assessment => !assessment.vulnerabilityAssessment.is_vulnerable)
     }
 
     setFilteredAssessments(filtered)
@@ -117,7 +117,7 @@ export const AssessmentDashboard = ({ assessments = MOCK_ASSESSMENTS }: Dashboar
 
   // Calculate summary statistics
   const totalAssessments = filteredAssessments.length
-  const vulnerableClients = filteredAssessments.filter(a => a.vulnerabilityAssessment.hasVulnerabilities).length
+  const vulnerableClients = filteredAssessments.filter(a => a.vulnerabilityAssessment.is_vulnerable).length
   const averageRisk = filteredAssessments.reduce((sum, a) => sum + a.riskProfile.finalRiskProfile, 0) / totalAssessments || 0
   const averageSuitabilityScore = filteredAssessments.reduce((sum, a) => sum + a.suitabilityAssessment.suitabilityScore, 0) / totalAssessments || 0
 
@@ -150,7 +150,7 @@ export const AssessmentDashboard = ({ assessments = MOCK_ASSESSMENTS }: Dashboar
       'Client Name': `${assessment.clientProfile.firstName} ${assessment.clientProfile.lastName}`,
       'Risk Profile': assessment.riskProfile.finalRiskProfile,
       'Suitability Score': assessment.suitabilityAssessment.suitabilityScore,
-      'Vulnerable': assessment.vulnerabilityAssessment.hasVulnerabilities ? 'Yes' : 'No',
+      'Vulnerable': assessment.vulnerabilityAssessment.is_vulnerable ? 'Yes' : 'No',
       'Status': assessment.status,
       'Advice Type': assessment.adviceType,
       'Created Date': new Date(assessment.createdAt).toLocaleDateString()
@@ -415,7 +415,7 @@ export const AssessmentDashboard = ({ assessments = MOCK_ASSESSMENTS }: Dashboar
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      {assessment.vulnerabilityAssessment.hasVulnerabilities ? (
+                      {assessment.vulnerabilityAssessment.is_vulnerable ? (
                         <span className="inline-flex items-center text-amber-600">
                           <AlertTriangle className="h-4 w-4 mr-1" />
                           Yes

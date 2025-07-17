@@ -1,6 +1,5 @@
-// ===================================================================
-// src/components/clients/ClientDetails.tsx - COMPLETE UPDATED FILE
-// ===================================================================
+// src/components/clients/ClientDetails.tsx
+// ✅ DEFINITIVE VERSION - All issues fixed
 
 'use client';
 
@@ -79,20 +78,31 @@ export function ClientDetails({
     loadActivities();
   }, [client.id]);
 
+  /**
+   * ✅ FIXED: This function now uses the correct snake_case column names
+   * for the Supabase query, preventing 400 Bad Request errors.
+   */
   const checkCashFlowData = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('cash_flow_scenarios')
-        .select('id')
-        .eq('clientId', client.id)
-        .eq('isActive', true);
+        .select('id', { count: 'exact', head: true }) // More efficient, only gets count
+        .eq('client_id', client.id)     // CORRECT: was 'clientId'
+        .eq('is_active', true);           // CORRECT: was 'isActive'
 
-      if (!error && data) {
-        setHasCashFlowAnalysis(data.length > 0);
-        setCashFlowCount(data.length);
+      if (error) {
+        throw error;
+      }
+      
+      if (count !== null) {
+        setHasCashFlowAnalysis(count > 0);
+        setCashFlowCount(count);
       }
     } catch (error) {
       console.error('Error checking cash flow data:', error);
+      // Silently fail but log the error, so the UI doesn't break.
+      setHasCashFlowAnalysis(false);
+      setCashFlowCount(0);
     }
   };
 
@@ -151,12 +161,14 @@ export function ClientDetails({
           .eq('is_current', true)
           .single();
 
-        const { data: profile } = await supabase
-          .from('risk_profiles')
-          .select('*')
-          .eq('client_id', clientId)
-          .eq('is_current', true)
+        // ✅ NEW CODE - Gets risk_profile from client's JSONB field
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('risk_profile')
+          .eq('id', clientId)
           .single();
+
+        const profile = clientData?.risk_profile || null;
 
         setAtrAssessment(atr);
         setCflAssessment(cfl);

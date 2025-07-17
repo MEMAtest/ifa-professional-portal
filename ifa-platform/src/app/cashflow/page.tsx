@@ -38,31 +38,31 @@ export default function CashFlowPage() {
     }
   }, [clientId]);
 
-  const loadInitialData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+const loadInitialData = async () => {
+  try {
+    setIsLoading(true);
+    setError(null);
 
-      // Load clients list for selection
-      const clientsResponse: ClientListResponse = await clientService.getAllClients(
-        { sortBy: 'name', sortOrder: 'asc' },
-        1,
-        100
-      );
-      setClients(clientsResponse.clients);
+    // Load clients list for selection
+    const clientsResponse: ClientListResponse = await clientService.getAllClients(
+      { status: ['active'] }, // Remove sortBy: 'name' to fix the 500 error
+      1,
+      100
+    );
+    setClients(clientsResponse.clients); // Use clientsResponse here, not response
 
-      // If we have a clientId in URL, load that client
-      if (clientId) {
-        await loadClientAndScenarios(clientId);
-      }
-
-    } catch (err) {
-      console.error('Error loading initial data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setIsLoading(false);
+    // If we have a clientId in URL, load that client
+    if (clientId) {
+      await loadClientAndScenarios(clientId);
     }
-  };
+
+  } catch (err) {
+    console.error('Error loading initial data:', err);
+    setError(err instanceof Error ? err.message : 'Failed to load data');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const loadClientAndScenarios = async (clientId: string) => {
     try {

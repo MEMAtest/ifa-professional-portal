@@ -1,12 +1,28 @@
-// ===================================================================
-// src/components/monte-carlo/EnhancedMonteCarloRunner.tsx - UPDATED
-// ===================================================================
+// src/components/monte-carlo/EnhancedMonteCarloRunner.tsx
+// FIXED VERSION - Complete working implementation
 
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Progress } from '@/components/ui/Progress';
+import { Badge } from '@/components/ui/Badge';
+import { Input } from '@/components/ui/Input';
+import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  AlertCircle, 
+  CheckCircle,
+  Play,
+  Pause,
+  RotateCcw,
+  Download,
+  Info,
+  Save
+} from 'lucide-react';
 
 interface MonteCarloInput {
   initialWealth: number;
@@ -34,6 +50,7 @@ interface MonteCarloResults {
   volatility: number;
   executionTime: number;
   simulationCount: number;
+  inputParameters?: MonteCarloInput;
 }
 
 interface SimulationProgress {
@@ -46,12 +63,14 @@ interface SimulationProgress {
 
 interface EnhancedMonteCarloRunnerProps {
   clientId?: string;
+  clientName?: string;
   initialInputs?: MonteCarloInput;
-  onComplete?: (results: any) => void;
+  onComplete?: (results: MonteCarloResults) => void;
 }
 
 const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
   clientId,
+  clientName,
   initialInputs,
   onComplete
 }) => {
@@ -77,7 +96,7 @@ const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
     timeHorizon: 30,
     withdrawalAmount: 25000,
     riskScore: 5,
-    inflationRate: 0.025,
+    inflationRate: 2.5,
     simulationCount: 5000
   });
 
@@ -101,65 +120,119 @@ const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
 
   // Initialize Web Worker
   const initializeWorker = useCallback(() => {
-    if (workerRef.current) return;
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
 
     try {
-      workerRef.current = new Worker('/workers/monte-carlo-worker.js');
+      const worker = new Worker('/workers/monte-carlo-worker.js');
+      workerRef.current = worker;
       
-      workerRef.current.onmessage = (e) => {
-        const { type, data } = e.data;
+      worker.onmessage = (e) => {
+        const messageData = e.data;
+        const { type } = messageData;
         
         switch (type) {
+          case 'test':
+            addLog('✅ Worker initialized successfully');
+            break;
+            
           case 'progress':
-            setProgress(data);
+            // Handle progress updates
+            if (messageData.progress) {
+              const progressData = messageData.progress;
+              const timeElapsed = (Date.now() - startTimeRef.current) / 1000;
+              const estimatedTotal = progressData.progress > 0 ? 
+                timeElapsed / (progressData.progress / 100) : 0;
+              const estimatedTimeRemaining = Math.max(0, estimatedTotal - timeElapsed);
+              
+              setProgress({
+                progress: progressData.progress || 0,
+                completed: progressData.completed || 0,
+                total: progressData.total || input.simulationCount || 0,
+                timeElapsed,
+                estimatedTimeRemaining
+              });
+            }
             break;
             
           case 'complete':
-            handleSimulationComplete(data);
+            // Handle completion
+            if (messageData.results) {
+              handleSimulationComplete(messageData.results);
+            }
             break;
             
           case 'error':
-            setError(data.message);
+            // Handle errors - check multiple possible locations
+            const errorMessage = messageData.error || 
+                               messageData.message || 
+                               'Unknown error occurred';
+            setError(errorMessage);
             setIsRunning(false);
-            addLog(`Error: ${data.message}`);
+            addLog(`❌ Error: ${errorMessage}`);
+            
+            if (progressUpdateInterval.current) {
+              clearInterval(progressUpdateInterval.current);
+            }
+            break;
+            
+          case 'cancelled':
+            setIsRunning(false);
+            addLog('Simulation cancelled');
+            
+            if (progressUpdateInterval.current) {
+              clearInterval(progressUpdateInterval.current);
+            }
             break;
             
           case 'log':
-            addLog(data.message);
+            if (messageData.message) {
+              addLog(messageData.message);
+            }
             break;
+            
+          default:
+            console.warn('Unknown message type from worker:', type, messageData);
         }
       };
       
-      workerRef.current.onerror = (error) => {
+      worker.onerror = (error) => {
         console.error('Worker error:', error);
         setError('Worker initialization failed');
         setIsRunning(false);
+        addLog('❌ Worker initialization failed');
       };
       
-      addLog('Web Worker initialized successfully');
+      // Test worker is ready
+      worker.postMessage({ type: 'test' });
+      
     } catch (err) {
       console.error('Failed to create worker:', err);
       setError('Failed to initialize simulation engine');
+      addLog('❌ Failed to initialize simulation engine');
     }
-  }, [addLog]);
+  }, [addLog, input.simulationCount]);
 
   // Handle simulation completion
   const handleSimulationComplete = async (data: MonteCarloResults) => {
-    const executionTime = (Date.now() - startTimeRef.current) / 1000;
+    const executionTime = data.executionTime || (Date.now() - startTimeRef.current);
     const finalResults = { ...data, executionTime };
     
     setResults(finalResults);
     setIsRunning(false);
+    setProgress(prev => ({ ...prev, progress: 100 }));
     
     if (progressUpdateInterval.current) {
       clearInterval(progressUpdateInterval.current);
     }
     
-    addLog(`Simulation completed in ${executionTime.toFixed(2)}s`);
+    addLog(`✅ Simulation completed in ${(executionTime / 1000).toFixed(2)}s`);
     addLog(`Success probability: ${data.successProbability.toFixed(1)}%`);
     
     // Save results if clientId is provided
-    if (clientId) {
+    if (clientId && scenarioName) {
       await saveResults(finalResults);
     }
     
@@ -167,6 +240,13 @@ const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
     if (onComplete) {
       onComplete(finalResults);
     }
+    
+    // Show success toast
+    toast({
+      title: "Simulation Complete",
+      description: `Success probability: ${data.successProbability.toFixed(1)}%`,
+      variant: "default"
+    });
   };
 
   // Save results to database
@@ -181,31 +261,26 @@ const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
           scenario_id: scenarioId,
           client_id: clientId,
           scenario_name: name,
-          simulation_count: results.simulationCount,
+          input_parameters: input,
+          results: results,
           success_probability: results.successProbability,
-          average_final_wealth: results.averageFinalWealth,
-          median_final_wealth: results.medianFinalWealth,
-          confidence_intervals: results.confidenceIntervals,
-          shortfall_risk: results.shortfallRisk,
-          average_shortfall_amount: results.averageShortfall,
-          wealth_volatility: results.volatility,
-          maximum_drawdown: results.maxDrawdown,
-          simulation_duration_ms: results.executionTime * 1000,
-          calculation_status: 'completed'
+          simulation_count: results.simulationCount,
+          created_at: new Date().toISOString()
         });
 
       if (saveError) {
         console.error('Error saving results:', saveError);
         toast({
-          title: 'Warning',
-          description: 'Results calculated but could not be saved',
-          variant: 'destructive'
+          title: "Save Error",
+          description: "Failed to save simulation results",
+          variant: "destructive"
         });
       } else {
+        addLog(`💾 Results saved: ${name}`);
         toast({
-          title: 'Success',
-          description: 'Monte Carlo simulation completed and saved',
-          variant: 'default'
+          title: "Results Saved",
+          description: `Saved as: ${name}`,
+          variant: "default"
         });
       }
     } catch (err) {
@@ -214,98 +289,90 @@ const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
   };
 
   // Run simulation
-  const runSimulation = useCallback(() => {
-    if (!workerRef.current) {
+  const runSimulation = useCallback(async () => {
+    try {
+      setError(null);
+      setResults(null);
+      setIsRunning(true);
+      setProgress({
+        progress: 0,
+        completed: 0,
+        total: input.simulationCount || 1000,
+        timeElapsed: 0,
+        estimatedTimeRemaining: 0
+      });
+
+      addLog(`🎲 Starting ${input.simulationCount} Monte Carlo simulations...`);
+      startTimeRef.current = Date.now();
+
+      // Initialize worker
       initializeWorker();
-      setTimeout(runSimulation, 100);
-      return;
-    }
 
-    setIsRunning(true);
-    setError(null);
-    setResults(null);
-    setProgress({
-      progress: 0,
-      completed: 0,
-      total: input.simulationCount || 5000,
-      timeElapsed: 0,
-      estimatedTimeRemaining: 0
-    });
-    
-    startTimeRef.current = Date.now();
-    
-    // Update progress every 100ms
-    progressUpdateInterval.current = setInterval(() => {
-      const elapsed = (Date.now() - startTimeRef.current) / 1000;
-      setProgress(prev => ({
-        ...prev,
-        timeElapsed: elapsed,
-        estimatedTimeRemaining: prev.progress > 0
-          ? (elapsed / prev.progress) * (100 - prev.progress)
-          : 0
-      }));
-    }, 100);
-    
-    addLog(`Starting simulation with ${input.simulationCount} iterations...`);
-    
-    // Send configuration to worker
-    workerRef.current.postMessage({
-      type: 'start',
-      config: {
-        ...input,
-        inflationRate: (input.inflationRate || 2.5) / 100
+      // Wait for worker to be ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      if (!workerRef.current) {
+        throw new Error('Worker not initialized');
       }
-    });
-  }, [input, initializeWorker, addLog]);
 
-  // Stop simulation
-  const stopSimulation = useCallback(() => {
-    if (workerRef.current) {
-      workerRef.current.postMessage({ type: 'stop' });
+      // Start progress timer
+      progressUpdateInterval.current = setInterval(() => {
+        if (startTimeRef.current > 0) {
+          const timeElapsed = (Date.now() - startTimeRef.current) / 1000;
+          setProgress(prev => ({ ...prev, timeElapsed }));
+        }
+      }, 100);
+
+      // Send simulation request to worker
+      const seed = Math.floor(Math.random() * 1000000);
+      workerRef.current.postMessage({
+        type: 'simulate',
+        data: { 
+          ...input, 
+          inflationRate: (input.inflationRate || 2.5) / 100, // Convert percentage to decimal
+          seed 
+        }
+      });
+
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unknown error');
+      setIsRunning(false);
+      addLog(`❌ Setup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      if (progressUpdateInterval.current) {
+        clearInterval(progressUpdateInterval.current);
+      }
     }
-    setIsRunning(false);
+  }, [input, addLog, initializeWorker]);
+
+  // Cancel simulation
+  const cancelSimulation = useCallback(() => {
+    if (workerRef.current && isRunning) {
+      workerRef.current.postMessage({ type: 'cancel' });
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+    
     if (progressUpdateInterval.current) {
       clearInterval(progressUpdateInterval.current);
     }
-    addLog('Simulation stopped by user');
-  }, [addLog]);
+    
+    setIsRunning(false);
+    addLog('Simulation cancelled by user');
+  }, [isRunning, addLog]);
 
-  // Get withdrawal rate percentage
-  const withdrawalRate = input.initialWealth > 0
-    ? ((input.withdrawalAmount / input.initialWealth) * 100).toFixed(1)
-    : '0.0';
-
-  // Get withdrawal rate assessment
-  const getWithdrawalRateAssessment = (rate: number) => {
-    if (rate <= 2) return { text: 'Very Conservative', color: '#059669' };
-    if (rate <= 3) return { text: 'Conservative', color: '#0891b2' };
-    if (rate <= 4) return { text: 'Moderate', color: '#ea580c' };
-    if (rate <= 5) return { text: 'Aggressive', color: '#dc2626' };
-    return { text: 'Very Aggressive', color: '#991b1b' };
+  // Update input values
+  const updateInput = (field: keyof MonteCarloInput, value: number) => {
+    setInput(prev => ({ ...prev, [field]: value }));
   };
 
-  const rateAssessment = getWithdrawalRateAssessment(parseFloat(withdrawalRate));
+  // Calculate withdrawal rate
+  const withdrawalRate = input.initialWealth > 0 
+    ? (input.withdrawalAmount / input.initialWealth) * 100 
+    : 0;
 
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  // Format time
-  const formatTime = (seconds: number) => {
-    if (seconds < 60) return `${seconds.toFixed(1)}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}m ${remainingSeconds}s`;
-  };
-
-  // Cleanup on unmount
-  React.useEffect(() => {
+  // Clean up on unmount
+  useEffect(() => {
     return () => {
       if (workerRef.current) {
         workerRef.current.terminate();
@@ -317,287 +384,319 @@ const EnhancedMonteCarloRunner: React.FC<EnhancedMonteCarloRunnerProps> = ({
   }, []);
 
   return (
-    <div className="enhanced-monte-carlo-runner">
-      {/* Scenario Name (only when saving results) */}
-      {clientId && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Scenario Name (Optional)
-          </label>
-          <input
-            type="text"
-            value={scenarioName}
-            onChange={(e) => setScenarioName(e.target.value)}
-            placeholder="e.g., Conservative Retirement Plan"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+    <div className="space-y-6">
+      {/* Client Info Header */}
+      {(clientId || clientName) && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-blue-600" />
+              <div>
+                <p className="font-medium text-blue-900">
+                  Running simulation for: {clientName || 'Client'}
+                </p>
+                <p className="text-sm text-blue-700">
+                  The inputs have been pre-populated based on the client's financial profile
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Input Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Initial Wealth
-          </label>
-          <input
-            type="number"
-            value={input.initialWealth}
-            onChange={(e) => setInput({ ...input, initialWealth: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isRunning}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Time Horizon (Years)
-          </label>
-          <input
-            type="number"
-            value={input.timeHorizon}
-            onChange={(e) => setInput({ ...input, timeHorizon: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isRunning}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Annual Withdrawal
-          </label>
-          <input
-            type="number"
-            value={input.withdrawalAmount}
-            onChange={(e) => setInput({ ...input, withdrawalAmount: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isRunning}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Risk Score (1-10)
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="10"
-            value={input.riskScore}
-            onChange={(e) => setInput({ ...input, riskScore: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isRunning}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Inflation Rate (%)
-          </label>
-          <input
-            type="number"
-            step="0.1"
-            value={input.inflationRate || 2.5}
-            onChange={(e) => setInput({ ...input, inflationRate: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isRunning}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Simulations
-          </label>
-          <input
-            type="number"
-            min="100"
-            max="50000"
-            step="100"
-            value={input.simulationCount}
-            onChange={(e) => setInput({ ...input, simulationCount: Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isRunning}
-          />
-        </div>
-      </div>
-
-      {/* Withdrawal Rate Assessment */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">Withdrawal Rate</p>
-            <p className="text-2xl font-bold" style={{ color: rateAssessment.color }}>
-              {withdrawalRate}%
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Assessment</p>
-            <p className="font-semibold" style={{ color: rateAssessment.color }}>
-              {rateAssessment.text}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Control Buttons */}
-      <div className="flex gap-4 mb-8">
-        <button
-          onClick={runSimulation}
-          disabled={isRunning}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isRunning ? 'Running...' : 'Run Simulation'}
-        </button>
-        <button
-          onClick={stopSimulation}
-          disabled={!isRunning}
-          className="px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Stop
-        </button>
-      </div>
-
-      {/* Progress Bar */}
-      {isRunning && (
-        <div className="mb-8">
-          <div className="bg-gray-200 rounded-full h-6 overflow-hidden">
-            <div
-              className="bg-blue-600 h-full transition-all duration-300 relative"
-              style={{ width: `${progress.progress}%` }}
-            >
-              <span className="absolute inset-0 flex items-center justify-center text-white text-sm font-medium">
-                {progress.progress.toFixed(1)}%
-              </span>
+      {/* Input Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Simulation Parameters</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Initial Wealth (£)
+              </label>
+              <Input
+                type="number"
+                value={input.initialWealth}
+                onChange={(e) => updateInput('initialWealth', parseFloat(e.target.value) || 0)}
+                disabled={isRunning}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Time Horizon (years)
+              </label>
+              <Input
+                type="number"
+                value={input.timeHorizon}
+                onChange={(e) => updateInput('timeHorizon', parseInt(e.target.value) || 0)}
+                disabled={isRunning}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Annual Withdrawal (£)
+              </label>
+              <Input
+                type="number"
+                value={input.withdrawalAmount}
+                onChange={(e) => updateInput('withdrawalAmount', parseFloat(e.target.value) || 0)}
+                disabled={isRunning}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Withdrawal Rate: {withdrawalRate.toFixed(2)}%
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Risk Score (1-10)
+              </label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={input.riskScore}
+                onChange={(e) => updateInput('riskScore', parseInt(e.target.value) || 5)}
+                disabled={isRunning}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Inflation Rate (%)
+              </label>
+              <Input
+                type="number"
+                step="0.1"
+                value={input.inflationRate}
+                onChange={(e) => updateInput('inflationRate', parseFloat(e.target.value) || 0)}
+                disabled={isRunning}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Number of Simulations
+              </label>
+              <Input
+                type="number"
+                min="100"
+                max="100000"
+                step="100"
+                value={input.simulationCount}
+                onChange={(e) => updateInput('simulationCount', parseInt(e.target.value) || 1000)}
+                disabled={isRunning}
+              />
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-4 mt-4 text-sm text-gray-600">
-            <div>
-              <p className="font-medium">Completed</p>
-              <p>{progress.completed.toLocaleString()} / {progress.total.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="font-medium">Time Elapsed</p>
-              <p>{formatTime(progress.timeElapsed)}</p>
-            </div>
-            <div>
-              <p className="font-medium">Time Remaining</p>
-              <p>{formatTime(progress.estimatedTimeRemaining)}</p>
-            </div>
-            <div>
-              <p className="font-medium">Speed</p>
-              <p>{progress.timeElapsed > 0 
-                ? `${Math.round(progress.completed / progress.timeElapsed).toLocaleString()}/s`
-                : '0/s'}</p>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Results */}
-      {results && (
-        <div className="space-y-6">
-          <h3 className="text-xl font-bold mb-4">Simulation Results</h3>
+          {/* Scenario Name for Saving */}
+          {clientId && (
+            <div className="pt-4 border-t">
+              <label className="block text-sm font-medium mb-2">
+                Scenario Name (optional)
+              </label>
+              <Input
+                type="text"
+                value={scenarioName}
+                onChange={(e) => setScenarioName(e.target.value)}
+                placeholder="e.g., Conservative Retirement Plan"
+                disabled={isRunning}
+              />
+            </div>
+          )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Success Probability</p>
-              <p className="text-2xl font-bold text-green-600">
-                {results.successProbability.toFixed(1)}%
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Average Final Wealth</p>
-              <p className="text-xl font-bold">
-                {formatCurrency(results.averageFinalWealth)}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Median Final Wealth</p>
-              <p className="text-xl font-bold">
-                {formatCurrency(results.medianFinalWealth)}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Shortfall Risk</p>
-              <p className="text-2xl font-bold text-red-600">
-                {results.shortfallRisk.toFixed(1)}%
-              </p>
-            </div>
+          <div className="flex gap-2 pt-4">
+            <Button
+              onClick={runSimulation}
+              disabled={isRunning}
+              className="flex items-center gap-2"
+            >
+              {isRunning ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Run Simulation
+                </>
+              )}
+            </Button>
+            
+            {isRunning && (
+              <Button
+                onClick={cancelSimulation}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Pause className="h-4 w-4" />
+                Stop
+              </Button>
+            )}
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Confidence Intervals */}
-          <div className="bg-white p-6 rounded-lg border">
-            <h4 className="font-semibold mb-4">Confidence Intervals</h4>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">10th Percentile</span>
-                <span className="font-medium">{formatCurrency(results.confidenceIntervals.p10)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">25th Percentile</span>
-                <span className="font-medium">{formatCurrency(results.confidenceIntervals.p25)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">50th Percentile (Median)</span>
-                <span className="font-medium">{formatCurrency(results.confidenceIntervals.p50)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">75th Percentile</span>
-                <span className="font-medium">{formatCurrency(results.confidenceIntervals.p75)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">90th Percentile</span>
-                <span className="font-medium">{formatCurrency(results.confidenceIntervals.p90)}</span>
+      {/* Progress Section */}
+      {(isRunning || progress.progress > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Simulation Progress</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <Progress value={progress.progress} className="h-2" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500">Progress</p>
+                  <p className="font-medium">{progress.progress.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Completed</p>
+                  <p className="font-medium">
+                    {progress.completed.toLocaleString()} / {progress.total.toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Time Elapsed</p>
+                  <p className="font-medium">{progress.timeElapsed.toFixed(1)}s</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Est. Remaining</p>
+                  <p className="font-medium">{progress.estimatedTimeRemaining.toFixed(1)}s</p>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Additional Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Average Shortfall</p>
-              <p className="text-lg font-bold text-red-600">
-                {formatCurrency(results.averageShortfall)}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Max Drawdown</p>
-              <p className="text-lg font-bold">
-                {results.maxDrawdown.toFixed(1)}%
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg border">
-              <p className="text-sm text-gray-600 mb-1">Volatility</p>
-              <p className="text-lg font-bold">
-                {results.volatility.toFixed(1)}%
-              </p>
-            </div>
-          </div>
-
-          {/* Performance Stats */}
-          <div className="text-sm text-gray-600 text-center">
-            Completed {results.simulationCount.toLocaleString()} simulations in {results.executionTime.toFixed(2)} seconds
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Error Display */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <p className="font-semibold">Error</p>
-          <p>{error}</p>
-        </div>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertCircle className="h-5 w-5" />
+              <p className="font-medium">Error</p>
+            </div>
+            <p className="text-sm text-red-700 mt-2">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results Section */}
+      {results && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Simulation Results</span>
+              {results.successProbability >= 75 ? (
+                <Badge className="bg-green-100 text-green-800">
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  High Success Rate
+                </Badge>
+              ) : results.successProbability >= 50 ? (
+                <Badge className="bg-yellow-100 text-yellow-800">
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  Moderate Success Rate
+                </Badge>
+              ) : (
+                <Badge className="bg-red-100 text-red-800">
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  Low Success Rate
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-700 font-medium">Success Probability</p>
+                <p className="text-2xl font-bold text-blue-900">{results.successProbability}%</p>
+              </div>
+              
+              <div className="p-4 bg-green-50 rounded-lg">
+                <p className="text-sm text-green-700 font-medium">Median Final Wealth</p>
+                <p className="text-2xl font-bold text-green-900">
+                  £{results.medianFinalWealth.toLocaleString()}
+                </p>
+              </div>
+              
+              <div className="p-4 bg-purple-50 rounded-lg">
+                <p className="text-sm text-purple-700 font-medium">Average Final Wealth</p>
+                <p className="text-2xl font-bold text-purple-900">
+                  £{results.averageFinalWealth.toLocaleString()}
+                </p>
+              </div>
+              
+              <div className="p-4 bg-red-50 rounded-lg">
+                <p className="text-sm text-red-700 font-medium">Shortfall Risk</p>
+                <p className="text-2xl font-bold text-red-900">{results.shortfallRisk}%</p>
+              </div>
+              
+              <div className="p-4 bg-orange-50 rounded-lg">
+                <p className="text-sm text-orange-700 font-medium">Max Drawdown</p>
+                <p className="text-2xl font-bold text-orange-900">{results.maxDrawdown}%</p>
+              </div>
+              
+              <div className="p-4 bg-indigo-50 rounded-lg">
+                <p className="text-sm text-indigo-700 font-medium">Volatility</p>
+                <p className="text-2xl font-bold text-indigo-900">{results.volatility}%</p>
+              </div>
+            </div>
+            
+            {/* Confidence Intervals */}
+            <div className="mt-6">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Confidence Intervals</h4>
+              <div className="space-y-2">
+                {Object.entries(results.confidenceIntervals).map(([percentile, value]) => (
+                  <div key={percentile} className="flex items-center justify-between py-2 border-b">
+                    <span className="text-sm text-gray-600">
+                      {percentile.replace('p', '')}th Percentile
+                    </span>
+                    <span className="font-medium">
+                      £{value.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Execution Time */}
+            {results.executionTime && (
+              <div className="mt-4 text-sm text-gray-500">
+                Simulation completed in {(results.executionTime / 1000).toFixed(2)} seconds
+                ({results.simulationCount.toLocaleString()} simulations)
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Debug Logs */}
-      <div className="mt-8 p-4 bg-gray-100 rounded-lg">
-        <h4 className="font-semibold mb-2">Simulation Log</h4>
-        <div className="space-y-1 text-sm font-mono text-gray-600">
-          {logs.map((log, index) => (
-            <div key={index}>{log}</div>
-          ))}
-        </div>
-      </div>
+      <Card className="border-gray-200">
+        <CardHeader>
+          <CardTitle className="text-sm">Simulation Log</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="bg-gray-50 rounded p-3 max-h-40 overflow-y-auto">
+            {logs.length === 0 ? (
+              <p className="text-xs text-gray-500">No logs yet...</p>
+            ) : (
+              logs.map((log, index) => (
+                <div key={index} className="text-xs font-mono text-gray-600">
+                  {log}
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

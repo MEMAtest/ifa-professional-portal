@@ -1,103 +1,143 @@
-// ===================================================================
-// src/app/monte-carlo/page.tsx - Monte Carlo Client Selection
-// ===================================================================
+// src/app/monte-carlo/[clientId]/page.tsx
+// Fixed version with correct imports and props
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Input } from '@/components/ui/Input';
-import { clientService } from '@/services/ClientService';
+import { clientService } from '@/services/ClientService'; // ✅ Fixed: lowercase 'c'
 import { supabase } from '@/lib/supabase';
+import { MonteCarloReportButton } from '@/components/monte-carlo/MonteCarloReport';
+import EnhancedMonteCarloRunner from '@/components/monte-carlo/EnhancedMonteCarloRunner';
 import { 
-  LineChart, 
-  Search, 
-  TrendingUp, 
-  DollarSign, 
+  ArrowLeft,
+  User,
+  DollarSign,
   Calendar,
-  ChevronRight,
+  TrendingUp,
   AlertCircle,
-  Users,
-  BarChart3
+  History,
+  Download,
+  Plus
 } from 'lucide-react';
-import type { Client, ClientListResponse } from '@/types/client';
+import type { Client } from '@/types/client';
 
-interface MonteCarloCount {
+interface MonteCarloScenario {
+  id: string;
   client_id: string;
-  count: number;
+  scenario_name: string;
+  created_at: string;
+  success_probability: number;
+  simulation_count: number;
 }
 
-export default function MonteCarloPage() {
+interface MonteCarloInput {
+  initialWealth: number;
+  timeHorizon: number;
+  withdrawalAmount: number;
+  riskScore: number;
+  inflationRate?: number;
+  simulationCount?: number;
+}
+
+export default function ClientMonteCarloPage() {
   const router = useRouter();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
-  const [monteCarloCount, setMonteCarloCount] = useState<Record<string, number>>({});
+  const params = useParams();
+  const clientId = params?.clientId as string;
+
+  const [client, setClient] = useState<Client | null>(null);
+  const [scenarios, setScenarios] = useState<MonteCarloScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showNewScenario, setShowNewScenario] = useState(false);
+  const [selectedScenario, setSelectedScenario] = useState<MonteCarloScenario | null>(null);
+
+  // Pre-populated inputs based on client data
+  const [monteCarloInputs, setMonteCarloInputs] = useState<MonteCarloInput>({
+    initialWealth: 500000,
+    timeHorizon: 30,
+    withdrawalAmount: 25000,
+    riskScore: 5,
+    inflationRate: 2.5,
+    simulationCount: 5000
+  });
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (clientId) {
+      loadClientData();
+    }
+  }, [clientId]);
 
-  useEffect(() => {
-    filterClients();
-  }, [searchQuery, clients]);
-
-  const loadData = async () => {
+  const loadClientData = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Load clients
-      const clientsResponse: ClientListResponse = await clientService.getAllClients(
-  { status: ['active'], sortBy: 'name', sortOrder: 'asc' },  // Changed to array
-  1,
-  100
-);
-      setClients(clientsResponse.clients);
+      // Load client data
+      const clientData = await clientService.getClientById(clientId); // ✅ Now using correct import
+      setClient(clientData);
 
-      // Load Monte Carlo counts
-      const { data: counts, error: countError } = await supabase
-        .from('monte_carlo_results')
-        .select('client_id')
-        .not('client_id', 'is', null);
-
-      if (!countError && counts) {
-        const countMap: Record<string, number> = {};
-        counts.forEach((record: any) => {
-          countMap[record.client_id] = (countMap[record.client_id] || 0) + 1;
+      // Pre-populate Monte Carlo inputs based on client data
+      if (clientData) {
+        const age = calculateAge(clientData.personalDetails?.dateOfBirth);
+        const yearsToRetirement = Math.max(65 - age, 1);
+        
+        setMonteCarloInputs({
+          initialWealth: clientData.financialProfile?.netWorth || 
+                        clientData.financialProfile?.liquidAssets || 
+                        500000,
+          timeHorizon: yearsToRetirement,
+          withdrawalAmount: (clientData.financialProfile?.monthlyExpenses || 2000) * 12,
+          riskScore: clientData.riskProfile?.attitudeToRisk || 5,
+          inflationRate: 2.5,
+          simulationCount: 5000
         });
-        setMonteCarloCount(countMap);
       }
 
+      // Load existing scenarios
+      await loadScenarios();
+
     } catch (err) {
-      console.error('Error loading data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      console.error('Error loading client data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load client data');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const filterClients = () => {
-    if (!searchQuery.trim()) {
-      setFilteredClients(clients);
-      return;
-    }
+  const loadScenarios = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('monte_carlo_results')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false });
 
-    const query = searchQuery.toLowerCase();
-    const filtered = clients.filter(client => {
-      const fullName = `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.toLowerCase();
-      const email = client.contactInfo?.email?.toLowerCase() || '';
-      const ref = client.clientRef?.toLowerCase() || '';
+      if (error) throw error;
+      setScenarios(data || []);
       
-      return fullName.includes(query) || email.includes(query) || ref.includes(query);
-    });
+      // If client has no scenarios yet, show new scenario form
+      if (!data || data.length === 0) {
+        setShowNewScenario(true);
+      }
+    } catch (err) {
+      console.error('Error loading scenarios:', err);
+    }
+  };
 
-    setFilteredClients(filtered);
+  const calculateAge = (dateOfBirth?: string): number => {
+    if (!dateOfBirth) return 45; // Default age
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
   };
 
   const formatCurrency = (amount: number): string => {
@@ -105,42 +145,53 @@ export default function MonteCarloPage() {
       style: 'currency',
       currency: 'GBP',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(amount);
   };
 
-  const calculateRetirementYears = (client: Client): number => {
-    if (!client.personalDetails?.dateOfBirth) return 30; // Default
-    const birthDate = new Date(client.personalDetails.dateOfBirth);
-    const today = new Date();
-    const age = today.getFullYear() - birthDate.getFullYear();
-    const retirementAge = 65;
-    return Math.max(retirementAge - age, 0);
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const handleScenarioComplete = async (results: any) => {
+    // Refresh scenarios list after new simulation
+    await loadScenarios();
+    setShowNewScenario(false);
   };
 
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading clients...</p>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="p-8">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading client data...</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !client) {
     return (
       <div className="container mx-auto px-4 py-8">
         <Card>
           <CardContent className="p-8">
             <div className="text-center">
               <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Data</h3>
-              <p className="text-gray-600 mb-4">{error}</p>
-              <Button onClick={loadData}>Try Again</Button>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Client</h3>
+              <p className="text-gray-600 mb-4">{error || 'Client not found'}</p>
+              <Button onClick={() => router.push('/monte-carlo')}>
+                Back to Client List
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -148,158 +199,160 @@ export default function MonteCarloPage() {
     );
   }
 
+  const clientName = `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim();
+  const clientAge = calculateAge(client.personalDetails?.dateOfBirth);
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center mb-2">
-          <LineChart className="h-8 w-8 text-blue-600 mr-3" />
-          <h1 className="text-3xl font-bold text-gray-900">Monte Carlo Analysis</h1>
+      <div className="mb-6">
+        <Button
+          onClick={() => router.push('/monte-carlo')}
+          variant="ghost"
+          className="mb-4"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Client List
+        </Button>
+        
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Monte Carlo Analysis</h1>
+            <p className="text-gray-600 mt-1">
+              Probability-based retirement planning for {clientName}
+            </p>
+          </div>
+          <Button
+            onClick={() => setShowNewScenario(!showNewScenario)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            New Scenario
+          </Button>
         </div>
-        <p className="text-gray-600">
-          Run sophisticated probability simulations to assess portfolio sustainability and success rates
-        </p>
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Clients</p>
-                <p className="text-2xl font-bold">{clients.length}</p>
-              </div>
-              <Users className="h-8 w-8 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">With Simulations</p>
-                <p className="text-2xl font-bold">
-                  {Object.keys(monteCarloCount).length}
-                </p>
-              </div>
-              <LineChart className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Simulations</p>
-                <p className="text-2xl font-bold">
-                  {Object.values(monteCarloCount).reduce((sum, count) => sum + count, 0)}
-                </p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Avg. per Client</p>
-                <p className="text-2xl font-bold">
-                  {Object.keys(monteCarloCount).length > 0
-                    ? (Object.values(monteCarloCount).reduce((sum, count) => sum + count, 0) / Object.keys(monteCarloCount).length).toFixed(1)
-                    : '0'}
-                </p>
-              </div>
-              <BarChart3 className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search */}
+      {/* Client Summary */}
       <Card className="mb-6">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Search clients by name, email, or reference..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="flex items-center gap-3">
+              <User className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-500">Client</p>
+                <p className="font-medium">{clientName}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Calendar className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-500">Current Age</p>
+                <p className="font-medium">{clientAge} years</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <DollarSign className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-500">Net Worth</p>
+                <p className="font-medium">
+                  {formatCurrency(client.financialProfile?.netWorth || 0)}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <TrendingUp className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-500">Risk Score</p>
+                <p className="font-medium">
+                  {client.riskProfile?.attitudeToRisk || 5}/10
+                </p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Client List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Client for Monte Carlo Analysis</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredClients.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No clients found</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredClients.map((client) => {
-                const yearsToRetirement = calculateRetirementYears(client);
-                const simulationCount = monteCarloCount[client.id] || 0;
+      {/* New Scenario Section */}
+      {showNewScenario && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Run New Monte Carlo Simulation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EnhancedMonteCarloRunner 
+              clientId={clientId}
+              clientName={clientName}
+              initialInputs={monteCarloInputs}
+              onComplete={handleScenarioComplete}
+            />
+          </CardContent>
+        </Card>
+      )}
 
-                return (
+      {/* Scenario History */}
+      {!showNewScenario && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <History className="h-5 w-5 mr-2" />
+              Simulation History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {scenarios.length === 0 ? (
+              <div className="text-center py-8">
+                <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 mb-4">
+                  No simulations run yet for this client
+                </p>
+                <Button
+                  onClick={() => setShowNewScenario(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Run First Simulation
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {scenarios.map((scenario) => (
                   <div
-                    key={client.id}
-                    className="p-4 border rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-pointer"
-                    onClick={() => router.push(`/monte-carlo/${client.id}`)}
+                    key={scenario.id}
+                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {client.personalDetails?.firstName} {client.personalDetails?.lastName}
-                          </h3>
-                          <Badge variant="secondary" className="ml-3">
-                            {client.status}
-                          </Badge>
-                          {simulationCount > 0 && (
-                            <Badge variant="default" className="ml-2">
-                              {simulationCount} simulation{simulationCount !== 1 ? 's' : ''}
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            <span>Net Worth: {formatCurrency(client.financialProfile?.netWorth || 0)}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <TrendingUp className="h-4 w-4 mr-1" />
-                            <span>Risk Score: {client.riskProfile?.attitudeToRisk || 'N/A'}/10</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            <span>Years to 65: {yearsToRetirement}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            <span>Annual Income: {formatCurrency(client.financialProfile?.annualIncome || 0)}</span>
-                          </div>
-                        </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">
+                          {scenario.scenario_name}
+                        </h4>
+                        <p className="text-sm text-gray-600">
+                          {formatDate(scenario.created_at)}
+                        </p>
                       </div>
-                      
-                      <ChevronRight className="h-5 w-5 text-gray-400 ml-4" />
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Success Rate</p>
+                          <p className={`text-2xl font-bold ${
+                            scenario.success_probability >= 75 ? 'text-green-600' :
+                            scenario.success_probability >= 50 ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {scenario.success_probability.toFixed(1)}%
+                          </p>
+                        </div>
+                        <MonteCarloReportButton
+                          scenario={scenario}
+                          client={client}
+                        />
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

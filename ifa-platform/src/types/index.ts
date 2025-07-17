@@ -54,7 +54,7 @@ export interface RiskProfile {
 }
 
 export interface VulnerabilityAssessment {
-  hasVulnerabilities: boolean;
+  is_vulnerable: boolean;
   vulnerabilityTypes: VulnerabilityType[];
   healthVulnerabilities: string;
   lifeEventVulnerabilities: string;

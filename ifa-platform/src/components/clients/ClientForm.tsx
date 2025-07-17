@@ -1,6 +1,5 @@
-// ===================================================================
-// src/components/clients/ClientForm.tsx - FINAL PRODUCTION VERSION
-// ===================================================================
+// src/components/clients/ClientForm.tsx
+// ✅ DEFINITIVE VERSION - All functionality preserved + Enter key fix
 
 'use client';
 
@@ -37,9 +36,112 @@ interface ClientFormProps {
   errors?: Record<string, string>;
 }
 
-// ✅ FIXED: Helper function to convert ClientFormData to Client
+// Safe default values with complete structure
+const getEmptyFormData = (): ClientFormData => ({
+  personalDetails: {
+    title: '',
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    nationality: '',
+    maritalStatus: 'single',
+    dependents: 0,
+    employmentStatus: 'employed',
+    occupation: ''
+  },
+  contactInfo: {
+    email: '',
+    phone: '',
+    mobile: '',
+    address: {
+      line1: '',
+      line2: '',
+      city: '',
+      county: '',
+      postcode: '',
+      country: 'United Kingdom'
+    },
+    preferredContact: 'email',
+    communicationPreferences: {
+      marketing: false,
+      newsletters: false,
+      smsUpdates: false
+    }
+  },
+  financialProfile: {
+    annualIncome: 0,
+    netWorth: 0,
+    liquidAssets: 0,
+    monthlyExpenses: 0,
+    investmentTimeframe: '',
+    investmentObjectives: [],
+    existingInvestments: [],
+    pensionArrangements: [],
+    insurancePolicies: []
+  },
+  vulnerabilityAssessment: {
+    is_vulnerable: false,
+    vulnerabilityFactors: [],
+    supportNeeds: [],
+    assessmentNotes: '',
+    assessmentDate: new Date().toISOString(),
+    reviewDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    assessorId: '',
+    communicationAdjustments: []
+  },
+  riskProfile: {
+    riskTolerance: '',
+    riskCapacity: '',
+    attitudeToRisk: 5,
+    capacityForLoss: '',
+    knowledgeExperience: '',
+    lastAssessment: new Date().toISOString(),
+    assessmentScore: undefined,
+    questionnaire: undefined,
+    assessmentHistory: []
+  },
+  status: 'prospect'
+});
+
+// Helper function to convert ClientFormData to Client with proper types
 function convertFormDataToClient(formData: ClientFormData, existingClient?: Client): Client {
   const now = new Date().toISOString();
+  
+  const financialProfile: FinancialProfile = {
+    annualIncome: formData.financialProfile?.annualIncome ?? 0,
+    netWorth: formData.financialProfile?.netWorth ?? 0,
+    liquidAssets: formData.financialProfile?.liquidAssets ?? 0,
+    monthlyExpenses: formData.financialProfile?.monthlyExpenses ?? 0,
+    investmentTimeframe: formData.financialProfile?.investmentTimeframe ?? '',
+    investmentObjectives: formData.financialProfile?.investmentObjectives ?? [],
+    existingInvestments: formData.financialProfile?.existingInvestments ?? [],
+    pensionArrangements: formData.financialProfile?.pensionArrangements ?? [],
+    insurancePolicies: formData.financialProfile?.insurancePolicies ?? []
+  };
+
+  const vulnerabilityAssessment: VulnerabilityAssessment = {
+    is_vulnerable: formData.vulnerabilityAssessment?.is_vulnerable ?? false,
+    vulnerabilityFactors: formData.vulnerabilityAssessment?.vulnerabilityFactors ?? [],
+    supportNeeds: formData.vulnerabilityAssessment?.supportNeeds ?? [],
+    assessmentNotes: formData.vulnerabilityAssessment?.assessmentNotes ?? '',
+    assessmentDate: formData.vulnerabilityAssessment?.assessmentDate ?? now,
+    reviewDate: formData.vulnerabilityAssessment?.reviewDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    assessorId: formData.vulnerabilityAssessment?.assessorId ?? '',
+    communicationAdjustments: formData.vulnerabilityAssessment?.communicationAdjustments ?? [],
+    lastAssessed: formData.vulnerabilityAssessment?.lastAssessed
+  };
+
+  const riskProfile: RiskProfile = {
+    riskTolerance: formData.riskProfile?.riskTolerance ?? '',
+    riskCapacity: formData.riskProfile?.riskCapacity ?? '',
+    attitudeToRisk: formData.riskProfile?.attitudeToRisk ?? 5,
+    capacityForLoss: formData.riskProfile?.capacityForLoss ?? '',
+    knowledgeExperience: formData.riskProfile?.knowledgeExperience ?? '',
+    lastAssessment: formData.riskProfile?.lastAssessment ?? now,
+    assessmentScore: formData.riskProfile?.assessmentScore,
+    questionnaire: formData.riskProfile?.questionnaire,
+    assessmentHistory: formData.riskProfile?.assessmentHistory ?? []
+  };
   
   return {
     id: existingClient?.id || `client-${Date.now()}`,
@@ -50,48 +152,33 @@ function convertFormDataToClient(formData: ClientFormData, existingClient?: Clie
     clientRef: formData.clientRef || existingClient?.clientRef,
     personalDetails: formData.personalDetails,
     contactInfo: formData.contactInfo,
-    
-    // ✅ FIXED: Convert Partial<FinancialProfile> to complete FinancialProfile
-    financialProfile: {
-      annualIncome: formData.financialProfile?.annualIncome || 0,
-      netWorth: formData.financialProfile?.netWorth || 0,
-      liquidAssets: formData.financialProfile?.liquidAssets || 0,
-      monthlyExpenses: formData.financialProfile?.monthlyExpenses || 0,
-      investmentTimeframe: formData.financialProfile?.investmentTimeframe || '',
-      investmentObjectives: formData.financialProfile?.investmentObjectives || [],
-      existingInvestments: formData.financialProfile?.existingInvestments || [],
-      pensionArrangements: formData.financialProfile?.pensionArrangements || [],
-      insurancePolicies: formData.financialProfile?.insurancePolicies || []
-    },
-    
-    // ✅ FIXED: Convert Partial<VulnerabilityAssessment> to complete VulnerabilityAssessment
-    vulnerabilityAssessment: {
-      is_vulnerable: formData.vulnerabilityAssessment?.is_vulnerable || false,
-      vulnerabilityFactors: formData.vulnerabilityAssessment?.vulnerabilityFactors || [],
-      supportNeeds: formData.vulnerabilityAssessment?.supportNeeds || [],
-      assessmentNotes: formData.vulnerabilityAssessment?.assessmentNotes || '',
-      assessmentDate: formData.vulnerabilityAssessment?.assessmentDate || now,
-      reviewDate: formData.vulnerabilityAssessment?.reviewDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      assessorId: formData.vulnerabilityAssessment?.assessorId || '',
-      communicationAdjustments: formData.vulnerabilityAssessment?.communicationAdjustments || [],
-      lastAssessed: formData.vulnerabilityAssessment?.lastAssessed || undefined
-    },
-    
-    // ✅ FIXED: Convert Partial<RiskProfile> to complete RiskProfile
-    riskProfile: {
-      riskTolerance: formData.riskProfile?.riskTolerance || '',
-      riskCapacity: formData.riskProfile?.riskCapacity || '',
-      attitudeToRisk: formData.riskProfile?.attitudeToRisk || 5,
-      capacityForLoss: formData.riskProfile?.capacityForLoss || '',
-      knowledgeExperience: formData.riskProfile?.knowledgeExperience || '',
-      lastAssessment: formData.riskProfile?.lastAssessment || now,
-      assessmentScore: formData.riskProfile?.assessmentScore,
-      questionnaire: formData.riskProfile?.questionnaire,
-      assessmentHistory: formData.riskProfile?.assessmentHistory || []
-    },
-    
+    financialProfile,
+    vulnerabilityAssessment,
+    riskProfile,
     status: formData.status || 'prospect'
   };
+}
+
+// Type-safe deep merge function
+function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+  const result = { ...target } as T;
+  
+  (Object.keys(source) as Array<keyof T>).forEach(key => {
+    const sourceValue = source[key];
+    const targetValue = target[key];
+    
+    if (sourceValue === undefined || sourceValue === null) {
+      return;
+    }
+    
+    if (typeof sourceValue === 'object' && !Array.isArray(sourceValue) && sourceValue !== null) {
+      (result as any)[key] = deepMerge(targetValue as any || {}, sourceValue as any);
+    } else {
+      (result as any)[key] = sourceValue;
+    }
+  });
+  
+  return result;
 }
 
 export default function ClientForm({
@@ -106,20 +193,29 @@ export default function ClientForm({
   const router = useRouter();
   const { toast } = useToast();
 
-  // ✅ FIXED: Safe initialization with proper type handling
+  // Initialize with complete structure and proper null checks
   const [formData, setFormData] = useState<ClientFormData>(() => {
+    const defaultData = getEmptyFormData();
+    
     if (client) {
       return {
-        personalDetails: client.personalDetails,
-        contactInfo: client.contactInfo,
-        financialProfile: client.financialProfile,
-        vulnerabilityAssessment: client.vulnerabilityAssessment,
-        riskProfile: client.riskProfile,
-        status: client.status,
+        personalDetails: deepMerge(defaultData.personalDetails, client.personalDetails || {}),
+        contactInfo: deepMerge(defaultData.contactInfo, client.contactInfo || {}),
+        financialProfile: deepMerge(defaultData.financialProfile, client.financialProfile || {}),
+        vulnerabilityAssessment: deepMerge(
+          defaultData.vulnerabilityAssessment || {}, 
+          client.vulnerabilityAssessment || {}
+        ),
+        riskProfile: deepMerge(
+          defaultData.riskProfile || {}, 
+          client.riskProfile || {}
+        ),
+        status: client.status || 'prospect',
         clientRef: client.clientRef
       };
     }
-    return getDefaultClientFormData();
+    
+    return defaultData;
   });
 
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -132,9 +228,31 @@ export default function ClientForm({
     setValidationErrors(errors);
   }, [formData]);
 
-  // ✅ FIXED: Handle form submission with proper type conversion
+  // ✅ CRITICAL FIX: Handle Enter key to prevent auto-submission
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+  if (e.key === 'Enter') {
+    // Allow Enter in textareas for line breaks
+    if (e.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+    
+    // Prevent default for ALL Enter key presses
+    e.preventDefault();
+      
+      // Prevent form submission on Enter key
+      e.preventDefault();
+      
+      // If we're not on the last step, move to next step
+      if (currentStep < totalSteps) {
+        nextStep();
+      }
+    }
+  };
+
+  // Handle form submission - FIXED with stopPropagation
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Prevent event bubbling
 
     if (validationErrors.length > 0) {
       toast({
@@ -149,7 +267,6 @@ export default function ClientForm({
       if (onSave) {
         await onSave(formData);
       } else if (onSubmit && client) {
-        // ✅ FIXED: Use the converter function to safely create Client
         const updatedClient = convertFormDataToClient(formData, client);
         onSubmit(updatedClient);
       }
@@ -157,104 +274,96 @@ export default function ClientForm({
       console.error('Error submitting form:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save client data',
+        description: 'Failed to save client',
         variant: 'destructive'
       });
     }
   };
 
-  // Update form data handlers
+  // Safe update functions that preserve structure
   const updatePersonalDetails = (updates: Partial<PersonalDetails>) => {
     setFormData(prev => ({
       ...prev,
-      personalDetails: { ...prev.personalDetails, ...updates }
+      personalDetails: deepMerge(prev.personalDetails, updates)
     }));
   };
 
   const updateContactInfo = (updates: Partial<ContactInfo>) => {
     setFormData(prev => ({
       ...prev,
-      contactInfo: { ...prev.contactInfo, ...updates }
+      contactInfo: deepMerge(prev.contactInfo, updates)
     }));
   };
 
   const updateFinancialProfile = (updates: Partial<FinancialProfile>) => {
     setFormData(prev => ({
       ...prev,
-      financialProfile: { ...prev.financialProfile, ...updates }
-    }));
-  };
-
-  const updateRiskProfile = (updates: Partial<RiskProfile>) => {
-    setFormData(prev => ({
-      ...prev,
-      riskProfile: { ...prev.riskProfile, ...updates }
+      financialProfile: deepMerge(prev.financialProfile || {}, updates)
     }));
   };
 
   const updateVulnerabilityAssessment = (updates: Partial<VulnerabilityAssessment>) => {
     setFormData(prev => ({
       ...prev,
-      vulnerabilityAssessment: { ...prev.vulnerabilityAssessment, ...updates }
+      vulnerabilityAssessment: deepMerge(prev.vulnerabilityAssessment || {}, updates)
     }));
   };
 
-  // Navigation helpers
-  const nextStep = () => {
+  const updateRiskProfile = (updates: Partial<RiskProfile>) => {
+    setFormData(prev => ({
+      ...prev,
+      riskProfile: deepMerge(prev.riskProfile || {}, updates)
+    }));
+  };
+
+  const updateStatus = (status: ClientStatus) => {
+    setFormData(prev => ({
+      ...prev,
+      status
+    }));
+  };
+
+  // Step navigation - FIXED to prevent auto-advance
+  const nextStep = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
 
-  const prevStep = () => {
+  const prevStep = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
 
-  const renderStepIndicator = () => (
-    <div className="flex justify-between mb-8">
-      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
-        <div
-          key={step}
-          className={`flex items-center ${step < totalSteps ? 'flex-1' : ''}`}
-        >
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-              step === currentStep
-                ? 'bg-blue-600 text-white'
-                : step < currentStep
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-200 text-gray-600'
-            }`}
-          >
-            {step < currentStep ? '✓' : step}
-          </div>
-          {step < totalSteps && (
-            <div
-              className={`flex-1 h-1 mx-2 ${
-                step < currentStep ? 'bg-green-600' : 'bg-gray-200'
-              }`}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-
+  // Render steps
   const renderPersonalDetailsStep = () => (
     <Card>
       <CardHeader>
         <CardTitle>Personal Details</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Title"
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <select
+            className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
             value={formData.personalDetails.title}
             onChange={(e) => updatePersonalDetails({ title: e.target.value })}
-            placeholder="Mr, Mrs, Dr, etc."
-          />
+          >
+            <option value="">Select Title</option>
+            <option value="Mr">Mr</option>
+            <option value="Mrs">Mrs</option>
+            <option value="Miss">Miss</option>
+            <option value="Ms">Ms</option>
+            <option value="Dr">Dr</option>
+          </select>
           <Input
             label="First Name *"
             value={formData.personalDetails.firstName}
@@ -269,6 +378,9 @@ export default function ClientForm({
             required
             error={errors['personalDetails.lastName']}
           />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Date of Birth"
             type="date"
@@ -280,10 +392,15 @@ export default function ClientForm({
             value={formData.personalDetails.nationality}
             onChange={(e) => updatePersonalDetails({ nationality: e.target.value })}
           />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <select
             className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
             value={formData.personalDetails.maritalStatus}
-            onChange={(e) => updatePersonalDetails({ maritalStatus: e.target.value as any })}
+            onChange={(e) => updatePersonalDetails({ 
+              maritalStatus: e.target.value as PersonalDetails['maritalStatus'] 
+            })}
           >
             <option value="single">Single</option>
             <option value="married">Married</option>
@@ -301,20 +418,39 @@ export default function ClientForm({
           <select
             className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
             value={formData.personalDetails.employmentStatus}
-            onChange={(e) => updatePersonalDetails({ employmentStatus: e.target.value as any })}
+            onChange={(e) => updatePersonalDetails({ 
+              employmentStatus: e.target.value as PersonalDetails['employmentStatus'] 
+            })}
           >
             <option value="employed">Employed</option>
-            <option value="self_employed">Self Employed</option>
+            <option value="self_employed">Self-Employed</option>
             <option value="retired">Retired</option>
             <option value="unemployed">Unemployed</option>
             <option value="student">Student</option>
             <option value="other">Other</option>
           </select>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Occupation"
             value={formData.personalDetails.occupation}
             onChange={(e) => updatePersonalDetails({ occupation: e.target.value })}
           />
+          <div>
+            <label className="text-sm font-medium">Client Status</label>
+            <select
+              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={formData.status}
+              onChange={(e) => updateStatus(e.target.value as ClientStatus)}
+            >
+              <option value="prospect">Prospect</option>
+              <option value="active">Active</option>
+              <option value="review_due">Review Due</option>
+              <option value="inactive">Inactive</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -361,38 +497,53 @@ export default function ClientForm({
           <h4 className="font-medium">Address</h4>
           <Input
             label="Address Line 1"
-            value={formData.contactInfo.address.line1}
+            value={formData.contactInfo.address?.line1 || ''}
             onChange={(e) => updateContactInfo({
-              address: { ...formData.contactInfo.address, line1: e.target.value }
+              address: { 
+                ...formData.contactInfo.address, 
+                line1: e.target.value 
+              }
             })}
           />
           <Input
             label="Address Line 2"
-            value={formData.contactInfo.address.line2 || ''}
+            value={formData.contactInfo.address?.line2 || ''}
             onChange={(e) => updateContactInfo({
-              address: { ...formData.contactInfo.address, line2: e.target.value }
+              address: { 
+                ...formData.contactInfo.address, 
+                line2: e.target.value 
+              }
             })}
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
               label="City"
-              value={formData.contactInfo.address.city}
+              value={formData.contactInfo.address?.city || ''}
               onChange={(e) => updateContactInfo({
-                address: { ...formData.contactInfo.address, city: e.target.value }
+                address: { 
+                  ...formData.contactInfo.address, 
+                  city: e.target.value 
+                }
               })}
             />
             <Input
               label="County"
-              value={formData.contactInfo.address.county}
+              value={formData.contactInfo.address?.county || ''}
               onChange={(e) => updateContactInfo({
-                address: { ...formData.contactInfo.address, county: e.target.value }
+                address: { 
+                  ...formData.contactInfo.address, 
+                  county: e.target.value 
+                }
               })}
             />
             <Input
               label="Postcode"
-              value={formData.contactInfo.address.postcode}
+              value={formData.contactInfo.address?.postcode || ''}
               onChange={(e) => updateContactInfo({
-                address: { ...formData.contactInfo.address, postcode: e.target.value }
+                address: { 
+                  ...formData.contactInfo.address, 
+                  postcode: e.target.value 
+                }
               })}
             />
           </div>
@@ -437,7 +588,92 @@ export default function ClientForm({
     </Card>
   );
 
-  const renderRiskProfileStep = () => (
+  const renderVulnerabilityStep = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Vulnerability Assessment</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="is_vulnerable"
+            checked={formData.vulnerabilityAssessment?.is_vulnerable || false}
+            onChange={(e) => updateVulnerabilityAssessment({ is_vulnerable: e.target.checked })}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <label htmlFor="is_vulnerable" className="text-sm font-medium">
+            Client has vulnerability factors
+          </label>
+        </div>
+
+        {formData.vulnerabilityAssessment?.is_vulnerable && (
+          <div className="space-y-4 mt-4">
+            <div>
+              <label className="text-sm font-medium">Vulnerability Factors</label>
+              <div className="mt-2 space-y-2">
+                {['Health', 'Age', 'Financial', 'Life Events', 'Other'].map(factor => (
+                  <label key={factor} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.vulnerabilityAssessment?.vulnerabilityFactors?.includes(factor) || false}
+                      onChange={(e) => {
+                        const factors = formData.vulnerabilityAssessment?.vulnerabilityFactors || [];
+                        if (e.target.checked) {
+                          updateVulnerabilityAssessment({ 
+                            vulnerabilityFactors: [...factors, factor] 
+                          });
+                        } else {
+                          updateVulnerabilityAssessment({ 
+                            vulnerabilityFactors: factors.filter(f => f !== factor) 
+                          });
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm">{factor}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium">Assessment Notes</label>
+              <textarea
+                value={formData.vulnerabilityAssessment?.assessmentNotes || ''}
+                onChange={(e) => updateVulnerabilityAssessment({ assessmentNotes: e.target.value })}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                rows={4}
+                placeholder="Enter any additional notes about the client's vulnerability..."
+              />
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  // Replace the renderRiskProfileStep function in ClientForm.tsx with this version:
+
+// In ClientForm.tsx, replace the entire renderRiskProfileStep function with this:
+
+const renderRiskProfileStep = () => {
+  // Prevent Enter key on ALL form elements in this step
+  const handleSelectKeyDown = (e: React.KeyboardEvent<HTMLSelectElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const handleRangeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  return (
     <Card>
       <CardHeader>
         <CardTitle>Risk Profile</CardTitle>
@@ -447,122 +683,184 @@ export default function ClientForm({
           <div>
             <label className="text-sm font-medium">Risk Tolerance</label>
             <select
-              className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
               value={formData.riskProfile?.riskTolerance || ''}
               onChange={(e) => updateRiskProfile({ riskTolerance: e.target.value })}
+              onKeyDown={handleSelectKeyDown}
             >
-              <option value="">Select risk tolerance</option>
-              <option value="conservative">Conservative</option>
-              <option value="moderate">Moderate</option>
-              <option value="aggressive">Aggressive</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="text-sm font-medium">Risk Capacity</label>
-            <select
-              className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-              value={formData.riskProfile?.riskCapacity || ''}
-              onChange={(e) => updateRiskProfile({ riskCapacity: e.target.value })}
-            >
-              <option value="">Select risk capacity</option>
+              <option value="">Select Risk Tolerance</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
           </div>
           
-          <Input
-            label="Attitude to Risk (1-10)"
-            type="number"
-            min="1"
-            max="10"
-            value={formData.riskProfile?.attitudeToRisk || 0}
-            onChange={(e) => updateRiskProfile({ attitudeToRisk: parseInt(e.target.value) || 0 })}
-          />
-          
-          <Input
-            label="Knowledge & Experience"
-            value={formData.riskProfile?.knowledgeExperience || ''}
-            onChange={(e) => updateRiskProfile({ knowledgeExperience: e.target.value })}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  const renderVulnerabilityStep = () => (
-    <Card>
-      <CardHeader>
-        <CardTitle>Vulnerability Assessment</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-4">
-          <div className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              id="is_vulnerable"
-              checked={formData.vulnerabilityAssessment?.is_vulnerable || false}
-              onChange={(e) => updateVulnerabilityAssessment({ is_vulnerable: e.target.checked })}
-              className="rounded border-gray-300"
-            />
-            <label htmlFor="is_vulnerable" className="text-sm font-medium">
-              Client is considered vulnerable
-            </label>
+          <div>
+            <label className="text-sm font-medium">Risk Capacity</label>
+            <select
+              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={formData.riskProfile?.riskCapacity || ''}
+              onChange={(e) => updateRiskProfile({ riskCapacity: e.target.value })}
+              onKeyDown={handleSelectKeyDown}
+            >
+              <option value="">Select Risk Capacity</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
           </div>
           
           <div>
-            <label className="text-sm font-medium">Assessment Notes</label>
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-              value={formData.vulnerabilityAssessment?.assessmentNotes || ''}
-              onChange={(e) => updateVulnerabilityAssessment({ assessmentNotes: e.target.value })}
-              placeholder="Enter vulnerability assessment notes..."
-            />
+            <label className="text-sm font-medium">Capacity for Loss</label>
+            <select
+              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={formData.riskProfile?.capacityForLoss || ''}
+              onChange={(e) => updateRiskProfile({ capacityForLoss: e.target.value })}
+              onKeyDown={handleSelectKeyDown}
+            >
+              <option value="">Select Capacity for Loss</option>
+              <option value="none">None</option>
+              <option value="limited">Limited</option>
+              <option value="moderate">Moderate</option>
+              <option value="substantial">Substantial</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="text-sm font-medium">Knowledge & Experience</label>
+            <select
+              className="mt-1 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={formData.riskProfile?.knowledgeExperience || ''}
+              onChange={(e) => updateRiskProfile({ knowledgeExperience: e.target.value })}
+              onKeyDown={handleSelectKeyDown}
+            >
+              <option value="">Select Level</option>
+              <option value="none">None</option>
+              <option value="basic">Basic</option>
+              <option value="moderate">Moderate</option>
+              <option value="extensive">Extensive</option>
+            </select>
+          </div>
+        </div>
+        
+        <div>
+          <label className="text-sm font-medium">Attitude to Risk (1-10)</label>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={formData.riskProfile?.attitudeToRisk || 5}
+            onChange={(e) => updateRiskProfile({ attitudeToRisk: parseInt(e.target.value) })}
+            onKeyDown={handleRangeKeyDown}
+            className="mt-2 w-full"
+          />
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span>1 - Very Cautious</span>
+            <span>5 - Balanced</span>
+            <span>10 - Very Adventurous</span>
+          </div>
+          <div className="text-center mt-2">
+            <span className="text-2xl font-bold">{formData.riskProfile?.attitudeToRisk || 5}</span>
           </div>
         </div>
       </CardContent>
     </Card>
   );
+};
+
+
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 1:
+        return renderPersonalDetailsStep();
+      case 2:
+        return renderContactInfoStep();
+      case 3:
+        return renderFinancialProfileStep();
+      case 4:
+        return renderVulnerabilityStep();
+      case 5:
+        return renderRiskProfileStep();
+      default:
+        return renderPersonalDetailsStep();
+    }
+  };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {renderStepIndicator()}
-      
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {currentStep === 1 && renderPersonalDetailsStep()}
-        {currentStep === 2 && renderContactInfoStep()}
-        {currentStep === 3 && renderFinancialProfileStep()}
-        {currentStep === 4 && renderRiskProfileStep()}
-        {currentStep === 5 && renderVulnerabilityStep()}
+    <div className="max-w-4xl mx-auto">
+      {/* Progress indicator */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          {[...Array(totalSteps)].map((_, index) => (
+            <div
+              key={index}
+              className={`flex-1 ${index < totalSteps - 1 ? 'relative' : ''}`}
+            >
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium
+                  ${currentStep > index + 1 ? 'bg-green-600 text-white' : 
+                    currentStep === index + 1 ? 'bg-blue-600 text-white' : 
+                    'bg-gray-200 text-gray-600'}`}
+              >
+                {index + 1}
+              </div>
+              {index < totalSteps - 1 && (
+                <div
+                  className={`absolute top-5 left-10 -right-10 h-0.5 
+                    ${currentStep > index + 1 ? 'bg-green-600' : 'bg-gray-200'}`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs text-gray-600">Personal</span>
+          <span className="text-xs text-gray-600">Contact</span>
+          <span className="text-xs text-gray-600">Financial</span>
+          <span className="text-xs text-gray-600">Vulnerability</span>
+          <span className="text-xs text-gray-600">Risk</span>
+        </div>
+      </div>
 
-        {/* Navigation Buttons */}
+      {/* ✅ CRITICAL FIX: Add onKeyDown to prevent Enter key auto-submission */}
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-6">
+        {renderCurrentStep()}
+        
+        {/* Navigation buttons */}
         <div className="flex justify-between">
           <div>
             {currentStep > 1 && (
-              <Button type="button" variant="outline" onClick={prevStep}>
-                Previous
-              </Button>
+              <input
+                type="button"
+                value="Previous"
+                onClick={() => prevStep()}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer"
+              />
             )}
           </div>
           
-          <div className="space-x-3">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
+          <div className="space-x-2">
+            <input
+              type="button"
+              value="Cancel"
+              onClick={() => onCancel()}
+              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer"
+            />
             
             {currentStep < totalSteps ? (
-              <Button type="button" onClick={nextStep}>
-                Next
-              </Button>
+              <input
+                type="button"
+                value="Next"
+                onClick={() => nextStep()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
+              />
             ) : (
-              <Button
+              <input
                 type="submit"
-                loading={loading || isSubmitting}
+                value={loading || isSubmitting ? 'Saving...' : 'Save Client'}
                 disabled={loading || isSubmitting || validationErrors.length > 0}
-              >
-                {loading || isSubmitting ? 'Saving...' : client ? 'Update Client' : 'Create Client'}
-              </Button>
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              />
             )}
           </div>
         </div>

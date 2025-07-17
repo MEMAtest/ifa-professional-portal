@@ -1,6 +1,3 @@
-// ===== FILE #4: next.config.js =====
-// CHANGE: Add explicit env injection (ADD 3 LINES)
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Images configuration
@@ -13,23 +10,37 @@ const nextConfig = {
       },
     ],
   },
+  
   // TypeScript configuration
   typescript: {
     ignoreBuildErrors: false,
   },
+  
   // ESLint configuration
   eslint: {
     ignoreDuringBuilds: false,
     dirs: ['src'],
   },
   
-  // 🔧 ADD THIS: Explicit environment variable injection
+  // Force all API routes to be dynamic
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+    // Prevent build-time API calls
+    outputFileTracingExcludes: {
+      '*': [
+        'node_modules/@swc/core-linux-x64-gnu',
+        'node_modules/@swc/core-linux-x64-musl',
+      ],
+    },
+  },
+  
+  // Explicitly inject environment variables
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },
   
-  // Security headers (NO CHANGES)
+  // Security headers
   async headers() {
     return [
       {
@@ -47,11 +58,25 @@ const nextConfig = {
             key: 'Referrer-Policy',
             value: 'origin-when-cross-origin',
           },
+          {
+            key: 'Cache-Control',
+            value: 'no-store, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, max-age=0',
+          },
         ],
       },
     ]
   },
-  // Redirects (NO CHANGES)
+  
+  // Redirects
   async redirects() {
     return [
       {
@@ -61,19 +86,16 @@ const nextConfig = {
       },
     ]
   },
-  // ✅ VERCEL-SAFE: Minimal experimental features (NO CHANGES)
-  experimental: {
-    optimizePackageImports: ['lucide-react'],
-  },
-  // Remove powered by header (NO CHANGES)
+  
+  // Remove powered by header
   poweredByHeader: false,
-  // Enable compression (Vercel handles this) (NO CHANGES)
+  // Enable compression (Vercel handles this)
   compress: true,
-  // Generate ETags (NO CHANGES)
+  // Generate ETags
   generateEtags: true,
-  // Page extensions (NO CHANGES)
+  // Page extensions
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  // No trailing slash (NO CHANGES)
+  // No trailing slash
   trailingSlash: false,
 }
 

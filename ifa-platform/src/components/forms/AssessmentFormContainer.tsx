@@ -366,7 +366,7 @@ function createEmptyAssessment(id?: string): Assessment {
       expectedReturn: 0
     },
     vulnerabilityAssessment: {
-      hasVulnerabilities: false,
+      is_vulnerable: false,
       vulnerabilityTypes: [],
       healthVulnerabilities: '',
       lifeEventVulnerabilities: '',

@@ -1,62 +1,50 @@
-// ===================================================================
-// src/app/clients/[id]/edit/page.tsx - FIXED VERSION
-// ===================================================================
+// src/app/clients/[id]/edit/page.tsx
+// ✅ FIXED: Safe cancel handler with proper error boundaries
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams, notFound } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
+import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { clientService } from '@/services/ClientService';
-import type { Client, ClientFormData } from '@/types/client';
-
-// ✅ FIX: Import the REAL ClientForm component
 import ClientForm from '@/components/clients/ClientForm';
-
-// Page Params Interface
-interface PageParams {
-  id: string;
-}
+import type { Client, ClientFormData } from '@/types/client';
 
 export default function EditClientPage() {
   const router = useRouter();
-  const rawParams = useParams();
-  
-  // Safe params handling
-  const params: PageParams | null = rawParams && typeof rawParams.id === 'string' 
-    ? { id: rawParams.id }
-    : null;
-
-  if (!params) {
-    notFound();
-    return null;
-  }
-
-  const { user, loading: authLoading } = useAuth();
+  const params = useParams();
   const { toast } = useToast();
-
-  // State
+  
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Validate and extract client ID
+  const clientId = params?.id as string;
+
   // Load client data
   useEffect(() => {
+    if (!clientId) {
+      setError('Invalid client ID');
+      setLoading(false);
+      return;
+    }
+
     const loadClient = async () => {
-      if (!params.id) return;
-      
       try {
         setLoading(true);
-        const clientData = await clientService.getClientById(params.id);
+        setError(null);
+        
+        const clientData = await clientService.getClientById(clientId);
         setClient(clientData);
       } catch (err) {
         console.error('Error loading client:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load client');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load client';
+        setError(errorMessage);
         toast({
           title: 'Error',
-          description: 'Failed to load client details',
+          description: errorMessage,
           variant: 'destructive'
         });
       } finally {
@@ -65,14 +53,15 @@ export default function EditClientPage() {
     };
 
     loadClient();
-  }, [params.id, toast]);
+  }, [clientId, toast]);
 
-  // Handle form submission - Updated to match ClientForm expectations
+  // Handle form submission
   const handleSubmit = async (updatedClient: Client) => {
     if (!client) return;
 
     try {
       setSaving(true);
+      setError(null);
 
       // Convert Client to ClientFormData for the update
       const formData: ClientFormData = {
@@ -92,37 +81,31 @@ export default function EditClientPage() {
         variant: 'default'
       });
 
-      // Redirect to client details page
-      router.push(`/clients/${client.id}?success=${encodeURIComponent('Client updated successfully')}`);
+      // Redirect to client details page with success message
+      router.push(`/clients/${client.id}?success=true`);
     } catch (err) {
       console.error('Error updating client:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update client';
       
-      if (err instanceof Error) {
-        setError(err.message);
-        toast({
-          title: 'Error',
-          description: err.message,
-          variant: 'destructive'
-        });
-      } else {
-        setError('Failed to update client');
-        toast({
-          title: 'Error',
-          description: 'Failed to update client',
-          variant: 'destructive'
-        });
-      }
+      setError(errorMessage);
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive'
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  // Handle save (for ClientFormData) - Alternative handler
+  // Handle save (for ClientFormData)
   const handleSave = async (formData: ClientFormData) => {
     if (!client) return;
 
     try {
       setSaving(true);
+      setError(null);
+      
       await clientService.updateClient(client.id, formData);
       
       toast({
@@ -131,13 +114,14 @@ export default function EditClientPage() {
         variant: 'default'
       });
 
-      router.push(`/clients/${client.id}?success=${encodeURIComponent('Client updated successfully')}`);
+      router.push(`/clients/${client.id}?success=true`);
     } catch (err) {
       console.error('Error updating client:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update client';
       
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to update client',
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {
@@ -145,13 +129,25 @@ export default function EditClientPage() {
     }
   };
 
-  // Handle cancel
+  // ✅ FIXED: Safe cancel handler with fallback
   const handleCancel = () => {
-    router.push(`/clients/${params.id}`);
+    try {
+      // Try to navigate to the client details page
+      if (clientId) {
+        router.push(`/clients/${clientId}`);
+      } else {
+        // Fallback to clients list
+        router.push('/clients');
+      }
+    } catch (err) {
+      console.error('Navigation error:', err);
+      // Ultimate fallback - use window.location
+      window.location.href = clientId ? `/clients/${clientId}` : '/clients';
+    }
   };
 
   // Loading state
-  if (authLoading || loading) {
+  if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="animate-pulse">
@@ -171,11 +167,15 @@ export default function EditClientPage() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Client Not Found</h1>
-          <p className="text-gray-600 mb-4">{error || 'The requested client could not be found.'}</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            {error ? 'Error Loading Client' : 'Client Not Found'}
+          </h1>
+          <p className="text-gray-600 mb-4">
+            {error || 'The requested client could not be found.'}
+          </p>
           <button
             onClick={() => router.push('/clients')}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
           >
             Back to Clients
           </button>
@@ -196,15 +196,17 @@ export default function EditClientPage() {
         </p>
       </div>
 
-      {/* ✅ FIXED: Now using the real ClientForm component */}
-      <ClientForm
-        client={client}
-        onSubmit={handleSubmit}
-        onSave={handleSave}
-        onCancel={handleCancel}
-        loading={saving}
-        isSubmitting={saving}
-      />
+      {/* Client Form with error boundary */}
+      <div className="relative">
+        <ClientForm
+          client={client}
+          onSubmit={handleSubmit}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          loading={saving}
+          isSubmitting={saving}
+        />
+      </div>
     </div>
   );
 }

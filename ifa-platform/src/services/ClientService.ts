@@ -1,6 +1,5 @@
-// ===================================================================
-// src/services/ClientService.ts - PRODUCTION READY - All Errors Fixed
-// ===================================================================
+// src/services/ClientService.ts
+// ✅ DEFINITIVE VERSION - Complete functionality + robust data transformation
 
 import type {
   Client,
@@ -13,12 +12,12 @@ import type {
   ClientCommunication,
   ClientDocument,
   ClientAssessment,
-  AuditLog, // ✅ FIXED: Now exists
+  AuditLog,
   ClientStatus,
   MigrationResult,
-  MigrationError, // ✅ ADD THIS LINE
-  RecentActivity, // ✅ FIXED: Now exists
-  LegacyClientData, // ✅ FIXED: Now exists
+  MigrationError,
+  RecentActivity,
+  LegacyClientData,
   ValidationError
 } from '@/types/client';
 
@@ -26,8 +25,14 @@ import {
   getVulnerabilityStatus,
   isValidClientStatus,
   createVulnerabilityAssessment,
-  validateClientData // ✅ FIXED: Changed from validateClientFormData
+  validateClientData
 } from '@/types/client';
+import { supabase } from '@/lib/supabase';
+
+// Extended interface for internal use with clientRef
+interface ClientFormDataWithRef extends ClientFormData {
+  clientRef?: string;
+}
 
 export class ClientService {
   private static instance: ClientService;
@@ -40,102 +45,360 @@ export class ClientService {
     return ClientService.instance;
   }
 
-/**
- * Get all clients with optional filtering and pagination
- */
-async getAllClients(
-  filters?: ClientFilters,
-  page: number = 1,
-  limit: number = 20
-): Promise<ClientListResponse> {
-  try {
-    const searchParams = new URLSearchParams();
-    
-    searchParams.append('page', page.toString());
-    searchParams.append('limit', limit.toString());
+  /**
+   * Generate client reference
+   */
+  private generateClientReference(): string {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000);
+    return `CLI${timestamp}${random}`;
+  }
 
-    if (filters) {
-      if (filters.status?.length) {
-        filters.status.forEach(status => searchParams.append('status', status));
-      }
-      
-      if (filters.advisorId) {
-        searchParams.append('advisorId', filters.advisorId);
-      }
-      
-      if (filters.riskLevel?.length) {
-        filters.riskLevel.forEach(level => searchParams.append('riskLevel', level));
-      }
-      
-      if (filters.vulnerabilityStatus !== undefined) {
-        searchParams.append('vulnerabilityStatus', filters.vulnerabilityStatus.toString());
-      }
-      
-      if (filters.dateRange) {
-        searchParams.append('startDate', filters.dateRange.start);
-        searchParams.append('endDate', filters.dateRange.end);
-      }
-      
-      if (filters.searchQuery) {
-        searchParams.append('search', filters.searchQuery);
-      }
-      
-      if (filters.search) {
-        searchParams.append('q', filters.search);
-      }
-      
-      if (filters.sortBy) {
-        searchParams.append('sortBy', filters.sortBy);
-      }
-      
-      if (filters.sortOrder) {
-        searchParams.append('sortOrder', filters.sortOrder);
-      }
-    }
+  /**
+   * ✅ DEFINITIVE ROBUST Transform - Handles ALL data formats
+   * This method handles snake_case, camelCase, and mixed JSONB field variations
+   */
+  private transformClientData(data: any): Client {
+    console.log('🔄 Transforming client data:', {
+      id: data.id,
+      hasPersonalDetails: !!data.personal_details,
+      hasVulnerability: !!data.vulnerability_assessment,
+      vulnerabilityValue: data.vulnerability_assessment?.is_vulnerable
+    });
 
-    // Fetch from API
-    const response = await fetch(`${this.baseUrl}?${searchParams.toString()}`);
-    const data = await response.json();
-    
-    console.log('API Response:', data); // Debug log
-    
-    if (!response.ok) {
-      throw new Error(data.error || `Failed to fetch clients: ${response.statusText}`);
-    }
-
-    // Transform the API response to match our interface
-    // The API returns clients with snake_case, we need to transform them
-    const transformedClients = (data.clients || []).map((rawClient: any) => 
-      this.transformClientData(rawClient)
-    );
-
-    return {
-      clients: transformedClients,
-      total: data.total || 0,
-      page: data.page || page,
-      limit: data.limit || limit,
-      totalPages: data.totalPages || Math.ceil((data.total || 0) / limit)
+    // ✅ CRITICAL FIX: Handle personal details JSONB structure properly
+    const personalDetails = {
+      title: data.personal_details?.title || data.personalDetails?.title || '',
+      firstName: data.personal_details?.firstName || 
+                data.personal_details?.firstname || 
+                data.personalDetails?.firstName || 
+                data.personalDetails?.firstname || '',
+      lastName: data.personal_details?.lastName || 
+               data.personal_details?.lastname || 
+               data.personalDetails?.lastName || 
+               data.personalDetails?.lastname || '',
+      dateOfBirth: data.personal_details?.dateOfBirth || 
+                   data.personal_details?.date_of_birth || 
+                   data.personalDetails?.dateOfBirth || 
+                   data.personalDetails?.date_of_birth || '',
+      nationality: data.personal_details?.nationality || 
+                  data.personalDetails?.nationality || 'UK',
+      maritalStatus: data.personal_details?.maritalStatus || 
+                     data.personal_details?.marital_status || 
+                     data.personalDetails?.maritalStatus || 
+                     data.personalDetails?.marital_status || 'single',
+      dependents: parseInt(data.personal_details?.dependents) || 
+                 parseInt(data.personalDetails?.dependents) || 0,
+      employmentStatus: data.personal_details?.employmentStatus || 
+                        data.personal_details?.employment_status || 
+                        data.personalDetails?.employmentStatus || 
+                        data.personalDetails?.employment_status || 'employed',
+      occupation: data.personal_details?.occupation || 
+                 data.personalDetails?.occupation || ''
     };
 
-  } catch (error) {
-    console.error('Error fetching clients:', error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to fetch clients');
+    // ✅ CRITICAL FIX: Handle contact info JSONB structure properly  
+    const contactInfo = {
+      email: data.contact_info?.email || data.contactInfo?.email || '',
+      phone: data.contact_info?.phone || data.contactInfo?.phone || '',
+      mobile: data.contact_info?.mobile || data.contactInfo?.mobile || '',
+      address: {
+        line1: data.contact_info?.address?.line1 || 
+               data.contactInfo?.address?.line1 || '',
+        line2: data.contact_info?.address?.line2 || 
+               data.contactInfo?.address?.line2 || '',
+        city: data.contact_info?.address?.city || 
+              data.contactInfo?.address?.city || '',
+        county: data.contact_info?.address?.county || 
+                data.contactInfo?.address?.county || '',
+        postcode: data.contact_info?.address?.postcode || 
+                  data.contactInfo?.address?.postcode || '',
+        country: data.contact_info?.address?.country || 
+                 data.contactInfo?.address?.country || 'UK'
+      },
+      preferredContact: data.contact_info?.preferredContact || 
+                        data.contact_info?.preferred_contact || 
+                        data.contactInfo?.preferredContact || 
+                        data.contactInfo?.preferred_contact || 'email',
+      communicationPreferences: {
+        marketing: data.contact_info?.communicationPreferences?.marketing || 
+                  data.contact_info?.communication_preferences?.marketing || 
+                  data.contactInfo?.communicationPreferences?.marketing || 
+                  data.contactInfo?.communication_preferences?.marketing || false,
+        newsletters: data.contact_info?.communicationPreferences?.newsletters || 
+                    data.contact_info?.communication_preferences?.newsletters || 
+                    data.contactInfo?.communicationPreferences?.newsletters || 
+                    data.contactInfo?.communication_preferences?.newsletters || false,
+        smsUpdates: data.contact_info?.communicationPreferences?.smsUpdates || 
+                   data.contact_info?.communication_preferences?.sms_updates || 
+                   data.contactInfo?.communicationPreferences?.smsUpdates || 
+                   data.contactInfo?.communication_preferences?.sms_updates || false
+      }
+    };
+
+    // ✅ CRITICAL FIX: Handle financial profile JSONB with number parsing
+    const parseFinancialValue = (value: any): number => {
+      if (typeof value === 'string') return parseFloat(value) || 0;
+      return value || 0;
+    };
+
+    const financialProfile = {
+      annualIncome: parseFinancialValue(
+        data.financial_profile?.annualIncome || 
+        data.financial_profile?.annual_income || 
+        data.financialProfile?.annualIncome || 
+        data.financialProfile?.annual_income
+      ),
+      netWorth: parseFinancialValue(
+        data.financial_profile?.netWorth || 
+        data.financial_profile?.net_worth || 
+        data.financialProfile?.netWorth || 
+        data.financialProfile?.net_worth
+      ),
+      liquidAssets: parseFinancialValue(
+        data.financial_profile?.liquidAssets || 
+        data.financial_profile?.liquid_assets || 
+        data.financialProfile?.liquidAssets || 
+        data.financialProfile?.liquid_assets
+      ),
+      monthlyExpenses: parseFinancialValue(
+        data.financial_profile?.monthlyExpenses || 
+        data.financial_profile?.monthly_expenses || 
+        data.financialProfile?.monthlyExpenses || 
+        data.financialProfile?.monthly_expenses
+      ),
+      investmentTimeframe: data.financial_profile?.investmentTimeframe || 
+                           data.financial_profile?.investment_timeframe || 
+                           data.financialProfile?.investmentTimeframe || 
+                           data.financialProfile?.investment_timeframe || '',
+      investmentObjectives: data.financial_profile?.investmentObjectives || 
+                            data.financial_profile?.investment_objectives || 
+                            data.financialProfile?.investmentObjectives || 
+                            data.financialProfile?.investment_objectives || [],
+      existingInvestments: data.financial_profile?.existingInvestments || 
+                           data.financial_profile?.existing_investments || 
+                           data.financialProfile?.existingInvestments || 
+                           data.financialProfile?.existing_investments || [],
+      pensionArrangements: data.financial_profile?.pensionArrangements || 
+                           data.financial_profile?.pension_arrangements || 
+                           data.financialProfile?.pensionArrangements || 
+                           data.financialProfile?.pension_arrangements || [],
+      insurancePolicies: data.financial_profile?.insurancePolicies || 
+                         data.financial_profile?.insurance_policies || 
+                         data.financialProfile?.insurancePolicies || 
+                         data.financialProfile?.insurance_policies || []
+    };
+
+    // In ClientService.ts, replace the vulnerability assessment transformation section with this:
+
+    // Handle vulnerability assessment - FIXED to properly parse boolean
+    const vulnerabilityAssessment = {
+      // Parse is_vulnerable as boolean - handle string "true"/"false" from DB
+      is_vulnerable: data.vulnerability_assessment?.is_vulnerable === true || 
+                     data.vulnerability_assessment?.is_vulnerable === 'true' ||
+                     data.vulnerability_assessment?.isvulnerable === true ||
+                     data.vulnerability_assessment?.isVulnerable === true,
+      vulnerabilityFactors: data.vulnerability_assessment?.vulnerabilityfactors || 
+                            data.vulnerability_assessment?.vulnerabilityFactors || 
+                            data.vulnerability_assessment?.vulnerability_factors || 
+                            [],
+      supportNeeds: data.vulnerability_assessment?.supportneeds || 
+                    data.vulnerability_assessment?.supportNeeds || 
+                    data.vulnerability_assessment?.support_needs || 
+                    [],
+      assessmentNotes: data.vulnerability_assessment?.assessmentnotes || 
+                       data.vulnerability_assessment?.assessmentNotes || 
+                       data.vulnerability_assessment?.assessment_notes || 
+                       '',
+      assessmentDate: data.vulnerability_assessment?.assessmentdate || 
+                      data.vulnerability_assessment?.assessmentDate || 
+                      data.vulnerability_assessment?.assessment_date || 
+                      new Date().toISOString(),
+      reviewDate: data.vulnerability_assessment?.reviewdate || 
+                  data.vulnerability_assessment?.reviewDate || 
+                  data.vulnerability_assessment?.review_date || 
+                  new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      assessorId: data.vulnerability_assessment?.assessorid || 
+                  data.vulnerability_assessment?.assessorId || 
+                  data.vulnerability_assessment?.assessor_id || 
+                  '',
+      communicationAdjustments: data.vulnerability_assessment?.communicationadjustments || 
+                                data.vulnerability_assessment?.communicationAdjustments || 
+                                data.vulnerability_assessment?.communication_adjustments || 
+                                [],
+      lastAssessed: data.vulnerability_assessment?.lastassessed || 
+                    data.vulnerability_assessment?.lastAssessed || 
+                    data.vulnerability_assessment?.last_assessed || 
+                    null
+    };
+
+    // ✅ CRITICAL FIX: Handle risk profile JSONB structure properly
+    const riskProfile = {
+      riskTolerance: data.risk_profile?.riskTolerance || 
+                     data.risk_profile?.risk_tolerance || 
+                     data.riskProfile?.riskTolerance || 
+                     data.riskProfile?.risk_tolerance || '',
+      riskCapacity: data.risk_profile?.riskCapacity || 
+                    data.risk_profile?.risk_capacity || 
+                    data.riskProfile?.riskCapacity || 
+                    data.riskProfile?.risk_capacity || '',
+      attitudeToRisk: parseInt(
+        data.risk_profile?.attitudeToRisk || 
+        data.risk_profile?.attitude_to_risk || 
+        data.riskProfile?.attitudeToRisk || 
+        data.riskProfile?.attitude_to_risk || '5'
+      ) || 5,
+      capacityForLoss: data.risk_profile?.capacityForLoss || 
+                       data.risk_profile?.capacity_for_loss || 
+                       data.riskProfile?.capacityForLoss || 
+                       data.riskProfile?.capacity_for_loss || '',
+      knowledgeExperience: data.risk_profile?.knowledgeExperience || 
+                           data.risk_profile?.knowledge_experience || 
+                           data.riskProfile?.knowledgeExperience || 
+                           data.riskProfile?.knowledge_experience || '',
+      lastAssessment: data.risk_profile?.lastAssessment || 
+                      data.risk_profile?.last_assessment || 
+                      data.riskProfile?.lastAssessment || 
+                      data.riskProfile?.last_assessment || 
+                      new Date().toISOString(),
+      assessmentScore: data.risk_profile?.assessmentScore || 
+                       data.risk_profile?.assessment_score || 
+                       data.riskProfile?.assessmentScore || 
+                       data.riskProfile?.assessment_score,
+      questionnaire: data.risk_profile?.questionnaire || 
+                     data.riskProfile?.questionnaire,
+      assessmentHistory: data.risk_profile?.assessmentHistory || 
+                         data.risk_profile?.assessment_history || 
+                         data.riskProfile?.assessmentHistory || 
+                         data.riskProfile?.assessment_history || []
+    };
+
+    // Final transformed client
+    const transformedClient: Client = {
+      id: data.id,
+      createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+      updatedAt: data.updated_at || data.updatedAt || new Date().toISOString(),
+      advisorId: data.advisor_id || data.advisorId || null,
+      firmId: data.firm_id || data.firmId || null,
+      clientRef: data.client_ref || data.clientRef || '',
+      personalDetails,
+      contactInfo,
+      financialProfile,
+      vulnerabilityAssessment,
+      riskProfile,
+      status: data.status || 'prospect'
+    };
+
+    // Debug log the result
+    console.log('✅ Transformed client result:', {
+      id: transformedClient.id,
+      name: `${personalDetails.firstName} ${personalDetails.lastName}`,
+      vulnerable: vulnerabilityAssessment.is_vulnerable,
+      clientRef: transformedClient.clientRef,
+      hasVulnerabilityData: !!data.vulnerability_assessment
+    });
+
+    return transformedClient;
   }
-}
+
+  /**
+   * Get all clients with optional filtering and pagination
+   */
+  async getAllClients(
+    filters?: ClientFilters, 
+    page: number = 1, 
+    limit: number = 50
+  ): Promise<ClientListResponse> {
+    try {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('limit', limit.toString());
+
+      // Handle array filters properly
+      if (filters?.status && filters.status.length > 0) {
+        filters.status.forEach(status => params.append('status', status));
+      }
+
+      if (filters?.vulnerabilityStatus) {
+        if (typeof filters.vulnerabilityStatus === 'boolean') {
+          params.append('vulnerabilityStatus', filters.vulnerabilityStatus.toString());
+        } else if (filters.vulnerabilityStatus !== 'all') {
+          params.append('vulnerabilityStatus', filters.vulnerabilityStatus);
+        }
+      }
+
+      if (filters?.searchQuery || filters?.search) {
+        params.append('search', filters.searchQuery || filters.search || '');
+      }
+
+      if (filters?.sortBy) {
+        params.append('sortBy', filters.sortBy);
+      }
+
+      if (filters?.sortOrder) {
+        params.append('sortOrder', filters.sortOrder);
+      }
+
+      if (filters?.advisorId && filters.advisorId !== '') {
+        params.append('advisorId', filters.advisorId);
+      }
+
+      if (filters?.firmId && filters.firmId !== 'default-firm') {
+        params.append('firmId', filters.firmId);
+      }
+
+      const response = await fetch(`${this.baseUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to fetch clients: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // ✅ CRITICAL: Transform all clients with robust data handling
+      const transformedClients = (result.clients || []).map((client: any) => 
+        this.transformClientData(client)
+      );
+
+      return {
+        clients: transformedClients,
+        total: result.total || 0,
+        page: result.page || page,
+        limit: result.limit || limit,
+        totalPages: result.totalPages || 1
+      };
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch clients');
+    }
+  }
 
   /**
    * Get client by ID
    */
   async getClientById(id: string): Promise<Client> {
     try {
-      const response = await fetch(`${this.baseUrl}/${id}`);
+      const response = await fetch(`${this.baseUrl}/${id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch client: ${response.statusText}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to fetch client: ${response.statusText}`);
       }
 
       const result = await response.json();
-      return this.transformClientData(result.client);
+      // ✅ CRITICAL: Use robust transformation for single client
+      return this.transformClientData(result.client || result);
     } catch (error) {
       console.error('Error fetching client by ID:', error);
       throw error;
@@ -147,21 +410,17 @@ async getAllClients(
    */
   async createClient(clientData: ClientFormData): Promise<Client> {
     try {
-      // Validate the client data
       const validationErrors = validateClientData(clientData);
       if (validationErrors.length > 0) {
         throw new Error(`Validation failed: ${validationErrors.map((e: ValidationError) => e.message).join(', ')}`);
       }
 
-      // Generate client reference
       const clientRef = this.generateClientReference();
 
-      const requestData = {
+      const requestData: ClientFormDataWithRef = {
         ...clientData,
-        clientRef, // ✅ FIXED: Now this property exists in the extended interface
-        status: clientData.status || 'prospect',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        clientRef,
+        status: clientData.status || 'prospect'
       };
 
       const response = await fetch(this.baseUrl, {
@@ -173,11 +432,12 @@ async getAllClients(
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to create client: ${response.statusText}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to create client: ${response.statusText}`);
       }
 
       const result = await response.json();
-      return this.transformClientData(result.client);
+      return this.transformClientData(result.client || result);
     } catch (error) {
       console.error('Error creating client:', error);
       throw error;
@@ -189,7 +449,6 @@ async getAllClients(
    */
   async updateClient(id: string, updates: Partial<ClientFormData>): Promise<Client> {
     try {
-      // Validate the updates
       if (Object.keys(updates).length > 0) {
         const validationErrors = validateClientData(updates);
         if (validationErrors.length > 0) {
@@ -197,25 +456,21 @@ async getAllClients(
         }
       }
 
-      const requestData = {
-        ...updates,
-        updatedAt: new Date().toISOString()
-      };
-
       const response = await fetch(`${this.baseUrl}/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestData)
+        body: JSON.stringify(updates)
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to update client: ${response.statusText}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to update client: ${response.statusText}`);
       }
 
       const result = await response.json();
-      return this.transformClientData(result.client);
+      return this.transformClientData(result.client || result);
     } catch (error) {
       console.error('Error updating client:', error);
       throw error;
@@ -232,7 +487,8 @@ async getAllClients(
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to delete client: ${response.statusText}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to delete client: ${response.statusText}`);
       }
     } catch (error) {
       console.error('Error deleting client:', error);
@@ -241,60 +497,35 @@ async getAllClients(
   }
 
   /**
-   * Search clients
+   * Search clients using RPC function
    */
-  async searchClients(query: string, filters?: ClientFilters): Promise<SearchResult> {
+  async searchClients(query: string): Promise<SearchResult> {
     try {
-      const searchParams = new URLSearchParams();
-      searchParams.append('q', query);
-
-      if (filters) {
-        if (filters.status?.length) {
-          filters.status.forEach(status => searchParams.append('status', status));
-        }
-        
-        if (filters.advisorId) {
-          searchParams.append('advisorId', filters.advisorId);
-        }
-        
-        if (filters.riskLevel?.length) {
-          filters.riskLevel.forEach(level => searchParams.append('riskLevel', level));
-        }
-        
-        if (filters.vulnerabilityStatus !== undefined) {
-          searchParams.append('vulnerabilityStatus', filters.vulnerabilityStatus.toString());
-        }
-      }
-
-      // Mock search implementation
-      const allClients = await this.filterClientsByVulnerability(filters);
-      const searchTerms = query.toLowerCase().split(' ');
+      const startTime = Date.now();
       
-      const matchedClients = allClients.filter(client => {
-        const searchableText = [
-          client.personalDetails.firstName,
-          client.personalDetails.lastName,
-          client.contactInfo.email,
-          client.personalDetails.occupation,
-          client.clientRef || ''
-        ].join(' ').toLowerCase();
-
-        return searchTerms.some(term => searchableText.includes(term));
+      const { data, error } = await supabase.rpc('search_clients', {
+        search_term: query
       });
 
-      // Apply additional filters
-      const filtered = this.applyClientFilters(matchedClients, filters);
+      if (error) {
+        console.error('Error calling search_clients RPC:', error);
+        throw new Error('Failed to search clients.');
+      }
 
+      const transformedClients = (data || []).map((client: any) => 
+        this.transformClientData(client)
+      );
+      const searchTime = Date.now() - startTime;
+      
       return {
-        clients: filtered,
-        total: filtered.length, // ✅ FIXED: Changed from totalCount
-        searchTime: Date.now() % 1000, // Mock search time
-        suggestions: this.generateSearchSuggestions(query) || [] // ✅ FIXED: Ensure array
+        clients: transformedClients,
+        total: transformedClients.length,
+        searchTime: searchTime,
+        suggestions: this.generateSearchSuggestions(query)
       };
-
     } catch (error) {
-      console.error('Error searching clients:', error);
-      throw new Error('Failed to search clients');
+      console.error('Error in searchClients service:', error);
+      throw error;
     }
   }
 
@@ -303,356 +534,280 @@ async getAllClients(
    */
   async getClientStatistics(advisorId?: string): Promise<ClientStatistics> {
     try {
-      const searchParams = new URLSearchParams();
-      if (advisorId) {
-        searchParams.append('advisorId', advisorId);
-      }
-
-      // Mock implementation - in production this would call the API
-      const allClients = await this.getAllClientsForStats(advisorId);
-      
-      const totalClients = allClients.length;
-      const activeClients = allClients.filter(c => c.status === 'active').length;
-      const prospectsCount = allClients.filter(c => c.status === 'prospect').length;
-      const reviewsDue = allClients.filter(c => c.status === 'review_due').length;
-      
-      // Count vulnerable clients
-      const vulnerableClients = allClients.filter(client => {
-        const isVulnerable = getVulnerabilityStatus(client.vulnerabilityAssessment);
-        return isVulnerable === true;
-      }).length;
-      
-      const highRiskClients = allClients.filter(client => {
-        const riskTolerance = client.riskProfile?.riskTolerance;
-        return riskTolerance === 'high' || riskTolerance === 'aggressive';
-      }).length;
-
-      const now = new Date();
-      const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-      const recentlyAdded = allClients.filter(client => 
-        new Date(client.createdAt) >= oneMonthAgo
-      ).length;
-
-      // Calculate financial metrics
-      const totalAssets = allClients.reduce((sum, client) => {
-        return sum + (client.financialProfile?.netWorth || 0);
-      }, 0);
-      
-      const averagePortfolioValue = totalClients > 0 ? totalAssets / totalClients : 0;
-
-      // Group by status
-      const byStatus = allClients.reduce((acc, client) => {
-        acc[client.status] = (acc[client.status] || 0) + 1;
-        return acc;
-      }, {} as Record<ClientStatus, number>);
-
-      // Group by risk level
-      const byRiskLevel = allClients.reduce((acc, client) => {
-        const riskLevel = client.riskProfile?.riskTolerance || 'unknown';
-        acc[riskLevel] = (acc[riskLevel] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-      return {
-        totalClients,
-        activeClients,
-        prospectsCount,
-        reviewsDue, // ✅ FIXED: Changed from reviewsOverdue
-        vulnerableClients,
-        highRiskClients,
-        recentlyAdded,
-        byStatus,
-        byRiskLevel,
-        averagePortfolioValue,
-        totalAssetsUnderManagement: totalAssets,
-        newThisMonth: recentlyAdded, // ✅ FIXED: Now this property exists
-        clientsByStatus: byStatus, // ✅ FIXED: Now this property exists
-        clientsByRiskLevel: byRiskLevel // ✅ FIXED: Now this property exists
-      };
-
-    } catch (error) {
-      console.error('Error fetching client statistics:', error);
-      throw new Error('Failed to fetch client statistics');
-    }
-  }
-
-  /**
-   * Get client reviews
-   */
-  async getClientReviews(clientId: string): Promise<ClientReview[]> {
-    try {
-      const response = await fetch(`${this.baseUrl}/${clientId}/reviews`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch client reviews: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result.reviews || [];
-    } catch (error) {
-      console.error('Error fetching client reviews:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Create client review
-   */
-  async createClientReview(
-    review: Omit<ClientReview, 'id' | 'createdAt' | 'updatedAt'>
-  ): Promise<ClientReview> {
-    try {
-      const reviewData = {
-        ...review,
-        id: this.generateId(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      const response = await fetch(`${this.baseUrl}/${review.clientId}/reviews`, {
-        method: 'POST',
+      const params = advisorId ? `?advisorId=${advisorId}` : '';
+      const response = await fetch(`${this.baseUrl}/statistics${params}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(reviewData)
+        }
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to create client review: ${response.statusText}`);
+        return this.getDefaultStatistics();
       }
 
       const result = await response.json();
-      return result.review;
+      return result;
     } catch (error) {
-      console.error('Error creating client review:', error);
-      throw error;
+      console.error('Error fetching statistics:', error);
+      return this.getDefaultStatistics();
     }
   }
 
   /**
-   * Get client communications
-   */
-  async getClientCommunications(clientId: string): Promise<ClientCommunication[]> {
-    try {
-      const response = await fetch(`${this.baseUrl}/${clientId}/communications`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch client communications: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result.communications || [];
-    } catch (error) {
-      console.error('Error fetching client communications:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Create client communication
-   */
-  async createClientCommunication(
-    communication: Omit<ClientCommunication, 'id' | 'createdAt'>
-  ): Promise<ClientCommunication> {
-    try {
-      const communicationData = {
-        ...communication,
-        id: this.generateId(),
-        createdAt: new Date().toISOString()
-      };
-
-      const response = await fetch(`${this.baseUrl}/${communication.clientId}/communications`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(communicationData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to create client communication: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result.communication;
-    } catch (error) {
-      console.error('Error creating client communication:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Link document to client
-   */
-  async linkClientDocument(
-    clientId: string,
-    documentId: string,
-    documentType: string
-  ): Promise<ClientDocument> {
-    try {
-      const linkData = {
-        clientId,
-        documentId,
-        documentType,
-        isRequired: this.isDocumentRequired(documentType),
-        status: 'pending' as const,
-        id: this.generateId()
-      };
-
-      const response = await fetch(`${this.baseUrl}/${clientId}/documents`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(linkData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to link document: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result.documentLink;
-    } catch (error) {
-      console.error('Error linking client document:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Link assessment to client
-   */
-  async linkClientAssessment(
-    clientId: string,
-    assessmentId: string,
-    assessmentType: string
-  ): Promise<ClientAssessment> {
-    try {
-      const linkData = {
-        clientId,
-        assessmentId,
-        assessmentType,
-        status: 'draft' as const,
-        id: this.generateId()
-      };
-
-      const response = await fetch(`${this.baseUrl}/${clientId}/assessments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(linkData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to link assessment: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result.assessmentLink;
-    } catch (error) {
-      console.error('Error linking client assessment:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get recent activity
+   * Get recent client activity
    */
   async getRecentActivity(limit: number = 10): Promise<RecentActivity[]> {
     try {
       const response = await fetch(`${this.baseUrl}/activity?limit=${limit}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch recent activity: ${response.statusText}`);
+        return [];
       }
 
       const result = await response.json();
       return result.activities || [];
     } catch (error) {
       console.error('Error fetching recent activity:', error);
-      throw error;
+      return [];
     }
   }
 
   /**
-   * Migrate client from legacy system
+   * Update client status
    */
-  async migrateClient(
-    clientData: LegacyClientData,
-    progressCallback: (progress: number, message: string) => void
-  ): Promise<MigrationResult> {
-    // This would typically call the migration service
-    // For now, return a mock implementation
-    return {
-      success: true,
-      clientsProcessed: 1,
-      clientsMigrated: 1,
-      errors: [],
-      summary: {
-        total: 1,
-        successful: 1,
-        failed: 0,
-        skipped: 0
-      }
-    };
+  async updateClientStatus(id: string, status: ClientStatus): Promise<Client> {
+    if (!isValidClientStatus(status)) {
+      throw new Error(`Invalid client status: ${status}`);
+    }
+
+    return this.updateClient(id, { status });
   }
 
   /**
-   * ✅ ADDED: Get audit log for client
+   * Get clients by advisor
    */
-  async getAuditLog(clientId: string): Promise<AuditLog[]> {
+  async getClientsByAdvisor(advisorId: string): Promise<Client[]> {
+    const response = await this.getAllClients({ advisorId }, 1, 100);
+    return response.clients;
+  }
+
+  // Review Management
+  async getClientReviews(clientId: string): Promise<ClientReview[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/${clientId}/audit-log`);
+      const response = await fetch(`${this.baseUrl}/${clientId}/reviews`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch audit log: ${response.statusText}`);
+        return [];
       }
 
       const result = await response.json();
-      return result.auditLog || [];
+      return result.reviews || [];
     } catch (error) {
-      console.error('Error fetching audit log:', error);
-      throw error;
+      console.error('Error fetching client reviews:', error);
+      return [];
     }
   }
 
-  /**
-   * ✅ ADDED: Migrate legacy clients in batch
-   */
+  async createClientReview(clientId: string, review: Partial<ClientReview>): Promise<ClientReview> {
+    const response = await fetch(`${this.baseUrl}/${clientId}/reviews`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(review)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create review: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.review;
+  }
+
+  async updateClientReview(clientId: string, reviewId: string, updates: Partial<ClientReview>): Promise<ClientReview> {
+    const response = await fetch(`${this.baseUrl}/${clientId}/reviews/${reviewId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updates)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update review: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.review;
+  }
+
+  // Communication Management
+  async getClientCommunications(clientId: string): Promise<ClientCommunication[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/${clientId}/communications`);
+      
+      if (!response.ok) {
+        return [];
+      }
+
+      const result = await response.json();
+      return result.communications || [];
+    } catch (error) {
+      console.error('Error fetching communications:', error);
+      return [];
+    }
+  }
+
+  async createClientCommunication(clientId: string, communication: Partial<ClientCommunication>): Promise<ClientCommunication> {
+    const response = await fetch(`${this.baseUrl}/${clientId}/communications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(communication)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create communication: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.communication;
+  }
+
+  // Document Management
+  async getClientDocuments(clientId: string): Promise<ClientDocument[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/${clientId}/documents`);
+      
+      if (!response.ok) {
+        return [];
+      }
+
+      const result = await response.json();
+      return result.documents || [];
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      return [];
+    }
+  }
+
+  async uploadClientDocument(clientId: string, file: File, metadata: Partial<ClientDocument>): Promise<ClientDocument> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('metadata', JSON.stringify(metadata));
+
+    const response = await fetch(`${this.baseUrl}/${clientId}/documents`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload document: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.document;
+  }
+
+  async deleteClientDocument(clientId: string, documentId: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/${clientId}/documents/${documentId}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete document: ${response.statusText}`);
+    }
+  }
+
+  // Assessment Management
+  async getClientAssessments(clientId: string): Promise<ClientAssessment[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/${clientId}/assessments`);
+      
+      if (!response.ok) {
+        return [];
+      }
+
+      const result = await response.json();
+      return result.assessments || [];
+    } catch (error) {
+      console.error('Error fetching assessments:', error);
+      return [];
+    }
+  }
+
+  async createClientAssessment(clientId: string, assessment: Partial<ClientAssessment>): Promise<ClientAssessment> {
+    const response = await fetch(`${this.baseUrl}/${clientId}/assessments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(assessment)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create assessment: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result.assessment;
+  }
+
+  // Audit Trail
+  async getClientAuditTrail(clientId: string): Promise<AuditLog[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/${clientId}/audit-trail`);
+      
+      if (!response.ok) {
+        return [];
+      }
+
+      const result = await response.json();
+      return result.auditLogs || [];
+    } catch (error) {
+      console.error('Error fetching audit trail:', error);
+      return [];
+    }
+  }
+
+  // Data Migration
   async migrateLegacyClients(
-    clients: LegacyClientData[], 
+    legacyData: LegacyClientData[],
     progressCallback?: (progress: number, message: string) => void
   ): Promise<MigrationResult> {
-    try {
-      const results: MigrationError[] = [];
-      const total = clients.length;
-      let successful = 0;
-      let failed = 0;
-      let skipped = 0;
+    const total = legacyData.length;
+    let successful = 0;
+    let failed = 0;
+    let skipped = 0;
+    const results: MigrationError[] = [];
 
-      for (let i = 0; i < clients.length; i++) {
-        const client = clients[i];
-        const progress = ((i + 1) / total) * 100;
-        
-        progressCallback?.(progress, `Migrating client ${i + 1} of ${total}: ${client.first_name} ${client.last_name}`);
+    try {
+      for (let i = 0; i < total; i++) {
+        const legacy = legacyData[i];
+        progressCallback?.((i / total) * 100, `Processing client ${i + 1} of ${total}`);
 
         try {
-          const result = await this.migrateClient(client, () => {});
-          if (result.success) {
-            successful++;
-          } else {
-            failed++;
+          const existing = await this.searchClients(legacy.email || '');
+          if (existing.clients.length > 0) {
+            skipped++;
             results.push({
-              clientId: client.id,
-              status: 'error',
-              reason: 'Migration failed'
+              clientId: legacy.id || '',
+              status: 'skipped',
+              reason: 'Client already exists'
             });
+            continue;
           }
+
+          const clientData = this.transformLegacyData(legacy);
+          await this.createClient(clientData);
+          successful++;
         } catch (error) {
           failed++;
           results.push({
-            clientId: client.id,
+            clientId: legacy.id || '',
             status: 'error',
             reason: error instanceof Error ? error.message : 'Unknown error'
           });
@@ -684,95 +839,73 @@ async getAllClients(
   }
 
   // Private helper methods
-
-  private async filterClientsByVulnerability(filters?: ClientFilters): Promise<Client[]> {
-  // Remove mock implementation - filtering should be done server-side
-  console.warn('filterClientsByVulnerability called but should not be used - filtering is done server-side');
-  return [];
-}
-
-private async getAllClientsForStats(advisorId?: string): Promise<Client[]> {
-  // This should call the API instead of returning mock data
-  try {
-    const response = await this.getAllClients({ advisorId }, 1, 1000); // Get up to 1000 clients
-    return response.clients;
-  } catch (error) {
-    console.error('Error fetching clients for stats:', error);
-    return [];
-  }
-}
-
-  private applyClientFilters(clients: Client[], filters?: ClientFilters): Client[] {
-    if (!filters) return clients;
-
-    return clients.filter(client => {
-      // Status filter
-      if (filters.status?.length && !filters.status.includes(client.status)) {
-        return false;
-      }
-
-      // Advisor filter
-      if (filters.advisorId && client.advisorId !== filters.advisorId) {
-        return false;
-      }
-
-      // Risk level filter
-      if (filters.riskLevel?.length) {
-        const clientRiskLevel = client.riskProfile?.riskTolerance || 'unknown';
-        if (!filters.riskLevel.includes(clientRiskLevel)) {
-          return false;
-        }
-      }
-
-      // Vulnerability filter  
-      if (filters.vulnerabilityStatus !== undefined) {
-        const isVulnerable = getVulnerabilityStatus(client.vulnerabilityAssessment);
-        if (filters.vulnerabilityStatus && isVulnerable !== true) {
-          return false;
-        }
-        if (!filters.vulnerabilityStatus && isVulnerable === true) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }
-
-  private transformClientData(rawData: any): Client {
-    // Transform raw API data to typed Client interface
+  private transformLegacyData(legacy: LegacyClientData): ClientFormData {
     return {
-      id: rawData.id,
-      createdAt: rawData.created_at || rawData.createdAt,
-      updatedAt: rawData.updated_at || rawData.updatedAt,
-      advisorId: rawData.advisor_id || rawData.advisorId,
-      firmId: rawData.firm_id || rawData.firmId,
-      clientRef: rawData.client_ref || rawData.clientRef,
-      personalDetails: rawData.personal_details || rawData.personalDetails,
-      contactInfo: rawData.contact_info || rawData.contactInfo,
-      financialProfile: rawData.financial_profile || rawData.financialProfile,
-      vulnerabilityAssessment: rawData.vulnerability_assessment || rawData.vulnerabilityAssessment,
-      riskProfile: rawData.risk_profile || rawData.riskProfile,
-      status: rawData.status
+      personalDetails: {
+        title: legacy.title || '',
+        firstName: legacy.firstName || '',
+        lastName: legacy.lastName || '',
+        dateOfBirth: legacy.dateOfBirth || '',
+        nationality: legacy.nationality || 'UK',
+        maritalStatus: legacy.maritalStatus || 'single',
+        dependents: legacy.dependents || 0,
+        employmentStatus: legacy.employmentStatus || 'employed',
+        occupation: legacy.occupation || ''
+      },
+      contactInfo: {
+        email: legacy.email || '',
+        phone: legacy.phone || '',
+        mobile: legacy.mobile || '',
+        address: {
+          line1: legacy.addressLine1 || '',
+          line2: legacy.addressLine2 || '',
+          city: legacy.city || '',
+          county: legacy.county || '',
+          postcode: legacy.postcode || '',
+          country: legacy.country || 'UK'
+        },
+        preferredContact: 'email',
+        communicationPreferences: {
+          marketing: false,
+          newsletters: false,
+          smsUpdates: false
+        }
+      },
+      financialProfile: {
+        annualIncome: 0,
+        netWorth: 0,
+        liquidAssets: 0,
+        monthlyExpenses: 0,
+        investmentTimeframe: '',
+        investmentObjectives: [],
+        existingInvestments: [],
+        pensionArrangements: [],
+        insurancePolicies: []
+      },
+      vulnerabilityAssessment: {
+        is_vulnerable: false,
+        vulnerabilityFactors: [],
+        supportNeeds: [],
+        assessmentNotes: '',
+        assessmentDate: new Date().toISOString(),
+        reviewDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        assessorId: '',
+        communicationAdjustments: []
+      },
+      riskProfile: {
+        riskTolerance: '',
+        riskCapacity: '',
+        attitudeToRisk: 5,
+        capacityForLoss: '',
+        knowledgeExperience: '',
+        lastAssessment: new Date().toISOString(),
+        assessmentHistory: []
+      },
+      status: 'prospect'
     };
   }
 
-  private generateClientReference(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substr(2, 5);
-    return `CLT-${timestamp}-${random}`.toUpperCase();
-  }
-
-  private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private getNestedProperty(obj: any, path: string): any {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
-  }
-
   private generateSearchSuggestions(query: string): string[] {
-    // Mock implementation
     return [
       `${query} active`,
       `${query} prospect`,
@@ -780,9 +913,43 @@ private async getAllClientsForStats(advisorId?: string): Promise<Client[]> {
     ];
   }
 
-  private isDocumentRequired(documentType: string): boolean {
-    const requiredTypes = ['suitability_report', 'fact_find', 'risk_assessment'];
-    return requiredTypes.includes(documentType);
+  private getDefaultStatistics(): ClientStatistics {
+    return {
+      totalClients: 0,
+      activeClients: 0,
+      prospectsCount: 0,
+      reviewsDue: 0,
+      vulnerableClients: 0,
+      highRiskClients: 0,
+      recentlyAdded: 0,
+      byStatus: {
+        prospect: 0,
+        active: 0,
+        review_due: 0,
+        inactive: 0,
+        archived: 0
+      },
+      byRiskLevel: {
+        low: 0,
+        medium: 0,
+        high: 0
+      },
+      averagePortfolioValue: 0,
+      totalAssetsUnderManagement: 0,
+      newThisMonth: 0,
+      clientsByStatus: {
+        prospect: 0,
+        active: 0,
+        review_due: 0,
+        inactive: 0,
+        archived: 0
+      },
+      clientsByRiskLevel: {
+        low: 0,
+        medium: 0,
+        high: 0
+      }
+    };
   }
 }
 

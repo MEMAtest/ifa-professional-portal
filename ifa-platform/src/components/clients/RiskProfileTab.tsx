@@ -47,13 +47,14 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
         .eq('is_current', true)
         .single();
 
-      // Load Risk Profile
-      const { data: profile } = await supabase
-        .from('risk_profiles')
-        .select('*')
-        .eq('client_id', clientId)
-        .eq('is_current', true)
-        .single();
+      // ✅ NEW CODE - Gets risk_profile from client's JSONB field
+const { data: client } = await supabase
+  .from('clients')
+  .select('risk_profile')
+  .eq('id', clientId)
+  .single();
+
+const profile = client?.risk_profile || null;
 
       setAtrAssessment(atr);
       setCflAssessment(cfl);

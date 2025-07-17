@@ -4,7 +4,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { VulnerabilityBadge } from './VulnerabilityBadge';
+import { VulnerabilityBadge } from '@/components/ui/VulnerabilityIndicator';
 import { Mail, Phone, TrendingUp, Calendar, MoreVertical, User } from 'lucide-react';
 import type { Client } from '@/types/client';
 import { getVulnerabilityStatus, isValidClientStatus } from '@/types/client';
@@ -71,7 +71,7 @@ export default function ClientCard({ client, onView, onEdit, onDelete }: ClientC
               {clientStatus.replace('_', ' ').toUpperCase()}
             </Badge>
             {isVulnerable === true && (
-              <VulnerabilityBadge size="sm" />
+              <VulnerabilityBadge client={client} />
             )}
           </div>
         </div>
