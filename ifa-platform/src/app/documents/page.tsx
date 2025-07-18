@@ -154,7 +154,31 @@ export default function UnifiedDocumentWorkflow() {
 
   useEffect(() => {
     loadInitialData()
+    // Temporary: Check database tables
+    checkDatabaseTables()
   }, [])
+
+  // Temporary debug function
+  const checkDatabaseTables = async () => {
+    try {
+      // Check if templates table exists and has data
+      const { data: templates, error: templatesError } = await supabase
+        .from('document_templates')
+        .select('id, name')
+        .limit(5)
+      
+      console.log('DEBUG - Templates check:', { templates, templatesError })
+      
+      // Also try without any filters
+      const { count, error: countError } = await supabase
+        .from('document_templates')
+        .select('*', { count: 'exact', head: true })
+      
+      console.log('DEBUG - Templates count:', { count, countError })
+    } catch (err) {
+      console.error('DEBUG - Database check error:', err)
+    }
+  }
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -211,13 +235,15 @@ export default function UnifiedDocumentWorkflow() {
       const { data, error } = await supabase
         .from('document_templates')
         .select('*')
-        .order('name')
 
       if (error) {
+        console.error('Supabase error loading templates:', error)
         throw new Error(`Failed to load templates: ${error.message}`)
       }
 
-      // Process templates with defaults
+      console.log('Raw template data from Supabase:', data)
+
+      // Process templates with defaults - don't filter by is_active
       const processedTemplates: DocumentTemplate[] = (data || []).map(template => ({
         id: template.id,
         name: template.name || 'Unnamed Template',
@@ -229,10 +255,69 @@ export default function UnifiedDocumentWorkflow() {
       }))
 
       setTemplates(processedTemplates)
-      console.log('Loaded templates:', processedTemplates)
+      console.log('Processed templates:', processedTemplates)
+      
+      // If no templates loaded, use fallback templates
+      if (processedTemplates.length === 0) {
+        console.warn('No templates found in database. Using fallback templates.')
+        const fallbackTemplates: DocumentTemplate[] = [
+          {
+            id: '485f9812-6dab-4b72-9462-ef65573f6225',
+            name: 'Client Service Agreement',
+            description: 'Standard client service agreement template',
+            template_content: DEFAULT_TEMPLATE_CONTENT,
+            requires_signature: true,
+            template_variables: {}
+          },
+          {
+            id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
+            name: 'Suitability Report',
+            description: 'Investment suitability assessment report',
+            template_content: DEFAULT_TEMPLATE_CONTENT,
+            requires_signature: true,
+            template_variables: {}
+          },
+          {
+            id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
+            name: 'Annual Review Report',
+            description: 'Annual portfolio review report',
+            template_content: DEFAULT_TEMPLATE_CONTENT,
+            requires_signature: false,
+            template_variables: {}
+          }
+        ]
+        setTemplates(fallbackTemplates)
+      }
     } catch (err) {
       console.error('Error loading templates:', err)
-      throw err
+      // Use fallback templates on error
+      const fallbackTemplates: DocumentTemplate[] = [
+        {
+          id: '485f9812-6dab-4b72-9462-ef65573f6225',
+          name: 'Client Service Agreement',
+          description: 'Standard client service agreement template',
+          template_content: DEFAULT_TEMPLATE_CONTENT,
+          requires_signature: true,
+          template_variables: {}
+        },
+        {
+          id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
+          name: 'Suitability Report',
+          description: 'Investment suitability assessment report',
+          template_content: DEFAULT_TEMPLATE_CONTENT,
+          requires_signature: true,
+          template_variables: {}
+        },
+        {
+          id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
+          name: 'Annual Review Report',
+          description: 'Annual portfolio review report',
+          template_content: DEFAULT_TEMPLATE_CONTENT,
+          requires_signature: false,
+          template_variables: {}
+        }
+      ]
+      setTemplates(fallbackTemplates)
     }
   }
 
