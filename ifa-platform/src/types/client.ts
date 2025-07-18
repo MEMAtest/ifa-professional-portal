@@ -386,6 +386,9 @@ export interface ClientService {
   getClientCommunications(clientId: string): Promise<ClientCommunication[]>;
   createClientCommunication(communication: Omit<ClientCommunication, 'id' | 'createdAt'>): Promise<ClientCommunication>;
   linkClientDocument(clientId: string, documentId: string, documentType: string): Promise<ClientDocument>;
+  getAuditLog(clientId: string): Promise<AuditLog[]>;
+  migrateLegacyClients(clients: LegacyClientData[], progressCallback?: (progress: number, message: string) => void): Promise<MigrationResult>;
+
   linkClientAssessment(clientId: string, assessmentId: string, assessmentType: string): Promise<ClientAssessment>;
   migrateClient(clientData: any, progressCallback: (progress: number, message: string) => void): Promise<MigrationResult>;
   getAuditLog(clientId: string): Promise<AuditLog[]>; // ✅ ADDED: Missing method

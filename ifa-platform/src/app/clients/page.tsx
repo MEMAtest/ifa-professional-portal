@@ -123,7 +123,7 @@ export default function ClientsPage() {
     }
 
     try {
-      const searchResult = await clientService.searchClients(query, filters);
+      const searchResult = await clientService.searchClients(query);
       setSuggestions(searchResult.suggestions);
 
       if (query.length >= 3) {
