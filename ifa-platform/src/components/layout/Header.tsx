@@ -1,10 +1,11 @@
 // File: src/components/layout/Header.tsx
-// FINAL CORRECTED VERSION
+// Updated version with Plannetic Logo component
 'use client'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
+import { Logo } from '@/components/ui/Logo'
 import { 
   LogOut, 
   Search, 
@@ -123,17 +124,8 @@ export const Header: React.FC = () => {
     <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50">
       <div className="flex items-center justify-between h-full px-6">
         <div className="flex items-center gap-6 flex-1 min-w-0">
-          <Link 
-            href="/dashboard" 
-            className="flex items-center gap-3 hover:opacity-80 transition-opacity flex-shrink-0"
-          >
-            <img 
-              src="/plannetic-icon.png"
-              alt="Plannetic Logo" 
-              className="h-8 w-8"
-            />
-            <h1 className="text-xl font-bold text-blue-600">Plannetic</h1>
-          </Link>
+          {/* Use Logo component instead of hardcoded image */}
+          <Logo variant="full" className="flex-shrink-0" />
           
           {breadcrumbs.length > 1 && (
             <nav className="hidden md:flex items-center space-x-2 text-sm min-w-0 flex-1">
@@ -177,7 +169,7 @@ export const Header: React.FC = () => {
               placeholder="Search clients, assessments, documents..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-plannetic-primary focus:border-transparent"
             />
           </div>
         </div>
@@ -212,7 +204,7 @@ export const Header: React.FC = () => {
                 </p>
                 <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
               </div>
-              <div className="h-8 w-8 bg-blue-500 rounded-full flex items-center justify-center">
+              <div className="h-8 w-8 bg-plannetic-primary rounded-full flex items-center justify-center">
                 <span className="text-sm font-medium text-white">
                   {user?.firstName?.[0]}{user?.lastName?.[0]}
                 </span>

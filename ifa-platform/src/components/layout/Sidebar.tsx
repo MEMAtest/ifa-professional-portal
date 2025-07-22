@@ -57,7 +57,7 @@ const navigation: NavSection[] = [
       { name: 'Overview', href: '/dashboard', icon: BarChart3 },
       // Change these routes to existing ones:
 { name: 'AI Insights', href: '/dashboard', icon: PieChart }, // Changed from /insights
-{ name: 'Risk Profiling', href: '/clients', icon: Shield }, // Changed from /risk
+{ name: 'Risk Profiling', href: '/assessments/atr', icon: Shield }, // Point to ATR instead of /risk
     ],
   },
   {
@@ -65,7 +65,7 @@ const navigation: NavSection[] = [
     items: [
       { name: 'All Clients', href: '/clients', icon: Users },
       { name: 'Suitability Assessments', href: '/assessments', icon: FileText },
-      { name: 'Risk Profiling', href: '/risk', icon: Shield },
+      { name: 'Risk Management', href: '/risk', icon: Shield },
     ],
   },
   {
@@ -79,7 +79,7 @@ const navigation: NavSection[] = [
   {
     title: 'Assessment Tools',
     items: [
-      { name: 'Assessment Dashboard', href: '/assessments', icon: ClipboardList },
+      { name: 'Assessment Dashboard', href: '/assessments/dashboard', icon: ClipboardList },
       { name: 'Suitability Assessment', href: '/assessments/suitability', icon: FileCheck },
       { name: 'Risk Assessment (ATR)', href: '/assessments/atr', icon: Brain },
       { name: 'Risk Assessment (CFL)', href: '/assessments/cfl', icon: Calculator },

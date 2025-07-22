@@ -1,14 +1,13 @@
-
 /* ================================================================
-   File: ifa-platform/src/app/globals.css (CLEAN VERSION)
-   ================================================================ */
-
+ File: ifa-platform/src/app/globals.css (PLANNETIC VERSION)
+ ================================================================ */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    /* Original theme colors */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -29,8 +28,16 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.75rem;
+    
+    /* Plannetic brand colors */
+    --plannetic-primary: 180 100% 40%;     /* Turquoise/Teal */
+    --plannetic-primary-dark: 180 100% 30%; /* Darker variant */
+    --plannetic-primary-light: 180 70% 50%; /* Lighter variant */
+    --plannetic-secondary: 180 20% 45%;    /* Muted teal for tagline */
+    --plannetic-accent: 180 100% 45%;      /* Accent dots/highlights */
+    --plannetic-bg-light: 180 20% 97%;     /* Very light teal background */
   }
-
+  
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
@@ -51,6 +58,14 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
+    
+    /* Plannetic brand colors for dark mode */
+    --plannetic-primary: 180 100% 45%;     /* Slightly brighter in dark */
+    --plannetic-primary-dark: 180 100% 35%;
+    --plannetic-primary-light: 180 70% 60%;
+    --plannetic-secondary: 180 30% 70%;    /* Lighter for dark backgrounds */
+    --plannetic-accent: 180 100% 50%;
+    --plannetic-bg-light: 180 15% 15%;     /* Dark teal background */
   }
 }
 
@@ -63,6 +78,32 @@
     color: hsl(var(--foreground));
   }
 }
+
+/* Plannetic brand utilities */
+@layer utilities {
+  .text-plannetic-primary {
+    color: hsl(var(--plannetic-primary));
+  }
+  .text-plannetic-secondary {
+    color: hsl(var(--plannetic-secondary));
+  }
+  .bg-plannetic-primary {
+    background-color: hsl(var(--plannetic-primary));
+  }
+  .bg-plannetic-accent {
+    background-color: hsl(var(--plannetic-accent));
+  }
+  .bg-plannetic-light {
+    background-color: hsl(var(--plannetic-bg-light));
+  }
+  .border-plannetic-primary {
+    border-color: hsl(var(--plannetic-primary));
+  }
+  .ring-plannetic-primary {
+    --tw-ring-color: hsl(var(--plannetic-primary));
+  }
+}
+
 /* Mobile menu button and responsive utilities */
 @media (max-width: 1023px) {
   .sidebar-mobile {
@@ -70,12 +111,13 @@
     height: 100dvh;
   }
 }
-/* Slider styles */
+
+/* Slider styles with Plannetic colors */
 input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   width: 20px;
   height: 20px;
-  background: rgb(59 130 246);
+  background: hsl(var(--plannetic-primary));
   border-radius: 50%;
   cursor: pointer;
 }
@@ -83,8 +125,22 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]::-moz-range-thumb {
   width: 20px;
   height: 20px;
-  background: rgb(59 130 246);
+  background: hsl(var(--plannetic-primary));
   border-radius: 50%;
   cursor: pointer;
   border: none;
+}
+
+/* Plannetic-specific animations */
+@keyframes plannetic-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.plannetic-pulse {
+  animation: plannetic-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

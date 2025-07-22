@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { LogoFull } from '@/components/ui/Logo'
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -21,7 +22,7 @@ export const LoginForm: React.FC = () => {
   const router = useRouter()
   const { signIn } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
-
+  
   const {
     register,
     handleSubmit,
@@ -33,7 +34,6 @@ export const LoginForm: React.FC = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
-    
     const { error } = await signIn(data)
     
     if (error) {
@@ -46,17 +46,18 @@ export const LoginForm: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-plannetic-bg-light py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            IFA Platform Pro
-          </h2>
+          {/* Plannetic Logo */}
+          <div className="flex justify-center mb-6">
+            <LogoFull showTagline={true} linkToHome={false} className="scale-125" />
+          </div>
           <p className="mt-2 text-sm text-gray-600">
             Professional Financial Advisory Platform
           </p>
         </div>
-
+        
         <Card>
           <CardHeader>
             <CardTitle>Sign in to your account</CardTitle>
@@ -71,32 +72,46 @@ export const LoginForm: React.FC = () => {
                   <p className="text-sm text-red-600">{errors.root.message}</p>
                 </div>
               )}
-
-              <Input
-                type="email"
-                autoComplete="email"
-                required
-                error={errors.email?.message}
-                {...register('email')}
-              />
-
-              <Input
-                type="password"
-                autoComplete="current-password"
-                required
-                error={errors.password?.message}
-                {...register('password')}
-              />
-
+              
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  required
+                  error={errors.email?.message}
+                  {...register('email')}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  required
+                  error={errors.password?.message}
+                  {...register('password')}
+                />
+              </div>
+              
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full bg-plannetic-primary hover:bg-plannetic-primary-dark"
                 disabled={isLoading}
               >
                 {isLoading ? 'Signing in...' : 'Sign in'}
               </Button>
             </form>
-
+            
             <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -106,16 +121,22 @@ export const LoginForm: React.FC = () => {
                   <span className="px-2 bg-white text-gray-500">Demo Credentials</span>
                 </div>
               </div>
-              <div className="mt-4 p-4 bg-blue-50 rounded-md">
-                <p className="text-sm text-blue-700">
+              
+              <div className="mt-4 p-4 bg-plannetic-bg-light rounded-md border border-plannetic-primary/20">
+                <p className="text-sm text-plannetic-primary-dark">
                   <strong>Demo Login:</strong><br />
-                  Email: demo@ifaplatform.com<br />
+                  Email: demo@plannetic.com<br />
                   Password: demo123
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
+        
+        {/* Footer */}
+        <p className="text-center text-xs text-gray-500">
+          © 2025 Plannetic. All rights reserved.
+        </p>
       </div>
     </div>
   )
