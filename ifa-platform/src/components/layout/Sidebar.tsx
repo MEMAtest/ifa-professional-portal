@@ -64,7 +64,7 @@ const navigation: NavSection[] = [
     title: 'Client Management',
     items: [
       { name: 'All Clients', href: '/clients', icon: Users },
-      { name: 'Suitability Assessments', href: '/assessments', icon: FileText },
+      { name: 'Suitability Assessments', href: '/assessments/suitability-clients', icon: FileText },
       { name: 'Risk Management', href: '/risk', icon: Shield },
     ],
   },

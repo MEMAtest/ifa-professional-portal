@@ -316,12 +316,30 @@ export default function SuitabilityAssessmentPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
-  // Auto-generate client reference on component mount
-  useEffect(() => {
-    if (!formData.client_details?.client_reference) {
-      updateField('client_details', 'client_reference', generateClientReference())
+// Update your auto-generate client reference code in your suitability page:
+useEffect(() => {
+  // Check if we have a selected client from the client list
+  const storedClient = sessionStorage.getItem('selectedClient')
+  
+  if (storedClient) {
+    const clientData = JSON.parse(storedClient)
+    
+    // If this is an existing client, use their existing reference
+    if (clientData.client_reference) {
+      updateField('client_details', 'client_reference', clientData.client_reference)
     }
-  }, [])
+    
+    // Pre-populate other fields
+    updateField('client_details', 'client_name', clientData.name)
+    updateField('client_details', 'age', clientData.age)
+    // ... populate other fields
+    
+    sessionStorage.removeItem('selectedClient')
+  } else if (!formData.client_details?.client_reference) {
+    // Only generate a new reference for NEW clients
+    updateField('client_details', 'client_reference', generateClientReference())
+  }
+}, [])
 
   // Calculate completion status
   const getCompletionStatus = () => {

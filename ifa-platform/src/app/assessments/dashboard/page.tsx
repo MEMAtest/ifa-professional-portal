@@ -104,62 +104,55 @@ export default function AssessmentDashboardPage() {
       setIsLoading(true)
       setError(null)
 
-      // Load from your Supabase database
+      // Load clients with your actual database structure
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
-        .select(`
-          *,
-          assessments (
-            status,
-            risk_profile,
-            suitability_score,
-            last_assessment_date,
-            next_review_date,
-            atr_complete,
-            cfl_complete,
-            persona_complete
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (clientsError) throw clientsError
 
-      // Transform the data to match our interface
+      // Transform the JSONB data to match our interface
       const transformedClients: Client[] = (clientsData || []).map((client, index) => {
-        const assessment = client.assessments?.[0] || {}
+        // Extract data from JSONB fields
+        const personalDetails = client.personal_details || {}
+        const contactInfo = client.contact_info || {}
+        const financialProfile = client.financial_profile || {}
+        const vulnerabilityAssessment = client.vulnerability_assessment || {}
+        const riskProfile = client.risk_profile || {}
         
         return {
           id: client.id,
-          name: `${client.first_name} ${client.last_name}`,
-          clientRef: client.client_reference || `C${Date.now()}${index}`,
-          age: client.age || calculateAge(client.date_of_birth),
-          occupation: client.occupation || 'Not specified',
-          location: `${client.city || 'Unknown'}, UK`,
-          phone: client.phone || '',
-          email: client.email || '',
-          investmentAmount: client.investment_amount || 0,
-          fees: client.fees || 0,
-          monthlySavings: client.monthly_savings || 0,
-          targetRetirementAge: client.target_retirement_age || 65,
-          riskProfile: assessment.risk_profile || 3,
-          suitabilityScore: assessment.suitability_score || 0,
-          assessmentStatus: assessment.status || 'draft',
-          lastAssessment: assessment.last_assessment_date,
-          nextReview: assessment.next_review_date,
-          portfolioPerformance: client.portfolio_performance || 0,
-          vulnerableClient: client.is_vulnerable || false,
-          tags: client.tags || [],
+          name: personalDetails.full_name || `${personalDetails.first_name || ''} ${personalDetails.last_name || ''}`.trim() || 'Unknown Client',
+          clientRef: client.client_ref || `C${Date.now()}${index}`,
+          age: personalDetails.age || calculateAge(personalDetails.date_of_birth) || 0,
+          occupation: personalDetails.occupation || 'Not specified',
+          location: `${contactInfo.city || contactInfo.town || 'Unknown'}, ${contactInfo.country || 'UK'}`,
+          phone: contactInfo.phone || contactInfo.mobile || '',
+          email: contactInfo.email || '',
+          investmentAmount: financialProfile.investment_amount || financialProfile.total_assets || 0,
+          fees: financialProfile.fees || 0,
+          monthlySavings: financialProfile.monthly_savings || 0,
+          targetRetirementAge: personalDetails.target_retirement_age || financialProfile.retirement_age || 65,
+          riskProfile: riskProfile.risk_level || riskProfile.final_risk_profile || 3,
+          suitabilityScore: riskProfile.suitability_score || 0,
+          assessmentStatus: client.status || 'draft',
+          lastAssessment: riskProfile.last_assessment_date || null,
+          nextReview: riskProfile.next_review_date || null,
+          portfolioPerformance: financialProfile.portfolio_performance || 0,
+          vulnerableClient: vulnerabilityAssessment.is_vulnerable || false,
+          tags: personalDetails.tags || financialProfile.tags || [],
           avatar: getRandomAvatar(index),
-          atrComplete: assessment.atr_complete || false,
-          cflComplete: assessment.cfl_complete || false,
-          personaComplete: assessment.persona_complete || false
+          atrComplete: riskProfile.atr_complete || false,
+          cflComplete: riskProfile.cfl_complete || false,
+          personaComplete: riskProfile.persona_complete || false
         }
       })
 
       setClients(transformedClients)
     } catch (err) {
       console.error('Error loading clients:', err)
-      setError('Failed to load clients. Please try again.')
+      setError('Failed to load clients. Please check your database connection.')
     } finally {
       setIsLoading(false)
     }
@@ -217,6 +210,7 @@ export default function AssessmentDashboardPage() {
   const handleClientClick = (client: any) => {
     // Store client data in sessionStorage for the assessment page to use
     sessionStorage.setItem('selectedClient', JSON.stringify({
+      id: client.id,  // Include the client ID
       name: client.name,
       age: client.age,
       investmentAmount: client.investmentAmount,
@@ -225,7 +219,8 @@ export default function AssessmentDashboardPage() {
       address: client.location,
       fees: client.fees,
       monthlySavings: client.monthlySavings,
-      targetRetirementAge: client.targetRetirementAge
+      targetRetirementAge: client.targetRetirementAge,
+      client_reference: client.clientRef  // Pass the existing client reference
     }))
     
     // Navigate to your existing suitability assessment page
