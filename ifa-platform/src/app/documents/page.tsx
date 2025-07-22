@@ -154,31 +154,7 @@ export default function UnifiedDocumentWorkflow() {
 
   useEffect(() => {
     loadInitialData()
-    // Temporary: Check database tables
-    checkDatabaseTables()
   }, [])
-
-  // Temporary debug function
-  const checkDatabaseTables = async () => {
-    try {
-      // Check if templates table exists and has data
-      const { data: templates, error: templatesError } = await supabase
-        .from('document_templates')
-        .select('id, name')
-        .limit(5)
-      
-      console.log('DEBUG - Templates check:', { templates, templatesError })
-      
-      // Also try without any filters
-      const { count, error: countError } = await supabase
-        .from('document_templates')
-        .select('*', { count: 'exact', head: true })
-      
-      console.log('DEBUG - Templates count:', { count, countError })
-    } catch (err) {
-      console.error('DEBUG - Database check error:', err)
-    }
-  }
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -231,93 +207,73 @@ export default function UnifiedDocumentWorkflow() {
   }
 
   const loadTemplates = async () => {
+    console.log('Starting template load...');
+    
+    // Always start with fallback templates
+    const fallbackTemplates: DocumentTemplate[] = [
+      {
+        id: '485f9812-6dab-4b72-9462-ef65573f6225',
+        name: 'Client Service Agreement',
+        description: 'Standard client service agreement template',
+        template_content: DEFAULT_TEMPLATE_CONTENT,
+        requires_signature: true,
+        template_variables: {}
+      },
+      {
+        id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
+        name: 'Suitability Report',
+        description: 'Investment suitability assessment report',
+        template_content: DEFAULT_TEMPLATE_CONTENT,
+        requires_signature: true,
+        template_variables: {}
+      },
+      {
+        id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
+        name: 'Annual Review Report',
+        description: 'Annual portfolio review report',
+        template_content: DEFAULT_TEMPLATE_CONTENT,
+        requires_signature: false,
+        template_variables: {}
+      }
+    ];
+    
+    // Set fallback templates immediately so UI has something
+    setTemplates(fallbackTemplates);
+    console.log('Fallback templates set:', fallbackTemplates);
+    
     try {
       const { data, error } = await supabase
         .from('document_templates')
         .select('*')
 
+      console.log('Supabase query result:', { data, error });
+
       if (error) {
-        console.error('Supabase error loading templates:', error)
-        throw new Error(`Failed to load templates: ${error.message}`)
+        console.error('Supabase error:', error);
+        // Keep using fallback templates
+        return;
       }
 
-      console.log('Raw template data from Supabase:', data)
+      if (data && data.length > 0) {
+        // Use real templates from database
+        const processedTemplates: DocumentTemplate[] = data.map(template => ({
+          id: template.id,
+          name: template.name || 'Unnamed Template',
+          description: template.description || null,
+          template_content: template.template_content || DEFAULT_TEMPLATE_CONTENT,
+          requires_signature: template.requires_signature ?? true,
+          template_variables: template.template_variables || {},
+          is_active: template.is_active ?? true
+        }));
 
-      // Process templates with defaults - don't filter by is_active
-      const processedTemplates: DocumentTemplate[] = (data || []).map(template => ({
-        id: template.id,
-        name: template.name || 'Unnamed Template',
-        description: template.description || null,
-        template_content: template.template_content || DEFAULT_TEMPLATE_CONTENT,
-        requires_signature: template.requires_signature ?? true,
-        template_variables: template.template_variables || {},
-        is_active: template.is_active ?? true
-      }))
-
-      setTemplates(processedTemplates)
-      console.log('Processed templates:', processedTemplates)
-      
-      // If no templates loaded, use fallback templates
-      if (processedTemplates.length === 0) {
-        console.warn('No templates found in database. Using fallback templates.')
-        const fallbackTemplates: DocumentTemplate[] = [
-          {
-            id: '485f9812-6dab-4b72-9462-ef65573f6225',
-            name: 'Client Service Agreement',
-            description: 'Standard client service agreement template',
-            template_content: DEFAULT_TEMPLATE_CONTENT,
-            requires_signature: true,
-            template_variables: {}
-          },
-          {
-            id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
-            name: 'Suitability Report',
-            description: 'Investment suitability assessment report',
-            template_content: DEFAULT_TEMPLATE_CONTENT,
-            requires_signature: true,
-            template_variables: {}
-          },
-          {
-            id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
-            name: 'Annual Review Report',
-            description: 'Annual portfolio review report',
-            template_content: DEFAULT_TEMPLATE_CONTENT,
-            requires_signature: false,
-            template_variables: {}
-          }
-        ]
-        setTemplates(fallbackTemplates)
+        setTemplates(processedTemplates);
+        console.log('Database templates loaded:', processedTemplates);
+      } else {
+        console.log('No templates in database, using fallbacks');
       }
     } catch (err) {
-      console.error('Error loading templates:', err)
-      // Use fallback templates on error
-      const fallbackTemplates: DocumentTemplate[] = [
-        {
-          id: '485f9812-6dab-4b72-9462-ef65573f6225',
-          name: 'Client Service Agreement',
-          description: 'Standard client service agreement template',
-          template_content: DEFAULT_TEMPLATE_CONTENT,
-          requires_signature: true,
-          template_variables: {}
-        },
-        {
-          id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
-          name: 'Suitability Report',
-          description: 'Investment suitability assessment report',
-          template_content: DEFAULT_TEMPLATE_CONTENT,
-          requires_signature: true,
-          template_variables: {}
-        },
-        {
-          id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
-          name: 'Annual Review Report',
-          description: 'Annual portfolio review report',
-          template_content: DEFAULT_TEMPLATE_CONTENT,
-          requires_signature: false,
-          template_variables: {}
-        }
-      ]
-      setTemplates(fallbackTemplates)
+      console.error('Template loading error:', err);
+      // Fallback templates already set
     }
   }
 
@@ -688,9 +644,20 @@ export default function UnifiedDocumentWorkflow() {
       <CardContent>
         {generatedDocument && (
           <>
-            {/* Document Preview */}
-            <div className="border rounded-lg p-6 bg-white max-h-96 overflow-y-auto mb-6">
-              <div dangerouslySetInnerHTML={{ __html: generatedDocument.content }} />
+            {/* Document Preview - Enhanced */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-700">Document Preview</h3>
+                <span className="text-xs text-gray-500">Scroll to view full document</span>
+              </div>
+              <div className="border-2 border-gray-200 rounded-lg shadow-inner bg-white">
+                <div className="h-[500px] overflow-y-auto p-8">
+                  <div 
+                    dangerouslySetInnerHTML={{ __html: generatedDocument.content }} 
+                    className="prose prose-sm max-w-none"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Action Buttons */}
@@ -723,11 +690,16 @@ export default function UnifiedDocumentWorkflow() {
                     className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
                   >
                     {loading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sending to DocuSeal...
+                      </>
                     ) : (
-                      <Send className="h-4 w-4" />
+                      <>
+                        <Send className="h-4 w-4" />
+                        Send for Signature (DocuSeal)
+                      </>
                     )}
-                    Send for Signature
                   </Button>
                 ) : (
                   <Button
@@ -740,6 +712,14 @@ export default function UnifiedDocumentWorkflow() {
                 )}
               </div>
             </div>
+
+            {/* DocuSeal Info */}
+            {selectedTemplate?.requires_signature && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+                <p className="font-medium">DocuSeal Integration Active</p>
+                <p className="text-xs mt-1">Document will be sent to {selectedClient?.contact_info?.email} for electronic signature</p>
+              </div>
+            )}
           </>
         )}
       </CardContent>
@@ -759,13 +739,19 @@ export default function UnifiedDocumentWorkflow() {
           <div className="text-lg font-medium text-gray-900 mb-2">
             {selectedTemplate?.name} has been processed for {getClientDisplayName(selectedClient!)}
           </div>
-          {selectedClient?.contact_info?.email && (
-            <div className="text-gray-600 mb-6">
-              Document sent to: {selectedClient.contact_info.email}
-            </div>
+          {selectedClient?.contact_info?.email && selectedTemplate?.requires_signature && (
+            <>
+              <div className="text-gray-600 mb-2">
+                Document sent to: {selectedClient.contact_info.email}
+              </div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                <Send className="h-3 w-3" />
+                Sent via DocuSeal for electronic signature
+              </div>
+            </>
           )}
           
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-4 mt-6">
             {generatedDocument?.url && generatedDocument.url !== '#' && (
               <Button
                 variant="outline"

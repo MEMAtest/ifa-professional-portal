@@ -70,3 +70,21 @@
     height: 100dvh;
   }
 }
+/* Slider styles */
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: rgb(59 130 246);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: rgb(59 130 246);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}

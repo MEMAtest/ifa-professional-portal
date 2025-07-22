@@ -1,7 +1,21 @@
 {
-  "name": "ifa-platform",
+  "name": "plannetic-platform",
   "version": "0.1.1",
+  "description": "Strategic Planning in Motion - Professional Financial Advisory Platform",
   "private": true,
+  "keywords": [
+    "financial-planning",
+    "advisory-platform",
+    "cash-flow-modeling",
+    "risk-assessment",
+    "strategic-planning"
+  ],
+  "author": "Plannetic Team",
+  "homepage": "https://plannetic.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/plannetic-platform.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -28,7 +42,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.50.1",
-    "recharts": "^2.12.2",
+    "recharts": "^2.15.4",
     "tailwind-merge": "^2.2.1",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.22.4",

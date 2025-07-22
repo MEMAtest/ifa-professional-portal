@@ -1,64 +1,84 @@
-// ===================================================================
-// FIXED API ROUTE: Document Generation
-// File: src/app/api/documents/generate/route.ts
-// ===================================================================
+// File: src/app/api/documents/send-signature/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { DocumentGenerationService } from '@/services/documentGenerationService'
 
-// ✅ FIXED: Add supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const DOCUSEAL_API_KEY = process.env.DOCUSEAL_API_KEY || '2GCP4Wrrp3vEH7bqVDD2DvUZAo674CS7HKFiM3vDxAT'
 
-const documentService = new DocumentGenerationService()
+// Using your actual DocuSeal template ID
+const DOCUSEAL_TEMPLATE_ID = '194082'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { content, title, clientId, templateId, variables } = body
+    const { clientEmail, clientName, templateName } = body
 
-    // Validate required fields
-    if (!content || !title || !clientId || !templateId) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+    console.log('Sending document via DocuSeal:', {
+      clientEmail,
+      clientName,
+      templateName,
+      templateId: DOCUSEAL_TEMPLATE_ID
+    })
+
+    // Create submission in DocuSeal
+    const docusealPayload = {
+      template_id: DOCUSEAL_TEMPLATE_ID,
+      send_email: true,
+      send_sms: false,
+      submitters: [
+        {
+          email: clientEmail,
+          name: clientName,
+          role: 'Client'
+        }
+      ]
     }
 
-    // Generate the document
-    const result = await documentService.generateDocument({
-      content,
-      title,
-      clientId,
-      templateId,
-      metadata: {
-        variables,
-        api_generated: true,
-        generated_at: new Date().toISOString()
+    try {
+      const response = await fetch('https://api.docuseal.co/v1/submissions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${DOCUSEAL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(docusealPayload)
+      })
+
+      const responseText = await response.text()
+      console.log('DocuSeal response:', response.status, responseText)
+
+      if (response.ok) {
+        const result = JSON.parse(responseText)
+        
+        return NextResponse.json({
+          success: true,
+          message: 'Document sent successfully via DocuSeal!',
+          signatureRequestId: result.id,
+          submissionId: result.id,
+          docusealResponse: result
+        })
+      } else {
+        console.error('DocuSeal API error:', responseText)
+        
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to send via DocuSeal',
+          error: responseText
+        }, { status: 400 })
       }
-    })
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Document generation failed' },
-        { status: 500 }
-      )
+    } catch (apiError) {
+      console.error('DocuSeal API call failed:', apiError)
+      
+      return NextResponse.json({
+        success: false,
+        message: 'DocuSeal API connection failed',
+        error: apiError instanceof Error ? apiError.message : 'Unknown error'
+      }, { status: 500 })
     }
-
-    return NextResponse.json({
-      success: true,
-      document: result.document,
-      url: result.url,
-      message: 'Document generated successfully'
-    })
 
   } catch (error) {
-    console.error('API Document generation error:', error)
+    console.error('Signature API error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to process signature request' },
       { status: 500 }
     )
   }
