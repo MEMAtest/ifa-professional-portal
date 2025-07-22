@@ -1,11 +1,10 @@
 // app/assessments/dashboard/page.tsx
-// This is a NEW page that shows the client list
-// It does NOT replace your existing assessments functionality
+// Complete error-free Assessment Dashboard with client list
 
 'use client'
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase' // Your Supabase client
+import { supabase } from '@/lib/supabase'
 import { 
   Users, 
   Search, 
@@ -64,7 +63,7 @@ interface Client {
   personaComplete: boolean
 }
 
-// Remove the hardcoded mock data and load from your database
+// Avatar emojis for clients
 const avatarEmojis = ['👨‍💼', '👩‍⚕️', '👨‍💻', '👵', '👨‍⚖️', '👩‍💼', '👨‍🏫', '👩‍🔬', '👨‍🌾', '👩‍🍳']
 
 const getRandomAvatar = (index: number) => avatarEmojis[index % avatarEmojis.length]
@@ -81,7 +80,8 @@ const statusConfig: Record<string, { color: string; icon: any; label: string }> 
   completed: { color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle, label: 'Completed' },
   in_progress: { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock, label: 'In Progress' },
   review_needed: { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: AlertTriangle, label: 'Review Needed' },
-  draft: { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: FileText, label: 'Draft' }
+  draft: { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: FileText, label: 'Draft' },
+  pending: { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Clock, label: 'Pending' }
 }
 
 export default function AssessmentDashboardPage() {
@@ -94,7 +94,7 @@ export default function AssessmentDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Load clients from your database
+  // Load clients from database
   useEffect(() => {
     loadClients()
   }, [])
@@ -104,7 +104,7 @@ export default function AssessmentDashboardPage() {
       setIsLoading(true)
       setError(null)
 
-      // Load clients with your actual database structure
+      // Load clients with your JSONB structure
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
         .select('*')
@@ -112,7 +112,7 @@ export default function AssessmentDashboardPage() {
 
       if (clientsError) throw clientsError
 
-      // Transform the JSONB data to match our interface
+      // Transform the JSONB data
       const transformedClients: Client[] = (clientsData || []).map((client, index) => {
         // Extract data from JSONB fields
         const personalDetails = client.personal_details || {}
@@ -203,14 +203,14 @@ export default function AssessmentDashboardPage() {
     totalAUM: clients.reduce((sum, client) => sum + client.investmentAmount, 0),
     completedAssessments: clients.filter(c => c.assessmentStatus === 'completed').length,
     reviewsNeeded: clients.filter(c => c.assessmentStatus === 'review_needed').length,
-    averageRisk: (clients.reduce((sum, c) => sum + c.riskProfile, 0) / clients.length).toFixed(1),
+    averageRisk: clients.length > 0 ? (clients.reduce((sum, c) => sum + c.riskProfile, 0) / clients.length).toFixed(1) : '0',
     vulnerableClients: clients.filter(c => c.vulnerableClient).length
   }
 
   const handleClientClick = (client: any) => {
-    // Store client data in sessionStorage for the assessment page to use
+    // Store client data in sessionStorage
     sessionStorage.setItem('selectedClient', JSON.stringify({
-      id: client.id,  // Include the client ID
+      id: client.id,
       name: client.name,
       age: client.age,
       investmentAmount: client.investmentAmount,
@@ -220,17 +220,19 @@ export default function AssessmentDashboardPage() {
       fees: client.fees,
       monthlySavings: client.monthlySavings,
       targetRetirementAge: client.targetRetirementAge,
-      client_reference: client.clientRef  // Pass the existing client reference
+      client_reference: client.clientRef
     }))
+    sessionStorage.setItem('selectedClientId', client.id)
     
-    // Navigate to your existing suitability assessment page
+    // Navigate to suitability assessment page
     router.push('/assessments/suitability')
   }
 
   const handleNewAssessment = () => {
     // Clear any existing client data
     sessionStorage.removeItem('selectedClient')
-    // Navigate to your existing suitability assessment page
+    sessionStorage.removeItem('selectedClientId')
+    // Navigate to suitability assessment
     router.push('/assessments/suitability')
   }
 
@@ -410,215 +412,216 @@ export default function AssessmentDashboardPage() {
         {/* Client Grid/List */}
         {!isLoading && !error && (
           <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
-          {filteredClients.map((client) => {
-            const statusInfo = statusConfig[client.assessmentStatus]
-            const StatusIcon = statusInfo.icon
+            {filteredClients.map((client) => {
+              // Safe status handling
+              const statusInfo = statusConfig[client.assessmentStatus] || statusConfig.draft
+              const StatusIcon = statusInfo.icon
 
-            if (viewMode === 'list') {
+              if (viewMode === 'list') {
+                return (
+                  <div
+                    key={client.id}
+                    onClick={() => handleClientClick(client)}
+                    className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="text-4xl">{client.avatar}</div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {client.name}
+                          </h3>
+                          <p className="text-sm text-gray-500">{client.clientRef} • {client.occupation}</p>
+                          <p className="text-xs text-gray-400 mt-1">{client.location} • {client.phone}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-8">
+                        <div className="flex items-center space-x-6">
+                          <div className="text-center">
+                            <div className="text-xs text-gray-500 mb-1">Portfolio</div>
+                            <div className="text-lg font-semibold">£{client.investmentAmount.toLocaleString()}</div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-xs text-gray-500 mb-1">Risk</div>
+                            <div className="text-lg font-semibold">{client.riskProfile}/5</div>
+                          </div>
+                          
+                          <div className="text-center">
+                            <div className="text-xs text-gray-500 mb-1">Performance</div>
+                            <div className={`text-lg font-semibold flex items-center justify-center ${client.portfolioPerformance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {client.portfolioPerformance >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                              {Math.abs(client.portfolioPerformance)}%
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <div className="flex -space-x-1">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${client.atrComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              A
+                            </div>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${client.cflComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              C
+                            </div>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${client.personaComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                              P
+                            </div>
+                          </div>
+                          
+                          <div className={`px-3 py-1 rounded-full text-sm font-medium border ${statusInfo.color} flex items-center space-x-1`}>
+                            <StatusIcon className="h-3 w-3" />
+                            <span>{statusInfo.label}</span>
+                          </div>
+                        </div>
+                        
+                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div
                   key={client.id}
                   onClick={() => handleClientClick(client)}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all cursor-pointer group"
+                  className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl transition-all cursor-pointer group hover:-translate-y-1"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
+                  {/* Client Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
                       <div className="text-4xl">{client.avatar}</div>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                           {client.name}
                         </h3>
-                        <p className="text-sm text-gray-500">{client.clientRef} • {client.occupation}</p>
-                        <p className="text-xs text-gray-400 mt-1">{client.location} • {client.phone}</p>
+                        <p className="text-sm text-gray-500">{client.clientRef}</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-xs font-medium border ${statusInfo.color} flex items-center space-x-1`}>
+                      <StatusIcon className="h-3 w-3" />
+                      <span>{statusInfo.label}</span>
+                    </div>
+                  </div>
+
+                  {/* Client Details */}
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 flex items-center space-x-1">
+                        <Building className="h-3 w-3" />
+                        <span>Occupation</span>
+                      </span>
+                      <span className="font-medium truncate ml-2">{client.occupation}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 flex items-center space-x-1">
+                        <MapPin className="h-3 w-3" />
+                        <span>Location</span>
+                      </span>
+                      <span className="font-medium truncate ml-2">{client.location}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 flex items-center space-x-1">
+                        <DollarSign className="h-3 w-3" />
+                        <span>Portfolio</span>
+                      </span>
+                      <span className="font-medium">£{client.investmentAmount.toLocaleString()}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 flex items-center space-x-1">
+                        <Shield className="h-3 w-3" />
+                        <span>Risk Level</span>
+                      </span>
+                      <span className="font-medium">{client.riskProfile}/5 - {riskProfileNames[client.riskProfile] || 'Unknown'}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 flex items-center space-x-1">
+                        <Target className="h-3 w-3" />
+                        <span>Suitability</span>
+                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">{client.suitabilityScore}%</span>
+                        <div className="w-20 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all"
+                            style={{ width: `${client.suitabilityScore}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center space-x-8">
-                      <div className="flex items-center space-x-6">
-                        <div className="text-center">
-                          <div className="text-xs text-gray-500 mb-1">Portfolio</div>
-                          <div className="text-lg font-semibold">£{client.investmentAmount.toLocaleString()}</div>
-                        </div>
-                        
-                        <div className="text-center">
-                          <div className="text-xs text-gray-500 mb-1">Risk</div>
-                          <div className="text-lg font-semibold">{client.riskProfile}/5</div>
-                        </div>
-                        
-                        <div className="text-center">
-                          <div className="text-xs text-gray-500 mb-1">Performance</div>
-                          <div className={`text-lg font-semibold flex items-center justify-center ${client.portfolioPerformance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {client.portfolioPerformance >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                            {Math.abs(client.portfolioPerformance)}%
-                          </div>
-                        </div>
-                      </div>
-                      
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 flex items-center space-x-1">
+                        <TrendingUp className="h-3 w-3" />
+                        <span>Performance</span>
+                      </span>
+                      <span className={`font-medium flex items-center ${client.portfolioPerformance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {client.portfolioPerformance >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                        {Math.abs(client.portfolioPerformance)}% YTD
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Assessment Progress */}
+                  <div className="border-t pt-3 mb-3">
+                    <div className="text-xs text-gray-500 mb-2">Assessment Progress</div>
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <div className="flex -space-x-1">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${client.atrComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                            A
-                          </div>
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${client.cflComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                            C
-                          </div>
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${client.personaComplete ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                            P
-                          </div>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${client.atrComplete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          ATR {client.atrComplete ? '✓' : '○'}
                         </div>
-                        
-                        <div className={`px-3 py-1 rounded-full text-sm font-medium border ${statusInfo.color} flex items-center space-x-1`}>
-                          <StatusIcon className="h-3 w-3" />
-                          <span>{statusInfo.label}</span>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${client.cflComplete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          CFL {client.cflComplete ? '✓' : '○'}
+                        </div>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${client.personaComplete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          Persona {client.personaComplete ? '✓' : '○'}
                         </div>
                       </div>
-                      
-                      <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
                     </div>
                   </div>
-                </div>
-              )
-            }
 
-            return (
-              <div
-                key={client.id}
-                onClick={() => handleClientClick(client)}
-                className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl transition-all cursor-pointer group hover:-translate-y-1"
-              >
-                {/* Client Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="text-4xl">{client.avatar}</div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-                        {client.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">{client.clientRef}</p>
-                    </div>
+                  {/* Tags */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {client.tags.map((tag, index) => (
+                      <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                    {client.vulnerableClient && (
+                      <span className="px-2 py-1 bg-red-50 text-red-700 text-xs rounded-full flex items-center space-x-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>Vulnerable</span>
+                      </span>
+                    )}
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-medium border ${statusInfo.color} flex items-center space-x-1`}>
-                    <StatusIcon className="h-3 w-3" />
-                    <span>{statusInfo.label}</span>
-                  </div>
-                </div>
 
-                {/* Client Details */}
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 flex items-center space-x-1">
-                      <Building className="h-3 w-3" />
-                      <span>Occupation</span>
-                    </span>
-                    <span className="font-medium truncate ml-2">{client.occupation}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 flex items-center space-x-1">
-                      <MapPin className="h-3 w-3" />
-                      <span>Location</span>
-                    </span>
-                    <span className="font-medium truncate ml-2">{client.location}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 flex items-center space-x-1">
-                      <DollarSign className="h-3 w-3" />
-                      <span>Portfolio</span>
-                    </span>
-                    <span className="font-medium">£{client.investmentAmount.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 flex items-center space-x-1">
-                      <Shield className="h-3 w-3" />
-                      <span>Risk Level</span>
-                    </span>
-                    <span className="font-medium">{client.riskProfile}/5 - {riskProfileNames[client.riskProfile]}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 flex items-center space-x-1">
-                      <Target className="h-3 w-3" />
-                      <span>Suitability</span>
-                    </span>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-medium">{client.suitabilityScore}%</span>
-                      <div className="w-20 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all"
-                          style={{ width: `${client.suitabilityScore}%` }}
-                        />
+                  {/* Action Button */}
+                  <button className="w-full py-2 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-600 rounded-lg font-medium group-hover:from-blue-600 group-hover:to-purple-600 group-hover:text-white transition-all flex items-center justify-center space-x-2">
+                    <span>View Assessment</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+
+                  {/* Review Date */}
+                  {client.nextReview && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span className="flex items-center space-x-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>Next Review</span>
+                        </span>
+                        <span>{new Date(client.nextReview).toLocaleDateString('en-GB')}</span>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 flex items-center space-x-1">
-                      <TrendingUp className="h-3 w-3" />
-                      <span>Performance</span>
-                    </span>
-                    <span className={`font-medium flex items-center ${client.portfolioPerformance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {client.portfolioPerformance >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                      {Math.abs(client.portfolioPerformance)}% YTD
-                    </span>
-                  </div>
-                </div>
-
-                {/* Assessment Progress */}
-                <div className="border-t pt-3 mb-3">
-                  <div className="text-xs text-gray-500 mb-2">Assessment Progress</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className={`px-2 py-1 rounded text-xs font-medium ${client.atrComplete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        ATR {client.atrComplete ? '✓' : '○'}
-                      </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium ${client.cflComplete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        CFL {client.cflComplete ? '✓' : '○'}
-                      </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium ${client.personaComplete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        Persona {client.personaComplete ? '✓' : '○'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tags */}
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {client.tags.map((tag, index) => (
-                    <span key={index} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">
-                      {tag}
-                    </span>
-                  ))}
-                  {client.vulnerableClient && (
-                    <span className="px-2 py-1 bg-red-50 text-red-700 text-xs rounded-full flex items-center space-x-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      <span>Vulnerable</span>
-                    </span>
                   )}
                 </div>
-
-                {/* Action Button */}
-                <button className="w-full py-2 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-600 rounded-lg font-medium group-hover:from-blue-600 group-hover:to-purple-600 group-hover:text-white transition-all flex items-center justify-center space-x-2">
-                  <span>View Assessment</span>
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-
-                {/* Review Date */}
-                {client.nextReview && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span className="flex items-center space-x-1">
-                        <Calendar className="h-3 w-3" />
-                        <span>Next Review</span>
-                      </span>
-                      <span>{new Date(client.nextReview).toLocaleDateString('en-GB')}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+              )
+            })}
           </div>
         )}
 
