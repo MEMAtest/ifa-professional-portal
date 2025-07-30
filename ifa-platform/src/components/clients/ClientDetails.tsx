@@ -56,6 +56,60 @@ export interface ClientDetailsProps {
 // Define tab types
 type TabType = 'overview' | 'financial' | 'risk' | 'cashflow' | 'communications' | 'reviews' | 'activity';
 
+// Communication type interface
+interface Communication {
+  id: number;
+  type: 'email' | 'call' | 'meeting';
+  subject: string;
+  date: string;
+  status: 'completed' | 'pending';
+}
+
+// Review type interface
+interface Review {
+  id: number;
+  type: string;
+  date: string;
+  status: 'completed' | 'pending';
+  outcome: string;
+}
+
+// Activity type interface
+interface Activity {
+  id: number;
+  action: string;
+  user: string;
+  date: string;
+  details: string;
+}
+
+// Assessment type interfaces
+interface AtrAssessment {
+  id: string;
+  client_id: string;
+  risk_level: number;
+  risk_category: string;
+  total_score: number;
+  assessment_date: string;
+  is_current: boolean;
+}
+
+interface CflAssessment {
+  id: string;
+  client_id: string;
+  capacity_level: number;
+  capacity_category: string;
+  total_score: number;
+  max_loss_percentage: number;
+  assessment_date: string;
+  is_current: boolean;
+}
+
+interface RiskProfileData {
+  final_risk_level: number;
+  final_risk_category: string;
+}
+
 export function ClientDetails({ 
   client, 
   onEdit, 
@@ -66,9 +120,9 @@ export function ClientDetails({
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [hasCashFlowAnalysis, setHasCashFlowAnalysis] = useState(false);
   const [cashFlowCount, setCashFlowCount] = useState(0);
-  const [communications, setCommunications] = useState<any[]>([]);
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [activities, setActivities] = useState<any[]>([]);
+  const [communications, setCommunications] = useState<Communication[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
 
   // Check for existing cash flow scenarios
   useEffect(() => {
@@ -82,7 +136,7 @@ export function ClientDetails({
    * ✅ FIXED: This function now uses the correct snake_case column names
    * for the Supabase query, preventing 400 Bad Request errors.
    */
-  const checkCashFlowData = async () => {
+  const checkCashFlowData = async (): Promise<void> => {
     try {
       const { data, error, count } = await supabase
         .from('cash_flow_scenarios')
@@ -106,7 +160,7 @@ export function ClientDetails({
     }
   };
 
-  const loadCommunications = async () => {
+  const loadCommunications = async (): Promise<void> => {
     // Mock data for now - replace with actual API call
     setCommunications([
       { id: 1, type: 'email', subject: 'Annual Review Reminder', date: '2024-01-15', status: 'completed' },
@@ -115,7 +169,7 @@ export function ClientDetails({
     ]);
   };
 
-  const loadReviews = async () => {
+  const loadReviews = async (): Promise<void> => {
     // Mock data for now
     setReviews([
       { id: 1, type: 'Annual Review', date: '2024-01-15', status: 'completed', outcome: 'Risk profile updated' },
@@ -123,7 +177,7 @@ export function ClientDetails({
     ]);
   };
 
-  const loadActivities = async () => {
+  const loadActivities = async (): Promise<void> => {
     // Mock data for now
     setActivities([
       { id: 1, action: 'Profile Updated', user: 'John Advisor', date: '2024-01-15', details: 'Updated risk assessment' },
@@ -135,16 +189,16 @@ export function ClientDetails({
   // Risk Profile Tab Component (internal to ClientDetails)
   const RiskProfileTabContent = ({ clientId, client }: { clientId: string; client: Client }) => {
     const router = useRouter();
-    const [atrAssessment, setAtrAssessment] = useState<any>(null);
-    const [cflAssessment, setCflAssessment] = useState<any>(null);
-    const [riskProfile, setRiskProfile] = useState<any>(null);
+    const [atrAssessment, setAtrAssessment] = useState<AtrAssessment | null>(null);
+    const [cflAssessment, setCflAssessment] = useState<CflAssessment | null>(null);
+    const [riskProfile, setRiskProfile] = useState<RiskProfileData | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
       loadAssessments();
     }, [clientId]);
 
-    const loadAssessments = async () => {
+    const loadAssessments = async (): Promise<void> => {
       try {
         // Try to load from new assessment tables first
         const { data: atr } = await supabase
@@ -468,7 +522,7 @@ export function ClientDetails({
     );
   };
 
-  // Extract client details
+  // Extract client details with proper type safety
   const fullName = `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim() || 'Unnamed Client';
   const age = client.personalDetails?.dateOfBirth ? 
     calculateAge(client.personalDetails.dateOfBirth) : null;
@@ -479,7 +533,7 @@ export function ClientDetails({
   const clientStatus = typeof client.status === 'string' ? client.status : 'inactive';
   const isVulnerable = getVulnerabilityStatus(client.vulnerabilityAssessment);
 
-  const getInvestmentObjectives = () => {
+  const getInvestmentObjectives = (): string[] => {
     if (!client.financialProfile?.investmentObjectives) return [];
     
     return client.financialProfile.investmentObjectives.map((objective, index) => {
@@ -625,7 +679,7 @@ export function ClientDetails({
                 <span className="text-sm">
                   {typeof client.contactInfo?.address === 'string'
                     ? client.contactInfo.address
-                    : client.contactInfo?.address
+                    : client.contactInfo?.address && typeof client.contactInfo.address === 'object'
                       ? [
                           client.contactInfo.address.line1,
                           client.contactInfo.address.line2,

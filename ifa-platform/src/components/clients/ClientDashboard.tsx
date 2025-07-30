@@ -390,9 +390,11 @@ const ClientCard: React.FC<{
             {client.contactInfo.phone}
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
-            <MapPin className="h-4 w-4" />
-            {client.contactInfo.address.city}, {client.contactInfo.address.postcode}
-          </div>
+  <MapPin className="h-4 w-4" />
+  {client.contactInfo?.address?.city && client.contactInfo?.address?.postcode 
+  ? `${client.contactInfo.address.city}, ${client.contactInfo.address.postcode}`
+  : 'No address provided'}
+</div>
         </div>
 
         {/* Financial & Risk Info */}
@@ -541,7 +543,9 @@ const ClientDetails: React.FC<{
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">Address</label>
                 <p className="mt-1 text-sm text-gray-900">
-                  {client.contactInfo.address.city}, {client.contactInfo.address.postcode}
+                  {client.contactInfo?.address?.city && client.contactInfo?.address?.postcode 
+  ? `${client.contactInfo.address.city}, ${client.contactInfo.address.postcode}`
+  : 'No address provided'}
                 </p>
               </div>
             </div>

@@ -1,105 +1,211 @@
+// src/components/monte-carlo/MonteCarloWorkerTest.tsx
+// Simple test component to verify worker functionality
+
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
-export function MonteCarloTest() {
-  const [results, setResults] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export default function MonteCarloWorkerTest() {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [isWorkerReady, setIsWorkerReady] = useState(false);
+  const [testResults, setTestResults] = useState<any>(null);
+  const workerRef = useRef<Worker | null>(null);
 
-  const runSimulation = async () => {
-    setIsLoading(true);
-    setError(null);
-    setResults(null);
+  const addLog = (message: string) => {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    setLogs(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
 
+  const initializeWorker = () => {
     try {
-      const response = await fetch('/api/monte-carlo/simulate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          scenario_id: 'test-123',
-          simulation_count: 1000,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setResults(data.data);
-      } else {
-        setError(data.error || 'Simulation failed');
-      }
+      addLog('Creating worker...');
+      const worker = new Worker('/workers/monte-carlo-worker.js');
+      
+      worker.onmessage = (e) => {
+        addLog(`Worker message received: ${e.data.type}`);
+        console.log('Full worker response:', e.data);
+        
+        if (e.data.type === 'test') {
+          setIsWorkerReady(true);
+          addLog('Worker is ready!');
+        } else if (e.data.type === 'progress') {
+          addLog(`Progress: ${e.data.progress.completed}/${e.data.progress.total} (${e.data.progress.progress}%)`);
+        } else if (e.data.type === 'complete') {
+          addLog('Simulation complete!');
+          setTestResults(e.data.results);
+        } else if (e.data.type === 'error') {
+          addLog(`ERROR: ${e.data.error}`);
+          console.error('Worker error:', e.data);
+        }
+      };
+      
+      worker.onerror = (error) => {
+        addLog(`Worker error: ${error.message}`);
+        console.error('Worker error event:', error);
+      };
+      
+      workerRef.current = worker;
+      addLog('Worker created, sending test message...');
+      
+      // Test worker
+      worker.postMessage({ type: 'test' });
+      
     } catch (err) {
-      setError('Network error: ' + (err as Error).message);
-    } finally {
-      setIsLoading(false);
+      addLog(`Failed to create worker: ${err}`);
+      console.error('Worker creation error:', err);
+    }
+  };
+
+  const runSimpleTest = () => {
+    if (!workerRef.current || !isWorkerReady) {
+      addLog('Worker not ready!');
+      return;
+    }
+
+    addLog('Starting simple simulation test...');
+    setTestResults(null);
+    
+    const testData = {
+      initialWealth: 100000,
+      timeHorizon: 10,
+      withdrawalAmount: 5000,
+      riskScore: 5,
+      inflationRate: 2.5,
+      simulationCount: 100, // Small number for quick test
+      seed: 12345
+    };
+    
+    addLog(`Test parameters: ${JSON.stringify(testData)}`);
+    
+    try {
+      workerRef.current.postMessage({
+        type: 'simulate',
+        data: testData
+      });
+      addLog('Message sent to worker');
+    } catch (err) {
+      addLog(`Failed to send message: ${err}`);
+    }
+  };
+
+  const terminateWorker = () => {
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+      setIsWorkerReady(false);
+      addLog('Worker terminated');
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">🎲 Monte Carlo Test</h2>
-        <p className="text-gray-600 text-sm mt-1">
-          Test the Monte Carlo simulation engine
-        </p>
-      </div>
-      
-      <div className="space-y-4">
-        <button 
-          onClick={runSimulation} 
-          disabled={isLoading}
-          className="w-full px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-        >
-          {isLoading ? '🎲 Running Simulation...' : '🚀 Run Monte Carlo Test'}
-        </button>
+    <Card className="max-w-4xl mx-auto">
+      <CardHeader>
+        <CardTitle>Monte Carlo Worker Test</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Controls */}
+        <div className="flex gap-2">
+          <Button 
+            onClick={initializeWorker}
+            disabled={isWorkerReady}
+          >
+            Initialize Worker
+          </Button>
+          
+          <Button 
+            onClick={runSimpleTest}
+            disabled={!isWorkerReady}
+            variant="default"
+          >
+            Run Test Simulation
+          </Button>
+          
+          <Button 
+            onClick={terminateWorker}
+            disabled={!workerRef.current}
+            variant="destructive"
+          >
+            Terminate Worker
+          </Button>
+          
+          <Button 
+            onClick={() => setLogs([])}
+            variant="outline"
+          >
+            Clear Logs
+          </Button>
+        </div>
 
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-red-800 font-medium">Error:</p>
-            <p className="text-red-600 text-sm">{error}</p>
-          </div>
-        )}
+        {/* Status */}
+        <div className="p-4 bg-gray-50 rounded">
+          <p className="font-semibold">Status:</p>
+          <p>Worker Ready: {isWorkerReady ? '✅ Yes' : '❌ No'}</p>
+          <p>Worker Exists: {workerRef.current ? '✅ Yes' : '❌ No'}</p>
+        </div>
 
-        {results && (
-          <div className="space-y-4">
-            <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-              <h3 className="text-green-800 font-bold text-lg mb-3">
-                ✅ Simulation Complete!
-              </h3>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {results.success_probability}%
-                  </div>
-                  <div className="text-sm text-gray-600">Success Rate</div>
-                </div>
-                
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    £{(results.median_final_wealth / 1000).toFixed(0)}k
-                  </div>
-                  <div className="text-sm text-gray-600">Median Wealth</div>
-                </div>
-              </div>
-
-              <div className="mt-4 text-xs text-gray-500">
-                Execution time: {results.simulation_duration_ms}ms
-              </div>
+        {/* Test Results */}
+        {testResults && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded">
+            <p className="font-semibold mb-2">Test Results:</p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>Success Rate: {testResults.successProbability}%</div>
+              <div>Avg Final Wealth: £{testResults.averageFinalWealth?.toLocaleString()}</div>
+              <div>Median Wealth: £{testResults.medianFinalWealth?.toLocaleString()}</div>
+              <div>Volatility: {testResults.volatility}%</div>
+              <div>Shortfall Risk: {testResults.shortfallRisk}%</div>
+              <div>Max Drawdown: {testResults.maxDrawdown}%</div>
             </div>
-
-            <details className="text-sm">
-              <summary className="cursor-pointer font-medium">📊 Full Results</summary>
-              <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto">
-                {JSON.stringify(results, null, 2)}
-              </pre>
-            </details>
           </div>
         )}
-      </div>
+
+        {/* Logs */}
+        <div className="border rounded p-4 bg-gray-900 text-gray-100">
+          <p className="font-semibold mb-2">Logs:</p>
+          <div className="h-64 overflow-y-auto font-mono text-xs">
+            {logs.length === 0 ? (
+              <p className="text-gray-500">No logs yet. Click "Initialize Worker" to start.</p>
+            ) : (
+              logs.map((log, i) => (
+                <div key={i} className="py-0.5">{log}</div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Instructions */}
+        <div className="text-sm text-gray-600 bg-blue-50 p-4 rounded">
+          <p className="font-semibold mb-1">Test Instructions:</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li>Click "Initialize Worker" - should show "Worker is ready!"</li>
+            <li>Click "Run Test Simulation" - should show progress updates</li>
+            <li>Check results appear in green box</li>
+            <li>Check browser console for detailed logs</li>
+          </ol>
+          <p className="mt-2 font-semibold">If it doesn't work:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li>Check browser console for errors</li>
+            <li>Verify file exists at /public/workers/monte-carlo-worker.js</li>
+            <li>Try the fixed worker code provided</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Add this to a test page to use it:
+// src/app/test-worker/page.tsx
+/*
+import MonteCarloWorkerTest from '@/components/monte-carlo/MonteCarloWorkerTest';
+
+export default function TestWorkerPage() {
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-2xl font-bold mb-6">Monte Carlo Worker Test</h1>
+      <MonteCarloWorkerTest />
     </div>
   );
 }
+*/

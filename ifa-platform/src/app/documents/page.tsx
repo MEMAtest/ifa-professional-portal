@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { Alert, AlertDescription } from '@/components/ui/Alert'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { 
   Users, 
   FileText, 
@@ -24,7 +25,16 @@ import {
   ArrowRight,
   ArrowLeft,
   AlertTriangle,
-  Loader2
+  Loader2,
+  FileDown,
+  Wand2,
+  TrendingUp,
+  Shield,
+  BarChart3,
+  Mail,
+  Plus,
+  Activity,
+  Grid3x3
 } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 
@@ -361,10 +371,68 @@ export default function UnifiedDocumentWorkflow() {
         })
       }
 
+      // Send notification email
+      try {
+        await fetch('/api/notifications/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'documentSent',
+            recipient: selectedClient.contact_info?.email,
+            data: {
+              clientName: getClientDisplayName(selectedClient),
+              documentName: selectedTemplate.name
+            }
+          })
+        })
+      } catch (emailError) {
+        console.log('Email notification not sent')
+      }
+
       setCurrentStep('preview-document')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Document generation failed')
       console.error('Document generation error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Function to save as PDF
+  const saveAsPDF = async () => {
+    if (!generatedDocument) return
+
+    setLoading(true)
+    try {
+      // Simple approach: open print dialog
+      const printWindow = window.open('', '_blank')
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${generatedDocument.name}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 40px; }
+              @media print { body { margin: 0; } }
+            </style>
+          </head>
+          <body>
+            ${generatedDocument.content}
+            <script>
+              window.onload = function() { 
+                window.print(); 
+                setTimeout(() => window.close(), 1000);
+              }
+            </script>
+          </body>
+          </html>
+        `)
+        printWindow.document.close()
+      }
+    } catch (err) {
+      console.error('PDF generation error:', err)
+      setError('Failed to generate PDF')
     } finally {
       setLoading(false)
     }
@@ -549,84 +617,126 @@ export default function UnifiedDocumentWorkflow() {
     </Card>
   )
 
-  const TemplateSelectionStep = () => (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Choose Document Template
-        </CardTitle>
-        {selectedClient && (
-          <div className="text-sm text-gray-600">
-            Generating document for: <strong>{getClientDisplayName(selectedClient)}</strong>
-          </div>
-        )}
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {templates.map((template) => (
-            <div
-              key={template.id}
-              onClick={() => {
-                setSelectedTemplate(template)
-                console.log('Selected template:', template)
-              }}
-              className={`p-4 rounded-lg border cursor-pointer transition-colors hover:border-blue-300 hover:bg-blue-50 ${
-                selectedTemplate?.id === template.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-gray-900">{template.name}</h4>
-                  <p className="text-sm text-gray-500">
-                    {template.description || 'Professional document template'}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    {template.requires_signature && (
-                      <Badge className="bg-orange-100 text-orange-800 text-xs">Requires Signature</Badge>
-                    )}
-                    <Badge variant="outline" className="text-xs">Professional Template</Badge>
+  const TemplateSelectionStep = () => {
+    // Smart template recommendations based on client profile
+    const getRecommendedTemplate = () => {
+      if (!selectedClient) return null
+      
+      const riskProfile = selectedClient.risk_profile?.riskTolerance?.toLowerCase()
+      const hasInvestment = (selectedClient.financial_profile?.investmentAmount || 0) > 0
+      
+      if (!riskProfile || riskProfile === 'not assessed') {
+        return 'Suitability Report' // Need to assess risk first
+      } else if (hasInvestment) {
+        return 'Annual Review Report' // Has existing investments
+      } else {
+        return 'Client Service Agreement' // New client
+      }
+    }
+    
+    const recommendedTemplate = getRecommendedTemplate()
+    
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Choose Document Template
+          </CardTitle>
+          {selectedClient && (
+            <div className="text-sm text-gray-600">
+              Generating document for: <strong>{getClientDisplayName(selectedClient)}</strong>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent>
+          {recommendedTemplate && (
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2 text-blue-800">
+                <Wand2 className="h-4 w-4" />
+                <span className="font-medium">Recommended Template</span>
+              </div>
+              <p className="text-sm text-blue-600 mt-1">
+                Based on the client profile, we recommend: <strong>{recommendedTemplate}</strong>
+              </p>
+            </div>
+          )}
+          
+          <div className="space-y-3">
+            {templates.map((template) => {
+              const isRecommended = template.name === recommendedTemplate
+              
+              return (
+                <div
+                  key={template.id}
+                  onClick={() => {
+                    setSelectedTemplate(template)
+                    console.log('Selected template:', template)
+                  }}
+                  className={`p-4 rounded-lg border cursor-pointer transition-colors hover:border-blue-300 hover:bg-blue-50 ${
+                    selectedTemplate?.id === template.id ? 'border-blue-500 bg-blue-50' : 
+                    isRecommended ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                        {template.name}
+                        {isRecommended && (
+                          <Badge className="bg-blue-100 text-blue-800 text-xs">Recommended</Badge>
+                        )}
+                      </h4>
+                      <p className="text-sm text-gray-500">
+                        {template.description || 'Professional document template'}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {template.requires_signature && (
+                          <Badge className="bg-orange-100 text-orange-800 text-xs">Requires Signature</Badge>
+                        )}
+                        <Badge variant="outline" className="text-xs">Professional Template</Badge>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400" />
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-gray-400" />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {templates.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <p>No templates available.</p>
+              )
+            })}
           </div>
-        )}
 
-        <div className="flex justify-between mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentStep('select-client')}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Clients
-          </Button>
-          
-          <Button
-            onClick={generateDocument}
-            disabled={!selectedTemplate || loading}
-            className="flex items-center gap-2"
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
-            Generate Preview
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
+          {templates.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>No templates available.</p>
+            </div>
+          )}
+
+          <div className="flex justify-between mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentStep('select-client')}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Clients
+            </Button>
+            
+            <Button
+              onClick={generateDocument}
+              disabled={!selectedTemplate || loading}
+              className="flex items-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+              Generate Preview
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const DocumentPreviewStep = () => (
     <Card>
@@ -672,6 +782,15 @@ export default function UnifiedDocumentWorkflow() {
               </Button>
 
               <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={saveAsPDF}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Save as PDF
+                </Button>
+
                 {generatedDocument.url !== '#' && (
                   <Button
                     variant="outline"
@@ -679,7 +798,7 @@ export default function UnifiedDocumentWorkflow() {
                     className="flex items-center gap-2"
                   >
                     <Download className="h-4 w-4" />
-                    Download PDF
+                    Download
                   </Button>
                 )}
 
@@ -716,9 +835,29 @@ export default function UnifiedDocumentWorkflow() {
             {/* DocuSeal Info */}
             {selectedTemplate?.requires_signature && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                <p className="font-medium">DocuSeal Integration Active</p>
-                <p className="text-xs mt-1">Document will be sent to {selectedClient?.contact_info?.email} for electronic signature</p>
+                <p className="font-medium">DocuSeal Integration</p>
+                <p className="text-xs mt-1">
+                  Document will be sent to: <strong>{selectedClient?.contact_info?.email || 'No email provided'}</strong>
+                </p>
+                {!selectedClient?.contact_info?.email && (
+                  <p className="text-xs mt-1 text-orange-600">
+                    ⚠️ Client email required for signature
+                  </p>
+                )}
               </div>
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <Alert className="mt-4 border-red-200 bg-red-50">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">
+                  {error}
+                  {error.includes('Demo mode') && (
+                    <p className="text-xs mt-1">The document workflow is complete for demonstration.</p>
+                  )}
+                </AlertDescription>
+              </Alert>
             )}
           </>
         )}
@@ -739,11 +878,20 @@ export default function UnifiedDocumentWorkflow() {
           <div className="text-lg font-medium text-gray-900 mb-2">
             {selectedTemplate?.name} has been processed for {getClientDisplayName(selectedClient!)}
           </div>
+          
           {selectedClient?.contact_info?.email && selectedTemplate?.requires_signature && (
             <>
-              <div className="text-gray-600 mb-2">
-                Document sent to: {selectedClient.contact_info.email}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <div className="text-green-800 font-medium mb-2">
+                  ✓ Document Successfully Sent
+                </div>
+                <div className="text-sm text-green-700">
+                  <p>Recipient: {selectedClient.contact_info.email}</p>
+                  <p>Template: {selectedTemplate.name}</p>
+                  <p>Status: Awaiting signature</p>
+                </div>
               </div>
+              
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                 <Send className="h-3 w-3" />
                 Sent via DocuSeal for electronic signature
@@ -763,6 +911,11 @@ export default function UnifiedDocumentWorkflow() {
             <Button onClick={resetWorkflow}>
               Generate Another Document
             </Button>
+          </div>
+
+          {/* Demo Note for Showcase */}
+          <div className="mt-6 text-xs text-gray-500">
+            <p>For demonstration purposes. In production, signatures are tracked in real-time.</p>
           </div>
         </div>
       </CardContent>

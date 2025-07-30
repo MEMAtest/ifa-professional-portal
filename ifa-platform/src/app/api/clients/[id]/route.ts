@@ -1,5 +1,5 @@
 // src/app/api/clients/[id]/route.ts
-// ✅ FIXED: Returns RAW database data, no transformation
+// ✅ DEFINITIVE FIX: Enhanced error handling and parameter extraction
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
@@ -11,34 +11,51 @@ import { revalidatePath } from 'next/cache';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }  // Changed parameter name for clarity
 ) {
   try {
-    console.log(`📋 GET /api/clients/${params.id} - Fetching client...`);
+    // Enhanced logging to debug the issue
+    console.log('📋 GET /api/clients/[id] - Request received');
+    console.log('Context:', JSON.stringify(context));
+    console.log('Params:', JSON.stringify(context?.params));
+    console.log('ID:', context?.params?.id);
     
-    if (!params.id) {
+    // More robust parameter extraction
+    const clientId = context?.params?.id;
+    
+    if (!clientId || clientId === 'undefined' || clientId === 'null') {
+      console.error('❌ No valid client ID provided');
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Client ID is required' 
+          error: 'Client ID is required',
+          debug: {
+            context: JSON.stringify(context),
+            params: JSON.stringify(context?.params),
+            receivedId: clientId
+          }
         }, 
         { status: 400 }
       );
     }
 
+    console.log(`📋 Fetching client with ID: ${clientId}`);
+
     // Fetch client from database
     const { data: client, error } = await supabase
       .from('clients')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', clientId)
       .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
+        console.log(`❌ Client not found: ${clientId}`);
         return NextResponse.json(
           { 
             success: false, 
-            error: 'Client not found' 
+            error: 'Client not found',
+            clientId: clientId
           }, 
           { status: 404 }
         );
@@ -55,16 +72,28 @@ export async function GET(
       );
     }
 
-    console.log(`✅ Found client: ${client.client_ref}`);
+    if (!client) {
+      console.log(`❌ No client data returned for ID: ${clientId}`);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Client not found',
+          clientId: clientId
+        }, 
+        { status: 404 }
+      );
+    }
 
-    // ✅ CRITICAL: Return RAW data, no transformation!
+    console.log(`✅ Found client: ${client.client_ref || clientId}`);
+
+    // ✅ Return RAW data
     return NextResponse.json({
       success: true,
       client // RAW database data
     });
 
   } catch (error) {
-    console.error(`❌ GET /api/clients/${params.id} error:`, error);
+    console.error('❌ Unexpected error in GET /api/clients/[id]:', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -82,12 +111,14 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    console.log(`📋 PATCH /api/clients/${params.id} - Updating client...`);
+    const clientId = context?.params?.id;
     
-    if (!params.id) {
+    console.log(`📋 PATCH /api/clients/${clientId} - Updating client...`);
+    
+    if (!clientId || clientId === 'undefined' || clientId === 'null') {
       return NextResponse.json(
         { 
           success: false, 
@@ -116,7 +147,7 @@ export async function PATCH(
     const { data: client, error } = await supabase
       .from('clients')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', clientId)
       .select()
       .single();
 
@@ -146,7 +177,7 @@ export async function PATCH(
     
     // Revalidate the cache
     revalidatePath('/api/clients');
-    revalidatePath(`/api/clients/${params.id}`);
+    revalidatePath(`/api/clients/${clientId}`);
     revalidatePath('/clients');
 
     // ✅ Return RAW data
@@ -156,7 +187,7 @@ export async function PATCH(
     });
 
   } catch (error) {
-    console.error(`❌ PATCH /api/clients/${params.id} error:`, error);
+    console.error(`❌ PATCH /api/clients/[id] error:`, error);
     return NextResponse.json(
       { 
         success: false, 
@@ -174,12 +205,14 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   try {
-    console.log(`📋 DELETE /api/clients/${params.id} - Deleting client...`);
+    const clientId = context?.params?.id;
     
-    if (!params.id) {
+    console.log(`📋 DELETE /api/clients/${clientId} - Deleting client...`);
+    
+    if (!clientId || clientId === 'undefined' || clientId === 'null') {
       return NextResponse.json(
         { 
           success: false, 
@@ -192,7 +225,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('clients')
       .delete()
-      .eq('id', params.id);
+      .eq('id', clientId);
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -216,7 +249,7 @@ export async function DELETE(
       );
     }
 
-    console.log(`✅ Deleted client: ${params.id}`);
+    console.log(`✅ Deleted client: ${clientId}`);
     
     // Revalidate the cache
     revalidatePath('/api/clients');
@@ -228,7 +261,7 @@ export async function DELETE(
     });
 
   } catch (error) {
-    console.error(`❌ DELETE /api/clients/${params.id} error:`, error);
+    console.error(`❌ DELETE /api/clients/[id] error:`, error);
     return NextResponse.json(
       { 
         success: false, 

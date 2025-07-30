@@ -1,248 +1,294 @@
 // app/assessments/suitability-clients/page.tsx
-// This page shows the client list for Suitability Assessments
-// Clicking a client will navigate to /assessments/suitability with their data
-
 'use client'
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { 
-  Users, 
-  Search, 
-  FileText, 
-  CheckCircle, 
-  Clock,
-  AlertTriangle,
-  ChevronRight,
-  Calendar,
-  DollarSign,
-  Shield,
-  Plus,
-  Loader2
+  BarChart3, 
+  Brain, 
+  Sparkles, 
+  Loader2, 
+  AlertTriangle, 
+  Users,
+  ArrowLeft
 } from 'lucide-react'
-
-interface Client {
-  id: string
-  name: string
-  clientRef: string
-  age: number
-  occupation: string
-  investmentAmount: number
-  assessmentStatus: string
-  lastAssessment: string | null
-  nextReview: string | null
-  riskProfile: number
-}
-
-const statusConfig: Record<string, { color: string; icon: any; label: string }> = {
-  completed: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Completed' },
-  in_progress: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'In Progress' },
-  review_needed: { color: 'bg-orange-100 text-orange-800', icon: AlertTriangle, label: 'Review Needed' },
-  draft: { color: 'bg-gray-100 text-gray-800', icon: FileText, label: 'Draft' }
-}
+import { 
+  suitabilityService, 
+  type SuitabilityClient, 
+  type SuitabilityMetrics 
+} from '@/services/SuitabilityAssessmentService'
+import SuitabilityMetricsCards from '@/components/suitability/SuitabilityMetricsCards'
+import SuitabilityFilters from '@/components/suitability/SuitabilityFilters'
+import ClientAssessmentCard from '@/components/suitability/ClientAssessmentCard'
 
 export default function SuitabilityClientsPage() {
   const router = useRouter()
-  const [clients, setClients] = useState<Client[]>([])
+  
+  // State
+  const [clients, setClients] = useState<SuitabilityClient[]>([])
+  const [filteredClients, setFilteredClients] = useState<SuitabilityClient[]>([])
+  const [metrics, setMetrics] = useState<SuitabilityMetrics>({
+    totalClients: 0,
+    totalAUM: 0,
+    completed: 0,
+    needReview: 0,
+    avgRiskLevel: 0,
+    vulnerable: 0
+  })
+  
+  // Filters
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('name')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  
+  // Loading states
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Load data on mount
   useEffect(() => {
-    loadClients()
+    loadData()
   }, [])
 
-  const loadClients = async () => {
+  // Apply filters when they change
+  useEffect(() => {
+    applyFilters()
+  }, [clients, searchTerm, statusFilter, sortBy])
+
+  const loadData = async () => {
     try {
       setIsLoading(true)
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (clientsError) throw clientsError
-
-      // Transform JSONB data
-      const transformedClients: Client[] = (clientsData || []).map(client => {
-        const personalDetails = client.personal_details || {}
-        const financialProfile = client.financial_profile || {}
-        const riskProfile = client.risk_profile || {}
-        
-        return {
-          id: client.id,
-          name: personalDetails.full_name || `${personalDetails.first_name || ''} ${personalDetails.last_name || ''}`.trim() || 'Unknown',
-          clientRef: client.client_ref || 'N/A',
-          age: personalDetails.age || 0,
-          occupation: personalDetails.occupation || 'Not specified',
-          investmentAmount: financialProfile.investment_amount || 0,
-          assessmentStatus: client.status || 'draft',
-          lastAssessment: riskProfile.last_assessment_date,
-          nextReview: riskProfile.next_review_date,
-          riskProfile: riskProfile.final_risk_profile || riskProfile.risk_level || 3
-        }
-      })
-
-      setClients(transformedClients)
-    } catch (err) {
-      console.error('Error loading clients:', err)
-      setError('Failed to load clients')
+      setError(null)
+      
+      console.log('Loading clients from Supabase...')
+      const loadedClients = await suitabilityService.loadClientsWithAssessments()
+      
+      if (loadedClients.length === 0) {
+        console.log('No clients found in database')
+        setClients([])
+        setFilteredClients([])
+        return
+      }
+      
+      console.log(`Successfully loaded ${loadedClients.length} clients`)
+      setClients(loadedClients)
+      
+      // Calculate metrics
+      const calculatedMetrics = suitabilityService.calculateMetrics(loadedClients)
+      setMetrics(calculatedMetrics)
+      
+    } catch (err: any) {
+      console.error('Error loading suitability data:', err)
+      setError(err.message || 'Failed to load client data')
+      setClients([])
+      setFilteredClients([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.clientRef.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const applyFilters = () => {
+    let filtered = suitabilityService.filterClients(clients, searchTerm, statusFilter)
+    filtered = suitabilityService.sortClients(filtered, sortBy)
+    setFilteredClients(filtered)
+  }
 
-  const handleSelectClient = (client: Client) => {
-    // Store client ID and reference for the suitability page
-    sessionStorage.setItem('selectedClientId', client.id)
+  const handleClientClick = (client: SuitabilityClient) => {
+    // Store client data in sessionStorage for the assessment dashboard
+    // Only store properties that exist on SuitabilityClient type
     sessionStorage.setItem('selectedClient', JSON.stringify({
       id: client.id,
       name: client.name,
       age: client.age,
-      investmentAmount: client.investmentAmount,
+      clientRef: client.clientRef,
       occupation: client.occupation,
+      investmentAmount: client.investmentAmount,
+      riskProfile: client.riskProfile,
+      suitabilityScore: client.suitabilityScore,
+      assessmentStatus: client.assessmentStatus,
+      lastAssessment: client.lastAssessment,
+      nextReview: client.nextReview,
+      portfolioPerformance: client.portfolioPerformance,
+      vulnerableClient: client.vulnerableClient,
+      tags: client.tags,
+      priority: client.priority,
+      // Add default values for properties needed by other components
+      location: '',
+      phone: '',
+      email: '',
+      fees: 0,
+      monthlySavings: 0,
+      targetRetirementAge: 65,
+      atrComplete: false,
+      cflComplete: false,
+      personaComplete: false,
+      maritalStatus: '',
+      address: '',
       client_reference: client.clientRef
     }))
     
-    // Navigate to the suitability assessment page
-    router.push('/assessments/suitability')
+    sessionStorage.setItem('selectedClientId', client.id)
+    
+    // Navigate to the client's assessment dashboard
+    router.push(`/assessments/dashboard?clientId=${client.id}`)
   }
 
-  const handleNewClient = () => {
-    // Clear any existing client data
+  const handleNewAssessment = () => {
     sessionStorage.removeItem('selectedClient')
     sessionStorage.removeItem('selectedClientId')
-    // Navigate to suitability assessment for new client
     router.push('/assessments/suitability')
   }
 
+  const handleRetryConnection = () => {
+    loadData()
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12">
+            <div className="text-center">
+              <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Loading Suitability Assessments...
+              </h3>
+              <p className="text-gray-600">Fetching client data from database</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-12">
+            <div className="text-center">
+              <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Error Loading Data
+              </h3>
+              <p className="text-gray-600 mb-6">{error}</p>
+              <button
+                onClick={handleRetryConnection}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Retry Connection
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Main content
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Suitability Assessments</h1>
-        <p className="text-gray-600">Select a client to view or create their suitability assessment</p>
-      </div>
-
-      {/* Search and Actions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search clients by name or reference..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <button
-            onClick={handleNewClient}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Assessment
-          </button>
-        </div>
-      </div>
-
-      {/* Client List */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Investment
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Risk Profile
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Next Review
-                  </th>
-                  <th className="relative px-6 py-3">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredClients.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                      No clients found. Try adjusting your search or create a new assessment.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredClients.map((client) => {
-                    const status = statusConfig[client.assessmentStatus] || statusConfig.draft
-                    const StatusIcon = status.icon
-                    
-                    return (
-                      <tr 
-                        key={client.id}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors"
-                        onClick={() => handleSelectClient(client)}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{client.name}</div>
-                            <div className="text-sm text-gray-500">{client.clientRef} • {client.occupation}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">£{client.investmentAmount.toLocaleString()}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <Shield className="h-4 w-4 text-gray-400 mr-1" />
-                            <span className="text-sm text-gray-900">{client.riskProfile}/5</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
-                            <StatusIcon className="h-3 w-3 mr-1" />
-                            {status.label}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {client.nextReview ? (
-                            <div className="flex items-center">
-                              <Calendar className="h-4 w-4 text-gray-400 mr-1" />
-                              {new Date(client.nextReview).toLocaleDateString('en-GB')}
-                            </div>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <ChevronRight className="h-5 w-5 text-gray-400" />
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                <Brain className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Suitability Assessments</h1>
+                <p className="text-gray-600">
+                  Professional suitability assessment management • {clients.length} clients loaded
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button 
+                onClick={() => router.push('/assessments')}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-all duration-200 flex items-center space-x-2 shadow-sm"
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>Risk Tools</span>
+              </button>
+              <button 
+                onClick={handleNewAssessment}
+                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md flex items-center space-x-2 hover:shadow-lg"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>New Assessment</span>
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* Metrics Cards */}
+        <SuitabilityMetricsCards metrics={metrics} />
+
+        {/* Filters - Updated to include clientCount */}
+        <SuitabilityFilters
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          clientCount={filteredClients.length}
+        />
+
+        {/* Empty State */}
+        {filteredClients.length === 0 && clients.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12">
+            <div className="text-center">
+              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No Clients Found
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Start by creating a new suitability assessment
+              </p>
+              <button
+                onClick={handleNewAssessment}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Create First Assessment
+              </button>
+            </div>
+          </div>
+        ) : filteredClients.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12">
+            <div className="text-center">
+              <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No Matching Clients
+              </h3>
+              <p className="text-gray-600">
+                Try adjusting your filters or search term
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* Client Grid/List */
+          <div className={viewMode === 'grid' 
+            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' 
+            : 'space-y-4'
+          }>
+            {filteredClients.map((client) => (
+              <ClientAssessmentCard
+                key={client.id}
+                client={client}
+                onClick={() => handleClientClick(client)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

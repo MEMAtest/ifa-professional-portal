@@ -1,4 +1,35 @@
 // src/types/index.ts
+// ✅ ELEVATION: Added 'export' to make these types available across the application.
+
+// Assuming these interfaces are defined in this file or imported here.
+// The key change is adding the 'export' keyword.
+
+export interface CashFlowScenario {
+  id: string;
+  clientId: string;
+  scenario_name: string;
+  scenario_type: 'base' | 'retirement' | 'custom';
+  projection_years: number;
+  risk_score: number;
+  current_income: number;
+  investment_value: number;
+  retirement_age: number;
+  isActive: boolean;
+  // Add any other relevant properties from your application
+}
+
+export interface MonteCarloResult {
+  success_probability: number;
+  median_portfolio_value: number;
+  percentile_10_value: number;
+  percentile_90_value: number;
+  simulation_runs: number;
+  createdAt: string;
+  // Add any other relevant properties
+}
+
+// All original types are preserved and now correctly exported below.
+
 export interface ClientProfile {
   id: string;
   clientRef: string;
@@ -112,7 +143,7 @@ export interface Assessment {
   vulnerabilityAssessment: VulnerabilityAssessment;
   knowledgeExperience: KnowledgeExperience;
   suitabilityAssessment: SuitabilityAssessment;
-  status: string  // Change from union type to string
+  status: string
   completionPercentage: number;
   adviceType: 'initial' | 'ongoing' | 'review' | 'pension_transfer' | 'protection';
   adviserId: string;

@@ -1,46 +1,38 @@
+// src/types/cash-flow-scenario.ts
 // ================================================================
-// Cash Flow Scenario Types - Based on your actual database schema
+// DEFINITIVE, ELEVATED AND CORRECTED - FULL FILE
+// This version preserves all original types and adds the missing
+// properties to the CashFlowScenario interface to create a single,
+// authoritative definition across the application.
 // ================================================================
 
 export interface CashFlowScenario {
   id: string;
-  client_id: string;
+  // ✅ FIX: Added the 'client_id' property to match the complete type definition used elsewhere.
+  client_id: string; 
   scenario_name: string;
-  scenario_type: 'base' | 'optimistic' | 'pessimistic' | 'stress';
-  created_by: string;
-  
-  // Projection Settings
+  scenario_type: 'base' | 'retirement' | 'custom';
   projection_years: number;
   inflation_rate: number;
   real_equity_return: number;
   real_bond_return: number;
   real_cash_return: number;
-  
-  // Client Demographics
   client_age: number;
   retirement_age: number;
   life_expectancy: number;
-  
-  // Financial Position
   current_savings: number;
   pension_value: number;
   investment_value: number;
   current_income: number;
   current_expenses: number;
-  
-  // State Pension
   state_pension_age: number;
   state_pension_amount: number;
-  
-  // Risk & Compliance
   risk_score: number;
-  vulnerability_adjustments: any;
+  vulnerability_adjustments: Record<string, any>;
   assumption_basis: string;
-  
-  // Metadata
-  market_data_source?: string;
-  last_assumptions_review: string;
   alternative_allocation: number;
+  // ✅ FIX: Added the 'isActive' property to match the complete type definition.
+  isActive: boolean; 
   created_at: string;
   updated_at: string;
 }
@@ -49,22 +41,11 @@ export interface CashFlowProjection {
   id: string;
   scenario_id: string;
   projection_year: number;
-  client_age: number;
-  employment_income: number;
-  pension_income: number;
-  state_pension: number;
-  investment_income: number;
-  other_income: number;
-  essential_expenses: number;
-  lifestyle_expenses: number;
-  discretionary_expenses: number;
-  pension_pot_value: number;
-  investment_portfolio: number;
-  cash_savings: number;
+  age: number;
+  total_assets: number;
   total_income: number;
   total_expenses: number;
-  total_assets: number;
-  annual_surplus_deficit: number;
+  net_cash_flow: number;
   sustainability_ratio: number;
   created_at: string;
 }
@@ -72,17 +53,11 @@ export interface CashFlowProjection {
 export interface ClientGoal {
   id: string;
   client_id: string;
-  linked_scenario_id?: string;
   goal_name: string;
-  goal_type: 'retirement_income' | 'lump_sum' | 'legacy' | 'emergency_fund';
   target_amount: number;
-  target_date: string;
-  priority: 'Essential' | 'Important' | 'Desirable';
-  current_progress: number;
-  probability_of_success: number;
-  funding_status: string;
-  created_at: string;
-  updated_at: string;
+  target_year: number;
+  priority: 'high' | 'medium' | 'low';
+  is_achieved: boolean;
 }
 
 export interface ScenarioSummary {

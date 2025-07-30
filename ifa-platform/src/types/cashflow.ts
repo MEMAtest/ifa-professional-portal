@@ -15,6 +15,7 @@ export interface ReturnAssumptions {
 
 // Cash Flow Scenario - COMPLETE INTERFACE
 export interface CashFlowScenario {
+  isActive: unknown;
   id: string;
   clientId: string;
   scenarioName: string;

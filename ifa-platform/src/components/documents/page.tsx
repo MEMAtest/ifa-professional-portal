@@ -4,7 +4,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useDocuments, useDocumentCategories } from '@/hooks/useDocuments'
+import { useDocuments, useDocumentCategories } from '@/lib/hooks/useDocuments'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -490,7 +490,7 @@ export default function DocumentsPage() {
         {/* Error State */}
         {error && (
           <Card className="p-6 border-red-200 bg-red-50">
-            <p className="text-red-700">{error}</p>
+            <p className="text-red-700">{error?.message || 'An error occurred'}</p>
           </Card>
         )}
 
