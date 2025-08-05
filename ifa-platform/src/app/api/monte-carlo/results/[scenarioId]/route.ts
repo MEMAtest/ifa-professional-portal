@@ -1,10 +1,8 @@
 // src/app/api/monte-carlo/results/[scenarioId]/route.ts
-// ✅ COMPLETE BULLETPROOF VERSION - FIXED WITH TYPE IMPORT
+// ✅ FIXED: Removed problematic import and simplified
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
-// ✅ FIX: Import the type from the database module
-import type { MonteCarloAssumptionRecord } from '@/lib/monte-carlo/database';
+import { supabase } from '@/lib/supabase';
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -24,16 +22,9 @@ export async function GET(
   { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
-    // ✅ TIMEOUT PROTECTION
-    const timeoutId = setTimeout(() => {
-      throw new Error('Get results timeout after 15 seconds');
-    }, 15000);
-
-    // ✅ PARAMETER VALIDATION
     const { scenarioId } = params;
 
     if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
-      clearTimeout(timeoutId);
       return NextResponse.json(
         { 
           success: false, 
@@ -45,76 +36,73 @@ export async function GET(
 
     const cleanScenarioId = scenarioId.trim();
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ GET RESULTS WITH ERROR HANDLING
-    const resultsResponse = await db.getResults(cleanScenarioId);
-    
-    clearTimeout(timeoutId);
-    
-    if (!resultsResponse.success) {
-      const isNotFound = resultsResponse.error?.includes('No results found') || 
-                        resultsResponse.error?.includes('not found');
-      
-      const statusCode = isNotFound ? 404 : 500;
-      
-      console.error(`Failed to get results for scenario ${cleanScenarioId}:`, resultsResponse.error);
-      
+    // Try to get results by scenario_id (TEXT field)
+    const { data: results, error: resultsError } = await supabase
+      .from('monte_carlo_results')
+      .select('*')
+      .eq('scenario_id', cleanScenarioId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (!resultsError && results && results.length > 0) {
+      return NextResponse.json({
+        success: true,
+        data: results[0],
+        metadata: {
+          scenarioId: cleanScenarioId,
+          fetchedAt: new Date().toISOString()
+        }
+      });
+    }
+
+    // If not found by scenario_id, try client_id
+    const { data: resultsByClient, error: clientError } = await supabase
+      .from('monte_carlo_results')
+      .select('*')
+      .eq('client_id', cleanScenarioId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (clientError) {
+      console.error('Monte Carlo results fetch error:', clientError);
       return NextResponse.json(
         { 
           success: false, 
-          error: resultsResponse.error || 'Failed to retrieve results',
-          scenarioId: cleanScenarioId
+          error: 'Failed to fetch Monte Carlo results' 
         },
-        { status: statusCode }
+        { status: 500 }
       );
     }
 
-    // ✅ OPTIONALLY GET ASSUMPTIONS FOR CONTEXT
-    let assumptions: MonteCarloAssumptionRecord | null = null;
-    try {
-      const assumptionsResponse = await db.getAssumptions(cleanScenarioId);
-      if (assumptionsResponse.success) {
-        assumptions = assumptionsResponse.data || null;
-      }
-    } catch (assumptionError) {
-      console.warn(`Could not fetch assumptions for scenario ${cleanScenarioId}:`, assumptionError);
+    if (!resultsByClient || resultsByClient.length === 0) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'No Monte Carlo results found',
+          scenarioId: cleanScenarioId
+        },
+        { status: 404 }
+      );
     }
 
-    // ✅ STANDARDIZED SUCCESS RESPONSE
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          results: resultsResponse.data,
-          assumptions: assumptions
-        },
-        metadata: {
-          scenarioId: cleanScenarioId,
-          fetchedAt: new Date().toISOString(),
-          environment: process.env.NODE_ENV || 'development'
-        }
-      },
-      { 
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
-        }
+    return NextResponse.json({
+      success: true,
+      data: resultsByClient[0],
+      metadata: {
+        scenarioId: cleanScenarioId,
+        fetchedAt: new Date().toISOString()
       }
-    );
+    });
 
   } catch (error: unknown) {
     console.error('Monte Carlo results API error:', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : undefined;
 
     return NextResponse.json(
       {
         success: false,
         error: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
         timestamp: new Date().toISOString()
       },
       { status: 500 }
@@ -131,20 +119,13 @@ export async function PATCH(
   { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
-    // ✅ TIMEOUT PROTECTION
-    const timeoutId = setTimeout(() => {
-      throw new Error('Update status timeout after 10 seconds');
-    }, 10000);
-
-    // ✅ PARAMETER VALIDATION
     const { scenarioId } = params;
 
     if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
-      clearTimeout(timeoutId);
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Scenario ID is required and must be a valid string' 
+          error: 'Scenario ID is required' 
         },
         { status: 400 }
       );
@@ -152,12 +133,10 @@ export async function PATCH(
 
     const cleanScenarioId = scenarioId.trim();
 
-    // ✅ SAFE BODY PARSING
     let body: any;
     try {
       body = await request.json();
     } catch (parseError) {
-      clearTimeout(timeoutId);
       return NextResponse.json(
         { 
           success: false, 
@@ -169,10 +148,8 @@ export async function PATCH(
 
     const { status } = body;
 
-    // ✅ STATUS VALIDATION
     const validStatuses = ['pending', 'running', 'completed', 'failed'];
     if (!status || !validStatuses.includes(status)) {
-      clearTimeout(timeoutId);
       return NextResponse.json(
         {
           success: false,
@@ -182,26 +159,28 @@ export async function PATCH(
       );
     }
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ UPDATE STATUS WITH ERROR HANDLING
-    const updateResponse = await db.updateStatus(cleanScenarioId, status);
-    
-    clearTimeout(timeoutId);
-    
-    if (!updateResponse.success) {
-      console.error(`Failed to update status for scenario ${cleanScenarioId}:`, updateResponse.error);
+    // Update in monte_carlo_results table
+    const { data, error } = await supabase
+      .from('monte_carlo_results')
+      .update({ 
+        calculation_status: status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('scenario_id', cleanScenarioId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`Failed to update status for scenario ${cleanScenarioId}:`, error);
       return NextResponse.json(
         {
           success: false,
-          error: updateResponse.error || 'Failed to update status'
+          error: 'Failed to update status'
         },
         { status: 500 }
       );
     }
 
-    // ✅ STANDARDIZED SUCCESS RESPONSE
     return NextResponse.json(
       {
         success: true,
@@ -229,100 +208,4 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
-
-/**
- * DELETE /api/monte-carlo/results/[scenarioId]
- * Delete Monte Carlo scenario and related data
- */
-export async function DELETE(
-  request: NextRequest,
-  { params }: ResultsRouteParams
-): Promise<NextResponse> {
-  try {
-    // ✅ TIMEOUT PROTECTION
-    const timeoutId = setTimeout(() => {
-      throw new Error('Delete scenario timeout after 10 seconds');
-    }, 10000);
-
-    // ✅ PARAMETER VALIDATION
-    const { scenarioId } = params;
-
-    if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
-      clearTimeout(timeoutId);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Scenario ID is required and must be a valid string' 
-        },
-        { status: 400 }
-      );
-    }
-
-    const cleanScenarioId = scenarioId.trim();
-
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ DELETE WITH ERROR HANDLING
-    const deleteResponse = await db.deleteScenario(cleanScenarioId);
-    
-    clearTimeout(timeoutId);
-    
-    if (!deleteResponse.success) {
-      console.error(`Failed to delete scenario ${cleanScenarioId}:`, deleteResponse.error);
-      return NextResponse.json(
-        {
-          success: false,
-          error: deleteResponse.error || 'Failed to delete scenario'
-        },
-        { status: 500 }
-      );
-    }
-
-    // ✅ STANDARDIZED SUCCESS RESPONSE
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Scenario deleted successfully',
-        data: { 
-          scenarioId: cleanScenarioId,
-          deletedAt: new Date().toISOString()
-        }
-      },
-      { status: 200 }
-    );
-
-  } catch (error: unknown) {
-    console.error('Monte Carlo delete scenario API error:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: errorMessage,
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * OPTIONS /api/monte-carlo/results/[scenarioId]
- * Handle CORS preflight requests
- */
-export async function OPTIONS(): Promise<NextResponse> {
-  return NextResponse.json(
-    { message: 'OK' },
-    { 
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      }
-    }
-  );
 }

@@ -1,20 +1,11 @@
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
 // src/app/api/communications/route.ts
-// ✅ FIXED: Updated to use client_communications table with correct columns
-// ===================================================================
+// ✅ FIXED: Using correct Supabase import for API routes
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createBrowserClient } from '@supabase/ssr';
+import { supabase } from '@/lib/supabase';
 
-// Initialize Supabase client
-function getSupabaseClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic';
 
 // GET - Fetch communications for a client
 export async function GET(request: NextRequest) {
@@ -29,9 +20,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
-
-    // ✅ FIXED: Use client_communications table with correct column
+    // Use correct table and columns
     const { data, error } = await supabase
       .from('client_communications')
       .select('*')
@@ -46,15 +35,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ✅ Transform to expected format for frontend
+    // Transform to expected format for frontend
     const transformedData = (data || []).map(comm => ({
       id: comm.id,
       clientId: comm.client_id,
       type: comm.communication_type,
       subject: comm.subject || '',
-      content: comm.summary || '', // Map summary to content
+      content: comm.summary || '',
       date: comm.communication_date,
-      status: 'completed', // Default since not in table
+      status: 'completed',
       direction: comm.direction || 'outbound',
       method: comm.contact_method || 'email',
       requiresFollowup: comm.requires_followup || false,
@@ -99,20 +88,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
-
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000'; // Default if no user
+    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
 
-    // ✅ FIXED: Insert with correct column names for client_communications
+    // Insert with correct column names
     const { data, error } = await supabase
       .from('client_communications')
       .insert({
         client_id: clientId,
         communication_type: type,
         subject,
-        summary: content || '', // Map content to summary
+        summary: content || '',
         communication_date: date || new Date().toISOString(),
         requires_followup: requiresFollowup,
         followup_date: followupDate || null,
@@ -136,7 +123,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Also log to activity log
+    // Log to activity log if table exists
     try {
       await supabase
         .from('activity_log')
@@ -177,12 +164,11 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
-
     // Map frontend field names to database columns
     const dbUpdates: any = {};
     if (updates.type) dbUpdates.communication_type = updates.type;
     if (updates.content) dbUpdates.summary = updates.content;
+    if (updates.subject) dbUpdates.subject = updates.subject;
     if (updates.date) dbUpdates.communication_date = updates.date;
     if (updates.requiresFollowup !== undefined) dbUpdates.requires_followup = updates.requiresFollowup;
     if (updates.followupDate) dbUpdates.followup_date = updates.followupDate;
@@ -233,8 +219,6 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const supabase = getSupabaseClient();
 
     const { error } = await supabase
       .from('client_communications')
