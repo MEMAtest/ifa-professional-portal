@@ -64,7 +64,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const db = getMonteCarloDatabase();
     
     // ✅ BULK SIMULATION WITH PROGRESS TRACKING
-    const results = [];
+    type BulkSimulationResult = 
+      | { scenario_id: string; success: true; data: any }
+      | { scenario_id: string; success: false; error: string };
+    const results: BulkSimulationResult[] = [];
     let successCount = 0;
     let failureCount = 0;
 
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           results.push({
             scenario_id: scenario.scenario_id,
             success: false,
-            error: saveResponse.error
+            error: saveResponse.error ?? 'Unknown error'
           });
           failureCount++;
         }

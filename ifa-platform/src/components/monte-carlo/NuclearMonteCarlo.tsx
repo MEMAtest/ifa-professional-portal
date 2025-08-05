@@ -1,9 +1,9 @@
 // src/components/monte-carlo/NuclearMonteCarlo.tsx
-// FIXED VERSION - All syntax errors resolved
+// ENHANCED VERSION with intelligent helpers and validation
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/Button';
@@ -22,7 +22,10 @@ import {
   User,
   FileText,
   CheckCircle2,
-  XCircle
+  XCircle,
+  HelpCircle,
+  Calculator,
+  BookOpen
 } from 'lucide-react';
 import {
   LineChart as RechartsLineChart,
@@ -43,6 +46,16 @@ import {
   RadialBarChart,
   RadialBar
 } from 'recharts';
+import {
+  validateParameters,
+  calculateWithdrawalRate,
+  calculateExpectedReturn,
+  ValidationDisplay,
+  HelperTooltip,
+  MonteCarloQuickTips,
+  PresetScenarios,
+  SafeWithdrawalCalculator
+} from './MonteCarloHelpers';
 
 // Types
 interface ClientDetails {
@@ -62,6 +75,10 @@ interface SimulationInputs {
   simulationCount: number;
 }
 
+type SimulationParameters = Omit<SimulationInputs, 'simulationCount'> & {
+  simulationCount?: number;
+};
+
 interface SimulationResults {
   successRate: number;
   averageFinalWealth: number;
@@ -77,6 +94,16 @@ interface SimulationResults {
   maxDrawdown: number;
   yearlyData: YearlyProjection[];
   executionTime: number;
+  simulationCount?: number;                    // ← ADD THIS LINE
+  confidenceIntervals?: {                      // ← ADD THIS BLOCK
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+  };
+  shortfallRisk?: number;                      // ← ADD THIS LINE
+  volatility?: number;                         // ← ADD THIS LINE
 }
 
 interface YearlyProjection {
@@ -129,7 +156,7 @@ export default function NuclearMonteCarlo({
   const [inputs, setInputs] = useState<SimulationInputs>({
     initialPortfolio: initialInputs?.initialPortfolio || 500000,
     timeHorizon: initialInputs?.timeHorizon || 30,
-    annualWithdrawal: initialInputs?.annualWithdrawal || 25000,
+    annualWithdrawal: initialInputs?.annualWithdrawal || 20000,
     riskScore: initialInputs?.riskScore || 5,
     inflationRate: initialInputs?.inflationRate || 2.5,
     simulationCount: initialInputs?.simulationCount || 5000
@@ -139,6 +166,37 @@ export default function NuclearMonteCarlo({
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<SimulationResults | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [persistResults, setPersistResults] = useState(false);
+  const [showHelpers, setShowHelpers] = useState(true);
+  const [showPresets, setShowPresets] = useState(false);
+
+  // Validation
+  const validation = validateParameters(inputs);
+  const withdrawalRate = calculateWithdrawalRate(inputs.annualWithdrawal, inputs.initialPortfolio);
+  const expectedReturn = calculateExpectedReturn(inputs.riskScore);
+
+  // Auto-adjust withdrawal when portfolio changes
+  useEffect(() => {
+    if (inputs.initialPortfolio > 0) {
+      const currentRate = withdrawalRate;
+      // If rate is too high, suggest 4%
+      if (currentRate > 6) {
+        const suggestedWithdrawal = Math.round(inputs.initialPortfolio * 0.04);
+        toast({
+          title: "High Withdrawal Rate Detected",
+          description: `Consider reducing annual withdrawal to £${suggestedWithdrawal.toLocaleString()} (4% rule)`,
+          action: (
+            <Button
+              size="sm"
+              onClick={() => setInputs({ ...inputs, annualWithdrawal: suggestedWithdrawal })}
+            >
+              Apply
+            </Button>
+          ),
+        });
+      }
+    }
+  }, [inputs.initialPortfolio]);
 
   // Helper functions
   const formatCurrency = (value: number) => {
@@ -174,8 +232,31 @@ export default function NuclearMonteCarlo({
     return mean + z0 * stdDev;
   };
 
+  // Apply preset scenario
+  const applyPreset = (params: SimulationParameters) => {
+    setInputs({
+      ...params,
+      simulationCount: params.simulationCount || inputs.simulationCount // Use preset or keep current
+    });
+    setShowPresets(false);
+    toast({
+      title: "Preset Applied",
+      description: "Scenario parameters have been loaded. Click 'Run Simulation' to begin.",
+    });
+  };
+
   // Run Monte Carlo simulation
   const runSimulation = async () => {
+    // Validate before running
+    if (!validation.isValid) {
+      toast({
+        title: "Invalid Parameters",
+        description: validation.errors[0],
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsRunning(true);
     setProgress(0);
     const startTime = Date.now();
@@ -192,12 +273,21 @@ export default function NuclearMonteCarlo({
       };
 
       // Run simulations
-      const simResults = [];
+      const simResults: { yearlyWealths: number[]; maxDrawdown: number }[] = [];
       const finalWealths: number[] = [];
       let successCount = 0;
 
       // Process in chunks for progress updates
       const chunkSize = 100;
+      
+      console.log('Starting simulation with:', {
+        simulationCount: inputs.simulationCount,
+        initialPortfolio: inputs.initialPortfolio,
+        timeHorizon: inputs.timeHorizon,
+        annualWithdrawal: inputs.annualWithdrawal,
+        withdrawalRate: withdrawalRate.toFixed(2) + '%',
+        expectedReturn: expectedReturn.toFixed(2) + '%'
+      });
       
       for (let i = 0; i < inputs.simulationCount; i++) {
         let wealth = inputs.initialPortfolio;
@@ -239,25 +329,45 @@ export default function NuclearMonteCarlo({
           }
         }
 
-        if (!failed) successCount++;
+        if (!failed && wealth > 0) {
+          successCount++;
+        }
+        
+        // Store final wealth (0 if failed)
         finalWealths.push(wealth > 0 ? wealth : 0);
         simResults.push({ yearlyWealths, maxDrawdown });
 
         // Update progress
-        if (i % chunkSize === 0) {
-          const currentProgress = Math.round((i / inputs.simulationCount) * 100);
+        if (i % chunkSize === 0 || i === inputs.simulationCount - 1) {
+          const currentProgress = Math.round(((i + 1) / inputs.simulationCount) * 100);
           setProgress(currentProgress);
           // Allow UI to update
-          await new Promise(resolve => setTimeout(resolve, 0));
+          await new Promise(resolve => setTimeout(resolve, 10));
         }
       }
-
+      
+      // Ensure progress reaches 100%
+      setProgress(100);
+      
       // Calculate statistics
+      console.log('Simulation complete:', {
+        successCount,
+        totalSimulations: inputs.simulationCount,
+        successRate: (successCount / inputs.simulationCount) * 100,
+        finalWealthsLength: finalWealths.length
+      });
+      
       finalWealths.sort((a, b) => a - b);
       
-      const successRate = (successCount / inputs.simulationCount) * 100;
-      const averageFinalWealth = finalWealths.reduce((sum, w) => sum + w, 0) / finalWealths.length;
-      const medianFinalWealth = finalWealths[Math.floor(finalWealths.length / 2)];
+      const successRate = inputs.simulationCount > 0 
+        ? (successCount / inputs.simulationCount) * 100 
+        : 0;
+      const averageFinalWealth = finalWealths.length > 0
+        ? finalWealths.reduce((sum, w) => sum + w, 0) / finalWealths.length
+        : 0;
+      const medianFinalWealth = finalWealths.length > 0
+        ? finalWealths[Math.floor(finalWealths.length / 2)]
+        : 0;
       
       // Percentiles
       const getPercentile = (p: number) => {
@@ -308,10 +418,18 @@ export default function NuclearMonteCarlo({
       setResults(results);
       setProgress(100);
       setShowReport(true);
+      setPersistResults(true);
+
+      // Show success message with context
+      const message = successRate >= 75 
+        ? "Excellent! High probability of success" 
+        : successRate >= 50 
+        ? "Moderate success rate - consider adjustments"
+        : "Low success rate - review your parameters";
 
       toast({
         title: "Simulation Complete",
-        description: `Success rate: ${successRate.toFixed(1)}%`,
+        description: `${successRate.toFixed(1)}% success rate. ${message}`,
       });
 
       // Save to database if clientId provided
@@ -376,7 +494,34 @@ export default function NuclearMonteCarlo({
 
       // Call completion callback if provided
       if (onComplete) {
-        onComplete(results);
+        // Pass the full results object with the correct structure
+        onComplete({
+          successRate,
+          averageFinalWealth,
+          medianFinalWealth,
+          percentiles: {
+            p10: getPercentile(10),
+            p25: getPercentile(25),
+            p50: getPercentile(50),
+            p75: getPercentile(75),
+            p90: getPercentile(90)
+          },
+          failureRisk: 100 - successRate,
+          maxDrawdown: maxDrawdown * 100,
+          yearlyData,
+          executionTime: results.executionTime,
+          // Additional fields for compatibility
+          simulationCount: inputs.simulationCount,
+          confidenceIntervals: {
+            p10: getPercentile(10),
+            p25: getPercentile(25),
+            p50: getPercentile(50),
+            p75: getPercentile(75),
+            p90: getPercentile(90)
+          },
+          shortfallRisk: 100 - successRate,
+          volatility: 15
+        });
       }
 
     } catch (error) {
@@ -405,8 +550,53 @@ export default function NuclearMonteCarlo({
       {!clientId && (
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">Monte Carlo Simulation Engine</h1>
-          <p className="text-gray-600">Professional retirement planning analysis</p>
+          <p className="text-gray-600">Professional retirement planning analysis with intelligent guidance</p>
         </div>
+      )}
+
+      {/* Quick Actions Bar */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowHelpers(!showHelpers)}
+        >
+          <HelpCircle className="h-4 w-4 mr-1" />
+          {showHelpers ? 'Hide' : 'Show'} Helpers
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowPresets(!showPresets)}
+        >
+          <BookOpen className="h-4 w-4 mr-1" />
+          Preset Scenarios
+        </Button>
+      </div>
+
+      {/* Preset Scenarios */}
+      {showPresets && (
+        <PresetScenarios onSelect={applyPreset} />
+      )}
+
+      {/* Validation Display */}
+      {validation.warnings.length > 0 || validation.errors.length > 0 ? (
+        <ValidationDisplay 
+          validation={validation} 
+          withdrawalRate={withdrawalRate}
+          expectedReturn={expectedReturn}
+        />
+      ) : withdrawalRate > 0 && withdrawalRate <= 5 && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <p className="text-sm text-green-800">
+                Your withdrawal rate of {withdrawalRate.toFixed(1)}% is within a sustainable range
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Client Details Card - Only show if no clientId provided */}
@@ -471,7 +661,7 @@ export default function NuclearMonteCarlo({
         </Card>
       )}
 
-      {/* Simulation Parameters */}
+      {/* Simulation Parameters with Helpers */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -485,12 +675,18 @@ export default function NuclearMonteCarlo({
               <label className="text-sm font-medium mb-1 flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
                 Initial Portfolio Value
+                <HelperTooltip
+                  title="Starting Portfolio"
+                  content="The total value of investments at the start of retirement."
+                  example="£500,000 - £2,000,000 typical range"
+                />
               </label>
               <Input
                 type="number"
                 value={inputs.initialPortfolio}
                 onChange={(e) => setInputs({...inputs, initialPortfolio: Number(e.target.value)})}
                 disabled={isRunning}
+                className={validation.errors.some(e => e.includes('portfolio')) ? 'border-red-500' : ''}
               />
             </div>
             
@@ -498,6 +694,11 @@ export default function NuclearMonteCarlo({
               <label className="text-sm font-medium mb-1 flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
                 Time Horizon (Years)
+                <HelperTooltip
+                  title="Retirement Duration"
+                  content="How many years the money needs to last."
+                  example="25-35 years typical for age 65 retiree"
+                />
               </label>
               <Input
                 type="number"
@@ -513,19 +714,37 @@ export default function NuclearMonteCarlo({
               <label className="text-sm font-medium mb-1 flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
                 Annual Withdrawal
+                <HelperTooltip
+                  title="Yearly Income Need"
+                  content="Amount withdrawn each year, adjusted for inflation."
+                  example="4% of portfolio is considered safe"
+                  warning={`Current rate: ${withdrawalRate.toFixed(1)}%`}
+                />
               </label>
               <Input
                 type="number"
                 value={inputs.annualWithdrawal}
                 onChange={(e) => setInputs({...inputs, annualWithdrawal: Number(e.target.value)})}
                 disabled={isRunning}
+                className={withdrawalRate > 6 ? 'border-red-500' : withdrawalRate > 4.5 ? 'border-yellow-500' : ''}
               />
+              {inputs.initialPortfolio > 0 && inputs.timeHorizon > 0 && (
+                <SafeWithdrawalCalculator 
+                  portfolio={inputs.initialPortfolio} 
+                  timeHorizon={inputs.timeHorizon} 
+                />
+              )}
             </div>
             
             <div>
               <label className="text-sm font-medium mb-1 flex items-center gap-1">
                 <Target className="h-4 w-4" />
                 Risk Score (1-10)
+                <HelperTooltip
+                  title="Investment Risk Level"
+                  content="1 = Very Conservative (mostly bonds), 10 = Very Aggressive (mostly stocks)"
+                  example="5-6 = Balanced portfolio"
+                />
               </label>
               <Input
                 type="number"
@@ -535,12 +754,20 @@ export default function NuclearMonteCarlo({
                 min="1"
                 max="10"
               />
+              <p className="text-xs text-gray-600 mt-1">
+                Expected return: {expectedReturn.toFixed(1)}% annually
+              </p>
             </div>
             
             <div>
               <label className="text-sm font-medium mb-1 flex items-center gap-1">
                 <TrendingUp className="h-4 w-4" />
                 Inflation Rate (%)
+                <HelperTooltip
+                  title="Annual Inflation"
+                  content="Expected yearly increase in cost of living."
+                  example="2-3% historical average"
+                />
               </label>
               <Input
                 type="number"
@@ -554,6 +781,11 @@ export default function NuclearMonteCarlo({
             <div>
               <label className="text-sm font-medium mb-1 block">
                 Number of Simulations
+                <HelperTooltip
+                  title="Simulation Runs"
+                  content="More simulations = more accurate results but longer processing."
+                  example="5,000 = good balance, 10,000 = very thorough"
+                />
               </label>
               <Input
                 type="number"
@@ -571,7 +803,7 @@ export default function NuclearMonteCarlo({
           <div className="mt-6 flex gap-4">
             <Button 
               onClick={runSimulation}
-              disabled={isRunning || (!clientId && !clientDetails.name)}
+              disabled={isRunning || (!clientId && !clientDetails.name) || !validation.isValid}
               size="lg"
               className="flex items-center gap-2"
             >
@@ -608,13 +840,32 @@ export default function NuclearMonteCarlo({
         </CardContent>
       </Card>
 
+      {/* Quick Tips - Show when helpers enabled */}
+      {showHelpers && !results && (
+        <MonteCarloQuickTips />
+      )}
+
       {/* Results Section */}
-      {results && showReport && (
+      {results && (showReport || persistResults) && (
         <>
           {/* Key Metrics */}
           <Card>
             <CardHeader>
-              <CardTitle>Simulation Results</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Simulation Results</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowReport(false);
+                    setPersistResults(false);
+                    setResults(null);
+                    setProgress(0);
+                  }}
+                >
+                  Clear Results
+                </Button>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

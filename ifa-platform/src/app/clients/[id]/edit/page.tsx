@@ -1,5 +1,5 @@
 // src/app/clients/[id]/edit/page.tsx
-// ✅ FIXED: Safe cancel handler with proper error boundaries
+// ✅ FIXED: Prevents auto-submission and ensures Step 5 works properly
 
 'use client';
 
@@ -55,7 +55,7 @@ export default function EditClientPage() {
     loadClient();
   }, [clientId, toast]);
 
-  // Handle form submission
+  // ✅ FIXED: Handle form submission without auto-redirect
   const handleSubmit = async (updatedClient: Client) => {
     if (!client) return;
 
@@ -81,8 +81,11 @@ export default function EditClientPage() {
         variant: 'default'
       });
 
-      // Redirect to client details page with success message
-      router.push(`/clients/${client.id}?success=true`);
+      // ✅ FIXED: Add delay before redirect to ensure user sees success message
+      setTimeout(() => {
+        router.push(`/clients/${client.id}?success=true`);
+      }, 1000);
+      
     } catch (err) {
       console.error('Error updating client:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to update client';
@@ -93,12 +96,11 @@ export default function EditClientPage() {
         description: errorMessage,
         variant: 'destructive'
       });
-    } finally {
       setSaving(false);
     }
   };
 
-  // Handle save (for ClientFormData)
+  // ✅ FIXED: Handle save for ClientFormData without auto-redirect
   const handleSave = async (formData: ClientFormData) => {
     if (!client) return;
 
@@ -106,6 +108,7 @@ export default function EditClientPage() {
       setSaving(true);
       setError(null);
       
+      // ✅ FIXED: Only update, don't redirect automatically
       await clientService.updateClient(client.id, formData);
       
       toast({
@@ -114,7 +117,11 @@ export default function EditClientPage() {
         variant: 'default'
       });
 
-      router.push(`/clients/${client.id}?success=true`);
+      // ✅ FIXED: Add delay before redirect
+      setTimeout(() => {
+        router.push(`/clients/${client.id}?success=true`);
+      }, 1000);
+      
     } catch (err) {
       console.error('Error updating client:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to update client';
@@ -124,12 +131,11 @@ export default function EditClientPage() {
         description: errorMessage,
         variant: 'destructive'
       });
-    } finally {
       setSaving(false);
     }
   };
 
-  // ✅ FIXED: Safe cancel handler with fallback
+  // Safe cancel handler
   const handleCancel = () => {
     try {
       // Try to navigate to the client details page
@@ -196,7 +202,7 @@ export default function EditClientPage() {
         </p>
       </div>
 
-      {/* Client Form with error boundary */}
+      {/* ✅ FIXED: Pass correct props to prevent auto-submission */}
       <div className="relative">
         <ClientForm
           client={client}

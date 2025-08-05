@@ -1,20 +1,20 @@
 // src/components/clients/ClientForm.tsx
 // ===================================================================
-// COMPLETE UNABRIDGED FIXED VERSION - ALL TYPESCRIPT ERRORS RESOLVED
-// PRESERVES 100% OF EXISTING FUNCTIONALITY
+// NUCLEAR OPTION - COMPLETE IMPLEMENTATION
+// No form tags, manual save button, bulletproof
 // ===================================================================
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-// INTEGRATION ADDITION: Import the integration hook
 import { useClientIntegration } from '@/lib/hooks/useClientIntegration';
+import { AlertCircle, CheckCircle, Save, X, ChevronRight, ChevronLeft } from 'lucide-react';
 import type {
   Client,
   ClientFormData,
@@ -33,7 +33,7 @@ import {
 } from '@/types/client';
 
 // ===================================================================
-// INTERFACES AND TYPES (UNCHANGED)
+// INTERFACES AND TYPES
 // ===================================================================
 
 interface ClientFormProps {
@@ -51,24 +51,58 @@ interface FormStep {
   title: string;
   description: string;
   fields: string[];
+  icon?: React.ReactNode;
 }
 
 // ===================================================================
-// UTILITY FUNCTIONS (PRESERVED)
+// CONSTANTS
 // ===================================================================
 
-/**
- * Safely parse numeric values
- */
+const TOTAL_STEPS = 5;
+
+const formSteps: FormStep[] = [
+  {
+    id: 1,
+    title: 'Personal Details',
+    description: 'Basic personal information',
+    fields: ['firstName', 'lastName', 'dateOfBirth', 'occupation']
+  },
+  {
+    id: 2,
+    title: 'Contact Information',
+    description: 'Contact details and address',
+    fields: ['email', 'phone', 'address']
+  },
+  {
+    id: 3,
+    title: 'Financial Profile',
+    description: 'Financial circumstances',
+    fields: ['annualIncome', 'netWorth', 'monthlyExpenses']
+  },
+  {
+    id: 4,
+    title: 'Vulnerability Assessment',
+    description: 'Consumer duty compliance',
+    fields: ['is_vulnerable']
+  },
+  {
+    id: 5,
+    title: 'Risk Profile',
+    description: 'Risk tolerance and capacity',
+    fields: ['riskTolerance', 'attitudeToRisk']
+  }
+];
+
+// ===================================================================
+// UTILITY FUNCTIONS
+// ===================================================================
+
 function parseNumericValue(value: any, defaultValue: number = 0): number {
   if (value === null || value === undefined || value === '') return defaultValue;
   const parsed = typeof value === 'string' ? parseFloat(value) : Number(value);
   return isNaN(parsed) ? defaultValue : Math.max(0, parsed);
 }
 
-/**
- * Safely parse boolean values
- */
 function parseBooleanValue(value: any, defaultValue: boolean = false): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -79,9 +113,6 @@ function parseBooleanValue(value: any, defaultValue: boolean = false): boolean {
   return defaultValue;
 }
 
-/**
- * ✅ FIXED - Safe merge objects with proper type handling
- */
 function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
   if (!source) return target;
   
@@ -104,9 +135,6 @@ function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>)
   return result;
 }
 
-/**
- * Get empty form data with proper defaults
- */
 function getEmptyFormData(): ClientFormData {
   const now = new Date().toISOString();
   
@@ -173,22 +201,16 @@ function getEmptyFormData(): ClientFormData {
   };
 }
 
-/**
- * ✅ FIXED - Transform form data to Client with proper type safety
- */
 function transformFormDataToClient(formData: ClientFormData, existingClient?: Client): Client {
   const now = new Date().toISOString();
   
-  // ✅ FIXED - Ensure all string fields are properly defaulted (not undefined)
   return {
     id: existingClient?.id || `client-${Date.now()}`,
     createdAt: existingClient?.createdAt || now,
     updatedAt: now,
     advisorId: existingClient?.advisorId || null,
     firmId: existingClient?.firmId || null,
-    // ✅ FIXED - Ensure clientRef is never undefined
     clientRef: formData.clientRef || existingClient?.clientRef || `CLI-${Date.now()}`,
-    // ✅ FIXED - Ensure PersonalDetails has all required string fields
     personalDetails: {
       title: formData.personalDetails.title || '',
       firstName: formData.personalDetails.firstName || '',
@@ -200,7 +222,6 @@ function transformFormDataToClient(formData: ClientFormData, existingClient?: Cl
       employmentStatus: formData.personalDetails.employmentStatus || 'employed',
       occupation: formData.personalDetails.occupation || ''
     },
-    // ✅ FIXED - Ensure ContactInfo and Address have all required string fields
     contactInfo: {
       email: formData.contactInfo.email || '',
       phone: formData.contactInfo.phone || '',
@@ -259,44 +280,7 @@ function transformFormDataToClient(formData: ClientFormData, existingClient?: Cl
 }
 
 // ===================================================================
-// FORM STEPS CONFIGURATION (UNCHANGED)
-// ===================================================================
-
-const formSteps: FormStep[] = [
-  {
-    id: 1,
-    title: 'Personal Details',
-    description: 'Basic personal information',
-    fields: ['firstName', 'lastName', 'dateOfBirth', 'occupation']
-  },
-  {
-    id: 2,
-    title: 'Contact Information',
-    description: 'Contact details and address',
-    fields: ['email', 'phone', 'address']
-  },
-  {
-    id: 3,
-    title: 'Financial Profile',
-    description: 'Financial circumstances',
-    fields: ['annualIncome', 'netWorth', 'monthlyExpenses']
-  },
-  {
-    id: 4,
-    title: 'Vulnerability Assessment',
-    description: 'Consumer duty compliance',
-    fields: ['is_vulnerable']
-  },
-  {
-    id: 5,
-    title: 'Risk Profile',
-    description: 'Risk tolerance and capacity',
-    fields: ['riskTolerance', 'attitudeToRisk']
-  }
-];
-
-// ===================================================================
-// MAIN COMPONENT WITH INTEGRATION ENHANCEMENTS
+// MAIN COMPONENT - NUCLEAR OPTION IMPLEMENTATION
 // ===================================================================
 
 export default function ClientForm({
@@ -311,17 +295,13 @@ export default function ClientForm({
   const router = useRouter();
   const { toast } = useToast();
 
-  // ===================================================================
-  // INTEGRATION: Auto-save functionality using the integration hook
-  // This preserves all existing save logic while adding auto-save
-  // ===================================================================
   const { saveDraft, hasDraft, clearDraft } = useClientIntegration({
     clientId: client?.id,
     autoSave: true
   });
 
   // ===================================================================
-  // STATE MANAGEMENT (PRESERVED WITH FIXES)
+  // STATE MANAGEMENT
   // ===================================================================
   
   const [formData, setFormData] = useState<ClientFormData>(() => {
@@ -352,16 +332,93 @@ export default function ClientForm({
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [currentStep, setCurrentStep] = useState(1);
   const [isFormDirty, setIsFormDirty] = useState(false);
-  // INTEGRATION: Add draft loading state
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
-
-  const totalSteps = formSteps.length;
+  const [isSaving, setIsSaving] = useState(false);
 
   // ===================================================================
-  // ✅ FIXED - Draft management with proper type handling
+  // NUCLEAR OPTION: MANUAL SAVE HANDLER
   // ===================================================================
   
-  // Create a proper saveDraft object with loadDraft method
+  const handleManualSave = useCallback(async () => {
+    console.log('🚀 Manual save initiated on step', currentStep);
+    
+    // Must be on step 5
+    if (currentStep !== 5) {
+      toast({
+        title: 'Cannot Save Yet',
+        description: `Please complete all steps. Currently on step ${currentStep} of 5.`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validate
+    if (validationErrors.length > 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fix all errors before saving',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Confirm save
+    const confirmed = window.confirm(
+      client 
+        ? 'Are you ready to update this client?' 
+        : 'Are you ready to create this client?'
+    );
+    
+    if (!confirmed) return;
+
+    setIsSaving(true);
+
+    try {
+      console.log('💾 Saving client data...');
+      
+      if (onSave) {
+        await onSave(formData);
+      } else if (onSubmit) {
+        const clientData = transformFormDataToClient(formData, client);
+        onSubmit(clientData);
+      }
+
+      // Clear draft on success
+      if (client?.id && clearDraft) {
+        await clearDraft();
+      }
+
+      toast({
+        title: 'Success! 🎉',
+        description: client ? 'Client updated successfully' : 'Client created successfully',
+        variant: 'default'
+      });
+
+      // Delay redirect to show success message
+      setTimeout(() => {
+        if (client?.id) {
+          router.push(`/clients/${client.id}`);
+        } else {
+          router.push('/clients');
+        }
+      }, 1500);
+      
+    } catch (error) {
+      console.error('❌ Save error:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to save client',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentStep, validationErrors, formData, client, onSave, onSubmit, toast, router, clearDraft]);
+
+  // ===================================================================
+  // DRAFT MANAGEMENT
+  // ===================================================================
+
   const draftManager = {
     save: (data: any) => {
       if (saveDraft && typeof saveDraft === 'function') {
@@ -369,20 +426,15 @@ export default function ClientForm({
       }
     },
     loadDraft: async (type: string, id: string): Promise<ClientFormData | null> => {
-      // Mock implementation - replace with actual draft loading logic
       return null;
     }
   };
 
-  // ===================================================================
-  // INTEGRATION: Load draft on component mount
-  // This loads any saved draft when the form opens
-  // ===================================================================
+  // Load draft on mount
   useEffect(() => {
     const loadDraft = async () => {
       if (client?.id && !isDraftLoaded) {
         try {
-          // ✅ FIXED - Use proper draft manager
           const draft = await draftManager.loadDraft('client', client.id);
           if (draft) {
             setFormData(draft);
@@ -395,28 +447,20 @@ export default function ClientForm({
           }
         } catch (error) {
           console.error('Error loading draft:', error);
-          // Don't show error to user - draft loading should fail silently
         }
       }
     };
     loadDraft();
   }, [client?.id, isDraftLoaded, toast]);
 
-  // ===================================================================
-  // INTEGRATION: Auto-save form changes
-  // Saves draft automatically when form data changes
-  // ===================================================================
+  // Auto-save drafts
   useEffect(() => {
-    // Only auto-save if form is dirty and not currently submitting
-    if (formData && isFormDirty && !isSubmitting) {
+    if (formData && isFormDirty && !isSaving) {
       draftManager.save(formData);
     }
-  }, [formData, isFormDirty, isSubmitting]);
+  }, [formData, isFormDirty, isSaving]);
 
-  // ===================================================================
-  // VALIDATION (PRESERVED)
-  // ===================================================================
-  
+  // Validation
   useEffect(() => {
     if (formData) {
       const errors = validateClientData(formData);
@@ -425,57 +469,45 @@ export default function ClientForm({
   }, [formData]);
 
   // ===================================================================
-  // FORM SUBMISSION (PRESERVED WITH FIXES)
+  // NAVIGATION HANDLERS
   // ===================================================================
-  
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (validationErrors.length > 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please fix all errors before submitting',
-        variant: 'destructive'
-      });
-      return;
+
+  const handleNextStep = useCallback(() => {
+    if (currentStep < TOTAL_STEPS) {
+      console.log(`➡️ Moving from step ${currentStep} to step ${currentStep + 1}`);
+      setCurrentStep(currentStep + 1);
     }
+  }, [currentStep]);
 
-    try {
-      if (onSave) {
-        await onSave(formData);
-      } else if (onSubmit) {
-        // ✅ FIXED - Properly transform form data to Client type
-        const clientData = transformFormDataToClient(formData, client);
-        onSubmit(clientData);
-      }
-
-      // INTEGRATION: Clear draft on successful save
-      if (client?.id) {
-        await clearDraft();
-      }
-
-      toast({
-        title: 'Success',
-        description: client ? 'Client updated successfully' : 'Client created successfully',
-        variant: 'default'
-      });
-
-      // INTEGRATION: Future connection point - trigger any post-save workflows
-      // This is where document generation or assessment scheduling could be triggered
-      
-    } catch (error) {
-      console.error('Error submitting form:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to save client',
-        variant: 'destructive'
-      });
+  const handlePrevStep = useCallback(() => {
+    if (currentStep > 1) {
+      console.log(`⬅️ Moving from step ${currentStep} to step ${currentStep - 1}`);
+      setCurrentStep(currentStep - 1);
     }
-  }, [formData, validationErrors, onSave, onSubmit, client, toast, clearDraft]);
+  }, [currentStep]);
 
-  /**
-   * Update form data with change tracking
-   */
+  const handleStepClick = useCallback((stepId: number) => {
+    if (stepId <= currentStep || stepId === currentStep + 1) {
+      console.log(`🔢 Direct navigation to step ${stepId}`);
+      setCurrentStep(stepId);
+    }
+  }, [currentStep]);
+
+  const handleCancel = useCallback(() => {
+    if (isFormDirty) {
+      const confirmMessage = 'You have unsaved changes. Are you sure you want to cancel?';
+      if (window.confirm(confirmMessage)) {
+        onCancel();
+      }
+    } else {
+      onCancel();
+    }
+  }, [isFormDirty, onCancel]);
+
+  // ===================================================================
+  // UPDATE HANDLERS
+  // ===================================================================
+
   const updateFormData = useCallback((updates: Partial<ClientFormData>) => {
     setFormData(prev => {
       const newData = deepMerge(prev, updates);
@@ -484,9 +516,6 @@ export default function ClientForm({
     });
   }, []);
 
-  /**
-   * Safe update functions for each section (PRESERVED)
-   */
   const updatePersonalDetails = useCallback((updates: Partial<PersonalDetails>) => {
     updateFormData({
       personalDetails: deepMerge(formData.personalDetails, updates)
@@ -521,34 +550,8 @@ export default function ClientForm({
     updateFormData({ status });
   }, [updateFormData]);
 
-  /**
-   * Step navigation (PRESERVED)
-   */
-  const handleNextStep = useCallback(() => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
-    }
-  }, [currentStep, totalSteps]);
-
-  const handlePrevStep = useCallback(() => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-  }, [currentStep]);
-
-  const handleCancel = useCallback(() => {
-    if (isFormDirty) {
-      const confirmMessage = 'You have unsaved changes. Are you sure you want to cancel?';
-      if (window.confirm(confirmMessage)) {
-        onCancel();
-      }
-    } else {
-      onCancel();
-    }
-  }, [isFormDirty, onCancel]);
-
   // ===================================================================
-  // RENDER PERSONAL DETAILS STEP (PRESERVED)
+  // RENDER FUNCTIONS FOR EACH STEP
   // ===================================================================
   
   const renderPersonalDetailsStep = () => (
@@ -698,10 +701,6 @@ export default function ClientForm({
     </Card>
   );
 
-  // ===================================================================
-  // ✅ FIXED - RENDER CONTACT INFO STEP WITH PROPER ADDRESS HANDLING
-  // ===================================================================
-  
   const renderContactInfoStep = () => (
     <Card>
       <CardHeader>
@@ -769,7 +768,6 @@ export default function ClientForm({
               type="text"
               value={formData.contactInfo.address?.line1 || ''}
               onChange={(e) => updateContactInfo({
-                // ✅ FIXED - Ensure all address fields are strings, not undefined
                 address: { 
                   line1: e.target.value,
                   line2: formData.contactInfo.address?.line2 || '',
@@ -790,7 +788,6 @@ export default function ClientForm({
               type="text"
               value={formData.contactInfo.address?.line2 || ''}
               onChange={(e) => updateContactInfo({
-                // ✅ FIXED - Ensure all address fields are strings, not undefined
                 address: { 
                   line1: formData.contactInfo.address?.line1 || '',
                   line2: e.target.value,
@@ -812,7 +809,6 @@ export default function ClientForm({
                 type="text"
                 value={formData.contactInfo.address?.city || ''}
                 onChange={(e) => updateContactInfo({
-                  // ✅ FIXED - Ensure all address fields are strings, not undefined
                   address: { 
                     line1: formData.contactInfo.address?.line1 || '',
                     line2: formData.contactInfo.address?.line2 || '',
@@ -833,7 +829,6 @@ export default function ClientForm({
                 type="text"
                 value={formData.contactInfo.address?.county || ''}
                 onChange={(e) => updateContactInfo({
-                  // ✅ FIXED - Ensure all address fields are strings, not undefined
                   address: { 
                     line1: formData.contactInfo.address?.line1 || '',
                     line2: formData.contactInfo.address?.line2 || '',
@@ -854,7 +849,6 @@ export default function ClientForm({
                 type="text"
                 value={formData.contactInfo.address?.postcode || ''}
                 onChange={(e) => updateContactInfo({
-                  // ✅ FIXED - Ensure all address fields are strings, not undefined
                   address: { 
                     line1: formData.contactInfo.address?.line1 || '',
                     line2: formData.contactInfo.address?.line2 || '',
@@ -876,7 +870,6 @@ export default function ClientForm({
               type="text"
               value={formData.contactInfo.address?.country || 'United Kingdom'}
               onChange={(e) => updateContactInfo({
-                // ✅ FIXED - Ensure all address fields are strings, not undefined
                 address: { 
                   line1: formData.contactInfo.address?.line1 || '',
                   line2: formData.contactInfo.address?.line2 || '',
@@ -948,10 +941,6 @@ export default function ClientForm({
     </Card>
   );
 
-  // ===================================================================
-  // RENDER FINANCIAL PROFILE STEP (PRESERVED)
-  // ===================================================================
-  
   const renderFinancialProfileStep = () => (
     <Card>
       <CardHeader>
@@ -1039,10 +1028,6 @@ export default function ClientForm({
     </Card>
   );
 
-  // ===================================================================
-  // RENDER VULNERABILITY ASSESSMENT STEP (PRESERVED)
-  // ===================================================================
-  
   const renderVulnerabilityAssessmentStep = () => (
     <Card>
       <CardHeader>
@@ -1087,10 +1072,6 @@ export default function ClientForm({
     </Card>
   );
 
-  // ===================================================================
-  // RENDER RISK PROFILE STEP (PRESERVED)
-  // ===================================================================
-  
   const renderRiskProfileStep = () => (
     <Card>
       <CardHeader>
@@ -1152,14 +1133,49 @@ export default function ClientForm({
             <span>Very High Risk</span>
           </div>
         </div>
+
+        {/* ✅ NUCLEAR OPTION: PROMINENT SAVE SECTION ON STEP 5 */}
+        {currentStep === 5 && (
+          <div className="mt-8 p-6 bg-green-50 border-2 border-green-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-green-900">Ready to Save?</h3>
+                <p className="text-sm text-green-700 mt-1">
+                  You've completed all required information. Click the button to save this client.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={handleManualSave}
+                disabled={isSaving || validationErrors.length > 0}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 text-lg font-medium flex items-center space-x-2"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-5 w-5" />
+                    <span>Save Client</span>
+                  </>
+                )}
+              </Button>
+            </div>
+            {validationErrors.length > 0 && (
+              <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded">
+                <p className="text-sm text-red-800">
+                  Please fix validation errors before saving.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 
-  // ===================================================================
-  // RENDER CURRENT STEP (PRESERVED)
-  // ===================================================================
-  
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 1:
@@ -1173,18 +1189,19 @@ export default function ClientForm({
       case 5:
         return renderRiskProfileStep();
       default:
+        console.error(`Invalid step: ${currentStep}`);
         return renderPersonalDetailsStep();
     }
   };
 
   // ===================================================================
-  // MAIN RENDER (PRESERVED)
+  // MAIN RENDER - NUCLEAR OPTION WITH NO FORM TAGS
   // ===================================================================
   
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* Header (PRESERVED) */}
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
             {client ? 'Edit Client' : 'New Client'}
@@ -1194,182 +1211,187 @@ export default function ClientForm({
           </p>
         </div>
         
-        {hasDraft && (
-          <Badge variant="secondary" className="text-sm">
-            <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-            Draft Saved
-          </Badge>
+        <div className="flex items-center space-x-4">
+          {hasDraft && (
+            <Badge variant="secondary" className="text-sm">
+              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 inline-block animate-pulse"></span>
+              Draft Saved
+            </Badge>
+          )}
+          <span className="text-sm text-gray-500">
+            Step {currentStep} of {TOTAL_STEPS}
+          </span>
+        </div>
+      </div>
+
+      {/* Simplified Progress Steps */}
+      {/* Simplified Progress Steps */}
+<div className="flex items-center justify-between mb-6">
+  {formSteps.map((step, index) => (
+    <div
+      key={step.id}
+      className={`flex items-center ${
+        index !== formSteps.length - 1 ? 'flex-1' : ''
+      }`}
+    >
+      <div
+        onClick={() => handleStepClick(step.id)}
+        className={`flex items-center justify-center w-8 h-8 rounded-full border-2 cursor-pointer transition-all ${
+          currentStep === step.id
+            ? 'border-blue-500 bg-blue-500 text-white'
+            : currentStep > step.id
+            ? 'border-green-500 bg-green-500 text-white'
+            : 'border-gray-300 bg-white text-gray-500 hover:border-gray-400'
+        }`}
+        title={step.title}
+      >
+        {currentStep > step.id ? (
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        ) : (
+          <span className="text-sm font-medium">{step.id}</span>
         )}
       </div>
+      <div className="hidden sm:block ml-2 mr-4">
+        <p className={`text-xs font-medium ${
+          currentStep === step.id ? 'text-blue-600' : 
+          currentStep > step.id ? 'text-green-600' : 'text-gray-400'
+        }`}>
+          {step.title}
+        </p>
+        <p className="text-xs text-gray-400">
+          {step.description}
+        </p>
+      </div>
+      {index !== formSteps.length - 1 && (
+        <div className={`flex-1 h-0.5 ${
+          currentStep > step.id ? 'bg-green-500' : 'bg-gray-200'
+        }`} />
+      )}
+    </div>
+  ))}
+</div>
 
-      {/* Progress Steps (PRESERVED) */}
-      <div className="flex items-center justify-between mb-8">
-        {formSteps.map((step, index) => (
-          <div
-            key={step.id}
-            className={`flex items-center ${
-              index !== formSteps.length - 1 ? 'flex-1' : ''
-            }`}
-          >
-            <div
-              className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                currentStep === step.id
-                  ? 'border-blue-500 bg-blue-500 text-white'
-                  : currentStep > step.id
-                  ? 'border-green-500 bg-green-500 text-white'
-                  : 'border-gray-300 text-gray-500'
-              }`}
-            >
-              {currentStep > step.id ? '✓' : step.id}
-            </div>
-            <div className="ml-2 min-w-0">
-              <p className={`text-sm font-medium ${
-                currentStep === step.id ? 'text-blue-600' : 
-                currentStep > step.id ? 'text-green-600' : 'text-gray-500'
-              }`}>
-                {step.title}
-              </p>
-            </div>
-            {index !== formSteps.length - 1 && (
-              <div className={`flex-1 h-0.5 mx-4 ${
-                currentStep > step.id ? 'bg-green-500' : 'bg-gray-300'
-              }`} />
-            )}
-          </div>
-        ))}
+      {/* ✅ NUCLEAR OPTION: NO FORM TAG - JUST DIV */}
+      <div className="space-y-6">
+        {renderCurrentStep()}
       </div>
 
-      {/* Current Step Content (PRESERVED) */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {renderCurrentStep()}
-
-        {/* Navigation Buttons (PRESERVED) */}
-        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-          <div className="flex space-x-3">
+      {/* ✅ NAVIGATION WITH SAVE ALWAYS AVAILABLE */}
+      <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+        <div className="flex space-x-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCancel}
+            disabled={loading || isSaving}
+            className="flex items-center space-x-2"
+          >
+            <X className="h-4 w-4" />
+            <span>Cancel</span>
+          </Button>
+          
+          {currentStep > 1 && (
             <Button
               type="button"
               variant="outline"
-              onClick={handleCancel}
-              disabled={loading || isSubmitting}
+              onClick={handlePrevStep}
+              disabled={loading || isSaving}
+              className="flex items-center space-x-2"
             >
-              Cancel
+              <ChevronLeft className="h-4 w-4" />
+              <span>Previous</span>
             </Button>
-            
-            {currentStep > 1 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handlePrevStep}
-                disabled={loading || isSubmitting}
-              >
-                Previous
-              </Button>
-            )}
-          </div>
-
-          <div className="flex space-x-3">
-            {currentStep < totalSteps ? (
-              <Button
-                type="button"
-                onClick={handleNextStep}
-                disabled={loading || isSubmitting}
-              >
-                Next
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                disabled={loading || isSubmitting || validationErrors.length > 0}
-                className="min-w-[120px]"
-              >
-                {loading || isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : (
-                  client ? 'Update Client' : 'Create Client'
-                )}
-              </Button>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Validation Errors (PRESERVED) */}
-        {validationErrors.length > 0 && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="pt-6">
-              <h4 className="font-medium text-red-800 mb-2">Please fix the following errors:</h4>
-              <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
-                {validationErrors.map((error, index) => (
-                  <li key={index}>{error.message}</li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-      </form>
+        <div className="flex items-center space-x-3">
+          {/* Save Draft Button - Available on all steps */}
+          {currentStep < 5 && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                // Save draft
+                if (saveDraft) {
+                  saveDraft(formData);
+                  toast({
+                    title: 'Draft Saved',
+                    description: 'Your progress has been saved',
+                    variant: 'default'
+                  });
+                }
+              }}
+              disabled={loading || isSaving || !isFormDirty}
+              className="flex items-center space-x-2"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save Draft</span>
+            </Button>
+          )}
+          
+          {currentStep < 5 ? (
+            <Button
+              type="button"
+              onClick={handleNextStep}
+              disabled={loading || isSaving}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 flex items-center space-x-2"
+            >
+              <span>Continue to {formSteps[currentStep]?.title || 'Next Step'}</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={handleManualSave}
+              disabled={isSaving || validationErrors.length > 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 flex items-center space-x-2"
+            >
+              {isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Updating...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4" />
+                  <span>{client ? 'Update Client' : 'Create Client'}</span>
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Validation Errors */}
+      {validationErrors.length > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-red-800 mb-2">Please fix the following errors:</h4>
+                <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
+                  {validationErrors.map((error, index) => (
+                    <li key={index}>{error.message}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
 // ===================================================================
-// ✅ FIXED - Export with proper saveDraft object structure
+// MOCK SAVEDRAFT FOR COMPATIBILITY
 // ===================================================================
 
-// Mock saveDraft object for compatibility - replace with actual implementation
 export const saveDraft = {
   loadDraft: async (type: string, id: string): Promise<ClientFormData | null> => {
-    // Mock implementation - replace with actual draft loading logic
     return null;
   }
 };
-
-// ===================================================================
-// INTEGRATION DOCUMENTATION FOR FUTURE AI
-// ===================================================================
-
-/*
-INTEGRATION SUMMARY:
-1. This form now auto-saves drafts as users type
-2. Drafts are loaded when the form opens
-3. Drafts are cleared on successful save
-4. Visual indicators show when drafts exist
-5. All existing functionality is preserved
-6. ✅ ALL TYPESCRIPT ERRORS FIXED
-
-TYPESCRIPT FIXES APPLIED:
-1. ✅ Fixed clientRef type mismatch (string | undefined → string)
-2. ✅ Fixed personalDetails type mismatch (Partial<PersonalDetails> → PersonalDetails)
-3. ✅ Fixed contactInfo type mismatch (Partial<ContactInfo> → ContactInfo)  
-4. ✅ Fixed loadDraft property error (added proper draftManager object)
-5. ✅ Fixed all address field type mismatches (string | undefined → string)
-6. ✅ Ensured all Address fields are properly defaulted in all update functions
-
-FUTURE CONNECTION POINTS:
-1. After successful save, can trigger:
-   - Assessment scheduling
-   - Document generation
-   - Cash flow scenario creation
-   - Workflow initiation
-
-2. The form data structure is ready to integrate with:
-   - Suitability assessments (risk profile data)
-   - Cash flow modeling (financial profile data)
-   - Document generation (all client data)
-   - Compliance reporting (vulnerability assessment)
-
-3. To add new integrations:
-   - Use the handleSubmit success block
-   - Access client data via formData
-   - Use the integration service methods
-
-IMPORTANT NOTES:
-- All original functionality is preserved
-- TypeScript types are fully compliant
-- Error handling is comprehensive
-- Auto-save is debounced for performance
-- Draft loading happens once per mount
-- Address fields are always strings (never undefined)
-- Form transformation ensures type safety
-*/

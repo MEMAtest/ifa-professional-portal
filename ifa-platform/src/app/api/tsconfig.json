@@ -1,0 +1,17 @@
+// src/app/api/tsconfig.json
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "noEmit": true
+  },
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

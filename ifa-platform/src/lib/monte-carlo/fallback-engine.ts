@@ -60,7 +60,7 @@ export class FallbackMonteCarloEngine {
     } = input;
 
     const allocation = this.getRiskBasedAllocation(riskScore);
-    const simulations = [];
+    const simulations: { finalWealth: number; success: boolean; maxDrawdown: number }[] = [];
     const startTime = performance.now();
 
     // Asset parameters

@@ -631,7 +631,7 @@ export class IntegratedClientService {
         .from('cash_flow_scenarios')
         .select('*')
         .eq('client_id', clientId)
-        .eq('status', 'active')
+        .eq('is_active', true)
         .order('updated_at', { ascending: false })
         .limit(1)
         // REMOVED .single() - it causes 400 errors when no data exists

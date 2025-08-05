@@ -1,8 +1,10 @@
 // src/app/api/monte-carlo/results/[scenarioId]/route.ts
-// ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
+// ✅ COMPLETE BULLETPROOF VERSION - FIXED WITH TYPE IMPORT
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
+// ✅ FIX: Import the type from the database module
+import type { MonteCarloAssumptionRecord } from '@/lib/monte-carlo/database';
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -70,11 +72,11 @@ export async function GET(
     }
 
     // ✅ OPTIONALLY GET ASSUMPTIONS FOR CONTEXT
-    let assumptions = null;
+    let assumptions: MonteCarloAssumptionRecord | null = null;
     try {
       const assumptionsResponse = await db.getAssumptions(cleanScenarioId);
       if (assumptionsResponse.success) {
-        assumptions = assumptionsResponse.data;
+        assumptions = assumptionsResponse.data || null;
       }
     } catch (assumptionError) {
       console.warn(`Could not fetch assumptions for scenario ${cleanScenarioId}:`, assumptionError);

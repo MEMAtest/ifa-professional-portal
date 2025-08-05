@@ -1,3 +1,4 @@
+// src/components/clients/RiskProfileTab.tsx
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -31,30 +32,41 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
 
   const loadAssessments = async () => {
     try {
-      // Load ATR
-      const { data: atr } = await supabase
+      // ✅ FIXED: Load ATR without .single()
+      const { data: atrArray, error: atrError } = await supabase
         .from('atr_assessments')
         .select('*')
         .eq('client_id', clientId)
-        .eq('is_current', true)
-        .single();
+        .eq('is_current', true);
 
-      // Load CFL
-      const { data: cfl } = await supabase
+      if (atrError && atrError.code !== 'PGRST116') {
+        console.error('ATR fetch error:', atrError);
+      }
+      const atr = atrArray?.[0] || null;
+
+      // ✅ FIXED: Load CFL without .single()
+      const { data: cflArray, error: cflError } = await supabase
         .from('cfl_assessments')
         .select('*')
         .eq('client_id', clientId)
-        .eq('is_current', true)
+        .eq('is_current', true);
+
+      if (cflError && cflError.code !== 'PGRST116') {
+        console.error('CFL fetch error:', cflError);
+      }
+      const cfl = cflArray?.[0] || null;
+
+      // ✅ FIXED: Get risk_profile from client's JSONB field
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('risk_profile')
+        .eq('id', clientId)
         .single();
 
-      // ✅ NEW CODE - Gets risk_profile from client's JSONB field
-const { data: client } = await supabase
-  .from('clients')
-  .select('risk_profile')
-  .eq('id', clientId)
-  .single();
-
-const profile = client?.risk_profile || null;
+      if (clientError && clientError.code !== 'PGRST116') {
+        console.error('Client fetch error:', clientError);
+      }
+      const profile = clientData?.risk_profile || null;
 
       setAtrAssessment(atr);
       setCflAssessment(cfl);
@@ -75,7 +87,11 @@ const profile = client?.risk_profile || null;
   };
 
   if (loading) {
-    return <div>Loading risk assessments...</div>;
+    return (
+      <div className="flex justify-center items-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
   }
 
   return (
@@ -87,147 +103,207 @@ const profile = client?.risk_profile || null;
             <CardTitle className="flex items-center justify-between">
               <span>Current Risk Profile</span>
               <Badge variant="default" className="text-lg">
-                Level {riskProfile.final_risk_level} - {riskProfile.final_risk_category}
+                Level {riskProfile.final_risk_level || 'N/A'} - {riskProfile.final_risk_category || 'Not Assessed'}
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="text-center">
-                <p className="text-sm text-gray-500">ATR Score</p>
-                <p className="text-2xl font-bold">{riskProfile.atr_score?.toFixed(1) || 'N/A'}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-gray-500">ATR Level</p>
+                <p className="text-xl font-bold">{riskProfile.atr_level || 'Not assessed'}</p>
               </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-500">CFL Score</p>
-                <p className="text-2xl font-bold">{riskProfile.cfl_score?.toFixed(1) || 'N/A'}</p>
+              <div>
+                <p className="text-sm text-gray-500">CFL Level</p>
+                <p className="text-xl font-bold">{riskProfile.cfl_level || 'Not assessed'}</p>
               </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-500">Final Level</p>
-                <p className="text-2xl font-bold">{riskProfile.final_risk_level}/5</p>
+              <div>
+                <p className="text-sm text-gray-500">Last Updated</p>
+                <p className="text-sm">{riskProfile.last_updated ? formatDate(riskProfile.last_updated) : 'Never'}</p>
               </div>
             </div>
-            {riskProfile.reconciliation_notes && (
-              <div className="p-3 bg-gray-50 rounded">
-                <p className="text-sm text-gray-600">{riskProfile.reconciliation_notes}</p>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
 
-      {/* ATR Assessment */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Shield className="h-5 w-5 mr-2" />
-            Attitude to Risk (ATR)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {atrAssessment ? (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
+      {/* Assessment Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* ATR Assessment Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Shield className="h-5 w-5 mr-2 text-blue-600" />
+                Attitude to Risk (ATR)
+              </div>
+              {atrAssessment ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {atrAssessment ? (
+              <div className="space-y-3">
                 <div>
-                  <p className="font-medium">{atrAssessment.risk_category}</p>
-                  <p className="text-sm text-gray-500">
-                    Assessed on {formatDate(atrAssessment.assessment_date)}
+                  <p className="text-sm text-gray-500">Risk Level</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold">{atrAssessment.risk_level}</span>
+                    <Badge>{atrAssessment.risk_category}</Badge>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Total Score</p>
+                  <p className="font-medium">{atrAssessment.total_score?.toFixed(1) || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Assessment Date</p>
+                  <p className="font-medium">{formatDate(atrAssessment.assessment_date)}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-4"
+                  onClick={() => router.push(`/assessments/atr?clientId=${clientId}`)}
+                >
+                  Update Assessment
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
+                <p className="text-gray-600 mb-4">No ATR assessment completed</p>
+                <Button 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => router.push(`/assessments/atr?clientId=${clientId}`)}
+                >
+                  Complete Assessment
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* CFL Assessment Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Calculator className="h-5 w-5 mr-2 text-green-600" />
+                Capacity for Loss (CFL)
+              </div>
+              {cflAssessment ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cflAssessment ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-gray-500">Capacity Level</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold">{cflAssessment.capacity_level}</span>
+                    <Badge variant="secondary">{cflAssessment.capacity_category}</Badge>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Max Loss Tolerance</p>
+                  <p className="font-medium">{cflAssessment.max_loss_percentage}%</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Assessment Date</p>
+                  <p className="font-medium">{formatDate(cflAssessment.assessment_date)}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-4"
+                  onClick={() => router.push(`/assessments/cfl?clientId=${clientId}`)}
+                >
+                  Update Assessment
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
+                <p className="text-gray-600 mb-4">No CFL assessment completed</p>
+                <Button 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => router.push(`/assessments/cfl?clientId=${clientId}`)}
+                >
+                  Complete Assessment
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Risk Reconciliation */}
+      {(atrAssessment && cflAssessment) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Risk Profile Reconciliation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-sm text-gray-500">ATR Level</p>
+                  <p className="text-2xl font-bold text-blue-600">{atrAssessment.risk_level}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">CFL Level</p>
+                  <p className="text-2xl font-bold text-green-600">{cflAssessment.capacity_level}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Final Level</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {Math.min(atrAssessment.risk_level, cflAssessment.capacity_level)}
                   </p>
                 </div>
-                <CheckCircle className="h-5 w-5 text-green-500" />
               </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => router.push(`/assessments/atr?clientId=${clientId}`)}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reassess
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center text-amber-600">
-                <AlertCircle className="h-5 w-5 mr-2" />
-                <p>No assessment completed</p>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Reconciliation Method:</strong> Conservative approach - 
+                  the final risk level is the lower of ATR ({atrAssessment.risk_level}) 
+                  and CFL ({cflAssessment.capacity_level}) to ensure suitable recommendations.
+                </p>
               </div>
-              <Button 
-                onClick={() => router.push(`/assessments/atr?clientId=${clientId}`)}
-              >
-                Complete ATR Assessment
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* CFL Assessment */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Calculator className="h-5 w-5 mr-2" />
-            Capacity for Loss (CFL)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {cflAssessment ? (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium">{cflAssessment.capacity_category}</p>
-                  <p className="text-sm text-gray-500">
-                    Max loss tolerance: {cflAssessment.max_loss_percentage}%
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Assessed on {formatDate(cflAssessment.assessment_date)}
-                  </p>
-                </div>
-                <CheckCircle className="h-5 w-5 text-green-500" />
-              </div>
+      {/* No Assessments Message */}
+      {!atrAssessment && !cflAssessment && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Risk Assessments Completed</h3>
+            <p className="text-gray-600 mb-6">
+              Complete both ATR and CFL assessments to establish a comprehensive risk profile for this client.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Button onClick={() => router.push(`/assessments/atr?clientId=${clientId}`)}>
+                Start ATR Assessment
+              </Button>
               <Button 
-                variant="outline" 
-                size="sm"
+                variant="outline"
                 onClick={() => router.push(`/assessments/cfl?clientId=${clientId}`)}
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reassess
+                Start CFL Assessment
               </Button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center text-amber-600">
-                <AlertCircle className="h-5 w-5 mr-2" />
-                <p>No assessment completed</p>
-              </div>
-              <Button 
-                onClick={() => router.push(`/assessments/cfl?clientId=${clientId}`)}
-              >
-                Complete CFL Assessment
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Suitability Assessment */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <FileText className="h-5 w-5 mr-2" />
-            Suitability Assessment
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button 
-            variant="outline"
-            onClick={() => router.push(`/assessments/suitability?clientId=${clientId}`)}
-          >
-            Complete Full Suitability Assessment
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

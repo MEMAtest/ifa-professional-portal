@@ -1,6 +1,7 @@
 // ================================================================
 // src/app/cashflow/scenarios/[id]/page.tsx
-// Complete scenario detail page with projections and editing
+// ENHANCED: Complete scenario detail page with all new features
+// All existing functionality preserved + Monte Carlo, Sensitivity, Risk Analysis
 // ================================================================
 
 'use client';
@@ -11,12 +12,32 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { ArrowLeft, Edit, Save, X, TrendingUp, DollarSign, Calendar, Target } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Edit, 
+  Save, 
+  X, 
+  TrendingUp, 
+  DollarSign, 
+  Calendar, 
+  Target,
+  Shield,
+  Percent,
+  AlertTriangle,
+  FileText
+} from 'lucide-react';
 import { ProjectionChart } from '@/components/cashflow/ProjectionChart';
 import { AssumptionEditor } from '@/components/cashflow/AssumptionEditor';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { clientService } from '@/services/ClientService';
+
+// ✅ NEW IMPORTS - Enhanced components
+import { MonteCarloAnalysis } from '@/components/cashflow/MonteCarloAnalysis';
+import { SensitivityAnalysis } from '@/components/cashflow/SensitivityAnalysis';
+import { RiskAnalysisDashboard } from '@/components/cashflow/RiskAnalysisDashboard';
+import GenerateReportModal from '@/components/cashflow/EnhancedGenerateReportModal';
+
 import type { 
   CashFlowScenario, 
   ProjectionResult, 
@@ -31,7 +52,7 @@ interface ScenarioDetailPageProps {
 }
 
 export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) {
-  // State management
+  // ✅ PRESERVED: All existing state
   const [scenario, setScenario] = useState<CashFlowScenario | null>(null);
   const [originalScenario, setOriginalScenario] = useState<CashFlowScenario | null>(null);
   const [client, setClient] = useState<Client | null>(null);
@@ -42,10 +63,13 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // ✅ NEW STATE: For report generation
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const router = useRouter();
 
-  // Load scenario data on mount
+  // ✅ PRESERVED: All existing useEffect and functions
   useEffect(() => {
     loadScenarioData();
   }, [params.id]);
@@ -55,7 +79,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
       setIsLoading(true);
       setError(null);
 
-      // Load scenario
       const scenarioData = await CashFlowDataService.getScenario(params.id);
       if (!scenarioData) {
         throw new Error('Scenario not found');
@@ -64,11 +87,9 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
       setScenario(scenarioData);
       setOriginalScenario({ ...scenarioData });
 
-      // Load client data
       const clientData = await clientService.getClientById(scenarioData.clientId);
       setClient(clientData);
 
-      // Generate projections
       await generateProjections(scenarioData);
 
     } catch (err) {
@@ -92,17 +113,14 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     }
   }, []);
 
-  // Handle assumption changes with real-time recalculation
   const handleAssumptionChange = useCallback(async (updatedScenario: CashFlowScenario) => {
     setScenario(updatedScenario);
     
-    // Debounced recalculation
     if (isCalculating) return;
     
     await generateProjections(updatedScenario);
   }, [generateProjections, isCalculating]);
 
-  // Save changes
   const handleSave = async () => {
     if (!scenario) return;
 
@@ -122,7 +140,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     }
   };
 
-  // Cancel editing
   const handleCancel = () => {
     if (originalScenario) {
       setScenario({ ...originalScenario });
@@ -131,7 +148,30 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     setIsEditing(false);
   };
 
-  // Format currency
+  // ✅ NEW: Handle sensitivity parameter changes
+  const handleSensitivityChange = useCallback(async (parameterId: string, value: number) => {
+    if (!scenario) return;
+    
+    // Update scenario based on parameter
+    const updatedScenario = { ...scenario };
+    
+    switch (parameterId) {
+      case 'inflationRate':
+        updatedScenario.inflationRate = value;
+        break;
+      case 'equityReturn':
+        updatedScenario.realEquityReturn = value;
+        break;
+      case 'retirementAge':
+        updatedScenario.retirementAge = Math.round(value);
+        break;
+      // Add more cases as needed
+    }
+    
+    await handleAssumptionChange(updatedScenario);
+  }, [scenario, handleAssumptionChange]);
+
+  // ✅ PRESERVED: All utility functions
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-GB', {
       style: 'currency',
@@ -141,12 +181,11 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     }).format(amount);
   };
 
-  // Format percentage
   const formatPercentage = (rate: number): string => {
     return `${rate.toFixed(1)}%`;
   };
 
-  // Loading state
+  // ✅ PRESERVED: Loading and error states
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -158,7 +197,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     );
   }
 
-  // Error state
   if (error || !scenario || !client) {
     return (
       <div className="max-w-4xl mx-auto p-6">
@@ -182,7 +220,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* Header */}
+      {/* ✅ ENHANCED HEADER: Added Generate Report button */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button
@@ -205,6 +243,15 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
         </div>
 
         <div className="flex items-center space-x-3">
+          {/* ✅ NEW: Generate Report Button */}
+          <Button
+            onClick={() => setShowReportModal(true)}
+            variant="outline"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Generate Report
+          </Button>
+          
           {isEditing ? (
             <>
               <Button
@@ -235,7 +282,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
         </div>
       </div>
 
-      {/* Key Metrics Cards */}
+      {/* ✅ PRESERVED: Key Metrics Cards */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
@@ -304,19 +351,30 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
         </div>
       )}
 
-      {/* Main Content Tabs */}
+      {/* ✅ ENHANCED TABS: Added Monte Carlo, Sensitivity, and Risk tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="projections">Projections</TabsTrigger>
           <TabsTrigger value="assumptions">Assumptions</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsTrigger value="montecarlo" className="flex items-center gap-1">
+            <Shield className="w-4 h-4" />
+            <span>Monte Carlo</span>
+          </TabsTrigger>
+          <TabsTrigger value="sensitivity" className="flex items-center gap-1">
+            <Percent className="w-4 h-4" />
+            <span>Sensitivity</span>
+          </TabsTrigger>
+          <TabsTrigger value="risk" className="flex items-center gap-1">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Risk</span>
+          </TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* ✅ PRESERVED: All existing tabs content */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Projection Chart */}
             <Card>
               <CardHeader>
                 <CardTitle>Portfolio Growth Projection</CardTitle>
@@ -337,7 +395,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
               </CardContent>
             </Card>
 
-            {/* Key Insights */}
             <Card>
               <CardHeader>
                 <CardTitle>Key Insights</CardTitle>
@@ -360,7 +417,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
           </div>
         </TabsContent>
 
-        {/* Projections Tab */}
         <TabsContent value="projections">
           <Card>
             <CardHeader>
@@ -412,7 +468,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
           </Card>
         </TabsContent>
 
-        {/* Assumptions Tab */}
         <TabsContent value="assumptions">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
@@ -474,7 +529,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
           </div>
         </TabsContent>
 
-        {/* Analysis Tab */}
         <TabsContent value="analysis">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
@@ -536,7 +590,45 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
             </Card>
           </div>
         </TabsContent>
+
+        {/* ✅ NEW: Monte Carlo Tab */}
+        <TabsContent value="montecarlo">
+          <MonteCarloAnalysis 
+            scenario={scenario} 
+            projectionYears={scenario.projectionYears}
+          />
+        </TabsContent>
+
+        {/* ✅ NEW: Sensitivity Analysis Tab */}
+        <TabsContent value="sensitivity">
+          <SensitivityAnalysis 
+            scenario={scenario}
+            onParameterChange={handleSensitivityChange}
+          />
+        </TabsContent>
+
+        {/* ✅ NEW: Enhanced Risk Analysis Tab */}
+        <TabsContent value="risk">
+          {summary && (
+            <RiskAnalysisDashboard
+              scenarioId={scenario.id}
+              riskMetrics={summary.riskMetrics}
+              clientAge={scenario.clientAge}
+              retirementAge={scenario.retirementAge}
+              projectionYears={scenario.projectionYears}
+            />
+          )}
+        </TabsContent>
       </Tabs>
+
+      {/* ✅ NEW: Report Generation Modal */}
+      {showReportModal && (
+        <GenerateReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          scenario={scenario}
+        />
+      )}
     </div>
   );
 }

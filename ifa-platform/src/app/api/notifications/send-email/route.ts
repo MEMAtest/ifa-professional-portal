@@ -1,13 +1,11 @@
-// File: src/app/api/notifications/send-email/route.ts
-// Email notifications using Resend (or SendGrid as alternative)
-
+// src/app/api/notifications/send-email/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { Resend } from 'resend'
 
-// Install: npm install resend
-// import { Resend } from 'resend'
-// const resend = new Resend(process.env.RESEND_API_KEY)
+// Initialize Resend with your API key
+const resend = new Resend(process.env.RESEND_API_KEY || 're_FiFcfDu8_KBHUjcegkf2nXzZptknSRaLC')
 
-// Email templates
+// Email templates (keeping existing ones)
 const EMAIL_TEMPLATES = {
   documentSent: (clientName: string, documentName: string) => ({
     subject: `Document Ready for Signature: ${documentName}`,
@@ -101,15 +99,32 @@ const EMAIL_TEMPLATES = {
         </div>
       </div>
     `
+  }),
+
+  // NEW: Report with attachment template
+  reportWithAttachment: (data: any) => ({
+    subject: data.subject,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        ${data.message.split('\n').map((line: string) => `<p>${line}</p>`).join('')}
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="color: #666; font-size: 12px;">
+          This email was sent from your IFA Platform. Please find the attached report.
+        </p>
+      </div>
+    `
   })
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, recipient, data } = body
+    const { type, recipient, cc, data } = body
 
-    let emailContent
+    let emailContent: { subject: string; html: string }
+    let attachments: any[] = []
+
+    // Handle different email types
     switch (type) {
       case 'documentSent':
         emailContent = EMAIL_TEMPLATES.documentSent(data.clientName, data.documentName)
@@ -123,36 +138,85 @@ export async function POST(request: NextRequest) {
       case 'reminder':
         emailContent = EMAIL_TEMPLATES.reminder(data.clientName, data.documentName, data.daysLeft)
         break
+      case 'reportWithAttachment':
+        emailContent = EMAIL_TEMPLATES.reportWithAttachment(data)
+        // Handle attachments
+        if (data.attachments && data.attachments.length > 0) {
+          attachments = data.attachments.map((att: any) => ({
+            filename: att.filename,
+            content: att.content.split(',')[1] // Remove data:application/pdf;base64, prefix
+          }))
+        }
+        break
       default:
         throw new Error('Invalid email type')
     }
 
-    // In production, uncomment and use:
-    // const email = await resend.emails.send({
-    //   from: 'noreply@yourcompany.com',
-    //   to: recipient,
-    //   subject: emailContent.subject,
-    //   html: emailContent.html,
-    // })
+    // Determine recipients
+    const to = Array.isArray(recipient) ? recipient : [recipient]
+    const ccRecipients = cc || []
 
-    // For demo, simulate success
-    console.log('Sending email:', {
-      to: recipient,
-      subject: emailContent.subject,
-      type
-    })
+    // Send email with Resend
+    try {
+      const emailData: any = {
+        from: 'IFA Platform <onboarding@resend.dev>', // Replace with your verified domain
+        to,
+        subject: emailContent.subject,
+        html: emailContent.html,
+      }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Email sent successfully',
-      emailId: `demo-${Date.now()}`,
-      preview: emailContent.subject
-    })
+      if (ccRecipients.length > 0) {
+        emailData.cc = ccRecipients
+      }
+
+      if (attachments.length > 0) {
+        emailData.attachments = attachments
+      }
+
+      const { data: resendData, error } = await resend.emails.send(emailData)
+
+      if (error) {
+        console.error('Resend error:', error)
+        throw new Error(error.message || 'Failed to send email')
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Email sent successfully',
+        emailId: resendData?.id || `demo-${Date.now()}`,
+        preview: emailContent.subject
+      })
+
+    } catch (resendError) {
+      console.error('Resend API error:', resendError)
+      
+      // Fallback for development/testing
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Development mode - Email details:', {
+          to,
+          cc: ccRecipients,
+          subject: emailContent.subject,
+          attachments: attachments.length
+        })
+
+        return NextResponse.json({
+          success: true,
+          message: 'Email simulated (development mode)',
+          emailId: `dev-${Date.now()}`,
+          preview: emailContent.subject
+        })
+      }
+
+      throw resendError
+    }
 
   } catch (error) {
     console.error('Email error:', error)
     return NextResponse.json(
-      { error: 'Failed to send email' },
+      { 
+        error: 'Failed to send email',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
@@ -163,13 +227,41 @@ export async function GET(request: NextRequest) {
   // This would be called by a cron job (Vercel Cron, etc.)
   
   try {
-    // Get all advisors and their weekly stats
-    // Send weekly report emails
+    // In production, you would:
+    // 1. Query your database for all advisors
+    // 2. Calculate their weekly stats
+    // 3. Send personalized reports
+    
+    const mockAdvisors = [
+      { email: 'advisor1@example.com', name: 'John Advisor', stats: { sent: 12, signed: 8, signatureRate: 67, pending: 4 } },
+      { email: 'advisor2@example.com', name: 'Jane Advisor', stats: { sent: 20, signed: 18, signatureRate: 90, pending: 2 } }
+    ]
+
+    let sentCount = 0
+    
+    for (const advisor of mockAdvisors) {
+      try {
+        await POST(new NextRequest('http://localhost/api/notifications/send-email', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'weeklyReport',
+            recipient: advisor.email,
+            data: {
+              advisorName: advisor.name,
+              stats: advisor.stats
+            }
+          })
+        }))
+        sentCount++
+      } catch (error) {
+        console.error(`Failed to send weekly report to ${advisor.email}:`, error)
+      }
+    }
     
     return NextResponse.json({
       success: true,
       message: 'Weekly reports sent',
-      count: 0 // Number of reports sent
+      count: sentCount
     })
   } catch (error) {
     return NextResponse.json(

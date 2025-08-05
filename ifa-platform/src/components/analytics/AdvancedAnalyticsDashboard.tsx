@@ -19,6 +19,7 @@ import { AdvancedAnalyticsService } from '@/services/AdvancedAnalyticsService';
 import { CashFlowScenarioService } from '@/services/CashFlowScenarioService';
 import { useToast } from '@/components/ui/use-toast';
 import type { CashFlowScenario, ScenarioSummary } from '@/types/cash-flow-scenario';
+import type { CashFlowScenario as FullCashFlowScenario } from '@/types/cashflow';
 
 interface AnalyticsData {
   stress_tests: any[];
@@ -27,6 +28,86 @@ interface AnalyticsData {
   timestamp: Date;
   scenario_summary: ScenarioSummary;
 }
+
+// Converter function to map from simple to full scenario type
+const convertToFullScenario = (scenario: CashFlowScenario): FullCashFlowScenario => {
+  return {
+    // Core properties
+    id: scenario.id,
+    clientId: scenario.client_id,
+    scenarioName: scenario.scenario_name,
+    scenarioType: scenario.scenario_type as any,
+    createdBy: 'system',
+    
+    // Projection Settings
+    projectionYears: scenario.projection_years,
+    inflationRate: scenario.inflation_rate,
+    realEquityReturn: scenario.real_equity_return,
+    realBondReturn: scenario.real_bond_return,
+    realCashReturn: scenario.real_cash_return,
+    
+    // Client Demographics
+    clientAge: scenario.client_age,
+    retirementAge: scenario.retirement_age,
+    lifeExpectancy: scenario.life_expectancy || 90,
+    dependents: 0,
+    
+    // Financial Position
+    currentSavings: scenario.current_savings || 0,
+    pensionValue: scenario.pension_value,
+    pensionPotValue: scenario.pension_value,
+    investmentValue: scenario.investment_value,
+    propertyValue: 0,
+    
+    // Income
+    currentIncome: scenario.current_income,
+    pensionContributions: 0,
+    statePensionAge: scenario.state_pension_age,
+    statePensionAmount: scenario.state_pension_amount,
+    otherIncome: 0,
+    
+    // Expenses
+    currentExpenses: scenario.current_expenses,
+    essentialExpenses: scenario.current_expenses * 0.7,
+    lifestyleExpenses: scenario.current_expenses * 0.2,
+    discretionaryExpenses: scenario.current_expenses * 0.1,
+    
+    // Debt
+    mortgageBalance: 0,
+    mortgagePayment: 0,
+    otherDebts: 0,
+    
+    // Goals
+    retirementIncomeTarget: scenario.current_income * 0.7,
+    retirementIncomeDesired: scenario.current_income * 0.8,
+    emergencyFundTarget: scenario.current_expenses * 6,
+    legacyTarget: 0,
+    
+    // Asset Allocation
+    equityAllocation: 60,
+    bondAllocation: 30,
+    cashAllocation: 10,
+    alternativeAllocation: scenario.alternative_allocation || 0,
+    
+    // Assumptions and Documentation
+    assumptionBasis: scenario.assumption_basis,
+    marketDataSource: 'Market Data',
+    lastAssumptionsReview: new Date().toISOString(),
+    
+    // Vulnerability adjustments
+    vulnerabilityAdjustments: scenario.vulnerability_adjustments || {},
+    
+    // Risk scores
+    riskScore: scenario.risk_score,
+    
+    // Timestamps
+    createdAt: scenario.created_at,
+    updatedAt: scenario.updated_at,
+    
+    // isActive
+    isActive: scenario.isActive
+  };
+};
 
 export function AdvancedAnalyticsDashboard() {
   const [selectedClientId, setSelectedClientId] = useState<string>('');
@@ -98,26 +179,9 @@ export function AdvancedAnalyticsDashboard() {
 
       const analyticsService = new AdvancedAnalyticsService();
       
-      // Convert our scenario to the format expected by AdvancedAnalyticsService
-      const scenarioForAnalysis = {
-        id: selectedScenario.id,
-        scenario_name: selectedScenario.scenario_name,
-        client_id: selectedScenario.client_id,
-        projection_years: selectedScenario.projection_years,
-        inflation_rate: selectedScenario.inflation_rate,
-        real_equity_return: selectedScenario.real_equity_return,
-        real_bond_return: selectedScenario.real_bond_return,
-        real_cash_return: selectedScenario.real_cash_return,
-        risk_score: selectedScenario.risk_score,
-        assumption_basis: selectedScenario.assumption_basis,
-        annual_charge_percent: 1.25,
-        charges_included: true,
-        calculation_method: 'real_terms',
-        data_sources: ['Market Data', 'ONS', 'BoE'],
-        last_reviewed: new Date()
-      };
-
-      const results = await analyticsService.runCompleteAnalysis(scenarioForAnalysis);
+      // Convert the scenario to the full type expected by the analytics service
+      const fullScenario = convertToFullScenario(selectedScenario);
+      const results = await analyticsService.runCompleteAnalysis(fullScenario);
       
       setAnalyticsData({
         ...results,
@@ -257,6 +321,7 @@ export function AdvancedAnalyticsDashboard() {
         </Card>
       )}
 
+      {/* Rest of the component remains the same... */}
       {/* Control Panel */}
       <Card>
         <CardHeader>

@@ -327,7 +327,12 @@ async function generateRealMetrics(firmId: string): Promise<MetricsResponse> {
     }))
 
     // ✅ FIXED: Generate daily trend with simplified approach for performance
-    const dailyTrend = []
+    const dailyTrend: Array<{
+      date: string;
+      document_count: number;
+      signature_count: number;
+      compliance_issues: number;
+    }> = []
     for (let i = 29; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
       const dateStr = date.toISOString().split('T')[0]

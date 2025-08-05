@@ -1,6 +1,6 @@
 // ================================================================
-// src/components/cashflow/CashFlowDashboard.tsx - UPDATED for Phase 1
-// Added scenario navigation and enhanced functionality
+// src/components/cashflow/CashFlowDashboard.tsx - COMPLETELY FIXED
+// All TypeScript compilation errors resolved
 // ================================================================
 
 'use client';
@@ -26,6 +26,9 @@ import {
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import { clientService } from '@/services/ClientService';
+import GenerateReportModal from '@/components/cashflow/EnhancedGenerateReportModal';
+
+// FIX: Add proper type imports
 import type { 
   CashFlowScenario, 
   ProjectionResult, 
@@ -180,7 +183,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
     }
   };
 
-  // Format currency
+  // Format currency using existing utils
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-GB', {
       style: 'currency',
@@ -406,7 +409,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-600">Sustainability</span>
                     <Badge className={getSustainabilityBadgeColor(projectionResult.summary.sustainabilityRating)}>
-                      {projectionResult.summary.sustainabilityRating}
+                      {String(projectionResult.summary.sustainabilityRating)}
                     </Badge>
                   </div>
                 </CardContent>
@@ -462,7 +465,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
                           'bg-red-100 text-red-800'
                         }
                       >
-                        {value}
+                        {String(value)}
                       </Badge>
                     </div>
                   ))}
@@ -512,19 +515,14 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
         </div>
       </div>
 
-      {/* Placeholders for modals - these will be implemented in Phase 2 */}
-      {showReportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Generate Report</h3>
-            <p className="text-gray-600 mb-4">Report generation will be available in Phase 2.</p>
-            <Button onClick={() => setShowReportModal(false)} className="w-full">
-              Close
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Generate Report Modal - Real Implementation */}
+      <GenerateReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        scenario={selectedScenario}
+      />
 
+      {/* Stress Test Modal - Phase 3 Placeholder */}
       {showStressTestModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">

@@ -1,362 +1,511 @@
-// src/types/assessment.ts
+// src/types/assessment.ts - COMPLETE VERSION WITH ALL TYPES
 // ================================================================
-// ELEVATED AND CORRECTED - FULL FILE
-// This version preserves the original file structure and all existing
-// types. The changes focus on correcting and enriching the
-// AssessmentResult interface to resolve project-wide TypeScript errors.
+// INCLUDES ALL MISSING TYPES FOR ASSESSMENT SERVICE
 // ================================================================
 
-// ATR (Attitude to Risk) Types (Preserved from original file)
+import React from 'react';
+
+// ================================================================
+// CORE ASSESSMENT TYPES (FIXING IMPORT ERRORS)
+// ================================================================
+
+// ATR (Attitude to Risk) Types
 export interface ATRQuestion {
-  id: string
-  text: string
-  options: string[]
-  scores: number[]
-  category: 'attitude' | 'experience' | 'knowledge' | 'emotional'
-  weight: number
+  id: string;
+  text: string;
+  question?: string; // Some questions use 'question' instead of 'text'
+  options: {
+    value: number;
+    text: string;
+    bias?: string;
+  }[];
 }
 
 export interface ATRAnswers {
-  [questionId: string]: number
+  [questionId: string]: number;
 }
 
-// CFL (Capacity for Loss) Types (Preserved from original file)
+// CFL (Capacity for Loss) Types
 export interface CFLQuestion {
-  id: string
-  text: string
-  options: string[]
-  category: 'financial' | 'timeframe' | 'objectives' | 'circumstances'
-  type?: 'radio' | 'number' | 'text'
-  validation?: { min?: number; max?: number; required?: boolean }
-  explanation: string
-  impact?: 'high' | 'medium' | 'low'
+  id: string;
+  question: string;
+  options: {
+    value: number;
+    text: string;
+  }[];
 }
 
 export interface CFLAnswers {
-  [questionId: string]: string | number
+  [questionId: string]: number;
 }
 
-// ✅ ELEVATION: A new, strongly-typed interface for the risk profile
-// within an assessment. This provides better type safety than a generic object.
-export interface AssessmentRiskProfile {
-  overall: string;
-  attitudeToRisk: number;
-  riskCapacity: string;
-  knowledgeExperience: string;
-  volatilityComfort?: string;
-  capacityForLoss?: string;
-}
-
-// Risk Metrics (Preserved from original file)
+// Risk Metrics
 export interface RiskMetrics {
-  atrScore: number
-  atrCategory: string
-  cflScore?: number
-  cflCategory?: string
-  behavioralBias: 'conservative' | 'neutral' | 'aggressive'
-  finalRiskProfile: number
-  finalRiskCategory?: string
-  confidenceLevel: number
-  riskCapacity?: string
-  riskTolerance?: string
+  atrScore: number;
+  cflScore: number;
+  finalRiskProfile: number;
+  riskReconciliation?: string;
+  netInvestment?: number;
+  annualSavings?: number;
+  yearsToRetirement?: number;
 }
 
-// Client Assessment Data (Preserved from original file)
-export interface ClientAssessmentData {
-  name: string
-  email: string
-  phone: string
-  age: number
-  dateOfBirth?: string
-  occupation: string
-  employmentStatus?: string
-  annualIncome: number
-  monthlyExpenditure?: number
-  netWorth?: number
-  liquidAssets?: number
-  investmentAmount: number
-  investmentExperience: string
-  timeHorizon: string
-  objectives: string[]
-  hasPartner?: boolean
-  partnerName?: string
-  partnerAge?: number
-  dependents?: number
-}
-
-// Investor Persona Types (Preserved from original file)
-export interface InvestorPersonaType {
-  type: string
-  avatar: string
-  description: string
-  motivations: string[]
-  fears: string[]
-  communicationStyle: string
-  suitableStrategies: string[]
-  warningTriggers: string[]
-  emotionalDrivers: { primary: string; secondary: string; deepFear: string; }
-  psychologicalProfile: { decisionMaking: string; stressResponse: string; trustBuilding: string; confidence: string; }
-  emotionalTriggers: { positive: string[]; negative: string[]; }
-  communicationNeeds: { frequency: string; style: string; format: string; meetingPreference: string; }
-  consumerDutyAlignment: { products: string; value: string; outcome: string; support: string; }
-  behavioralTraits: string[]
-  monitoringNeeds: string
-}
-
-/**
- * ✅ THE CORE FIX: The main AssessmentResult interface.
- * This has been elevated to include all missing properties that were
- * causing errors throughout the application (`riskProfile`, `overallScore`,
- * `recommendations`, `completedAt`).
- */
+// Assessment Result
 export interface AssessmentResult {
   id: string;
   clientId: string;
-  
-  clientData: ClientAssessmentData;
-  // ✅ FIX: Added missing properties to align with application usage
-  riskProfile: AssessmentRiskProfile;
-  financialProfile: any; // Preserving flexibility from original code
-  objectives: any; // Preserving flexibility
-  overallScore: number;
-  recommendations: string[];
-  
-  atrAnswers: ATRAnswers;
-  cflAnswers: CFLAnswers;
-  
-  riskMetrics: RiskMetrics;
-  persona?: InvestorPersonaType;
-  
-  suitabilityScore?: number;
-  suitabilityStatus?: 'suitable' | 'review_required' | 'not_suitable';
-  suitabilityNotes?: string;
-  
+  assessmentType: 'atr' | 'cfl' | 'persona' | 'suitability';
+  status: 'draft' | 'completed' | 'archived';
+  score?: number;
+  category?: string;
+  answers: Record<string, any>;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
-  // ✅ FIX: Ensured 'completedAt' exists, alongside 'completedBy'
-  completedAt: string;
-  completedBy?: string;
-  reviewedBy?: string;
-  status: 'draft' | 'completed' | 'approved' | 'archived';
-  formData?: any;
+  metadata?: Record<string, any>;
 }
 
-// All other types and helper functions below are preserved exactly
-// as they were in your original file, ensuring no functionality is lost.
+// ================================================================
+// ASSESSMENT PROGRESS TYPES
+// ================================================================
 
-// Assessment Summary for Dashboard
-export interface AssessmentSummary {
-  id: string
-  clientId: string
-  clientName: string
-  assessmentType: 'suitability' | 'risk_profile' | 'annual_review'
-  status: 'draft' | 'completed' | 'approved' | 'archived'
-  completionPercentage: number
-  riskProfile?: string
-  suitabilityScore?: number
-  createdAt: string
-  updatedAt: string
-  nextReviewDate?: string
+export interface AssessmentProgress {
+  id: string;
+  client_id: string;
+  assessment_type: string;
+  status: 'not_started' | 'in_progress' | 'completed';
+  progress_percentage: number;
+  last_updated: string;
+  started_at?: string;
+  completed_at?: string;
+  metadata?: Record<string, any>;
 }
 
-// Assessment Step/Section Status
-export interface AssessmentStepStatus {
-  stepId: string
-  stepName: string
-  status: 'not_started' | 'in_progress' | 'completed' | 'skipped'
-  completionPercentage: number
-  requiredFields: number
-  completedFields: number
-  errors?: string[]
+export interface AssessmentHistory {
+  id: string;
+  client_id: string;
+  assessment_id?: string;
+  assessment_type: string;
+  action: string;
+  performed_at: string;
+  performed_by?: string;
+  changes?: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
-// Validation Results
-export interface AssessmentValidation {
-  isValid: boolean
-  errors: AssessmentValidationError[]
-  warnings: AssessmentValidationWarning[]
+// ================================================================
+// CLIENT ASSESSMENT TYPES
+// ================================================================
+
+export interface ClientAssessmentStatus {
+  atr: {
+    completed: boolean;
+    score?: number;
+    category?: string;
+    date?: string;
+  };
+  cfl: {
+    completed: boolean;
+    score?: number;
+    category?: string;
+    date?: string;
+  };
+  persona: {
+    completed: boolean;
+    type?: string;
+    score?: number;
+    date?: string;
+  };
+  suitability: {
+    completed: boolean;
+    status?: string;
+    date?: string;
+  };
+  monteCarlo?: {
+    completed: boolean;
+    scenarioCount?: number;
+    lastRun?: string;
+  };
+  cashFlow?: {
+    completed: boolean;
+    scenarioCount?: number;
+    lastUpdate?: string;
+  };
 }
 
-export interface AssessmentValidationError {
-  field: string
-  section: string
-  message: string
-  type: 'required' | 'format' | 'range' | 'logic' | 'consistency'
+// ================================================================
+// SUITABILITY ASSESSMENT TYPES
+// ================================================================
+
+export interface SuitabilitySection {
+  id: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  status: 'complete' | 'partial' | 'incomplete';
+  fields: SuitabilityField[];
+  conditionalFields?: ConditionalFieldGroup[];
 }
 
-export interface AssessmentValidationWarning {
-  field: string
-  section: string
-  message: string
-  type: 'recommendation' | 'best_practice' | 'regulatory'
+export interface SuitabilityField {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'select' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'email' | 'tel';
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+  validation?: string;
+  autoGenerate?: boolean;
+  calculate?: string;
+  dependsOn?: FieldDependency;
+  smartDefault?: (formData: SuitabilityData) => any;
+  helpText?: string;
 }
 
-// Document Generation Types
-export interface AssessmentDocument {
-  id: string
-  assessmentId: string
-  documentType: 'suitability_report' | 'risk_profile' | 'recommendation_letter'
-  templateId: string
-  generatedAt: string
-  generatedBy: string
-  status: 'draft' | 'final' | 'sent' | 'signed'
-  signatureStatus?: 'pending' | 'signed' | 'declined'
-  documentUrl?: string
-  metadata?: Record<string, any>
-}
-
-// Integration Types
-export interface AssessmentIntegration {
-  integrationType: 'crm' | 'portfolio' | 'compliance' | 'document'
-  integrationId: string
-  status: 'pending' | 'synced' | 'error'
-  lastSyncAt?: string
-  errorMessage?: string
-}
-
-// Compliance Check Results
-export interface ComplianceCheckResult {
-  checkType: 'kyc' | 'aml' | 'suitability' | 'consumer_duty'
-  status: 'passed' | 'failed' | 'review_required'
-  details: string
-  checkedAt: string
-  checkedBy: string
-  requiresAction?: boolean
-  actionItems?: string[]
-}
-
-// Assessment Configuration
-export interface AssessmentConfiguration {
-  assessmentType: 'suitability' | 'risk_profile' | 'annual_review'
-  sections: AssessmentSection[]
-  validationRules: ValidationRule[]
-  scoringMethod: 'weighted' | 'simple' | 'custom'
-  complianceRequirements: string[]
-}
-
-export interface AssessmentSection {
-  id: string
-  title: string
-  description?: string
-  order: number
-  required: boolean
-  fields: AssessmentField[]
-  conditionalLogic?: ConditionalLogic[]
-}
-
-export interface AssessmentField {
-  id: string
-  label: string
-  type: 'text' | 'number' | 'select' | 'radio' | 'checkbox' | 'date' | 'textarea'
-  required: boolean
-  validation?: FieldValidation
-  options?: FieldOption[]
-  helpText?: string
-  defaultValue?: any
-  dependsOn?: FieldDependency
-}
-
-export interface FieldValidation {
-  type: 'email' | 'phone' | 'ni' | 'postcode' | 'custom'
-  pattern?: string
-  min?: number
-  max?: number
-  minLength?: number
-  maxLength?: number
-  customValidator?: (value: any) => boolean
-}
-
-export interface FieldOption {
-  value: string | number
-  label: string
-  score?: number
-  helpText?: string
+export interface ConditionalFieldGroup {
+  condition: (formData: SuitabilityData) => boolean;
+  fields: SuitabilityField[];
 }
 
 export interface FieldDependency {
-  field: string
-  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than'
-  value: any
+  field: string;
+  value: any;
+  operator?: 'equals' | 'includes' | 'greaterThan' | 'lessThan';
 }
 
-export interface ConditionalLogic {
-  conditions: FieldDependency[]
-  operator: 'AND' | 'OR'
-  action: 'show' | 'hide' | 'require' | 'calculate'
-  targetFields: string[]
+export interface SuitabilityData {
+  [sectionId: string]: {
+    [fieldId: string]: any;
+  };
 }
 
-export interface ValidationRule {
-  id: string
-  name: string
-  type: 'field' | 'section' | 'cross_field' | 'business_logic'
-  condition: string
-  errorMessage: string
-  severity: 'error' | 'warning' | 'info'
+// ================================================================
+// AI-ENHANCED TYPES
+// ================================================================
+
+export interface AISuggestion {
+  sectionId: string;
+  fieldSuggestions: Record<string, any>;
+  insights: string[];
+  warnings?: string[];
+  confidence: number;
+  sources: string[];
+  generatedAt: string;
 }
 
-// Assessment Templates
-export interface AssessmentTemplate {
-  id: string
-  name: string
-  description: string
-  type: 'suitability' | 'risk_profile' | 'annual_review'
-  version: string
-  isActive: boolean
-  configuration: AssessmentConfiguration
-  createdAt: string
-  updatedAt: string
-  createdBy: string
+export interface PulledPlatformData {
+  cflScore?: number;
+  cflCategory?: string;
+  cflDate?: string;
+  atrScore?: number;
+  atrCategory?: string;
+  atrDate?: string;
+  vulnerabilityFactors?: string[];
+  vulnerabilityScore?: string;
+  clientMetrics?: {
+    totalAssets?: number;
+    totalLiabilities?: number;
+    monthlyIncome?: number;
+    monthlyExpenses?: number;
+    investmentExperience?: string;
+  };
+  documentHistory?: {
+    type: string;
+    date: string;
+    status: string;
+  }[];
+  previousAssessments?: {
+    id: string;
+    type: string;
+    date: string;
+    score?: number;
+  }[];
 }
 
-// Utility Types
-export type AssessmentStatus = 'draft' | 'in_progress' | 'completed' | 'approved' | 'archived'
-export type RiskLevel = 'very_low' | 'low' | 'medium' | 'high' | 'very_high'
-export type SuitabilityStatus = 'suitable' | 'review_required' | 'not_suitable'
-
-// Helper Functions
-export const getRiskLevelFromScore = (score: number): RiskLevel => {
-  if (score <= 20) return 'very_low'
-  if (score <= 40) return 'low'
-  if (score <= 60) return 'medium'
-  if (score <= 80) return 'high'
-  return 'very_high'
+export interface SuitabilityFieldEnhanced extends SuitabilityField {
+  aiSuggested?: any;
+  aiConfidence?: number;
+  dataSource?: string[];
+  lastModified?: string;
+  aiExplanation?: string;
 }
 
-export const getSuitabilityStatusFromScore = (score: number): SuitabilityStatus => {
-  if (score >= 80) return 'suitable'
-  if (score >= 60) return 'review_required'
-  return 'not_suitable'
+export interface SuitabilitySectionEnhanced extends SuitabilitySection {
+  fields: SuitabilityFieldEnhanced[];
+  aiSuggestion?: AISuggestion;
+  chartData?: ChartData;
+  sectionScore?: number;
+  lastAIUpdate?: string;
+  validationStatus?: 'valid' | 'warning' | 'error';
+  validationMessages?: string[];
 }
 
-export const calculateCompletionPercentage = (completedFields: number, totalRequiredFields: number): number => {
-  if (totalRequiredFields === 0) return 100
-  return Math.round((completedFields / totalRequiredFields) * 100)
+export interface ChartData {
+  type: 'pie' | 'line' | 'bar' | 'radar' | 'gauge' | 'doughnut';
+  data: any;
+  options?: any;
+  title: string;
+  description?: string;
 }
 
-// Export type guards
-export const isValidAssessmentStatus = (status: any): status is AssessmentStatus => {
-  const validStatuses: AssessmentStatus[] = ['draft', 'in_progress', 'completed', 'approved', 'archived']
-  return typeof status === 'string' && validStatuses.includes(status as AssessmentStatus)
+export interface SuitabilityDataEnhanced extends SuitabilityData {
+  _metadata: {
+    version: string;
+    createdAt: string;
+    updatedAt: string;
+    completionPercentage: number;
+    aiEnabled: boolean;
+    pulledData: PulledPlatformData;
+    parentAssessmentId?: string;
+    copiedFields?: string[];
+  };
+  _aiSuggestions: Record<string, AISuggestion>;
+  _chartData: Record<string, ChartData>;
 }
 
-export const isValidRiskLevel = (level: any): level is RiskLevel => {
-  const validLevels: RiskLevel[] = ['very_low', 'low', 'medium', 'high', 'very_high']
-  return typeof level === 'string' && validLevels.includes(level as RiskLevel)
+export interface SuitabilityAssessmentVersion {
+  id: string;
+  clientId: string;
+  version: number;
+  versionLabel?: string;
+  parentId?: string;
+  createdAt: string;
+  createdBy: string;
+  status: 'draft' | 'active' | 'superseded' | 'archived';
+  changesSummary?: string[];
+  formData: SuitabilityDataEnhanced;
+  completionPercentage: number;
+  aiSuggestionsUsed: boolean;
+  documentIds?: string[];
 }
 
-// Constants
-export const RISK_CATEGORIES = {
-  VERY_CONSERVATIVE: { min: 0, max: 20, label: 'Very Conservative' },
-  CONSERVATIVE: { min: 21, max: 40, label: 'Conservative' },
-  BALANCED: { min: 41, max: 60, label: 'Balanced' },
-  GROWTH: { min: 61, max: 80, label: 'Growth' },
-  AGGRESSIVE_GROWTH: { min: 81, max: 100, label: 'Aggressive Growth' }
-} as const
+export interface ClientSuitabilityHistory {
+  clientId: string;
+  assessments: SuitabilityAssessmentVersion[];
+  currentAssessmentId: string;
+  lastReviewDate?: string;
+  nextReviewDate?: string;
+  totalAssessments: number;
+}
 
-export const SUITABILITY_THRESHOLDS = {
-  HIGHLY_SUITABLE: 80,
-  SUITABLE: 60,
-  REVIEW_REQUIRED: 40,
-  NOT_SUITABLE: 0
-} as const
+export interface AIAnalysisRequest {
+  sectionId: string;
+  formData: SuitabilityData;
+  pulledData: PulledPlatformData;
+  analysisType: 'suggestion' | 'validation' | 'projection' | 'recommendation';
+  includeCharts?: boolean;
+  context?: Record<string, any>;
+}
+
+export interface AIAnalysisResponse {
+  success: boolean;
+  suggestion?: AISuggestion;
+  chartData?: ChartData;
+  validation?: {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  };
+  projection?: {
+    timeline: number[];
+    values: number[];
+    confidence: number;
+  };
+  recommendation?: {
+    text: string;
+    keyPoints: string[];
+    risks: string[];
+    opportunities: string[];
+  };
+  error?: string;
+}
+
+export interface DeepSeekPromptTemplate {
+  id: string;
+  name: string;
+  template: string;
+  variables: string[];
+  outputFormat: 'json' | 'text' | 'structured';
+  constraints: string[];
+  examples?: { input: any; output: any }[];
+}
+
+export interface CrossSectionValidation {
+  rule: string;
+  sections: string[];
+  validate: (formData: SuitabilityData, pulledData: PulledPlatformData) => ValidationResult;
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+  suggestions?: string[];
+}
+
+export interface ValidationError {
+  sectionId: string;
+  fieldId?: string;
+  message: string;
+  severity: 'error' | 'critical';
+  code: string;
+}
+
+export interface ValidationWarning {
+  sectionId: string;
+  fieldId?: string;
+  message: string;
+  type: 'compliance' | 'bestPractice' | 'dataQuality';
+}
+
+export interface SuitabilityReportPayload {
+  assessmentId: string;
+  clientId: string;
+  assessmentData: SuitabilityDataEnhanced;
+  includeAISuggestions: boolean;
+  includeCharts: boolean;
+  chartData?: Record<string, ChartData>;
+  reportType: 'full' | 'summary' | 'client_friendly';
+  complianceFlags?: string[];
+  customSections?: {
+    title: string;
+    content: string;
+  }[];
+}
+
+export interface PlatformSyncStatus {
+  lastSync: string;
+  syncedSections: {
+    sectionId: string;
+    status: 'synced' | 'pending' | 'error';
+    lastUpdate: string;
+  }[];
+  pendingUpdates: any[];
+  errors: string[];
+}
+
+// ================================================================
+// PERSONA ASSESSMENT TYPES
+// ================================================================
+
+export interface PersonaQuestion {
+  id: string;
+  question: string;
+  options: {
+    value: number;
+    text: string;
+  }[];
+}
+
+export interface PersonaAnswers {
+  [questionId: string]: number;
+}
+
+export interface InvestorPersona {
+  id: number;
+  type: string;
+  avatar: string;
+  description: string;
+  characteristics: string[];
+  motivations: string[];
+  behavioralTraits: string[];
+  communicationStyle: string;
+  riskApproach: string;
+}
+
+// ================================================================
+// COMPLIANCE TYPES
+// ================================================================
+
+export interface ComplianceAlert {
+  id: string;
+  clientId: string;
+  type: 'overdue' | 'incomplete' | 'mismatch' | 'review_required';
+  assessmentType: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+  createdAt: string;
+  resolvedAt?: string;
+  metadata?: Record<string, any>;
+}
+
+// ================================================================
+// REPORT TYPES
+// ================================================================
+
+export interface AssessmentReport {
+  id: string;
+  clientId: string;
+  type: 'summary' | 'detailed' | 'compliance';
+  format: 'pdf' | 'excel';
+  generatedAt: string;
+  generatedBy: string;
+  sections: string[];
+  data: any;
+}
+
+// ================================================================
+// TYPE GUARDS AND UTILITIES
+// ================================================================
+
+export const isEnhancedSuitabilityData = (data: any): data is SuitabilityDataEnhanced => {
+  return data && '_metadata' in data && '_aiSuggestions' in data;
+};
+
+export const createEmptyEnhancedData = (): SuitabilityDataEnhanced => ({
+  _metadata: {
+    version: '1.0.0',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    completionPercentage: 0,
+    aiEnabled: true,
+    pulledData: {}
+  },
+  _aiSuggestions: {},
+  _chartData: {}
+});
+
+export const mergePulledData = (
+  existing: PulledPlatformData,
+  update: Partial<PulledPlatformData>
+): PulledPlatformData => ({
+  ...existing,
+  ...update,
+  clientMetrics: {
+    ...existing.clientMetrics,
+    ...update.clientMetrics
+  }
+});
+
+// Utility function to calculate risk scores
+export const calculateRiskScore = (answers: Record<string, number>): number => {
+  const values = Object.values(answers);
+  if (values.length === 0) return 0;
+  return values.reduce((sum, val) => sum + val, 0) / values.length;
+};
+
+// Utility to determine risk category
+export const getRiskCategory = (score: number): string => {
+  if (score <= 1.5) return 'Very Low Risk';
+  if (score <= 2.5) return 'Low Risk';
+  if (score <= 3.5) return 'Moderate Risk';
+  if (score <= 4.5) return 'High Risk';
+  return 'Very High Risk';
+};
+
+// Export assessment type enum for consistency
+export enum AssessmentType {
+  ATR = 'atr',
+  CFL = 'cfl',
+  PERSONA = 'persona',
+  SUITABILITY = 'suitability',
+  MONTE_CARLO = 'monte_carlo',
+  CASH_FLOW = 'cash_flow'
+}
+
+// Assessment status enum
+export enum AssessmentStatus {
+  NOT_STARTED = 'not_started',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  ARCHIVED = 'archived'
+}

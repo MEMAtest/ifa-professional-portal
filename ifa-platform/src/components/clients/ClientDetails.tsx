@@ -1,14 +1,17 @@
 // src/components/clients/ClientDetails.tsx
-// ✅ DEFINITIVE VERSION - All issues fixed
+// ✅ COMPLETE VERSION - With All Calendar Integration Fixes
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { VulnerabilityBadge } from './VulnerabilityBadge';
+import { LogCommunicationModal } from '@/components/communications/LogCommunicationModal';
+import { ScheduleReviewModal } from '@/components/reviews/ScheduleReviewModal';
+import { EditReviewModal } from '@/components/reviews/EditReviewModal';
 import { 
   Mail, 
   Phone, 
@@ -28,7 +31,9 @@ import {
   TrendingDown,
   Target,
   Briefcase,
-  CheckCircle
+  CheckCircle,
+  ArrowLeft,
+  Edit
 } from 'lucide-react';
 import type { Client } from '@/types/client';
 import { getVulnerabilityStatus } from '@/types/client';
@@ -41,6 +46,7 @@ import {
   calculateAge
 } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { useClientDetailsData, createCommunication, scheduleReview } from '@/hooks/useClientDetailsData';
 
 // Import the Cash Flow Dashboard component
 import CashFlowDashboard from '@/components/cashflow/CashFlowDashboard';
@@ -49,39 +55,12 @@ export interface ClientDetailsProps {
   client: Client;
   onEdit: () => void;
   onDelete: () => void;
-  onAddCommunication: () => void;
+  onAddCommunication: () => void;  // Keep for backwards compatibility
   onScheduleReview: () => void;
 }
 
 // Define tab types
 type TabType = 'overview' | 'financial' | 'risk' | 'cashflow' | 'communications' | 'reviews' | 'activity';
-
-// Communication type interface
-interface Communication {
-  id: number;
-  type: 'email' | 'call' | 'meeting';
-  subject: string;
-  date: string;
-  status: 'completed' | 'pending';
-}
-
-// Review type interface
-interface Review {
-  id: number;
-  type: string;
-  date: string;
-  status: 'completed' | 'pending';
-  outcome: string;
-}
-
-// Activity type interface
-interface Activity {
-  id: number;
-  action: string;
-  user: string;
-  date: string;
-  details: string;
-}
 
 // Assessment type interfaces
 interface AtrAssessment {
@@ -117,32 +96,51 @@ export function ClientDetails({
   onAddCommunication, 
   onScheduleReview 
 }: ClientDetailsProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [hasCashFlowAnalysis, setHasCashFlowAnalysis] = useState(false);
   const [cashFlowCount, setCashFlowCount] = useState(0);
-  const [communications, setCommunications] = useState<Communication[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
+  
+  // ✅ ADD: Modal states
+  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showEditReviewModal, setShowEditReviewModal] = useState(false);
+  const [selectedReview, setSelectedReview] = useState<any>(null);
+  
+  // ✅ UPDATED: Use the real data hook instead of mock data
+  const { 
+    communications, 
+    reviews, 
+    activities, 
+    loading: dataLoading, 
+    error: dataError,
+    refresh 
+  } = useClientDetailsData(client);
+
+  // ✅ ADD: Handle tab parameter from URL
+  useEffect(() => {
+    const tabParam = searchParams?.get('tab');
+    if (tabParam) {
+      const validTabs: TabType[] = ['overview', 'financial', 'risk', 'cashflow', 'communications', 'reviews', 'activity'];
+      if (validTabs.includes(tabParam as TabType)) {
+        setActiveTab(tabParam as TabType);
+      }
+    }
+  }, [searchParams]);
 
   // Check for existing cash flow scenarios
   useEffect(() => {
     checkCashFlowData();
-    loadCommunications();
-    loadReviews();
-    loadActivities();
   }, [client.id]);
 
-  /**
-   * ✅ FIXED: This function now uses the correct snake_case column names
-   * for the Supabase query, preventing 400 Bad Request errors.
-   */
   const checkCashFlowData = async (): Promise<void> => {
     try {
       const { data, error, count } = await supabase
         .from('cash_flow_scenarios')
-        .select('id', { count: 'exact', head: true }) // More efficient, only gets count
-        .eq('client_id', client.id)     // CORRECT: was 'clientId'
-        .eq('is_active', true);           // CORRECT: was 'isActive'
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', client.id)
+        .eq('is_active', true);
 
       if (error) {
         throw error;
@@ -154,36 +152,35 @@ export function ClientDetails({
       }
     } catch (error) {
       console.error('Error checking cash flow data:', error);
-      // Silently fail but log the error, so the UI doesn't break.
       setHasCashFlowAnalysis(false);
       setCashFlowCount(0);
     }
   };
 
-  const loadCommunications = async (): Promise<void> => {
-    // Mock data for now - replace with actual API call
-    setCommunications([
-      { id: 1, type: 'email', subject: 'Annual Review Reminder', date: '2024-01-15', status: 'completed' },
-      { id: 2, type: 'call', subject: 'Portfolio Discussion', date: '2024-01-10', status: 'completed' },
-      { id: 3, type: 'meeting', subject: 'Initial Consultation', date: '2023-12-20', status: 'completed' }
-    ]);
+  // ✅ ADD: Handler for adding communication
+  const handleAddCommunication = () => {
+    setShowCommunicationModal(true);
   };
 
-  const loadReviews = async (): Promise<void> => {
-    // Mock data for now
-    setReviews([
-      { id: 1, type: 'Annual Review', date: '2024-01-15', status: 'completed', outcome: 'Risk profile updated' },
-      { id: 2, type: 'Portfolio Review', date: '2023-07-20', status: 'completed', outcome: 'Rebalancing recommended' }
-    ]);
+  // ✅ UPDATED: Handler for scheduling review
+  const handleScheduleReview = () => {
+    setShowReviewModal(true);
   };
 
-  const loadActivities = async (): Promise<void> => {
-    // Mock data for now
-    setActivities([
-      { id: 1, action: 'Profile Updated', user: 'John Advisor', date: '2024-01-15', details: 'Updated risk assessment' },
-      { id: 2, action: 'Document Added', user: 'John Advisor', date: '2024-01-10', details: 'Added annual statement' },
-      { id: 3, action: 'Communication Logged', user: 'System', date: '2024-01-08', details: 'Email sent: Review reminder' }
-    ]);
+  // ✅ ADD: Handler for editing review
+  const handleEditReview = (review: any) => {
+    setSelectedReview(review);
+    setShowEditReviewModal(true);
+  };
+
+  // ✅ ADD: Handler for back navigation
+  const handleBackNavigation = () => {
+    const fromParam = searchParams?.get('from');
+    if (fromParam === 'calendar') {
+      router.push('/calendar');
+    } else {
+      router.push('/clients');
+    }
   };
 
   // Risk Profile Tab Component (internal to ClientDetails)
@@ -200,22 +197,37 @@ export function ClientDetails({
 
     const loadAssessments = async (): Promise<void> => {
       try {
-        // Try to load from new assessment tables first
-        const { data: atr } = await supabase
+        // Fetch ATR assessment
+        const { data: atrArray, error: atrError } = await supabase
           .from('atr_assessments')
           .select('*')
-          .eq('client_id', clientId)
-          .eq('is_current', true)
-          .single();
+          .match({ 
+            client_id: clientId,
+            is_current: true 
+          });
+        
+        const atr = atrArray?.[0] || null;
+        
+        if (atrError && atrError.code !== 'PGRST116') {
+          console.error('ATR fetch error:', atrError);
+        }
 
-        const { data: cfl } = await supabase
+        // Fetch CFL assessment
+        const { data: cflArray, error: cflError } = await supabase
           .from('cfl_assessments')
           .select('*')
-          .eq('client_id', clientId)
-          .eq('is_current', true)
-          .single();
+          .match({ 
+            client_id: clientId,
+            is_current: true 
+          });
+        
+        const cfl = cflArray?.[0] || null;
+        
+        if (cflError && cflError.code !== 'PGRST116') {
+          console.error('CFL fetch error:', cflError);
+        }
 
-        // ✅ NEW CODE - Gets risk_profile from client's JSONB field
+        // Fetch client risk profile
         const { data: clientData } = await supabase
           .from('clients')
           .select('risk_profile')
@@ -477,7 +489,7 @@ export function ClientDetails({
           </>
         )}
 
-        {/* Legacy Risk Profile Card - shown when using old data */}
+        {/* Legacy Risk Profile Card */}
         {!hasNewAssessments && client.riskProfile && (
           <Card>
             <CardHeader>
@@ -553,9 +565,19 @@ export function ClientDetails({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">{fullName}</h1>
-          <p className="text-gray-600">Client Reference: {client.clientRef || 'No Reference'}</p>
+        <div className="flex items-center space-x-4">
+          {/* ✅ ADD: Back Button */}
+          <button
+            onClick={handleBackNavigation}
+            className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            {searchParams?.get('from') === 'calendar' ? 'Back to Calendar' : 'Back to Clients'}
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">{fullName}</h1>
+            <p className="text-gray-600">Client Reference: {client.clientRef || 'No Reference'}</p>
+          </div>
         </div>
         <div className="flex items-center space-x-3">
           <Badge className={`${getStatusColor(clientStatus)} border`}>
@@ -565,10 +587,11 @@ export function ClientDetails({
           <Button onClick={onEdit} variant="outline">
             Edit Client
           </Button>
-          <Button onClick={onScheduleReview} variant="outline">
+          <Button onClick={handleScheduleReview} variant="outline">
             Schedule Review
           </Button>
-          <Button onClick={onAddCommunication} variant="outline">
+          {/* ✅ UPDATED: Use local handler */}
+          <Button onClick={handleAddCommunication} variant="outline">
             Log Communication
           </Button>
           <Button onClick={onDelete} variant="destructive">
@@ -897,7 +920,7 @@ export function ClientDetails({
         </div>
       )}
 
-      {/* Risk Profile Tab - UPDATED */}
+      {/* Risk Profile Tab */}
       {activeTab === 'risk' && (
         <RiskProfileTabContent clientId={client.id} client={client} />
       )}
@@ -909,46 +932,64 @@ export function ClientDetails({
         </div>
       )}
 
-      {/* Communications Tab */}
+      {/* ✅ UPDATED: Communications Tab with Real Data */}
       {activeTab === 'communications' && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Communication History</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Communication History</CardTitle>
+                <Button onClick={handleAddCommunication} size="sm">
+                  Add Communication
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {communications.map((comm) => (
-                  <div key={comm.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <div className={`p-2 rounded-lg ${
-                        comm.type === 'email' ? 'bg-blue-100' : 
-                        comm.type === 'call' ? 'bg-green-100' : 'bg-purple-100'
-                      }`}>
-                        {comm.type === 'email' && <Mail className="h-5 w-5 text-blue-600" />}
-                        {comm.type === 'call' && <Phone className="h-5 w-5 text-green-600" />}
-                        {comm.type === 'meeting' && <Calendar className="h-5 w-5 text-purple-600" />}
+              {dataLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : dataError ? (
+                <div className="text-center text-red-600 py-8">{dataError}</div>
+              ) : (
+                <div className="space-y-4">
+                  {communications.map((comm) => (
+                    <div key={comm.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className={`p-2 rounded-lg ${
+                          comm.type === 'email' ? 'bg-blue-100' : 
+                          comm.type === 'call' ? 'bg-green-100' : 
+                          comm.type === 'meeting' ? 'bg-purple-100' : 'bg-gray-100'
+                        }`}>
+                          {comm.type === 'email' && <Mail className="h-5 w-5 text-blue-600" />}
+                          {comm.type === 'call' && <Phone className="h-5 w-5 text-green-600" />}
+                          {comm.type === 'meeting' && <Calendar className="h-5 w-5 text-purple-600" />}
+                          {comm.type === 'note' && <FileText className="h-5 w-5 text-gray-600" />}
+                        </div>
+                        <div>
+                          <p className="font-medium">{comm.subject}</p>
+                          <p className="text-sm text-gray-500">{formatDate(comm.date)}</p>
+                          {comm.content && (
+                            <p className="text-sm text-gray-600 mt-1">{comm.content}</p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{comm.subject}</p>
-                        <p className="text-sm text-gray-500">{formatDate(comm.date)}</p>
-                      </div>
+                      <Badge variant={comm.status === 'completed' ? 'default' : 'secondary'}>
+                        {comm.status}
+                      </Badge>
                     </div>
-                    <Badge variant={comm.status === 'completed' ? 'default' : 'secondary'}>
-                      {comm.status}
-                    </Badge>
-                  </div>
-                ))}
-                {communications.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No communications recorded</p>
-                )}
-              </div>
+                  ))}
+                  {communications.length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No communications recorded</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Reviews Tab */}
+      {/* ✅ UPDATED: Reviews Tab with Real Data and Click to Edit */}
       {activeTab === 'reviews' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
@@ -956,23 +997,54 @@ export function ClientDetails({
               <CardTitle>Review History</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {reviews.map((review) => (
-                  <div key={review.id} className="p-4 border rounded-lg">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-medium">{review.type}</h4>
-                      <Badge>{review.status}</Badge>
+              {dataLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div 
+                      key={review.id} 
+                      className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => handleEditReview(review)}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-medium">{review.review_type}</h4>
+                        <div className="flex items-center space-x-2">
+                          <Badge 
+                            variant={
+                              review.status === 'completed' ? 'default' : 
+                              review.status === 'overdue' ? 'destructive' : 
+                              'secondary'
+                            }
+                          >
+                            {review.status}
+                          </Badge>
+                          <Edit className="h-4 w-4 text-gray-400" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        {review.status === 'completed' && review.completed_date
+                          ? `Completed on ${formatDate(review.completed_date)}`
+                          : `Due on ${formatDate(review.due_date)}`
+                        }
+                      </p>
+                      {review.review_summary && (
+                        <p className="text-sm">{review.review_summary}</p>
+                      )}
+                      {review.next_review_date && (
+                        <p className="text-sm text-blue-600 mt-2">
+                          Next review: {formatDate(review.next_review_date)}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">
-                      Completed on {formatDate(review.date)}
-                    </p>
-                    <p className="text-sm">{review.outcome}</p>
-                  </div>
-                ))}
-                {reviews.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No reviews recorded</p>
-                )}
-              </div>
+                  ))}
+                  {reviews.length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No reviews recorded</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -981,49 +1053,151 @@ export function ClientDetails({
               <CardTitle>Next Review</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8">
-                <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">No review scheduled</p>
-                <Button onClick={onScheduleReview}>
-                  Schedule Review
-                </Button>
-              </div>
+              {(() => {
+                const upcomingReview = reviews.find(r => r.status === 'pending' || r.status === 'overdue');
+                
+                if (upcomingReview) {
+                  return (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <Calendar className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+                        <h4 className="font-medium text-lg">{upcomingReview.review_type}</h4>
+                        <p className="text-gray-600 mt-2">
+                          Due on {formatDate(upcomingReview.due_date)}
+                        </p>
+                        {upcomingReview.status === 'overdue' && (
+                          <Badge variant="destructive" className="mt-2">Overdue</Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-2 justify-center">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditReview(upcomingReview);
+                          }}
+                        >
+                          Reschedule
+                        </Button>
+                        <Button size="sm">
+                          Complete Review
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="text-center py-8">
+                    <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 mb-4">No review scheduled</p>
+                    <Button onClick={handleScheduleReview}>
+                      Schedule Review
+                    </Button>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Activity Tab */}
+      {/* ✅ UPDATED: Activity Tab with Real Data */}
       {activeTab === 'activity' && (
         <Card>
           <CardHeader>
             <CardTitle>Activity Log</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {activities.map((activity) => (
-                <div key={activity.id} className="flex items-start space-x-4 p-4 border rounded-lg">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <Activity className="h-5 w-5 text-gray-600" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{activity.action}</p>
-                        <p className="text-sm text-gray-600">{activity.details}</p>
-                      </div>
-                      <span className="text-sm text-gray-500">{formatDate(activity.date)}</span>
+            {dataLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activities.map((activity) => (
+                  <div key={activity.id} className="flex items-start space-x-4 p-4 border rounded-lg">
+                    <div className="p-2 bg-gray-100 rounded-lg">
+                      <Activity className="h-5 w-5 text-gray-600" />
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">by {activity.user}</p>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium">
+                            {activity.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </p>
+                          {activity.type && (
+                            <p className="text-sm text-gray-600">
+                              Type: {activity.type}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-sm text-gray-500">{formatDate(activity.date)}</span>
+                      </div>
+                      {activity.user_name && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          by {activity.user_name}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {activities.length === 0 && (
-                <p className="text-center text-gray-500 py-8">No activity recorded</p>
-              )}
-            </div>
+                ))}
+                {activities.length === 0 && (
+                  <p className="text-center text-gray-500 py-8">No activity recorded</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
+      )}
+
+      {/* ✅ ADD: Communication Modal */}
+      <LogCommunicationModal
+        isOpen={showCommunicationModal}
+        onClose={() => setShowCommunicationModal(false)}
+        clientId={client.id}
+        clientName={`${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim()}
+        onSuccess={() => {
+          refresh?.();
+          setShowCommunicationModal(false);
+        }}
+      />
+
+      {/* ✅ ADD: Review Scheduling Modal */}
+      <ScheduleReviewModal
+        isOpen={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        clientId={client.id}
+        clientName={`${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim()}
+        onSuccess={() => {
+          refresh?.();
+          setShowReviewModal(false);
+        }}
+        existingReviews={reviews.map(r => ({
+          id: r.id,
+          due_date: r.due_date,
+          status: r.status as 'scheduled' | 'in_progress' | 'completed' | 'overdue',
+          review_type: r.review_type
+        }))}
+      />
+
+      {/* ✅ ADD: Edit Review Modal */}
+      {showEditReviewModal && selectedReview && (
+        <EditReviewModal
+          isOpen={showEditReviewModal}
+          onClose={() => {
+            setShowEditReviewModal(false);
+            setSelectedReview(null);
+          }}
+          review={selectedReview}
+          clientName={fullName}
+          onSuccess={() => {
+            refresh?.();
+            setShowEditReviewModal(false);
+            setSelectedReview(null);
+          }}
+        />
       )}
     </div>
   );

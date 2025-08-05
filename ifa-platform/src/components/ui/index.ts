@@ -1,18 +1,31 @@
-// src/components/ui/index.ts
-// Updated exports to match capitalized file structure
-export * from './Alert'
-export * from './Badge'
-export * from './Button'
-export * from './Card'
-export * from './Input'
-export * from './Progress'
-export * from './Tabs'
+// ================================================================
+// File: src/components/ui/index.ts
+// Central export for all UI components
+// ================================================================
 
-// Logo components - NEW
-export * from './Logo'
+// Export all UI components from a single location
+export { Alert } from './Alert';
+export { Badge } from './Badge';
+export { Button } from './Button';
+export { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from './Card';
+export { Input } from './Input';
+export { Checkbox } from './Checkbox';
+export { Label } from './Label';
+export { Logo } from './Logo';
+export { NavigationGuard } from './NavigationGuard';
+export { ParameterSlider } from './ParameterSlider';
+export { Progress } from './Progress';
+export { Select } from './Select';
+export { Slider } from './Slider';
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
+export { Textarea } from './Textarea';
+export { VulnerabilityIndicator } from './VulnerabilityIndicator';
+export { useToast, toast } from './use-toast';
 
-// Ensure you can import like this:
-// import { Button, Card } from '@/components/ui'
-// OR
-// import { Button } from '@/components/ui/Button'
-// import { Card } from '@/components/ui/Card'
+// Export types
+export type { InputProps } from './Input';
+export type { CheckboxProps } from './Checkbox';
+export type { ButtonProps } from './Button';
+
+// Export any shared utilities
+export * from './styles';

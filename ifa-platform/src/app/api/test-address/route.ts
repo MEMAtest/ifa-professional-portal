@@ -38,7 +38,16 @@ export async function GET(request: NextRequest) {
       }
     ];
 
-    const results = [];
+    type Result = {
+      endpoint: string;
+      status: number | string;
+      success: boolean;
+      data?: any;
+      error?: string;
+      url: string;
+      responseTime: number | null;
+    };
+    const results: Result[] = [];
 
     for (const endpoint of endpoints) {
       try {

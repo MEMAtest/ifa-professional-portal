@@ -1,7 +1,6 @@
 // ================================================================
-// src/app/cashflow/page.tsx - INTEGRATED Cash Flow Page
-// Enhanced with platform integration while preserving ALL functionality
-// FIXED: All database query issues resolved
+// src/app/cashflow/page.tsx - FINAL FIXED VERSION
+// Using existing AssessmentService and correct type imports
 // ================================================================
 
 'use client';
@@ -16,11 +15,13 @@ import { CashFlowScenarioService } from '@/services/CashFlowScenarioService';
 import { clientService } from '@/services/ClientService';
 // INTEGRATION: Import integration hook and services
 import { useClientIntegration } from '@/lib/hooks/useClientIntegration';
+// FIX: Use existing AssessmentService instead of creating new one
+import { AssessmentService } from '@/services/AssessmentService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-
 import { Badge } from '@/components/ui/Badge';
+import { supabase } from '@/lib/supabase';
 import { 
   TrendingUp, 
   Calculator, 
@@ -34,9 +35,12 @@ import {
   DollarSign,
   Target,
   Activity,
-  ChevronRight
+  ChevronRight,
+  Save,
+  Loader2
 } from 'lucide-react';
 import type { Client, ClientListResponse } from '@/types/client';
+// FIX: Import from the correct module - using the one that matches the service
 import type { CashFlowScenario } from '@/types/cashflow';
 
 // ================================================================
@@ -49,6 +53,12 @@ interface QuickAction {
   description: string;
   action: () => void;
   disabled?: boolean;
+}
+
+// ENHANCED: Add tracking state interface
+interface TrackingState {
+  isTracking: boolean;
+  lastTrackedScenarioId?: string;
 }
 
 // ================================================================
@@ -72,6 +82,11 @@ export default function CashFlowPage() {
   // INTEGRATION: New state for enhanced features
   const [isCreatingScenario, setIsCreatingScenario] = useState(false);
   const [showNewScenarioDialog, setShowNewScenarioDialog] = useState(false);
+  
+  // ENHANCED: Add tracking state
+  const [trackingState, setTrackingState] = useState<TrackingState>({
+    isTracking: false
+  });
 
   // INTEGRATION: Use the integration hook for selected client
   const { 
@@ -103,6 +118,30 @@ export default function CashFlowPage() {
       window.history.replaceState({}, '', newUrl);
     }
   }, [action, selectedClient]);
+
+  // ENHANCED: Track scenario creation in CashFlowDashboard
+  useEffect(() => {
+    if (!selectedClient) return;
+
+    // Listen for scenario save events from CashFlowDashboard
+    const handleScenarioSave = async (event: CustomEvent) => {
+      const { scenario, isNew } = event.detail;
+      
+      if (isNew && scenario.id !== trackingState.lastTrackedScenarioId) {
+        await trackCashFlowProgress(scenario);
+        setTrackingState({
+          isTracking: false,
+          lastTrackedScenarioId: scenario.id
+        });
+      }
+    };
+
+    window.addEventListener('cashflow:scenarioSaved' as any, handleScenarioSave as EventListener);
+    
+    return () => {
+      window.removeEventListener('cashflow:scenarioSaved' as any, handleScenarioSave as EventListener);
+    };
+  }, [selectedClient, trackingState.lastTrackedScenarioId]);
 
   const loadInitialData = async () => {
     try {
@@ -151,7 +190,7 @@ export default function CashFlowPage() {
     }
   };
 
-  // INTEGRATION: Create default scenario for new clients
+  // ENHANCED: Track progress when creating default scenario
   const createDefaultScenario = async (client: Client) => {
     try {
       setIsCreatingScenario(true);
@@ -162,6 +201,9 @@ export default function CashFlowPage() {
       if (linkScenario) {
         await linkScenario(defaultScenario.id);
       }
+      
+      // ENHANCED: Track assessment completion
+      await trackCashFlowProgress(defaultScenario as any);
       
       // Reload scenarios
       const updatedScenarios = await CashFlowDataService.getScenariosForClient(client.id);
@@ -181,6 +223,63 @@ export default function CashFlowPage() {
       });
     } finally {
       setIsCreatingScenario(false);
+    }
+  };
+
+  // ENHANCED: Track cash flow assessment progress using existing AssessmentService
+  const trackCashFlowProgress = async (scenario: CashFlowScenario) => {
+    if (!selectedClient) return;
+    
+    try {
+      setTrackingState({ isTracking: true, lastTrackedScenarioId: scenario.id });
+      
+      // Get current scenario count
+      const { count } = await supabase
+        .from('cashflow_scenarios')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', selectedClient.id);
+      
+      const scenarioCount = count || 1;
+      
+      // Use existing AssessmentService to update progress
+      await AssessmentService.updateProgress(selectedClient.id, {
+        assessmentType: 'cashFlow',
+        status: 'completed',
+        progressPercentage: 100,
+        metadata: {
+          lastUpdate: new Date().toISOString(),
+          scenarioCount,
+          lastScenarioName: scenario.scenarioName || 'Cash Flow Scenario',
+          scenarioType: scenario.scenarioType || 'standard',
+          // Use the correct property names based on the CashFlowScenario type
+          projectionYears: scenario.projectionYears || 30
+        }
+      });
+      
+      // Log history using existing service
+      await AssessmentService.logHistory(selectedClient.id, {
+        assessmentType: 'cashFlow',
+        action: 'scenario_created',
+        changes: {
+          scenarioName: scenario.scenarioName,
+          type: scenario.scenarioType || 'standard',
+          projectionYears: scenario.projectionYears || 30
+        }
+      });
+      
+      // Show subtle success indicator
+      toast({
+        title: 'Progress Updated',
+        description: 'Cash flow assessment has been recorded',
+        variant: 'default',
+        duration: 2000
+      });
+      
+    } catch (error) {
+      console.error('Failed to track cash flow progress:', error);
+      // Non-blocking - don't show error to user
+    } finally {
+      setTrackingState(prev => ({ ...prev, isTracking: false }));
     }
   };
 
@@ -209,6 +308,12 @@ export default function CashFlowPage() {
   const handleViewClient = () => {
     if (!selectedClient) return;
     router.push(`/clients/${selectedClient.id}`);
+  };
+
+  // ENHANCED: Navigate to assessment hub
+  const handleViewAssessmentHub = () => {
+    if (!selectedClient) return;
+    router.push(`/assessments/client/${selectedClient.id}`);
   };
 
   const formatCurrency = (amount: number): string => {
@@ -462,6 +567,14 @@ export default function CashFlowPage() {
             </div>
 
             <div className="flex items-center space-x-2">
+              {/* ENHANCED: Show tracking status */}
+              {trackingState.isTracking && (
+                <Badge variant="default" className="animate-pulse">
+                  <Save className="h-3 w-3 mr-1" />
+                  Saving Progress
+                </Badge>
+              )}
+              
               <Badge variant={selectedClient.status === 'active' ? 'default' : 'secondary'}>
                 {selectedClient.status}
               </Badge>
@@ -549,6 +662,33 @@ export default function CashFlowPage() {
           {/* Cash Flow Dashboard Component (existing) */}
           <CashFlowDashboard clientId={selectedClient.id} />
 
+          {/* ENHANCED: Assessment Hub Link */}
+          {scenarios.length > 0 && (
+            <Card className="bg-purple-50 border-purple-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Calculator className="h-5 w-5 text-purple-600" />
+                    <div>
+                      <p className="font-medium text-purple-900">Assessment Progress</p>
+                      <p className="text-sm text-purple-700">
+                        Cash flow planning is now tracked in the Assessment Hub
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleViewAssessmentHub}
+                    className="text-purple-700 border-purple-300"
+                  >
+                    View Hub
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* INTEGRATION: Additional Actions */}
           <Card>
             <CardHeader>
@@ -617,44 +757,3 @@ export default function CashFlowPage() {
     </div>
   );
 }
-
-// ===================================================================
-// INTEGRATION DOCUMENTATION FOR FUTURE AI
-// ===================================================================
-
-/*
-INTEGRATION SUMMARY:
-1. Pre-selects client from URL parameters (already existed)
-2. Auto-creates default scenario for new clients
-3. Shows integration status badges
-4. Quick actions connect to other modules
-5. Uses assessment data in scenarios
-6. All existing functionality preserved
-
-KEY INTEGRATION FEATURES:
-1. URL Parameters - ?clientId=xxx&action=new
-2. Auto Scenario Creation - Creates base case for new clients
-3. Integration Badges - Shows if client has assessment
-4. Quick Actions - Navigate to assessment, Monte Carlo, reports
-5. Risk Profile Integration - Shows when using assessment data
-
-FUTURE CONNECTION POINTS:
-1. Pull goals from assessment into scenarios
-2. Use Monte Carlo results in projections
-3. Auto-update scenarios when assessment changes
-4. Generate periodic review reports
-5. Track scenario performance over time
-
-DATA FLOW:
-- Client financial data → Scenario assumptions
-- Assessment risk profile → Return expectations
-- Scenarios → Monte Carlo simulations
-- All data → Report generation
-
-TESTING CHECKLIST:
-1. Select client without scenarios → Default created
-2. Client with assessment → Risk profile shown
-3. Quick actions → Navigate correctly
-4. Create new scenario → Links to client
-5. Generate report → Uses scenario data
-*/

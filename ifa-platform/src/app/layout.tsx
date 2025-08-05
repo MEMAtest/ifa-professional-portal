@@ -2,7 +2,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-
 // Context providers
 import Providers from './providers'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -15,10 +14,10 @@ export const metadata: Metadata = {
   title: 'Plannetic - Turning Plans into Performance',
   description: 'Professional Financial Advisory Platform - Strategic planning and performance optimization for financial advisors',
   keywords: [
-    'financial planning', 
-    'advisory platform', 
-    'cash flow modeling', 
-    'retirement planning', 
+    'financial planning',
+    'advisory platform',
+    'cash flow modeling',
+    'retirement planning',
     'risk assessment',
     'Monte Carlo analysis',
     'strategic planning',

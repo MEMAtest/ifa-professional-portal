@@ -7,9 +7,12 @@
 // ================================================================
 
 export interface CashFlowScenario {
+  // ✅ FIX: Removed the conflicting index signature that was causing type errors
+  // If you need dynamic properties, use a more specific approach or separate interface
+  
   id: string;
   // ✅ FIX: Added the 'client_id' property to match the complete type definition used elsewhere.
-  client_id: string; 
+  client_id: string;
   scenario_name: string;
   scenario_type: 'base' | 'retirement' | 'custom';
   projection_years: number;
@@ -32,9 +35,32 @@ export interface CashFlowScenario {
   assumption_basis: string;
   alternative_allocation: number;
   // ✅ FIX: Added the 'isActive' property to match the complete type definition.
-  isActive: boolean; 
+  isActive: boolean;
   created_at: string;
   updated_at: string;
+  
+  // ✅ Added these properties that are used in AdvancedAnalyticsDashboard
+  clientId?: string;  // For camelCase compatibility
+  scenarioName?: string;  // For camelCase compatibility
+  scenarioType?: 'base' | 'retirement' | 'custom';  // For camelCase compatibility
+  projectionYears?: number;  // For camelCase compatibility
+  riskScore?: number;  // For camelCase compatibility
+  currentIncome?: number;  // For camelCase compatibility
+  investmentValue?: number;  // For camelCase compatibility
+  retirementAge?: number;  // For camelCase compatibility
+  inflationRate?: number;  // For camelCase compatibility
+  realEquityReturn?: number;  // For camelCase compatibility
+  realBondReturn?: number;  // For camelCase compatibility
+  realCashReturn?: number;  // For camelCase compatibility
+  assumptionBasis?: string;  // For camelCase compatibility
+  annualChargePercent?: number;
+  chargesIncluded?: boolean;
+  calculationMethod?: string;
+  dataSources?: string[];
+  lastReviewed?: Date;
+  currentExpenses?: number;  // For camelCase compatibility
+  pensionValue?: number;  // For camelCase compatibility
+  clientAge?: number;  // For camelCase compatibility
 }
 
 export interface CashFlowProjection {
@@ -74,4 +100,9 @@ export interface ClientOption {
   name: string;
   age?: number;
   scenarioCount: number;
+}
+
+// ✅ If you need a type that allows arbitrary string properties, create a separate interface
+export interface CashFlowScenarioWithDynamicProps extends CashFlowScenario {
+  [key: string]: any;
 }

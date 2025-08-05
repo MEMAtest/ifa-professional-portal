@@ -102,7 +102,7 @@ async function runEnhancedMonteCarloSimulation(scenario: any, simulationCount: n
     let wealth = initialWealth;
     let minWealth = wealth;
     let maxWealth = wealth;
-    let depletionYear = null;
+    let depletionYear: number | null = null;
     
     for (let year = 0; year < scenario.projection_years; year++) {
       // Select market regime

@@ -247,7 +247,7 @@ export function useClientIntegration(
       }
 
       // Check which method is available
-      let result = null
+      let result: any = null
       
       if (typeof realDocumentService.generateDocument === 'function') {
         // generateDocument expects: (templateType, clientId, client)

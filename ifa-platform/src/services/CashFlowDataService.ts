@@ -5,7 +5,7 @@
 
 import { supabase, dbTransform, cashFlowDB } from '@/lib/supabase'; // Using completely fixed supabase
 import { clientService } from '@/services/ClientService';
-import AssessmentService from '@/services/AssessmentService';
+import { AssessmentService } from '@/services/AssessmentService';
 import type { Client, FinancialProfile } from '@/types/client';
 import type { AssessmentResult } from '@/types/assessment';
 import type { 
@@ -27,7 +27,7 @@ export class CashFlowDataService {
   ): Promise<CashFlowScenario> {
     try {
       const client = await clientService.getClientById(clientId);
-      const assessment = await AssessmentService.getLatestAssessment(clientId);
+      const assessment = await AssessmentService.getClientAssessment(clientId);
       
       if (!client) {
         throw new Error('Client not found');
