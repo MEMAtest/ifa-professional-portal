@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // src/app/api/reviews/route.ts
 // ===================================================================
 // API ROUTE FOR CLIENT REVIEWS - UPDATED FOR EXISTING TABLE

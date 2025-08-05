@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // src/app/api/activity-log/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createBrowserClient } from '@supabase/ssr';

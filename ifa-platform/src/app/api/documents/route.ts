@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // src/app/api/documents/route.ts - REAL DATA from Your Supabase Database
 // ===================================================================

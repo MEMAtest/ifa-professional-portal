@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // src/app/api/documents/download/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'

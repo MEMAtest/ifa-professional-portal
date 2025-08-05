@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // FILE 1: /src/app/api/calendar/route.ts - COMPLETE FIXED VERSION
 // ============================================

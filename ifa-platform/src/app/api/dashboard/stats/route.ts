@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // File: src/app/api/dashboard/stats/route.ts
 // API Route: Dashboard Statistics for Document Vault

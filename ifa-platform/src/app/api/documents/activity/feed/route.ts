@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // File: src/app/api/documents/activity/feed/route.ts
 // FIXED: Removed invalid exports that were causing build errors

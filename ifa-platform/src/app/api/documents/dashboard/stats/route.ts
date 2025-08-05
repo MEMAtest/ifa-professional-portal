@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // File: src/app/api/documents/dashboard/stats/route.ts
 // Minimal version with only valid exports

@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // FIXED WEBHOOK ROUTE: DocuSeal Status Updates
 // File: src/app/api/docuseal/webhook/route.ts

@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // FIXED API ROUTE: Get Client Documents
 // File: src/app/api/documents/client/[clientId]/route.ts

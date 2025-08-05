@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // src/app/api/assessments/progress/[clientId]/route.ts
 // ================================================================
 // ASSESSMENT PROGRESS TRACKING API - FIXED VERSION

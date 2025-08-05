@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // src/app/api/clients/[id]/route.ts
 // ✅ DEFINITIVE FIX: Enhanced error handling and parameter extraction
 

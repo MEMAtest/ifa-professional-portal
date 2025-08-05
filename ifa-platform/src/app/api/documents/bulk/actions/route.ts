@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ===================================================================
 // File: src/app/api/documents/bulk/actions/route.ts
 // API Route: Bulk Operations for Document Vault

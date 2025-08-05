@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ================================================================
 // FILE 2: /api/documents/generate-combined/route.ts
 // ================================================================

@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // ================================================================
 // FILE 6: /api/documents/status/[documentId]/route.ts
 // ================================================================

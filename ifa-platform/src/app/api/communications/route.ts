@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 // src/app/api/communications/route.ts
 // ✅ FIXED: Updated to use client_communications table with correct columns
 // ===================================================================
