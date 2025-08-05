@@ -5,22 +5,21 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Create a service role client for server-side operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy initialization to prevent build-time errors
+let supabaseAdmin: ReturnType<typeof createClient> | null = null;
 
-interface AssessmentData {
-  client_id: string;
-  advisor_id: string;
-  assessment_data: any;
-  risk_analysis?: any;
-  vulnerability_analysis?: any;
-  consumer_duty_compliance?: any;
-  status: string;
-  version: number;
-  legacy_form_id?: string | null;
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Missing Supabase environment variables');
+    }
+    
+    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  return supabaseAdmin;
 }
 
 export async function POST(request: NextRequest) {
@@ -38,6 +37,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get supabase client (lazy initialization)
+    const supabaseAdmin = getSupabaseAdmin();
+
     // Verify the user with the token
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
@@ -48,32 +50,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build assessment data with proper typing
-    const assessmentData: AssessmentData = {
+    // Build assessment data directly for insert
+    const insertData = {
       client_id: body.client_id || body.clientId,
       advisor_id: user.id,
       assessment_data: body.assessment_data || body.assessmentData || {},
       status: body.status || 'draft',
       version: body.version || 1,
+      ...(body.risk_analysis || body.riskAnalysis ? { risk_analysis: body.risk_analysis || body.riskAnalysis } : {}),
+      ...(body.vulnerability_analysis || body.vulnerabilityAnalysis ? { vulnerability_analysis: body.vulnerability_analysis || body.vulnerabilityAnalysis } : {}),
+      ...(body.consumer_duty_compliance || body.consumerDutyCompliance ? { consumer_duty_compliance: body.consumer_duty_compliance || body.consumerDutyCompliance } : {}),
+      ...(body.legacy_form_id || body.legacyFormId ? { legacy_form_id: body.legacy_form_id || body.legacyFormId } : {})
     };
-
-    // Add optional fields if provided
-    if (body.risk_analysis || body.riskAnalysis) {
-      assessmentData.risk_analysis = body.risk_analysis || body.riskAnalysis;
-    }
-    if (body.vulnerability_analysis || body.vulnerabilityAnalysis) {
-      assessmentData.vulnerability_analysis = body.vulnerability_analysis || body.vulnerabilityAnalysis;
-    }
-    if (body.consumer_duty_compliance || body.consumerDutyCompliance) {
-      assessmentData.consumer_duty_compliance = body.consumer_duty_compliance || body.consumerDutyCompliance;
-    }
-    if (body.legacy_form_id || body.legacyFormId) {
-      assessmentData.legacy_form_id = body.legacy_form_id || body.legacyFormId;
-    }
 
     const { data, error } = await supabaseAdmin
       .from('assessments')
-      .insert([assessmentData])
+      .insert([insertData])
       .select()
       .single();
 
@@ -105,6 +97,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
     const assessmentId = searchParams.get('id');
+
+    // Get supabase client (lazy initialization)
+    const supabaseAdmin = getSupabaseAdmin();
 
     // Build the query based on parameters
     if (assessmentId) {
