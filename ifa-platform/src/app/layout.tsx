@@ -2,6 +2,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+
 // Context providers
 import Providers from './providers'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
   description: 'Professional Financial Advisory Platform - Strategic planning and performance optimization for financial advisors',
   keywords: [
     'financial planning',
-    'advisory platform',
+    'advisory platform', 
     'cash flow modeling',
     'retirement planning',
     'risk assessment',
@@ -27,14 +28,10 @@ export const metadata: Metadata = {
   creator: 'Plannetic',
   publisher: 'Plannetic',
   icons: {
-    icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/icon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/icon-32x32.png', sizes: '32x32', type: 'image/png' },
-    ],
+    icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
-  metadataBase: new URL('https://plannetic.com'),
+  metadataBase: new URL('https://www.plannetic.com'), // Updated to www
   openGraph: {
     title: 'Plannetic - Turning Plans into Performance',
     description: 'Professional Financial Advisory Platform for strategic planning and performance optimization',
@@ -43,7 +40,7 @@ export const metadata: Metadata = {
     siteName: 'Plannetic',
     images: [
       {
-        url: '/og-image.png',
+        url: '/logo.png', // Using your actual logo file
         width: 1200,
         height: 630,
         alt: 'Plannetic - Turning Plans into Performance',
@@ -54,21 +51,21 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Plannetic - Professional Financial Advisory Platform',
     description: 'Turning Plans into Performance - Strategic planning and optimization for financial advisors',
-    images: ['/twitter-image.png'],
+    images: ['/logo.png'], // Using your actual logo file
   },
   robots: {
-    index: false,
-    follow: false,
-    noarchive: true,
+    index: true, // Changed to true for production
+    follow: true, // Changed to true for production
+    noarchive: false,
     nosnippet: false,
-    noimageindex: true,
+    noimageindex: false,
     nocache: false,
   },
 }
 
-// VIEWPORT - Plannetic brand color (turquoise)
+// VIEWPORT - Plannetic brand color (teal)
 export const viewport: Viewport = {
-  themeColor: '#00CED1',
+  themeColor: '#14b8a6', // Updated to match your teal branding
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
