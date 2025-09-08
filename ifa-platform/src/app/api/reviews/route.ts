@@ -7,14 +7,12 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase/server';
+
 
 // Initialize Supabase client
-function getSupabaseClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+async function getSupabaseClient() {
+  return await createClient();
 }
 
 // GET - Fetch reviews for a client
@@ -30,7 +28,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = await getSupabaseClient();
 
     const { data, error } = await supabase
       .from('client_reviews')
@@ -101,7 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = await getSupabaseClient();
 
     // Create the review
     const { data, error } = await supabase
@@ -167,7 +165,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = await getSupabaseClient();
 
     // If completing a review, set completed_date
     if (updates.status === 'completed' && !updates.completed_date) {
@@ -234,7 +232,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = await getSupabaseClient();
 
     const { error } = await supabase
       .from('client_reviews')

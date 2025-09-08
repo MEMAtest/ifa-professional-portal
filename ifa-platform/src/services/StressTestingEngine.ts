@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ================================================================
 // src/services/StressTestingEngine.ts - ENHANCED WITH PERSONAL CRISIS
 // Extends existing engine with personal crisis scenarios

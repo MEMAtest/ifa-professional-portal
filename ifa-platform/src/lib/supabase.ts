@@ -1,33 +1,127 @@
-// ===== FILE #2: src/lib/supabase.ts =====
-// COMPLETELY FIXED - All TypeScript errors eliminated
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/database'
+// src/lib/supabase.ts
+import { createBrowserClient, createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import type { Database } from '@/types/database.types'
 
-// 🔧 CHANGE: Remove the ! assertions that crash the app
+// Environment variables with fallbacks
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://maandodhonjolrmcxivo.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-// 🔧 CHANGE: Better error handling instead of throwing
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables')
-  console.error('URL available:', !!supabaseUrl)
-  console.error('Key available:', !!supabaseAnonKey)
+// Log warnings if environment variables are missing
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  console.warn('⚠️ NEXT_PUBLIC_SUPABASE_URL not set, using default')
+}
+if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  console.error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is missing!')
 }
 
-// 🔧 CHANGE: Use fallback for missing key instead of crashing
-export const supabase = createClient<Database>(
+// ================================================================
+// Unified Client Creation
+// ================================================================
+
+/**
+ * Creates a Supabase client for use in Server Components or Server Actions.
+ * This is the PRIMARY client you should use for data fetching and mutations.
+ */
+export async function createServerSupabaseClient() {
+  const cookieStore = await cookies()
+
+  return createServerClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          } catch {
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
+          }
+        },
+      },
+    }
+  )
+}
+
+/**
+ * Creates a Supabase client for use in Client Components.
+ * Use this for things like real-time subscriptions or client-side mutations.
+ */
+export function createBrowserSupabaseClient() {
+  return createBrowserClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey
+  )
+}
+
+// ================================================================
+// Legacy Global Client (for non-App Router files or quick fixes)
+// Use sparingly and phase out where possible.
+// ================================================================
+export const supabase = createBrowserClient<Database>(
   supabaseUrl,
-  supabaseAnonKey || 'dummy-key-for-build',
+  supabaseAnonKey,
   {
     auth: {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true
+    },
+    db: {
+      schema: 'public'
+    },
+    global: {
+      headers: {
+        'x-application-name': 'ifa-platform'
+      }
     }
   }
 )
 
-// Auth helpers (NO CHANGES)
+// Create admin client for server-side operations (if service role key is available)
+export const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createBrowserClient<Database>(
+      supabaseUrl,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        },
+        db: {
+          schema: 'public'
+        }
+      }
+    )
+  : supabase
+
+// ================================================================
+// Type exports for use in other files
+// ================================================================
+
+export type { Database }
+
+// Helper types for table rows
+export type Tables<T extends keyof Database['public']['Tables']> = 
+  Database['public']['Tables'][T]['Row']
+
+export type InsertTables<T extends keyof Database['public']['Tables']> = 
+  Database['public']['Tables'][T]['Insert']
+
+export type UpdateTables<T extends keyof Database['public']['Tables']> = 
+  Database['public']['Tables'][T]['Update']
+
+// ================================================================
+// Auth helpers (using the legacy global client for now)
+// ================================================================
+
 export const getSession = async () => {
   const { data: { session }, error } = await supabase.auth.getSession()
   return { session, error }
@@ -43,243 +137,77 @@ export const signOut = async () => {
   return { error }
 }
 
+export const signIn = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+  return { data, error }
+}
+
+export const signUp = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  })
+  return { data, error }
+}
+
 // ================================================================
-// 🆕 COMPLETELY FIXED: Case Transformation Utilities
+// Case transformation utilities (for snake_case <-> camelCase)
 // ================================================================
 
 /**
  * Convert camelCase to snake_case
  */
 export function toSnakeCase(str: string): string {
-  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
 }
 
 /**
- * Convert snake_case to camelCase  
+ * Convert snake_case to camelCase
  */
 export function toCamelCase(str: string): string {
-  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
 }
 
 /**
  * Transform object keys from camelCase to snake_case (for database)
- * FIXED: Proper type handling without conflicts
  */
-export function transformToSnakeCase<T extends Record<string, any>>(obj: T | null | undefined): any {
-  if (obj === null || obj === undefined) return obj;
-  if (typeof obj !== 'object') return obj;
+export function transformToSnakeCase<T = any>(obj: T): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj !== 'object') return obj
+  if (obj instanceof Date) return obj
   if (Array.isArray(obj)) {
-    return obj.map((item: any) => transformToSnakeCase(item));
+    return obj.map(item => transformToSnakeCase(item))
   }
   
-  const result: any = {};
+  const result: any = {}
   for (const [key, value] of Object.entries(obj)) {
-    const snakeKey = toSnakeCase(key);
-    result[snakeKey] = typeof value === 'object' && value !== null 
-      ? transformToSnakeCase(value) 
-      : value;
+    const snakeKey = toSnakeCase(key)
+    result[snakeKey] = transformToSnakeCase(value)
   }
-  return result;
+  return result
 }
 
 /**
  * Transform object keys from snake_case to camelCase (from database)
- * FIXED: Proper type handling without conflicts
  */
-export function transformToCamelCase<T extends Record<string, any>>(obj: T | null | undefined): any {
-  if (obj === null || obj === undefined) return obj;
-  if (typeof obj !== 'object') return obj;
+export function transformToCamelCase<T = any>(obj: T): any {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj !== 'object') return obj
+  if (obj instanceof Date) return obj
   if (Array.isArray(obj)) {
-    return obj.map((item: any) => transformToCamelCase(item));
+    return obj.map(item => transformToCamelCase(item))
   }
   
-  const result: any = {};
+  const result: any = {}
   for (const [key, value] of Object.entries(obj)) {
-    const camelKey = toCamelCase(key);
-    result[camelKey] = typeof value === 'object' && value !== null 
-      ? transformToCamelCase(value) 
-      : value;
+    const camelKey = toCamelCase(key)
+    result[camelKey] = transformToCamelCase(value)
   }
-  return result;
+  return result
 }
 
-// ================================================================
-// 🆕 COMPLETELY FIXED: Simple Transform Functions (No Complex Types)
-// ================================================================
-
-/**
- * Simple transformation helper - COMPLETELY REWRITTEN to avoid type conflicts
- */
-export const dbTransform = {
-  /**
-   * Transform a single object to snake_case for database insert/update
-   */
-  toSnake: <T extends Record<string, any>>(obj: T): any => {
-    return transformToSnakeCase(obj);
-  },
-
-  /**
-   * Transform database result back to camelCase
-   */
-  toCamel: <T extends Record<string, any>>(obj: T): any => {
-    return transformToCamelCase(obj);
-  },
-
-  /**
-   * Simple insert with transformation - COMPLETELY REWRITTEN
-   */
-  insert: async <T extends Record<string, any>>(
-    table: string, 
-    data: T,
-    selectColumns = '*'
-  ) => {
-    try {
-      const snakeData = transformToSnakeCase(data);
-      
-      const { data: result, error } = await supabase
-        .from(table)
-        .insert(snakeData)
-        .select(selectColumns)
-        .single();
-      
-      if (error) {
-        return { data: null, error };
-      }
-      
-      const transformedResult = result ? transformToCamelCase(result) : null;
-      return { data: transformedResult, error: null };
-    } catch (err) {
-      return { data: null, error: err };
-    }
-  },
-
-  /**
-   * Simple select with transformation - COMPLETELY REWRITTEN
-   */
-  select: async (
-    table: string,
-    columns = '*',
-    filters?: Record<string, any>
-  ) => {
-    try {
-      let query = supabase.from(table).select(columns);
-      
-      // Apply filters one by one to avoid type conflicts
-      if (filters) {
-        for (const [key, value] of Object.entries(filters)) {
-          const snakeKey = toSnakeCase(key);
-          query = query.eq(snakeKey, value);
-        }
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) {
-        return { data: null, error };
-      }
-      
-      // Transform results to camelCase
-      const transformedData = data && Array.isArray(data) 
-        ? data.map((item: any) => transformToCamelCase(item))
-        : data;
-      
-      return { data: transformedData, error: null };
-    } catch (err) {
-      return { data: null, error: err };
-    }
-  },
-
-  /**
-   * Simple update with transformation - COMPLETELY REWRITTEN
-   */
-  update: async <T extends Record<string, any>>(
-    table: string,
-    data: Partial<T>,
-    filters: Record<string, any>,
-    selectColumns = '*'
-  ) => {
-    try {
-      const snakeData = transformToSnakeCase(data);
-      
-      let query = supabase.from(table).update(snakeData);
-      
-      // Apply filters one by one
-      for (const [key, value] of Object.entries(filters)) {
-        const snakeKey = toSnakeCase(key);
-        query = query.eq(snakeKey, value);
-      }
-      
-      const { data: insertResult, error: insertError } = await query.select(selectColumns);
-      
-      const { data: result, error } = await query;
-      
-      if (error) {
-        return { data: null, error };
-      }
-      
-      const transformedResult = result && Array.isArray(result) && (result as any[]).length > 0
-        ? transformToCamelCase(result[0])
-        : null;
-        
-      return { data: transformedResult, error: null };
-    } catch (err) {
-      return { data: null, error: err };
-    }
-  },
-
-  /**
-   * Simple delete - COMPLETELY REWRITTEN
-   */
-  delete: async (
-    table: string,
-    filters: Record<string, any>
-  ) => {
-    try {
-      let query = supabase.from(table).delete();
-      
-      // Apply filters one by one
-      for (const [key, value] of Object.entries(filters)) {
-        const snakeKey = toSnakeCase(key);
-        query = query.eq(snakeKey, value);
-      }
-      
-      const { error } = await query;
-      return { error };
-    } catch (err) {
-      return { error: err };
-    }
-  }
-};
-
-// ================================================================
-// 🆕 SIMPLE HELPER - No complex types, just basic functionality
-// ================================================================
-
-/**
- * Simple cash flow helper - COMPLETELY REWRITTEN to avoid all type conflicts
- */
-export const cashFlowDB = {
-  async create(scenario: Record<string, any>) {
-    return dbTransform.insert('cash_flow_scenarios', scenario);
-  },
-  
-  async getByClient(clientId: string) {
-    return dbTransform.select('cash_flow_scenarios', '*', { clientId });
-  },
-
-  async getById(id: string) {
-    const result = await dbTransform.select('cash_flow_scenarios', '*', { id });
-    if (result.data && Array.isArray(result.data) && result.data.length > 0) {
-      return { data: result.data[0], error: null };
-    }
-    return { data: null, error: result.error };
-  },
-
-  async update(id: string, updates: Record<string, any>) {
-    return dbTransform.update('cash_flow_scenarios', updates, { id });
-  },
-
-  async delete(id: string) {
-    return dbTransform.delete('cash_flow_scenarios', { id });
-  }
-};
+// Default export for convenience
+export default supabase

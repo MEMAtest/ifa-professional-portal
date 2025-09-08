@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 import { ComplianceCheck, ComplianceReport, CashFlowScenario } from '@/types/advanced-analytics';
 
 export class FCAComplianceService {

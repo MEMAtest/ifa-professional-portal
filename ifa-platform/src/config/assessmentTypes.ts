@@ -1,7 +1,5 @@
-// src/config/assessmentTypes.ts
-// ================================================================
-// ASSESSMENT TYPES CONFIGURATION
-// ================================================================
+// src/config/assessmentTypes.ts - COMPLETE UPDATED VERSION
+// NO PREREQUISITES - ALL ASSESSMENTS OPTIONAL AND INDEPENDENT
 
 import { 
   Shield, 
@@ -22,13 +20,30 @@ export interface AssessmentTypeConfig {
   required: boolean;
   category: 'risk' | 'planning' | 'compliance';
   estimatedTime: string;
-  prerequisites?: string[];
+  prerequisites?: string[]; // Keep field but always empty
   scoringType?: 'numeric' | 'category' | 'percentage';
   color: string;
   shortName: string;
+  order?: number; // Add order for display purposes only
 }
 
+// ALL ASSESSMENTS - No mandatory requirements, no prerequisites
 export const assessmentTypes: Record<string, AssessmentTypeConfig> = {
+  suitability: {
+    id: 'suitability',
+    name: 'Full Suitability',
+    shortName: 'Suitability',
+    description: 'Comprehensive suitability assessment',
+    icon: FileText,
+    route: '/assessments/suitability',
+    required: false, // ✅ Changed to false
+    category: 'compliance',
+    estimatedTime: '30-45 minutes',
+    prerequisites: [], // ✅ No prerequisites
+    scoringType: 'percentage',
+    color: 'green',
+    order: 1
+  },
   atr: {
     id: 'atr',
     name: 'Attitude to Risk',
@@ -36,11 +51,13 @@ export const assessmentTypes: Record<string, AssessmentTypeConfig> = {
     description: 'Measures psychological comfort with investment volatility',
     icon: Shield,
     route: '/assessments/atr',
-    required: true,
+    required: false, // ✅ Changed to false
     category: 'risk',
     estimatedTime: '10-15 minutes',
+    prerequisites: [], // ✅ No prerequisites
     scoringType: 'numeric',
-    color: 'blue'
+    color: 'blue',
+    order: 2
   },
   cfl: {
     id: 'cfl',
@@ -49,11 +66,13 @@ export const assessmentTypes: Record<string, AssessmentTypeConfig> = {
     description: 'Evaluates financial ability to absorb investment losses',
     icon: TrendingUp,
     route: '/assessments/cfl',
-    required: true,
+    required: false, // ✅ Changed to false
     category: 'risk',
     estimatedTime: '5-10 minutes',
+    prerequisites: [], // ✅ No prerequisites
     scoringType: 'numeric',
-    color: 'green'
+    color: 'purple',
+    order: 3
   },
   persona: {
     id: 'persona',
@@ -62,25 +81,13 @@ export const assessmentTypes: Record<string, AssessmentTypeConfig> = {
     description: 'Behavioral profiling for personalized advice delivery',
     icon: User,
     route: '/assessments/persona-assessment',
-    required: true,
+    required: false, // ✅ Changed to false
     category: 'compliance',
     estimatedTime: '5 minutes',
+    prerequisites: [], // ✅ No prerequisites
     scoringType: 'category',
-    color: 'purple'
-  },
-  suitability: {
-    id: 'suitability',
-    name: 'Full Suitability',
-    shortName: 'Suitability',
-    description: 'Comprehensive suitability assessment',
-    icon: FileText,
-    route: '/assessments/suitability',
-    required: true,
-    category: 'compliance',
-    estimatedTime: '30-45 minutes',
-    prerequisites: ['atr', 'cfl'],
-    scoringType: 'percentage',
-    color: 'orange'
+    color: 'indigo',
+    order: 4
   },
   monteCarlo: {
     id: 'monteCarlo',
@@ -92,8 +99,10 @@ export const assessmentTypes: Record<string, AssessmentTypeConfig> = {
     required: false,
     category: 'planning',
     estimatedTime: '15-20 minutes',
+    prerequisites: [], // ✅ No prerequisites
     scoringType: 'percentage',
-    color: 'indigo'
+    color: 'orange',
+    order: 5
   },
   cashFlow: {
     id: 'cashFlow',
@@ -105,40 +114,33 @@ export const assessmentTypes: Record<string, AssessmentTypeConfig> = {
     required: false,
     category: 'planning',
     estimatedTime: '20-30 minutes',
+    prerequisites: [], // ✅ No prerequisites
     scoringType: 'numeric',
-    color: 'teal'
+    color: 'teal',
+    order: 6
   }
 };
 
-// Get required assessments
-export const requiredAssessments = Object.values(assessmentTypes).filter(a => a.required);
+// ✅ UPDATED: All assessments are now optional
+export const requiredAssessments: AssessmentTypeConfig[] = [];
 
-// Get optional assessments
-export const optionalAssessments = Object.values(assessmentTypes).filter(a => !a.required);
+// ✅ UPDATED: All assessments are optional
+export const optionalAssessments = Object.values(assessmentTypes).sort((a, b) => 
+  (a.order || 99) - (b.order || 99)
+);
 
 // Get assessment by ID
 export const getAssessmentType = (id: string): AssessmentTypeConfig | undefined => {
   return assessmentTypes[id];
 };
 
-// Check if all prerequisites are met
+// ✅ UPDATED: No prerequisites to check
 export const checkPrerequisites = (
   assessmentId: string, 
   completedAssessments: string[]
 ): { met: boolean; missing: string[] } => {
-  const assessment = assessmentTypes[assessmentId];
-  if (!assessment || !assessment.prerequisites) {
-    return { met: true, missing: [] };
-  }
-  
-  const missing = assessment.prerequisites.filter(
-    prereq => !completedAssessments.includes(prereq)
-  );
-  
-  return {
-    met: missing.length === 0,
-    missing
-  };
+  // Always return met: true since no prerequisites
+  return { met: true, missing: [] };
 };
 
 // Get color classes for Tailwind
@@ -179,44 +181,33 @@ export const getAssessmentColorClasses = (color: string) => {
   return colorMap[color] || colorMap.blue;
 };
 
-// Calculate overall completion percentage
+// ✅ UPDATED: Calculate progress based on all assessments
 export const calculateOverallProgress = (
   completedAssessments: string[],
-  includeOptional: boolean = false
+  includeOptional: boolean = true // Default to include all
 ): number => {
-  const assessmentsToCheck = includeOptional 
-    ? Object.keys(assessmentTypes)
-    : requiredAssessments.map(a => a.id);
-    
-  const completed = assessmentsToCheck.filter(id => 
+  const allAssessments = Object.keys(assessmentTypes);
+  const completed = allAssessments.filter(id => 
     completedAssessments.includes(id)
   ).length;
   
-  return Math.round((completed / assessmentsToCheck.length) * 100);
+  return allAssessments.length > 0 
+    ? Math.round((completed / allAssessments.length) * 100)
+    : 0;
 };
 
-// Get next recommended assessment
+// ✅ UPDATED: Suggest next assessment (any uncompleted one)
 export const getNextAssessment = (
   completedAssessments: string[]
 ): AssessmentTypeConfig | null => {
-  // First check required assessments
-  for (const assessment of requiredAssessments) {
-    if (!completedAssessments.includes(assessment.id)) {
-      // Check prerequisites
-      const prereqCheck = checkPrerequisites(assessment.id, completedAssessments);
-      if (prereqCheck.met) {
-        return assessment;
-      }
-    }
-  }
+  // Return first uncompleted assessment
+  const allAssessments = Object.values(assessmentTypes).sort((a, b) => 
+    (a.order || 99) - (b.order || 99)
+  );
   
-  // Then check optional assessments
-  for (const assessment of optionalAssessments) {
+  for (const assessment of allAssessments) {
     if (!completedAssessments.includes(assessment.id)) {
-      const prereqCheck = checkPrerequisites(assessment.id, completedAssessments);
-      if (prereqCheck.met) {
-        return assessment;
-      }
+      return assessment;
     }
   }
   
@@ -245,4 +236,21 @@ export const assessmentStatusColors = {
   in_progress: 'yellow',
   completed: 'green',
   overdue: 'red'
+};
+
+// ✅ NEW: Get all available assessments for a client
+export const getAvailableAssessments = (
+  completedAssessments: string[] = []
+): AssessmentTypeConfig[] => {
+  // Return all assessments since there are no prerequisites
+  return Object.values(assessmentTypes).sort((a, b) => 
+    (a.order || 99) - (b.order || 99)
+  );
+};
+
+// ✅ NEW: Check if any assessment is complete
+export const hasAnyAssessmentComplete = (
+  completedAssessments: string[]
+): boolean => {
+  return completedAssessments.length > 0;
 };

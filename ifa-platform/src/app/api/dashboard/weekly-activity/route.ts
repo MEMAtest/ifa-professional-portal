@@ -1,6 +1,5 @@
-// File: src/app/api/dashboard/weekly-activity/route.ts
+import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +17,7 @@ interface WeeklyStats {
 }
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
     console.log('📊 GET /api/dashboard/weekly-activity - Fetching weekly data...');
     
@@ -50,16 +50,16 @@ export async function GET(request: NextRequest) {
       const dayName = days[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1]; // Adjust for Monday start
       
       // Fetch clients onboarded this day
-      const clientsCount = await getClientsForDay(dayStart, dayEnd);
+      const clientsCount = await getClientsForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
       
       // Fetch assessments completed this day
-      const assessmentsCount = await getAssessmentsForDay(dayStart, dayEnd);
+      const assessmentsCount = await getAssessmentsForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
       
       // Fetch documents generated this day
-      const documentsCount = await getDocumentsForDay(dayStart, dayEnd);
+      const documentsCount = await getDocumentsForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
       
       // Fetch Monte Carlo simulations this day
-      const monteCarloCount = await getMonteCarloForDay(dayStart, dayEnd);
+      const monteCarloCount = await getMonteCarloForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
       
       weeklyStats.clientsChart.push({
         day: dayName,
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Helper function to get clients for a specific day
-async function getClientsForDay(dayStart: Date, dayEnd: Date): Promise<number> {
+async function getClientsForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
   try {
     const { count, error } = await supabase
       .from('clients')
@@ -127,7 +127,7 @@ async function getClientsForDay(dayStart: Date, dayEnd: Date): Promise<number> {
 }
 
 // Helper function to get assessments for a specific day
-async function getAssessmentsForDay(dayStart: Date, dayEnd: Date): Promise<number> {
+async function getAssessmentsForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
   try {
     // Assuming you have an assessments table
     const { count, error } = await supabase
@@ -149,7 +149,7 @@ async function getAssessmentsForDay(dayStart: Date, dayEnd: Date): Promise<numbe
 }
 
 // Helper function to get documents for a specific day
-async function getDocumentsForDay(dayStart: Date, dayEnd: Date): Promise<number> {
+async function getDocumentsForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
   try {
     // Using your existing documents table
     const { count, error } = await supabase
@@ -172,7 +172,7 @@ async function getDocumentsForDay(dayStart: Date, dayEnd: Date): Promise<number>
 }
 
 // Helper function to get Monte Carlo simulations for a specific day
-async function getMonteCarloForDay(dayStart: Date, dayEnd: Date): Promise<number> {
+async function getMonteCarloForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
   try {
     // Assuming you have a monte_carlo_results or similar table
     const { count, error } = await supabase

@@ -1,5 +1,5 @@
 // services/SuitabilityAssessmentService.ts - FIXED VERSION (No Object Errors)
-import { supabase } from '@/lib/supabase'
+import { createClient } from "@/lib/supabase/client"
 
 export interface SuitabilityClient {
   id: string
@@ -32,6 +32,7 @@ export interface SuitabilityMetrics {
 
 class SuitabilityAssessmentService {
   private static instance: SuitabilityAssessmentService
+  private supabase = createClient() // ✅ Create supabase client as class property
   
   public static getInstance(): SuitabilityAssessmentService {
     if (!SuitabilityAssessmentService.instance) {
@@ -45,7 +46,7 @@ class SuitabilityAssessmentService {
       console.log('Loading clients from Supabase...')
       
       // Load actual clients from Supabase - ONLY ACTIVE CLIENTS
-      const { data: clients, error } = await supabase
+      const { data: clients, error } = await this.supabase  // ✅ Use this.supabase
         .from('clients')
         .select(`
           id,

@@ -19,7 +19,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { clientService } from '@/services/ClientService';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import type { Client } from '@/types/client';
 
 // Types
@@ -97,6 +97,7 @@ const Input = ({
 );
 
 export default function AssessmentsPage() {
+  const supabase = createClient()
   const router = useRouter();
   const [clients, setClients] = useState<ClientWithAssessmentStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);

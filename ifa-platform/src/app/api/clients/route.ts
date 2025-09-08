@@ -1,13 +1,15 @@
+import { createClient } from "@/lib/supabase/server"
 // src/app/api/clients/route.ts
 // ✅ FIXED: Returns RAW database data, no transformation
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
     console.log('📋 GET /api/clients - Fetching clients...');
     
@@ -91,6 +93,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const supabase = await createClient()
   try {
     console.log('📋 POST /api/clients - Creating new client...');
     

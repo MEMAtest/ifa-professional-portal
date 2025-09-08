@@ -1,24 +1,47 @@
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
 // src/app/api/assessments/report/[clientId]/route.ts
 // ================================================================
 // ASSESSMENT REPORT GENERATION API - FIXED VERSION
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { clientService } from '@/services/ClientService';
-import type { AssessmentProgress, AssessmentHistory } from '@/types/assessment';
+
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic';
 
 // Extend jsPDF type for autoTable
 declare module 'jspdf' {
   interface jsPDF {
     autoTable: (options: any) => jsPDF;
   }
+}
+
+// Define types if not imported
+interface AssessmentProgress {
+  id: string;
+  client_id: string;
+  assessment_type: string;
+  status: string;
+  progress_percentage?: number;
+  started_at?: string;
+  completed_at?: string;
+  last_updated?: string;
+  metadata?: any;
+}
+
+interface AssessmentHistory {
+  id: string;
+  client_id: string;
+  assessment_type: string;
+  action: string;
+  performed_at: string;
+  performed_by?: string;
+  changes?: any;
+  metadata?: any;
 }
 
 // POST: Generate assessment report
@@ -30,12 +53,15 @@ export async function POST(
     const clientId = params.clientId;
     const body = await request.json();
     const { format = 'pdf', includeHistory = true, assessmentTypes = [] } = body;
+    
+    // Create Supabase client
+    const supabase = await createClient();
 
     // Fetch all required data
     const [clientData, progressData, historyData] = await Promise.all([
       fetchClientData(clientId),
-      fetchProgressData(clientId, assessmentTypes),
-      includeHistory ? fetchHistoryData(clientId) : Promise.resolve([])
+      fetchProgressData(supabase, clientId, assessmentTypes),
+      includeHistory ? fetchHistoryData(supabase, clientId) : Promise.resolve([])
     ]);
 
     if (!clientData) {
@@ -65,16 +91,25 @@ export async function POST(
       );
     }
 
-    // Log report generation
-    await supabase
+    // Log report generation - properly typed
+    const { error: insertError } = await supabase
       .from('assessment_history')
-      .insert({
+      .insert([{
         client_id: clientId,
         assessment_type: 'report',
         action: 'generated',
         performed_at: new Date().toISOString(),
-        metadata: { format, includeHistory, assessmentTypes }
-      });
+        metadata: { 
+          format, 
+          includeHistory, 
+          assessmentTypes 
+        }
+      }]);
+
+    if (insertError) {
+      console.error('Error logging report generation:', insertError);
+      // Don't fail the request if logging fails
+    }
 
     // Return the file
     return new NextResponse(reportBuffer, {
@@ -103,8 +138,12 @@ async function fetchClientData(clientId: string) {
   }
 }
 
-// Fetch progress data
-async function fetchProgressData(clientId: string, assessmentTypes: string[]) {
+// Fetch progress data - pass supabase client
+async function fetchProgressData(
+  supabase: any, 
+  clientId: string, 
+  assessmentTypes: string[]
+): Promise<AssessmentProgress[]> {
   let query = supabase
     .from('assessment_progress')
     .select('*')
@@ -115,15 +154,20 @@ async function fetchProgressData(clientId: string, assessmentTypes: string[]) {
   }
 
   const { data, error } = await query;
+  
   if (error) {
     console.error('Error fetching progress:', error);
     return [];
   }
-  return data || [];
+  
+  return (data as AssessmentProgress[]) || [];
 }
 
-// Fetch history data
-async function fetchHistoryData(clientId: string) {
+// Fetch history data - pass supabase client
+async function fetchHistoryData(
+  supabase: any,
+  clientId: string
+): Promise<AssessmentHistory[]> {
   const { data, error } = await supabase
     .from('assessment_history')
     .select('*')
@@ -135,7 +179,8 @@ async function fetchHistoryData(clientId: string) {
     console.error('Error fetching history:', error);
     return [];
   }
-  return data || [];
+  
+  return (data as AssessmentHistory[]) || [];
 }
 
 // Generate PDF Report
@@ -198,7 +243,6 @@ async function generatePDFReport(
     if (atrProgress?.metadata) {
       const atrMeta = atrProgress.metadata as any;
       const atrScore = atrMeta.score || 0;
-      // Fix: Convert number to string properly
       doc.text(`ATR Score: ${Number(atrScore).toFixed(1)}/5`, 20, riskYPos);
       riskYPos += 7;
     }
@@ -206,7 +250,6 @@ async function generatePDFReport(
     if (cflProgress?.metadata) {
       const cflMeta = cflProgress.metadata as any;
       const cflScore = cflMeta.score || 0;
-      // Fix: Convert number to string properly
       doc.text(`CFL Score: ${Number(cflScore).toFixed(1)}/5`, 20, riskYPos);
     }
   }

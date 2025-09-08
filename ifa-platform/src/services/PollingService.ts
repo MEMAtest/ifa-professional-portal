@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // src/services/PollingService.ts
 import { CashFlowScenarioService } from './CashFlowScenarioService';
 

@@ -1,6 +1,7 @@
+import { createClient } from "@/lib/supabase/server"
 // src/app/api/clients/statistics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,7 @@ interface ClientStatistics {
 }
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
     console.log('📊 GET /api/clients/statistics - Fetching statistics...');
     

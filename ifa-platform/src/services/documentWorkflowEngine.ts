@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ===================================================================
 // src/services/documentWorkflowEngine.ts - COMPLETE FILE
 // ===================================================================

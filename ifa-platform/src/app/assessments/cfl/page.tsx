@@ -547,21 +547,19 @@ export default function CFLAssessmentPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId,
-          answers,
-          score: cflResult.score,
-          category: cflResult.category,
-          level: Math.round(cflResult.score / 20) || 1, // Convert to 1-5 scale
-          maxLossPercentage: cflResult.maxLossPercentage,
-          confidenceLevel: cflResult.confidenceLevel,
-          recommendations: cflResult.recommendations,
-          financialData: {
-            monthlyIncome: answers.monthly_income,
-            monthlyExpenses: answers.monthly_essential_expenses,
-            emergencyFund: answers.emergency_fund,
-            otherInvestments: answers.other_investments
-          }
-        }),
+  clientId,
+  answers,
+  totalScore: cflResult.score,
+  capacityCategory: cflResult.category,
+  capacityLevel: Math.round(cflResult.score / 10) || 1, // Scale to 1-10
+  maxLossPercentage: cflResult.maxLossPercentage,
+  confidenceLevel: cflResult.confidenceLevel,
+  recommendations: cflResult.recommendations,
+  monthlyIncome: Number(answers.monthly_income) || 0,
+  monthlyExpenses: Number(answers.monthly_essential_expenses) || 0,
+  emergencyFund: Number(answers.emergency_fund) || 0,
+  otherInvestments: Number(answers.other_investments) || 0
+}),
       })
 
       if (response.ok) {
@@ -591,15 +589,15 @@ export default function CFLAssessmentPage() {
         })
         
         toast({
-          title: 'Success',
-          description: 'CFL assessment saved successfully',
-          variant: 'default'
-        })
-        
-        // Navigate to assessment hub after save
-        setTimeout(() => {
-          router.push(`/assessments/client/${clientId}${isProspect ? '?isProspect=true' : ''}`)
-        }, 2000)
+  title: 'Success',
+  description: 'CFL assessment saved successfully',
+  variant: 'default'
+})
+
+// REMOVED automatic navigation - user stays on page
+// setTimeout(() => {
+//   router.push(`/assessments/client/${clientId}${isProspect ? '?isProspect=true' : ''}`)
+// }, 2000)
       } else {
         throw new Error('Failed to save assessment')
       }

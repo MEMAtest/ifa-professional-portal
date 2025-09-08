@@ -14,7 +14,7 @@ import {
   EyeOff
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { useToast } from '@/hooks/use-toast'
@@ -45,6 +45,7 @@ interface UserProfile {
 }
 
 export default function SettingsPage() {
+  const supabase = createClient()
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
 

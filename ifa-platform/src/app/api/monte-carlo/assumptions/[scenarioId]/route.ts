@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server"
 // src/app/api/monte-carlo/assumptions/[scenarioId]/route.ts
 // ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
 

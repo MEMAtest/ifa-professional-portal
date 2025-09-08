@@ -1,6 +1,6 @@
 // ================================================================
-// src/app/cashflow/page.tsx - FINAL FIXED VERSION
-// Using existing AssessmentService and correct type imports
+// src/app/cashflow/page.tsx - UPDATED VERSION
+// Added Stress Test button and fixed Generate Report to use modal
 // ================================================================
 
 'use client';
@@ -8,20 +8,20 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
-// FIX: Use default import instead of named import
 import CashFlowDashboard from '@/components/cashflow/CashFlowDashboard';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { CashFlowScenarioService } from '@/services/CashFlowScenarioService';
 import { clientService } from '@/services/ClientService';
-// INTEGRATION: Import integration hook and services
 import { useClientIntegration } from '@/lib/hooks/useClientIntegration';
-// FIX: Use existing AssessmentService instead of creating new one
 import { AssessmentService } from '@/services/AssessmentService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
+// ADDED: Import modals
+import GenerateReportModal from '@/components/cashflow/EnhancedGenerateReportModal';
+import { StressTestModal } from '@/components/cashflow/StressTestModal';
 import { 
   TrendingUp, 
   Calculator, 
@@ -37,10 +37,10 @@ import {
   Activity,
   ChevronRight,
   Save,
-  Loader2
+  Loader2,
+  Zap // ADDED: Zap icon for stress test
 } from 'lucide-react';
 import type { Client, ClientListResponse } from '@/types/client';
-// FIX: Import from the correct module - using the one that matches the service
 import type { CashFlowScenario } from '@/types/cashflow';
 
 // ================================================================
@@ -55,7 +55,6 @@ interface QuickAction {
   disabled?: boolean;
 }
 
-// ENHANCED: Add tracking state interface
 interface TrackingState {
   isTracking: boolean;
   lastTrackedScenarioId?: string;
@@ -66,10 +65,11 @@ interface TrackingState {
 // ================================================================
 
 export default function CashFlowPage() {
+  const supabase = createClient()
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientId = searchParams?.get('clientId');
-  const action = searchParams?.get('action'); // For 'new' scenario action
+  const action = searchParams?.get('action');
   const { toast } = useToast();
 
   // Existing state
@@ -78,17 +78,17 @@ export default function CashFlowPage() {
   const [scenarios, setScenarios] = useState<CashFlowScenario[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // INTEGRATION: New state for enhanced features
   const [isCreatingScenario, setIsCreatingScenario] = useState(false);
   const [showNewScenarioDialog, setShowNewScenarioDialog] = useState(false);
-  
-  // ENHANCED: Add tracking state
   const [trackingState, setTrackingState] = useState<TrackingState>({
     isTracking: false
   });
 
-  // INTEGRATION: Use the integration hook for selected client
+  // ADDED: Modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showStressTestModal, setShowStressTestModal] = useState(false);
+  const [selectedScenarioForReport, setSelectedScenarioForReport] = useState<CashFlowScenario | null>(null);
+
   const { 
     client: integratedClient,
     dashboardData,
@@ -109,21 +109,17 @@ export default function CashFlowPage() {
     }
   }, [clientId]);
 
-  // INTEGRATION: Check for 'new' action
   useEffect(() => {
     if (action === 'new' && selectedClient) {
       setShowNewScenarioDialog(true);
-      // Clear the action param
       const newUrl = `/cashflow?clientId=${selectedClient.id}`;
       window.history.replaceState({}, '', newUrl);
     }
   }, [action, selectedClient]);
 
-  // ENHANCED: Track scenario creation in CashFlowDashboard
   useEffect(() => {
     if (!selectedClient) return;
 
-    // Listen for scenario save events from CashFlowDashboard
     const handleScenarioSave = async (event: CustomEvent) => {
       const { scenario, isNew } = event.detail;
       
@@ -148,15 +144,13 @@ export default function CashFlowPage() {
       setIsLoading(true);
       setError(null);
 
-      // Load clients list for selection
       const clientsResponse: ClientListResponse = await clientService.getAllClients(
-        { status: ['active'] }, // Remove sortBy: 'name' to fix the 500 error
+        { status: ['active'] },
         1,
         100
       );
       setClients(clientsResponse.clients);
 
-      // If we have a clientId in URL, load that client
       if (clientId) {
         await loadClientAndScenarios(clientId);
       }
@@ -171,15 +165,12 @@ export default function CashFlowPage() {
 
   const loadClientAndScenarios = async (clientId: string) => {
     try {
-      // Load selected client
       const client = await clientService.getClientById(clientId);
       setSelectedClient(client);
 
-      // Load scenarios for this client
       const clientScenarios = await CashFlowDataService.getScenariosForClient(clientId);
       setScenarios(clientScenarios);
 
-      // INTEGRATION: Check if client needs a default scenario
       if (clientScenarios.length === 0) {
         await createDefaultScenario(client);
       }
@@ -190,22 +181,18 @@ export default function CashFlowPage() {
     }
   };
 
-  // ENHANCED: Track progress when creating default scenario
   const createDefaultScenario = async (client: Client) => {
     try {
       setIsCreatingScenario(true);
       
       const defaultScenario = await CashFlowScenarioService.ensureClientHasScenario(client.id);
       
-      // Link the scenario to the client
       if (linkScenario) {
         await linkScenario(defaultScenario.id);
       }
       
-      // ENHANCED: Track assessment completion
       await trackCashFlowProgress(defaultScenario as any);
       
-      // Reload scenarios
       const updatedScenarios = await CashFlowDataService.getScenariosForClient(client.id);
       setScenarios(updatedScenarios);
       
@@ -226,14 +213,12 @@ export default function CashFlowPage() {
     }
   };
 
-  // ENHANCED: Track cash flow assessment progress using existing AssessmentService
   const trackCashFlowProgress = async (scenario: CashFlowScenario) => {
     if (!selectedClient) return;
     
     try {
       setTrackingState({ isTracking: true, lastTrackedScenarioId: scenario.id });
       
-      // Get current scenario count
       const { count } = await supabase
         .from('cashflow_scenarios')
         .select('*', { count: 'exact', head: true })
@@ -241,7 +226,6 @@ export default function CashFlowPage() {
       
       const scenarioCount = count || 1;
       
-      // Use existing AssessmentService to update progress
       await AssessmentService.updateProgress(selectedClient.id, {
         assessmentType: 'cashFlow',
         status: 'completed',
@@ -251,12 +235,10 @@ export default function CashFlowPage() {
           scenarioCount,
           lastScenarioName: scenario.scenarioName || 'Cash Flow Scenario',
           scenarioType: scenario.scenarioType || 'standard',
-          // Use the correct property names based on the CashFlowScenario type
           projectionYears: scenario.projectionYears || 30
         }
       });
       
-      // Log history using existing service
       await AssessmentService.logHistory(selectedClient.id, {
         assessmentType: 'cashFlow',
         action: 'scenario_created',
@@ -267,7 +249,6 @@ export default function CashFlowPage() {
         }
       });
       
-      // Show subtle success indicator
       toast({
         title: 'Progress Updated',
         description: 'Cash flow assessment has been recorded',
@@ -277,7 +258,6 @@ export default function CashFlowPage() {
       
     } catch (error) {
       console.error('Failed to track cash flow progress:', error);
-      // Non-blocking - don't show error to user
     } finally {
       setTrackingState(prev => ({ ...prev, isTracking: false }));
     }
@@ -285,19 +265,26 @@ export default function CashFlowPage() {
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
-    // Update URL with selected client
     router.push(`/cashflow?clientId=${client.id}`);
   };
 
-  // INTEGRATION: Quick actions for selected client
   const handleStartAssessment = () => {
     if (!selectedClient) return;
     router.push(`/assessments/suitability?clientId=${selectedClient.id}`);
   };
 
+  // UPDATED: Generate Report to use modal
   const handleGenerateReport = () => {
-    if (!selectedClient) return;
-    router.push(`/documents?clientId=${selectedClient.id}&template=cashflow`);
+    if (!selectedClient || scenarios.length === 0) return;
+    setSelectedScenarioForReport(scenarios[0]);
+    setShowReportModal(true);
+  };
+
+  // ADDED: Stress Test handler
+  const handleStressTest = () => {
+    if (!selectedClient || scenarios.length === 0) return;
+    setSelectedScenarioForReport(scenarios[0]);
+    setShowStressTestModal(true);
   };
 
   const handleRunMonteCarlo = () => {
@@ -310,7 +297,6 @@ export default function CashFlowPage() {
     router.push(`/clients/${selectedClient.id}`);
   };
 
-  // ENHANCED: Navigate to assessment hub
   const handleViewAssessmentHub = () => {
     if (!selectedClient) return;
     router.push(`/assessments/client/${selectedClient.id}`);
@@ -325,7 +311,7 @@ export default function CashFlowPage() {
     }).format(amount);
   };
 
-  // INTEGRATION: Get quick actions based on client status
+  // UPDATED: Quick actions with Stress Test
   const getQuickActions = (): QuickAction[] => {
     if (!selectedClient) return [];
     
@@ -340,6 +326,13 @@ export default function CashFlowPage() {
         disabled: false
       },
       {
+        icon: Zap,
+        label: 'Stress Test',
+        description: 'Test scenario resilience',
+        action: handleStressTest,
+        disabled: scenarios.length === 0
+      },
+      {
         icon: Activity,
         label: 'Monte Carlo',
         description: 'Run simulation',
@@ -352,13 +345,6 @@ export default function CashFlowPage() {
         description: 'Create cash flow report',
         action: handleGenerateReport,
         disabled: scenarios.length === 0
-      },
-      {
-        icon: Users,
-        label: 'Client Details',
-        description: 'View full profile',
-        action: handleViewClient,
-        disabled: false
       }
     ];
   };
@@ -409,7 +395,7 @@ export default function CashFlowPage() {
 
       {/* Main Content */}
       {!selectedClient ? (
-        // Client Selection View (ENHANCED)
+        // Client Selection View
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -435,7 +421,6 @@ export default function CashFlowPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {clients.map((client) => {
-                    // INTEGRATION: Get integration status for each client
                     const hasAssessment = dashboardData?.client?.id === client.id && 
                                         dashboardData?.currentAssessment !== null;
                     
@@ -471,7 +456,6 @@ export default function CashFlowPage() {
                             </div>
                           )}
                           
-                          {/* INTEGRATION: Show integration badges */}
                           <div className="flex gap-2 mt-2">
                             {hasAssessment && (
                               <Badge className="text-xs bg-green-100 text-green-800">
@@ -499,7 +483,7 @@ export default function CashFlowPage() {
             </CardContent>
           </Card>
 
-          {/* Enhanced Portfolio Overview */}
+          {/* Portfolio Overview */}
           {clients.length > 0 && (
             <Card>
               <CardHeader>
@@ -539,9 +523,9 @@ export default function CashFlowPage() {
           )}
         </div>
       ) : (
-        // Client Cash Flow Dashboard View (ENHANCED)
+        // Client Cash Flow Dashboard View
         <div className="space-y-6">
-          {/* Enhanced Header with Integration Status */}
+          {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button
@@ -567,7 +551,6 @@ export default function CashFlowPage() {
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* ENHANCED: Show tracking status */}
               {trackingState.isTracking && (
                 <Badge variant="default" className="animate-pulse">
                   <Save className="h-3 w-3 mr-1" />
@@ -583,7 +566,6 @@ export default function CashFlowPage() {
                   {scenarios.length} scenario{scenarios.length !== 1 ? 's' : ''}
                 </Badge>
               )}
-              {/* INTEGRATION: Show if has assessment */}
               {dashboardData?.currentAssessment && (
                 <Badge className="bg-green-100 text-green-800">
                   <CheckCircle className="h-3 w-3 mr-1" />
@@ -593,7 +575,7 @@ export default function CashFlowPage() {
             </div>
           </div>
 
-          {/* INTEGRATION: Quick Actions Bar */}
+          {/* Quick Actions Bar */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {getQuickActions().map((action, index) => (
               <Card
@@ -618,7 +600,7 @@ export default function CashFlowPage() {
             ))}
           </div>
 
-          {/* INTEGRATION: Show warning if no scenarios */}
+          {/* Warnings and Info */}
           {scenarios.length === 0 && !isCreatingScenario && (
             <Alert className="border-orange-200 bg-orange-50">
               <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -631,7 +613,6 @@ export default function CashFlowPage() {
             </Alert>
           )}
 
-          {/* INTEGRATION: Show if using assessment data */}
           {dashboardData?.currentAssessment && scenarios.length > 0 && (
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-4">
@@ -659,10 +640,10 @@ export default function CashFlowPage() {
             </Card>
           )}
 
-          {/* Cash Flow Dashboard Component (existing) */}
+          {/* Cash Flow Dashboard Component */}
           <CashFlowDashboard clientId={selectedClient.id} />
 
-          {/* ENHANCED: Assessment Hub Link */}
+          {/* Assessment Hub Link */}
           {scenarios.length > 0 && (
             <Card className="bg-purple-50 border-purple-200">
               <CardContent className="p-4">
@@ -689,7 +670,7 @@ export default function CashFlowPage() {
             </Card>
           )}
 
-          {/* INTEGRATION: Additional Actions */}
+          {/* UPDATED: Next Steps with Stress Test and fixed Generate Report */}
           <Card>
             <CardHeader>
               <CardTitle>Next Steps</CardTitle>
@@ -714,20 +695,37 @@ export default function CashFlowPage() {
                 )}
                 
                 {scenarios.length > 0 && (
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        <Activity className="h-4 w-4 text-blue-600" />
+                  <>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">
+                          <Zap className="h-4 w-4 text-orange-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Run Stress Test</p>
+                          <p className="text-sm text-gray-600">Test financial resilience</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">Run Monte Carlo Analysis</p>
-                        <p className="text-sm text-gray-600">Test scenario probability</p>
-                      </div>
+                      <Button size="sm" variant="outline" onClick={handleStressTest}>
+                        Run Test
+                      </Button>
                     </div>
-                    <Button size="sm" variant="outline" onClick={handleRunMonteCarlo}>
-                      Run Analysis
-                    </Button>
-                  </div>
+                    
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Activity className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">Run Monte Carlo Analysis</p>
+                          <p className="text-sm text-gray-600">Test scenario probability</p>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={handleRunMonteCarlo}>
+                        Run Analysis
+                      </Button>
+                    </div>
+                  </>
                 )}
                 
                 <div className="flex items-center justify-between p-3 border rounded-lg">
@@ -753,6 +751,24 @@ export default function CashFlowPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* ADDED: Modals */}
+      {showReportModal && selectedScenarioForReport && (
+        <GenerateReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          scenario={selectedScenarioForReport}
+        />
+      )}
+
+      {showStressTestModal && selectedScenarioForReport && (
+        <StressTestModal
+          isOpen={showStressTestModal}
+          onClose={() => setShowStressTestModal(false)}
+          scenario={selectedScenarioForReport}
+          client={selectedClient}
+        />
       )}
     </div>
   );

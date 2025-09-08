@@ -3,8 +3,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { useAutoSave } from '@/hooks/useAutoSave';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import AssessmentDocumentIntegration from '@/services/AssessmentDocumentIntegration';
+
+const supabase = createClient()
 
 type FormData = {
   [section: string]: {

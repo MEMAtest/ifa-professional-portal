@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server"
 // src/app/api/test-address/route.ts
 // ✅ FIXED: Added dynamic export to prevent static generation errors
 // Debug endpoint to test OS API directly

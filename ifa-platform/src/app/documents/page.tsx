@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -36,7 +36,8 @@ import {
   Activity,
   Grid3x3
 } from 'lucide-react'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 // ===================================================================
 // TYPES & INTERFACES (FIXED)
@@ -152,11 +153,15 @@ export default function UnifiedDocumentWorkflow() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Supabase client
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  // Supabase client with proper initialization pattern
+  const supabase = useMemo<SupabaseClient | null>(() => {
+    try {
+      return createClient()
+    } catch (error) {
+      console.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
+      return null
+    }
+  }, [])
 
   // ===================================================================
   // DATA LOADING (FIXED)
@@ -167,6 +172,11 @@ export default function UnifiedDocumentWorkflow() {
   }, [])
 
   const loadInitialData = async () => {
+    if (!supabase) {
+      setError('Supabase client is not available')
+      return
+    }
+
     setLoading(true)
     try {
       await Promise.all([
@@ -182,6 +192,11 @@ export default function UnifiedDocumentWorkflow() {
   }
 
   const loadRealClients = async () => {
+    if (!supabase) {
+      console.error("Action failed: Supabase client is not available in loadRealClients.")
+      return
+    }
+
     try {
       const { data, error } = await supabase
         .from('clients')
@@ -217,51 +232,33 @@ export default function UnifiedDocumentWorkflow() {
   }
 
   const loadTemplates = async () => {
+    if (!supabase) {
+      console.error("Action failed: Supabase client is not available in loadTemplates.")
+      // Set fallback templates even when client is not available
+      setTemplates(getFallbackTemplates())
+      return
+    }
+
     console.log('Starting template load...');
     
     // Always start with fallback templates
-    const fallbackTemplates: DocumentTemplate[] = [
-      {
-        id: '485f9812-6dab-4b72-9462-ef65573f6225',
-        name: 'Client Service Agreement',
-        description: 'Standard client service agreement template',
-        template_content: DEFAULT_TEMPLATE_CONTENT,
-        requires_signature: true,
-        template_variables: {}
-      },
-      {
-        id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
-        name: 'Suitability Report',
-        description: 'Investment suitability assessment report',
-        template_content: DEFAULT_TEMPLATE_CONTENT,
-        requires_signature: true,
-        template_variables: {}
-      },
-      {
-        id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
-        name: 'Annual Review Report',
-        description: 'Annual portfolio review report',
-        template_content: DEFAULT_TEMPLATE_CONTENT,
-        requires_signature: false,
-        template_variables: {}
-      }
-    ];
+    const fallbackTemplates = getFallbackTemplates()
     
     // Set fallback templates immediately so UI has something
-    setTemplates(fallbackTemplates);
-    console.log('Fallback templates set:', fallbackTemplates);
+    setTemplates(fallbackTemplates)
+    console.log('Fallback templates set:', fallbackTemplates)
     
     try {
       const { data, error } = await supabase
         .from('document_templates')
         .select('*')
 
-      console.log('Supabase query result:', { data, error });
+      console.log('Supabase query result:', { data, error })
 
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('Supabase error:', error)
         // Keep using fallback templates
-        return;
+        return
       }
 
       if (data && data.length > 0) {
@@ -274,18 +271,46 @@ export default function UnifiedDocumentWorkflow() {
           requires_signature: template.requires_signature ?? true,
           template_variables: template.template_variables || {},
           is_active: template.is_active ?? true
-        }));
+        }))
 
-        setTemplates(processedTemplates);
-        console.log('Database templates loaded:', processedTemplates);
+        setTemplates(processedTemplates)
+        console.log('Database templates loaded:', processedTemplates)
       } else {
-        console.log('No templates in database, using fallbacks');
+        console.log('No templates in database, using fallbacks')
       }
     } catch (err) {
-      console.error('Template loading error:', err);
+      console.error('Template loading error:', err)
       // Fallback templates already set
     }
   }
+
+  // Helper to get fallback templates
+  const getFallbackTemplates = (): DocumentTemplate[] => [
+    {
+      id: '485f9812-6dab-4b72-9462-ef65573f6225',
+      name: 'Client Service Agreement',
+      description: 'Standard client service agreement template',
+      template_content: DEFAULT_TEMPLATE_CONTENT,
+      requires_signature: true,
+      template_variables: {}
+    },
+    {
+      id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
+      name: 'Suitability Report',
+      description: 'Investment suitability assessment report',
+      template_content: DEFAULT_TEMPLATE_CONTENT,
+      requires_signature: true,
+      template_variables: {}
+    },
+    {
+      id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
+      name: 'Annual Review Report',
+      description: 'Annual portfolio review report',
+      template_content: DEFAULT_TEMPLATE_CONTENT,
+      requires_signature: false,
+      template_variables: {}
+    }
+  ]
 
   // ===================================================================
   // DOCUMENT GENERATION (FIXED)

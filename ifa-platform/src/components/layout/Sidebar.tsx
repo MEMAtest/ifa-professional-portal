@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useClientContext } from '@/hooks/useClientContext';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import {
   BarChart3,
   Users,
@@ -64,6 +64,7 @@ interface CashFlowStats {
 }
 
 export const Sidebar = () => {
+  const supabase = createClient()
   const pathname = usePathname();
   const { clientId, isProspect } = useClientContext();
   const [cashFlowStats, setCashFlowStats] = useState<CashFlowStats>({

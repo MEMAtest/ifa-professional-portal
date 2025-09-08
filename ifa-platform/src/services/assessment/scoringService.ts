@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // src/services/assessment/scoringService.ts - Complete assessment scoring
 import { 
   RiskProfile, 

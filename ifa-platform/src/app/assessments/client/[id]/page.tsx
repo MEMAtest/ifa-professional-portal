@@ -1,8 +1,11 @@
+// src/app/assessments/client/[id]/page.tsx - UPDATED WITH VERSION DISPLAY & RESULTS NAVIGATION
+// COMPLETE UNABRIDGED CODE
+
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { format, differenceInDays, addMonths } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import {
   Shield,
   TrendingUp,
@@ -21,21 +24,121 @@ import {
   Info,
   BarChart3,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Plus,
+  Eye,
+  History
 } from 'lucide-react';
-import { 
-  assessmentTypes, 
-  requiredAssessments, 
-  optionalAssessments,
-  getAssessmentColorClasses,
-  calculateOverallProgress,
-  getNextAssessment,
-  checkPrerequisites
-} from '@/config/assessmentTypes';
 import { clientService } from '@/services/ClientService';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import type { Client } from '@/types/client';
 import type { AssessmentProgress, AssessmentHistory, ComplianceAlert } from '@/types/assessment';
+
+// Assessment configuration with FIXED routes
+const assessmentTypes = {
+  suitability: {
+    id: 'suitability',
+    name: 'Full Suitability',
+    shortName: 'Suitability',
+    description: 'Comprehensive suitability assessment',
+    icon: FileText,
+    route: '/assessments/suitability-clients',
+    resultsRoute: '/assessments/suitability/results',
+    estimatedTime: '30-45 mins',
+    color: 'green',
+    order: 1
+  },
+  atr: {
+    id: 'atr',
+    name: 'Attitude to Risk',
+    shortName: 'ATR',
+    description: 'Assess risk tolerance and investment preferences',
+    icon: Shield,
+    route: '/assessments/atr',
+    resultsRoute: '/assessments/atr/results',
+    estimatedTime: '15-20 mins',
+    color: 'blue',
+    order: 2
+  },
+  cfl: {
+    id: 'cfl',
+    name: 'Capacity for Loss',
+    shortName: 'CFL',
+    description: 'Evaluate financial capacity for potential losses',
+    icon: TrendingUp,
+    route: '/assessments/cfl',
+    resultsRoute: '/assessments/cfl/results',
+    estimatedTime: '20-25 mins',
+    color: 'purple',
+    order: 3
+  },
+  persona: {
+    id: 'persona',
+    name: 'Investor Persona',
+    shortName: 'Persona',
+    description: 'Identify investor personality and preferences',
+    icon: User,
+    route: '/assessments/persona-assessment',
+    resultsRoute: '/assessments/personas/results',
+    estimatedTime: '10-15 mins',
+    color: 'indigo',
+    order: 4
+  },
+  monte_carlo: {
+    id: 'monte_carlo',
+    name: 'Monte Carlo Analysis',
+    shortName: 'Monte Carlo',
+    description: 'Probability-based retirement planning simulations',
+    icon: Activity,
+    route: '/monte-carlo',
+    resultsRoute: '/monte-carlo/results',
+    estimatedTime: '15-20 mins',
+    color: 'orange',
+    order: 5
+  },
+  cashflow: {
+    id: 'cashflow',
+    name: 'Cash Flow Planning',
+    shortName: 'Cash Flow',
+    description: 'Detailed income and expenditure projections',
+    icon: Calculator,
+    route: '/cashflow',
+    resultsRoute: '/cashflow/results',
+    estimatedTime: '20-30 mins',
+    color: 'teal',
+    order: 6
+  }
+};
+
+// Helper functions
+const getAssessmentColorClasses = (color: string) => {
+  const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+    blue: { bg: 'bg-blue-100', text: 'text-blue-600', border: 'border-blue-200' },
+    green: { bg: 'bg-green-100', text: 'text-green-600', border: 'border-green-200' },
+    purple: { bg: 'bg-purple-100', text: 'text-purple-600', border: 'border-purple-200' },
+    orange: { bg: 'bg-orange-100', text: 'text-orange-600', border: 'border-orange-200' },
+    indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600', border: 'border-indigo-200' },
+    teal: { bg: 'bg-teal-100', text: 'text-teal-600', border: 'border-teal-200' }
+  };
+  return colorMap[color] || colorMap.blue;
+};
+
+const calculateOverallProgress = (completedAssessments: string[]): number => {
+  const totalAssessments = Object.keys(assessmentTypes).length;
+  return totalAssessments > 0 
+    ? Math.round((completedAssessments.length / totalAssessments) * 100)
+    : 0;
+};
+
+const getNextAssessment = (completedAssessments: string[]) => {
+  const allAssessments = Object.values(assessmentTypes).sort((a, b) => a.order - b.order);
+  for (const assessment of allAssessments) {
+    if (!completedAssessments.includes(assessment.id)) {
+      return assessment;
+    }
+  }
+  return null;
+};
 
 // UI Components
 const Card = ({ children, className = "", onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) => (
@@ -69,7 +172,8 @@ const Button = ({
   disabled = false, 
   variant = "default",
   size = "default",
-  className = ""
+  className = "",
+  loading = false
 }: { 
   children: React.ReactNode; 
   onClick?: () => void; 
@@ -77,6 +181,7 @@ const Button = ({
   variant?: string;
   size?: string;
   className?: string;
+  loading?: boolean;
 }) => {
   const variants = {
     default: "bg-blue-600 text-white hover:bg-blue-700",
@@ -93,9 +198,10 @@ const Button = ({
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
-      className={`rounded-lg font-medium transition-colors ${variants[variant as keyof typeof variants] || variants.default} ${sizes[size as keyof typeof sizes] || sizes.default} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      disabled={disabled || loading}
+      className={`rounded-lg font-medium transition-colors inline-flex items-center ${variants[variant as keyof typeof variants] || variants.default} ${sizes[size as keyof typeof sizes] || sizes.default} ${disabled || loading ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
     >
+      {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
       {children}
     </button>
   );
@@ -105,7 +211,8 @@ const Alert = ({ children, variant = "default", className = "" }: { children: Re
   const variants = {
     default: "bg-blue-50 border-blue-200 text-blue-800",
     warning: "bg-yellow-50 border-yellow-200 text-yellow-800",
-    danger: "bg-red-50 border-red-200 text-red-800"
+    danger: "bg-red-50 border-red-200 text-red-800",
+    success: "bg-green-50 border-green-200 text-green-800"
   };
   
   return (
@@ -117,34 +224,141 @@ const Alert = ({ children, variant = "default", className = "" }: { children: Re
 
 // Main Component
 export default function AssessmentClientPage() {
+  const supabase = createClient()
   const params = useParams();
   const router = useRouter();
   const clientId = params?.id as string;
+  
+  const loadingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   // State
   const [client, setClient] = useState<Client | null>(null);
   const [assessmentProgress, setAssessmentProgress] = useState<AssessmentProgress[]>([]);
   const [assessmentHistory, setAssessmentHistory] = useState<AssessmentHistory[]>([]);
   const [complianceAlerts, setComplianceAlerts] = useState<ComplianceAlert[]>([]);
+  const [assessmentVersions, setAssessmentVersions] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'compliance'>('overview');
   const [showExportModal, setShowExportModal] = useState(false);
 
-  // Load all data
-  useEffect(() => {
-    if (clientId) {
-      loadAllData();
-    }
+  // Check compliance alerts
+  const checkComplianceAlerts = useCallback((progress: AssessmentProgress[]) => {
+    const alerts: ComplianceAlert[] = [];
+    const now = new Date();
+
+    progress.forEach(p => {
+      if (p.completed_at) {
+        const completedDate = new Date(p.completed_at);
+        const monthsSince = differenceInDays(now, completedDate) / 30;
+        
+        if (monthsSince > 12) {
+          const normalizedType = p.assessment_type.replace('_', '-');
+          const assessment = assessmentTypes[p.assessment_type as keyof typeof assessmentTypes] || 
+                           assessmentTypes[normalizedType as keyof typeof assessmentTypes];
+          
+          alerts.push({
+            id: `overdue-${p.assessment_type}`,
+            clientId: clientId,
+            type: 'overdue',
+            assessmentType: p.assessment_type,
+            message: `${assessment?.name || p.assessment_type} assessment is overdue for annual review`,
+            severity: 'high',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    setComplianceAlerts(alerts);
   }, [clientId]);
 
-  const loadAllData = async () => {
+  // Load version information for assessments
+  const loadAssessmentVersions = useCallback(async () => {
+    const versions: Record<string, any> = {};
+    
+    // Load ATR versions
+    try {
+      const { data: atrData } = await supabase
+        .from('atr_assessments')
+        .select('id, version, assessment_date, risk_category, total_score, is_current')
+        .eq('client_id', clientId)
+        .order('version', { ascending: false })
+        .limit(1);
+      
+      if (atrData && atrData[0]) {
+        versions.atr = {
+          version: atrData[0].version || 1,
+          date: atrData[0].assessment_date,
+          category: atrData[0].risk_category,
+          score: atrData[0].total_score,
+          isCurrent: atrData[0].is_current
+        };
+      }
+    } catch (error) {
+      console.error('Error loading ATR versions:', error);
+    }
+    
+    // Load CFL versions
+    try {
+      const { data: cflData } = await supabase
+        .from('cfl_assessments')
+        .select('id, version, assessment_date, capacity_category, total_score, is_current')
+        .eq('client_id', clientId)
+        .order('version', { ascending: false })
+        .limit(1);
+      
+      if (cflData && cflData[0]) {
+        versions.cfl = {
+          version: cflData[0].version || 1,
+          date: cflData[0].assessment_date,
+          category: cflData[0].capacity_category,
+          score: cflData[0].total_score,
+          isCurrent: cflData[0].is_current
+        };
+      }
+    } catch (error) {
+      console.error('Error loading CFL versions:', error);
+    }
+    
+    // Load Persona versions
+    try {
+      const { data: personaData } = await supabase
+        .from('persona_assessments')
+        .select('id, version, assessment_date, persona_type, confidence, is_current')
+        .eq('client_id', clientId)
+        .order('version', { ascending: false })
+        .limit(1);
+      
+      if (personaData && personaData[0]) {
+        versions.persona = {
+          version: personaData[0].version || 1,
+          date: personaData[0].assessment_date,
+          type: personaData[0].persona_type,
+          confidence: personaData[0].confidence,
+          isCurrent: personaData[0].is_current
+        };
+      }
+    } catch (error) {
+      console.error('Error loading Persona versions:', error);
+    }
+    
+    setAssessmentVersions(versions);
+  }, [clientId]);
+
+  // Load all data
+  const loadAllData = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+
     try {
       setIsLoading(true);
       setError(null);
 
       // Load client data
       const clientData = await clientService.getClientById(clientId);
+      if (!mountedRef.current) return;
       setClient(clientData);
 
       // Load assessment progress
@@ -154,7 +368,14 @@ export default function AssessmentClientPage() {
         .eq('client_id', clientId);
 
       if (progressError) throw progressError;
-      setAssessmentProgress(progressData || []);
+      if (!mountedRef.current) return;
+      
+      const normalizedProgress = (progressData || []).map(p => ({
+        ...p,
+        assessment_type: p.assessment_type.replace('-', '_')
+      }));
+      
+      setAssessmentProgress(normalizedProgress);
 
       // Load assessment history
       const { data: historyData, error: historyError } = await supabase
@@ -165,81 +386,90 @@ export default function AssessmentClientPage() {
         .limit(50);
 
       if (historyError) throw historyError;
+      if (!mountedRef.current) return;
       setAssessmentHistory(historyData || []);
 
+      // Load version information
+      await loadAssessmentVersions();
+
       // Check for compliance alerts
-      checkComplianceAlerts(progressData || []);
+      checkComplianceAlerts(normalizedProgress);
 
     } catch (err) {
       console.error('Error loading data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load assessment data');
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Failed to load assessment data');
+      }
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setIsLoading(false);
+        loadingRef.current = false;
+      }
     }
-  };
+  }, [clientId, checkComplianceAlerts, loadAssessmentVersions]);
 
-  const checkComplianceAlerts = (progress: AssessmentProgress[]) => {
-    const alerts: ComplianceAlert[] = [];
-    const now = new Date();
+  // Load data on mount
+  useEffect(() => {
+    mountedRef.current = true;
+    
+    if (clientId) {
+      loadAllData();
+    }
 
-    // Check for overdue assessments
-    progress.forEach(p => {
-      if (p.completed_at) {
-        const completedDate = new Date(p.completed_at);
-        const monthsSince = differenceInDays(now, completedDate) / 30;
-        
-        if (monthsSince > 12) {
-          alerts.push({
-            id: `overdue-${p.assessment_type}`,
-            clientId: clientId,
-            type: 'overdue',
-            assessmentType: p.assessment_type,
-            message: `${assessmentTypes[p.assessment_type]?.name} assessment is overdue for annual review`,
-            severity: 'high',
-            createdAt: new Date().toISOString()
-          });
-        }
-      }
-    });
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [clientId, loadAllData]);
 
-    // Check for incomplete required assessments
-    requiredAssessments.forEach(assessment => {
-      const progress = assessmentProgress.find(p => p.assessment_type === assessment.id);
-      if (!progress || progress.status !== 'completed') {
-        alerts.push({
-          id: `incomplete-${assessment.id}`,
-          clientId: clientId,
-          type: 'incomplete',
-          assessmentType: assessment.id,
-          message: `${assessment.name} is required but not completed`,
-          severity: 'medium',
-          createdAt: new Date().toISOString()
-        });
-      }
-    });
-
-    setComplianceAlerts(alerts);
-  };
-
+  // Handle assessment navigation
   const handleStartAssessment = (assessmentId: string) => {
-    const assessment = assessmentTypes[assessmentId];
+    const assessment = assessmentTypes[assessmentId as keyof typeof assessmentTypes];
     if (!assessment) return;
 
-    // Check prerequisites
-    const completedAssessments = assessmentProgress
-      .filter(p => p.status === 'completed')
-      .map(p => p.assessment_type);
+    let route = '';
     
-    const prereqCheck = checkPrerequisites(assessmentId, completedAssessments);
-    if (!prereqCheck.met) {
-      alert(`Please complete the following assessments first: ${prereqCheck.missing.join(', ')}`);
-      return;
+    switch (assessmentId) {
+      case 'suitability':
+        route = `/assessments/suitability-clients/${clientId}`;
+        break;
+      
+      case 'monte_carlo':
+        route = `/monte-carlo?clientId=${clientId}`;
+        break;
+      
+      case 'cashflow':
+        route = `/cashflow?clientId=${clientId}`;
+        break;
+      
+      case 'atr':
+      case 'cfl':
+      case 'persona':
+        route = `${assessment.route}?clientId=${clientId}`;
+        break;
+      
+      default:
+        route = `${assessment.route}?clientId=${clientId}`;
     }
 
-    // Navigate to assessment with clientId
-    router.push(`${assessment.route}?clientId=${clientId}`);
+    console.log(`Navigating to ${assessmentId}: ${route}`);
+    router.push(route);
   };
 
+  // Handle viewing results
+  const handleViewResults = (assessmentId: string) => {
+    const assessment = assessmentTypes[assessmentId as keyof typeof assessmentTypes];
+    if (!assessment) return;
+    
+    // Navigate to the results page
+    router.push(`${assessment.resultsRoute}/${clientId}`);
+  };
+
+  // Handle new assessment
+  const handleNewAssessment = () => {
+    router.push(`/assessments/new?clientId=${clientId}`);
+  };
+
+  // Handle export
   const handleExportReport = async (format: 'pdf' | 'excel') => {
     try {
       const response = await fetch(`/api/assessments/report/${clientId}`, {
@@ -264,18 +494,45 @@ export default function AssessmentClientPage() {
     }
   };
 
+  // Get assessment status with version info
   const getAssessmentStatus = (assessmentId: string) => {
-    const progress = assessmentProgress.find(p => p.assessment_type === assessmentId);
-    if (!progress) return { status: 'not_started', percentage: 0, date: null };
+    const normalizedId = assessmentId.replace('-', '_');
+    const progress = assessmentProgress.find(p => {
+      const normalizedProgressType = p.assessment_type.replace('-', '_');
+      return normalizedProgressType === normalizedId;
+    });
+    
+    const versionInfo = assessmentVersions[assessmentId];
+    
+    if (!progress) return { status: 'not_started', percentage: 0, date: null, version: null };
+    
+    let status = progress.status;
+    if (progress.progress_percentage === 100 && status !== 'completed') {
+      status = 'completed';
+    } else if (progress.progress_percentage > 0 && progress.progress_percentage < 100 && status === 'not_started') {
+      status = 'in_progress';
+    }
     
     return {
-      status: progress.status,
+      status,
       percentage: progress.progress_percentage || 0,
-      date: progress.completed_at || progress.last_updated
+      date: progress.completed_at || progress.last_updated,
+      version: versionInfo?.version || null,
+      versionInfo
     };
   };
 
-  const getStatusBadge = (status: string) => {
+  // Get status badge with version
+  const getStatusBadge = (status: string, version?: number | null) => {
+    if (status === 'completed' && version) {
+      return (
+        <div className="flex items-center gap-2">
+          <Badge variant="success">Complete</Badge>
+          <Badge variant="secondary">v{version}</Badge>
+        </div>
+      );
+    }
+    
     switch (status) {
       case 'completed':
         return <Badge variant="success">Complete</Badge>;
@@ -287,7 +544,12 @@ export default function AssessmentClientPage() {
   };
 
   // Calculate stats
-  const completedAssessments = assessmentProgress.filter(p => p.status === 'completed').map(p => p.assessment_type);
+  const completedAssessments = assessmentProgress
+    .filter(p => p.status === 'completed' || p.progress_percentage === 100)
+    .map(p => p.assessment_type.replace('-', '_'));
+  const inProgressCount = assessmentProgress
+    .filter(p => (p.status === 'in_progress' || (p.progress_percentage > 0 && p.progress_percentage < 100)))
+    .length;
   const overallProgress = calculateOverallProgress(completedAssessments);
   const nextAssessment = getNextAssessment(completedAssessments);
 
@@ -343,16 +605,34 @@ export default function AssessmentClientPage() {
             </div>
             
             <div className="flex items-center space-x-2">
+              <Button
+                onClick={handleNewAssessment}
+                className="flex items-center space-x-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Assessment</span>
+              </Button>
               <Button variant="outline" onClick={() => loadAllData()}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
-              <Button onClick={() => setShowExportModal(true)}>
+              <Button variant="outline" onClick={() => setShowExportModal(true)}>
                 <Download className="h-4 w-4 mr-2" />
-                Export Report
+                Export
               </Button>
             </div>
           </div>
+
+          {/* Info Alert */}
+          <Alert variant="success" className="mb-4">
+            <div className="flex items-start space-x-2">
+              <Info className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold mb-1">Flexible Assessment System</h3>
+                <p className="text-sm">All assessments are independent - complete them in any order that suits your workflow. Completed assessments show version numbers and can be clicked to view full history.</p>
+              </div>
+            </div>
+          </Alert>
 
           {/* Compliance Alerts */}
           {complianceAlerts.length > 0 && (
@@ -360,7 +640,7 @@ export default function AssessmentClientPage() {
               <div className="flex items-start space-x-2">
                 <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold mb-1">Compliance Alerts</h3>
+                  <h3 className="font-semibold mb-1">Review Recommended</h3>
                   <ul className="space-y-1 text-sm">
                     {complianceAlerts.map(alert => (
                       <li key={alert.id}>{alert.message}</li>
@@ -386,9 +666,9 @@ export default function AssessmentClientPage() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Required Complete</p>
+                  <p className="text-sm text-gray-600">Completed</p>
                   <p className="text-2xl font-bold text-green-600">
-                    {completedAssessments.filter(id => requiredAssessments.some(a => a.id === id)).length}/{requiredAssessments.length}
+                    {completedAssessments.length}/{Object.keys(assessmentTypes).length}
                   </p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-green-500" />
@@ -398,28 +678,22 @@ export default function AssessmentClientPage() {
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Next Assessment</p>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {nextAssessment?.shortName || 'All Complete'}
-                  </p>
+                  <p className="text-sm text-gray-600">In Progress</p>
+                  <p className="text-2xl font-bold text-yellow-600">{inProgressCount}</p>
                 </div>
-                <ChevronRight className="h-8 w-8 text-gray-400" />
+                <Clock className="h-8 w-8 text-yellow-500" />
               </div>
             </Card>
 
             <Card className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">Compliance Status</p>
-                  <p className="text-lg font-semibold">
-                    {complianceAlerts.length === 0 ? (
-                      <span className="text-green-600">Compliant</span>
-                    ) : (
-                      <span className="text-red-600">{complianceAlerts.length} Issues</span>
-                    )}
+                  <p className="text-sm text-gray-600">Next Suggested</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {nextAssessment?.shortName || 'All Complete'}
                   </p>
                 </div>
-                <Shield className="h-8 w-8 text-purple-500" />
+                <ChevronRight className="h-8 w-8 text-gray-400" />
               </div>
             </Card>
           </div>
@@ -466,102 +740,107 @@ export default function AssessmentClientPage() {
           {/* Tab Content */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* Required Assessments */}
+              {/* All Available Assessments */}
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Required Assessments</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Assessments</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {requiredAssessments.map(assessment => {
-                    const status = getAssessmentStatus(assessment.id);
-                    const colors = getAssessmentColorClasses(assessment.color);
-                    
-                    return (
-                      <Card
-                        key={assessment.id}
-                        onClick={() => handleStartAssessment(assessment.id)}
-                        className="p-6 hover:border-blue-300"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center space-x-3">
-                            <div className={`p-3 rounded-lg ${colors.bg}`}>
-                              <assessment.icon className={`h-6 w-6 ${colors.text}`} />
+                  {Object.values(assessmentTypes)
+                    .sort((a, b) => a.order - b.order)
+                    .map(assessment => {
+                      const status = getAssessmentStatus(assessment.id);
+                      const colors = getAssessmentColorClasses(assessment.color);
+                      const Icon = assessment.icon;
+                      
+                      return (
+                        <Card
+                          key={assessment.id}
+                          onClick={() => {
+                            // If completed, navigate to results page to view history
+                            if (status.status === 'completed') {
+                              handleViewResults(assessment.id);
+                            } else {
+                              // Start or continue assessment
+                              handleStartAssessment(assessment.id);
+                            }
+                          }}
+                          className="p-6 hover:border-blue-300"
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                              <div className={`p-3 rounded-lg ${colors.bg}`}>
+                                <Icon className={`h-6 w-6 ${colors.text}`} />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-gray-900">{assessment.name}</h3>
+                                <p className="text-sm text-gray-600">{assessment.description}</p>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900">{assessment.name}</h3>
-                              <p className="text-sm text-gray-600">{assessment.description}</p>
-                            </div>
-                          </div>
-                          {getStatusBadge(status.status)}
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">Progress</span>
-                            <span className="font-medium">{status.percentage}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all ${colors.bg}`}
-                              style={{ width: `${status.percentage}%` }}
-                            />
+                            {getStatusBadge(status.status, status.version)}
                           </div>
                           
-                          {status.date && (
-                            <p className="text-xs text-gray-500 mt-2">
-                              Last updated: {format(new Date(status.date), 'dd MMM yyyy')}
-                            </p>
-                          )}
-                          
-                          <div className="flex items-center justify-between mt-4">
-                            <span className="text-sm text-gray-600">
-                              <Clock className="h-4 w-4 inline mr-1" />
-                              {assessment.estimatedTime}
-                            </span>
-                            <ChevronRight className="h-5 w-5 text-gray-400" />
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Optional Assessments */}
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Optional Assessments</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {optionalAssessments.map(assessment => {
-                    const status = getAssessmentStatus(assessment.id);
-                    const colors = getAssessmentColorClasses(assessment.color);
-                    
-                    return (
-                      <Card
-                        key={assessment.id}
-                        onClick={() => handleStartAssessment(assessment.id)}
-                        className="p-6 hover:border-blue-300"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center space-x-3">
-                            <div className={`p-3 rounded-lg ${colors.bg}`}>
-                              <assessment.icon className={`h-6 w-6 ${colors.text}`} />
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Progress</span>
+                              <span className="font-medium">{status.percentage}%</span>
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900">{assessment.name}</h3>
-                              <p className="text-sm text-gray-600">{assessment.description}</p>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full transition-all ${colors.bg}`}
+                                style={{ width: `${status.percentage}%` }}
+                              />
                             </div>
+                            
+                            {/* Show version info and last update for completed assessments */}
+                            {status.status === 'completed' && status.versionInfo && (
+                              <div className="mt-3 p-2 bg-gray-50 rounded-lg space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-gray-500">Current Version:</span>
+                                  <span className="font-semibold">Version {status.versionInfo.version}</span>
+                                </div>
+                                {status.date && (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">Last Updated:</span>
+                                    <span>{format(new Date(status.date), 'dd MMM yyyy')}</span>
+                                  </div>
+                                )}
+                                {status.versionInfo.category && (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">Result:</span>
+                                    <span className="font-medium">{status.versionInfo.category}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center justify-center mt-2">
+                                  <span className="text-xs text-blue-600 flex items-center">
+                                    <Eye className="h-3 w-3 mr-1" />
+                                    Click to view full history
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Show estimated time for not started */}
+                            {status.status === 'not_started' && (
+                              <div className="flex items-center justify-between mt-4">
+                                <span className="text-sm text-gray-600">
+                                  <Clock className="h-4 w-4 inline mr-1" />
+                                  {assessment.estimatedTime}
+                                </span>
+                                <ChevronRight className="h-5 w-5 text-gray-400" />
+                              </div>
+                            )}
+                            
+                            {/* Show continue for in progress */}
+                            {status.status === 'in_progress' && (
+                              <div className="flex items-center justify-center mt-4">
+                                <span className="text-sm text-blue-600 font-medium">
+                                  Continue Assessment →
+                                </span>
+                              </div>
+                            )}
                           </div>
-                          {status.status === 'completed' && getStatusBadge(status.status)}
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">
-                            <Clock className="h-4 w-4 inline mr-1" />
-                            {assessment.estimatedTime}
-                          </span>
-                          <ChevronRight className="h-5 w-5 text-gray-400" />
-                        </div>
-                      </Card>
-                    );
-                  })}
+                        </Card>
+                      );
+                    })}
                 </div>
               </div>
             </div>
@@ -577,34 +856,44 @@ export default function AssessmentClientPage() {
                 </Card>
               ) : (
                 <div className="space-y-3">
-                  {assessmentHistory.map(entry => (
-                    <Card key={entry.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
-                            {entry.action === 'completed' ? (
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <Clock className="h-5 w-5 text-blue-600" />
-                            )}
+                  {assessmentHistory.map(entry => {
+                    const normalizedType = entry.assessment_type.replace('_', '-');
+                    const assessment = assessmentTypes[entry.assessment_type as keyof typeof assessmentTypes] || 
+                                     assessmentTypes[normalizedType as keyof typeof assessmentTypes];
+                    
+                    return (
+                      <Card key={entry.id} className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
+                              {entry.action === 'completed' ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : entry.action === 'saved' ? (
+                                <History className="h-5 w-5 text-blue-600" />
+                              ) : (
+                                <Clock className="h-5 w-5 text-gray-600" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {assessment?.name || entry.assessment_type} - {entry.action}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                {format(new Date(entry.performed_at), 'dd MMM yyyy HH:mm')}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {assessmentTypes[entry.assessment_type]?.name} - {entry.action}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              {format(new Date(entry.performed_at), 'dd MMM yyyy HH:mm')}
-                            </p>
-                          </div>
+                          {entry.metadata && Object.keys(entry.metadata).length > 0 && (
+                            <div className="text-sm text-gray-500">
+                              {entry.metadata.version && (
+                                <Badge variant="secondary">v{entry.metadata.version}</Badge>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {entry.metadata && (
-                          <Badge variant="secondary">
-                            {JSON.stringify(entry.metadata)}
-                          </Badge>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -616,48 +905,51 @@ export default function AssessmentClientPage() {
               {complianceAlerts.length === 0 ? (
                 <Card className="p-8 text-center">
                   <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">All Compliant</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">All Current</h3>
                   <p className="text-gray-600">No compliance issues detected</p>
                 </Card>
               ) : (
                 <div className="space-y-3">
-                  {complianceAlerts.map(alert => (
-                    <Alert
-                      key={alert.id}
-                      variant={alert.severity === 'high' ? 'danger' : 'warning'}
-                    >
-                      <div className="flex items-start space-x-3">
-                        <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <h4 className="font-medium">{assessmentTypes[alert.assessmentType]?.name}</h4>
-                          <p className="text-sm mt-1">{alert.message}</p>
+                  {complianceAlerts.map(alert => {
+                    const assessment = assessmentTypes[alert.assessmentType as keyof typeof assessmentTypes];
+                    return (
+                      <Alert
+                        key={alert.id}
+                        variant={alert.severity === 'high' ? 'danger' : 'warning'}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <h4 className="font-medium">{assessment?.name || alert.assessmentType}</h4>
+                            <p className="text-sm mt-1">{alert.message}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleStartAssessment(alert.assessmentType)}
+                          >
+                            Update
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => handleStartAssessment(alert.assessmentType)}
-                        >
-                          Resolve
-                        </Button>
-                      </div>
-                    </Alert>
-                  ))}
+                      </Alert>
+                    );
+                  })}
                 </div>
               )}
               
               <div className="mt-6">
-                <h3 className="font-medium text-gray-900 mb-3">Compliance Requirements</h3>
+                <h3 className="font-medium text-gray-900 mb-3">Compliance Guidelines</h3>
                 <div className="space-y-2 text-sm text-gray-600">
                   <div className="flex items-center space-x-2">
                     <Info className="h-4 w-4" />
-                    <span>Annual review required for all assessments</span>
+                    <span>Annual review recommended for all assessments</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Info className="h-4 w-4" />
-                    <span>Material changes trigger reassessment requirement</span>
+                    <span>Material changes may trigger reassessment needs</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Info className="h-4 w-4" />
-                    <span>All required assessments must be completed before advice</span>
+                    <span>Version history is maintained for all assessments</span>
                   </div>
                 </div>
               </div>

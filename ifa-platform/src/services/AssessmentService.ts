@@ -3,7 +3,7 @@
 // Final Version - Fixed ComplianceStatus Import Issue
 // ================================================================
 
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import type { 
   AssessmentProgress, 
   AssessmentHistory, 
@@ -38,6 +38,8 @@ export interface AssessmentHistoryEntry {
 }
 
 export class AssessmentService {
+  // Remove instance property since all methods are static
+
   // ================================================================
   // EXISTING METHODS (Keep all your current methods here)
   // ================================================================
@@ -46,6 +48,8 @@ export class AssessmentService {
    * Get assessment progress for a client
    */
   static async getProgress(clientId: string): Promise<AssessmentProgress[]> {
+    const supabase = createClient(); // Create client for this method
+    
     const { data, error } = await supabase
       .from('assessment_progress')
       .select('*')
@@ -62,6 +66,8 @@ export class AssessmentService {
     clientId: string, 
     limit: number = 50
   ): Promise<AssessmentHistory[]> {
+    const supabase = createClient(); // Create client for this method
+    
     const { data, error } = await supabase
       .from('assessment_history')
       .select('*')
@@ -92,6 +98,8 @@ export class AssessmentService {
    * Get the most recent assessment for a client
    */
   static async getClientAssessment(clientId: string): Promise<any> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const { data, error } = await supabase
         .from('assessments')
@@ -116,6 +124,8 @@ export class AssessmentService {
     clientId: string, 
     assessmentType: AssessmentType
   ): Promise<boolean> {
+    const supabase = createClient(); // Create client for this method
+    
     const { data, error } = await supabase
       .from('assessment_progress')
       .select('status')
@@ -131,6 +141,8 @@ export class AssessmentService {
    * Get all completed assessments for a client
    */
   static async getCompletedAssessments(clientId: string): Promise<string[]> {
+    const supabase = createClient(); // Create client for this method
+    
     const { data, error } = await supabase
       .from('assessment_progress')
       .select('assessment_type')
@@ -243,6 +255,8 @@ export class AssessmentService {
     clientId: string,
     tableName: 'monte_carlo_scenarios' | 'cashflow_scenarios'
   ): Promise<number> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const { count, error } = await supabase
         .from(tableName)

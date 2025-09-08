@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ================================================================
 // src/services/EnhancedScenarioBuilder.ts
 // Comprehensive scenario generation with rich insights and explanations

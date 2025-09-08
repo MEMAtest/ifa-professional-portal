@@ -3,7 +3,7 @@
 // File: src/services/realIntegratedServices.ts
 // ===================================================================
 
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
 import type { Client, ClientListResponse } from '@/types/client'
 import { DocumentGenerationService } from './documentGenerationService'
 import { DocuSealService } from './docuSealService'
@@ -48,10 +48,7 @@ export class RealClientService {
   private supabase
   
   constructor() {
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    this.supabase = createClient()
   }
 
   async getAllClients(): Promise<Client[]> {
@@ -91,10 +88,7 @@ export class RealDocumentService {
   private templateService: DocumentTemplateService
 
   constructor() {
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    this.supabase = createClient()
     this.documentService = new DocumentGenerationService()
     this.docuSealService = new DocuSealService()
     this.templateService = new DocumentTemplateService()
@@ -320,10 +314,7 @@ export class AutoSaveService {
   private supabase
 
   constructor() {
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    this.supabase = createClient()
   }
 
   queueSave(clientId: string, data: any) {

@@ -1,10 +1,10 @@
 // ================================================================
-// File: ifa-platform/src/app/assessments/persona-assessment/page.tsx
-// PHASE 1 NAVIGATION FIX - Persona Assessment with URL-based Context
+// File: src/app/assessments/persona-assessment/page.tsx
+// FIXED VERSION - No auto-navigation, includes document generation
 // ================================================================
 
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -13,9 +13,12 @@ import { Progress } from '@/components/ui/Progress'
 import { Alert, AlertDescription } from '@/components/ui/Alert'
 import { useToast } from '@/components/ui/use-toast'
 
-// PHASE 1: Import navigation components
+// Navigation components
 import { NavigationGuard } from '@/components/ui/NavigationGuard'
 import { useClientContext } from '@/hooks/useClientContext'
+
+// Import document generation - ADDED
+import DocumentGenerationButton from '@/components/documents/DocumentGenerationButton'
 
 import { 
   ChevronLeft, 
@@ -30,13 +33,16 @@ import {
   RefreshCw,
   ArrowLeft,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Info,
+  FileText  // ADDED for document generation
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { investorPersonas } from '@/data/investorPersonas'
 
 // ================================================================
-// PERSONA ASSESSMENT QUESTIONS (same as before)
+// PERSONA ASSESSMENT QUESTIONS
 // ================================================================
 
 interface PersonaQuestion {
@@ -45,7 +51,7 @@ interface PersonaQuestion {
   category: 'motivation' | 'fear' | 'communication' | 'decision_making' | 'emotional'
   options: {
     text: string
-    scores: { [personaLevel: string]: number } // Points for each persona level 1-5
+    scores: { [personaLevel: string]: number }
   }[]
 }
 
@@ -269,14 +275,13 @@ const personaQuestions: PersonaQuestion[] = [
 ]
 
 // ================================================================
-// PERSONA ASSESSMENT COMPONENT WITH PHASE 1 NAVIGATION
+// MAIN PERSONA ASSESSMENT COMPONENT
 // ================================================================
 
 export default function PersonaAssessmentPage() {
   const router = useRouter()
   const { toast } = useToast()
   
-  // PHASE 1: Use context instead of sessionStorage
   const { client, clientId, isProspect } = useClientContext()
   
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -289,12 +294,48 @@ export default function PersonaAssessmentPage() {
     confidence: number
   } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [hasTrackedStart, setHasTrackedStart] = useState(false)
+  const [savedAssessmentId, setSavedAssessmentId] = useState<string | null>(null)
+  const [showDocumentGeneration, setShowDocumentGeneration] = useState(false) // ADDED
 
-  // Calculate persona based on answers
+  // Get client name for document generation
+  const clientName = client ? 
+    `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim() : 
+    ''
+  const clientEmail = client?.contactInfo?.email || ''
+
+  // Track assessment start
+  useEffect(() => {
+    if (clientId && !hasTrackedStart) {
+      trackProgress('in_progress', 0)
+      setHasTrackedStart(true)
+    }
+  }, [clientId, hasTrackedStart])
+
+  // Track progress
+  const trackProgress = async (status: string, percentage: number, metadata?: any) => {
+    if (!clientId) return
+
+    try {
+      await fetch(`/api/assessments/progress/${clientId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assessmentType: 'persona',
+          status,
+          progressPercentage: percentage,
+          metadata
+        })
+      })
+    } catch (error) {
+      console.error('Error tracking progress:', error)
+    }
+  }
+
+  // Calculate persona
   const calculatePersona = () => {
     const scores = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }
     
-    // Sum up scores for each persona level
     Object.entries(answers).forEach(([questionId, optionIndex]) => {
       const question = personaQuestions.find(q => q.id === questionId)
       if (question && question.options[optionIndex]) {
@@ -305,11 +346,9 @@ export default function PersonaAssessmentPage() {
       }
     })
 
-    // Find the persona with highest score
     const maxScore = Math.max(...Object.values(scores))
     const winningLevel = Object.entries(scores).find(([level, score]) => score === maxScore)?.[0] || '3'
     
-    // Calculate confidence based on score separation
     const totalScore = Object.values(scores).reduce((sum, score) => sum + score, 0)
     const winningPercentage = (maxScore / totalScore) * 100
     const confidence = Math.min(95, Math.max(60, winningPercentage))
@@ -325,6 +364,10 @@ export default function PersonaAssessmentPage() {
   const handleAnswer = (optionIndex: number) => {
     const questionId = personaQuestions[currentQuestion].id
     setAnswers(prev => ({ ...prev, [questionId]: optionIndex }))
+    
+    const answeredCount = Object.keys(answers).length + 1
+    const progressPercentage = Math.round((answeredCount / personaQuestions.length) * 100)
+    trackProgress('in_progress', progressPercentage)
   }
 
   const nextQuestion = () => {
@@ -334,6 +377,12 @@ export default function PersonaAssessmentPage() {
       const result = calculatePersona()
       setCalculatedPersona(result)
       setIsComplete(true)
+      
+      trackProgress('in_progress', 100, {
+        personaLevel: result.level,
+        personaType: result.persona.type,
+        confidence: result.confidence
+      })
     }
   }
 
@@ -348,36 +397,79 @@ export default function PersonaAssessmentPage() {
     setAnswers({})
     setIsComplete(false)
     setCalculatedPersona(null)
+    setSavedAssessmentId(null)
+    setShowDocumentGeneration(false) // ADDED
+    trackProgress('in_progress', 0)
   }
 
-  // PHASE 1: Navigation handlers
   const handleBack = () => {
     router.push(`/assessments/client/${clientId}${isProspect ? '?isProspect=true' : ''}`)
   }
 
-  // PHASE 1: Save persona to client/prospect
+  // UPDATED SAVE FUNCTION - NO AUTO NAVIGATION
   const savePersona = async () => {
-    if (!calculatedPersona || !clientId) return
+    if (!calculatedPersona || !clientId) {
+      toast({
+        title: 'Error',
+        description: 'Missing required data for saving',
+        variant: 'destructive'
+      })
+      return
+    }
     
     setIsSaving(true)
     try {
-      // TODO: Implement actual save logic
-      // For now, just simulate saving
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await fetch('/api/assessments/persona', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          personaLevel: calculatedPersona.level,
+          personaType: calculatedPersona.persona.type,
+          scores: calculatedPersona.scores,
+          confidence: calculatedPersona.confidence,
+          answers: answers,
+          motivations: calculatedPersona.persona.motivations,
+          fears: calculatedPersona.persona.fears,
+          psychologicalProfile: calculatedPersona.persona.psychologicalProfile,
+          communicationNeeds: calculatedPersona.persona.communicationNeeds,
+          consumerDutyAlignment: calculatedPersona.persona.consumerDutyAlignment
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to save persona assessment')
+      }
+
+      const result = await response.json()
+      setSavedAssessmentId(result.data?.id)
+      setShowDocumentGeneration(true) // ADDED - Show document generation after save
+      
+      await trackProgress('completed', 100, {
+        assessmentId: result.data?.id,
+        personaLevel: calculatedPersona.level,
+        personaType: calculatedPersona.persona.type,
+        confidence: calculatedPersona.confidence,
+        version: result.version
+      })
       
       toast({
-        title: 'Persona Saved',
-        description: `${calculatedPersona.persona.type} profile saved successfully`,
+        title: 'Success',
+        description: `${calculatedPersona.persona.type} profile saved successfully (Version ${result.version || 1})`,
         variant: 'default'
       })
       
-      // Navigate back to hub after saving
-      handleBack()
+      // REMOVED AUTO-NAVIGATION
+      // setTimeout(() => {
+      //   handleBack()
+      // }, 1500)
+      
     } catch (error) {
       console.error('Error saving persona:', error)
       toast({
         title: 'Error',
-        description: 'Failed to save persona assessment',
+        description: error instanceof Error ? error.message : 'Failed to save persona assessment',
         variant: 'destructive'
       })
     } finally {
@@ -385,373 +477,335 @@ export default function PersonaAssessmentPage() {
     }
   }
 
+  // ADDED - Document generation success handler
+  const handleDocumentGenerationSuccess = (docId: string, docUrl?: string) => {
+    toast({
+      title: 'Document Generated',
+      description: 'Your persona assessment report has been created successfully',
+      variant: 'default'
+    })
+  }
+
   const progress = ((currentQuestion + 1) / personaQuestions.length) * 100
   const currentQuestionData = personaQuestions[currentQuestion]
   const currentAnswer = answers[currentQuestionData?.id]
 
-  // PHASE 1: Wrap entire component in NavigationGuard
   return (
     <NavigationGuard requireClient={true}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* PHASE 1: Back button and client info */}
-        <div className="flex items-center gap-4 mb-4">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Assessments
-          </Button>
-          <div className="text-sm text-gray-600">
-            {client && (
-              <>
-                Assessing: <span className="font-medium">{client.personalDetails?.firstName} {client.personalDetails?.lastName}</span>
-              </>
-            )}
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Assessments
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Investor Persona Assessment</h1>
+              {client && (
+                <p className="text-gray-600 mt-1">
+                  For: {clientName}
+                  {isProspect && (
+                    <Badge variant="outline" className="ml-2 bg-orange-50 text-orange-700 border-orange-300">
+                      Prospect
+                    </Badge>
+                  )}
+                </p>
+              )}
+            </div>
           </div>
-          {/* PHASE 1: Prospect indicator */}
-          {isProspect && (
-            <Badge variant="outline" className="ml-auto bg-orange-50 text-orange-700 border-orange-300">
-              <Users className="h-3 w-3 mr-1" />
-              Prospect Mode
-            </Badge>
-          )}
         </div>
 
-        {/* PHASE 1: Prospect warning banner */}
+        {/* Prospect warning */}
         {isProspect && (
-          <Alert className="border-orange-200 bg-orange-50">
+          <Alert className="mb-4 border-orange-200 bg-orange-50">
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertDescription>
               <span className="font-medium text-orange-800">
-                This is a temporary prospect assessment. Data will be stored locally for 30 days. 
-                Convert to a full client to save permanently.
+                Prospect Mode: This assessment will be saved temporarily. Convert to client to persist data.
               </span>
             </AlertDescription>
           </Alert>
         )}
 
-        {isComplete && calculatedPersona ? (
-          <>
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Investor Persona</h1>
-              <p className="text-gray-600">Based on your responses, here's your investment personality profile</p>
-            </div>
+        <div className="max-w-4xl mx-auto">
+          {isComplete && calculatedPersona ? (
+            // Results display
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Investor Persona</h2>
+                <p className="text-gray-600">Investment personality profile based on your responses</p>
+              </div>
 
-            {/* Persona Result */}
-            <Card className="overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">{calculatedPersona.persona.avatar}</div>
-                  <CardTitle className="text-2xl text-blue-900">{calculatedPersona.persona.type}</CardTitle>
-                  <p className="text-blue-700 mt-2">{calculatedPersona.persona.description}</p>
-                  <Badge variant="default" className="mt-3">
-                    {calculatedPersona.confidence}% match confidence
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                {/* Key Characteristics */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <h4 className="flex items-center space-x-2 font-semibold text-green-900">
-                      <Target className="h-5 w-5" />
-                      <span>Key Motivations</span>
-                    </h4>
-                    <ul className="space-y-2">
-                      {calculatedPersona.persona.motivations.map((motivation: string, i: number) => (
-                        <li key={i} className="flex items-center space-x-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="text-sm">{motivation}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h4 className="flex items-center space-x-2 font-semibold text-red-900">
-                      <Shield className="h-5 w-5" />
-                      <span>Key Concerns</span>
-                    </h4>
-                    <ul className="space-y-2">
-                      {calculatedPersona.persona.fears.map((fear: string, i: number) => (
-                        <li key={i} className="flex items-center space-x-2">
-                          <CheckCircle className="h-4 w-4 text-red-600" />
-                          <span className="text-sm">{fear}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Psychological Profile */}
-                <div className="space-y-4">
-                  <h4 className="flex items-center space-x-2 font-semibold text-blue-900">
-                    <Brain className="h-5 w-5" />
-                    <span>Your Investment Psychology</span>
-                  </h4>
-                  <div className="grid md:grid-cols-2 gap-4 text-sm">
-                    <div className="bg-blue-50 p-3 rounded-lg">
-                      <strong className="text-blue-900">Decision Making:</strong>
-                      <p className="text-blue-800 mt-1">{calculatedPersona.persona.psychologicalProfile.decisionMaking}</p>
-                    </div>
-                    <div className="bg-purple-50 p-3 rounded-lg">
-                      <strong className="text-purple-900">Stress Response:</strong>
-                      <p className="text-purple-800 mt-1">{calculatedPersona.persona.psychologicalProfile.stressResponse}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Communication Preferences */}
-                <div className="space-y-4">
-                  <h4 className="flex items-center space-x-2 font-semibold text-purple-900">
-                    <Heart className="h-5 w-5" />
-                    <span>Communication Preferences</span>
-                  </h4>
-                  <div className="grid md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <strong>Frequency:</strong> {calculatedPersona.persona.communicationNeeds.frequency}
-                    </div>
-                    <div>
-                      <strong>Style:</strong> {calculatedPersona.persona.communicationNeeds.style}
-                    </div>
-                    <div>
-                      <strong>Format:</strong> {calculatedPersona.persona.communicationNeeds.format}
-                    </div>
-                    <div>
-                      <strong>Meeting Preference:</strong> {calculatedPersona.persona.communicationNeeds.meetingPreference}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Consumer Duty Alignment */}
-                <div className="space-y-4">
-                  <h4 className="flex items-center space-x-2 font-semibold text-green-900">
-                    <Shield className="h-5 w-5" />
-                    <span>Consumer Duty Alignment</span>
-                  </h4>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="bg-green-50 p-3 rounded-lg">
-                      <strong className="text-green-900">Suitable Products:</strong>
-                      <p className="text-sm text-green-800 mt-1">{calculatedPersona.persona.consumerDutyAlignment.products}</p>
-                    </div>
-                    <div className="bg-blue-50 p-3 rounded-lg">
-                      <strong className="text-blue-900">Value Proposition:</strong>
-                      <p className="text-sm text-blue-800 mt-1">{calculatedPersona.persona.consumerDutyAlignment.value}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Score Breakdown */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-900">Assessment Score Breakdown</h4>
-                  <div className="space-y-2">
-                    {Object.entries(calculatedPersona.scores).map(([level, score]) => {
-                      const persona = investorPersonas[level]
-                      const percentage = (score / Math.max(...Object.values(calculatedPersona.scores))) * 100
-                      return (
-                        <div key={level} className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-lg">{persona.avatar}</span>
-                            <span className="text-sm font-medium">{persona.type}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-32 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className={cn(
-                                  "h-2 rounded-full",
-                                  level === calculatedPersona.level ? "bg-blue-600" : "bg-gray-400"
-                                )}
-                                style={{ width: `${percentage}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-gray-600 w-12">{score} pts</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Actions */}
-            <div className="flex justify-center space-x-4">
-              <Button onClick={resetAssessment} variant="outline">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retake Assessment
-              </Button>
-              <Button 
-                onClick={savePersona}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Persona to Profile
-                  </>
-                )}
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Investor Persona Assessment</h1>
-              <p className="text-gray-600">Answer 8 questions to discover your investment personality</p>
-            </div>
-
-            {/* Progress */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Question {currentQuestion + 1} of {personaQuestions.length}</span>
-                  <span className="text-sm text-gray-500">{Math.round(progress)}% Complete</span>
-                </div>
-                <Progress value={progress} className="w-full" />
-              </CardContent>
-            </Card>
-
-            {/* Question */}
-            {currentQuestionData && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center space-x-2 text-blue-600 mb-2">
-                    <Users className="h-5 w-5" />
-                    <span className="text-sm font-medium capitalize">{currentQuestionData.category.replace('_', ' ')}</span>
-                  </div>
-                  <CardTitle className="text-xl leading-relaxed">
-                    {currentQuestionData.text}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {currentQuestionData.options.map((option, index) => {
-                      const isSelected = currentAnswer === index
-                      
-                      return (
-                        <button
-                          key={index}
-                          onClick={() => handleAnswer(index)}
-                          className={cn(
-                            "w-full p-4 text-left border rounded-lg transition-all hover:bg-gray-50",
-                            isSelected 
-                              ? "border-blue-500 bg-blue-50 text-blue-900" 
-                              : "border-gray-200"
-                          )}
-                        >
-                          <div className="flex items-start space-x-3">
-                            <div 
-                              className={cn(
-                                "w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center",
-                                isSelected 
-                                  ? "border-blue-500 bg-blue-500" 
-                                  : "border-gray-300"
-                              )}
-                            >
-                              {isSelected && (
-                                <div className="w-2 h-2 rounded-full bg-white" />
-                              )}
-                            </div>
-                            <span className="text-sm leading-relaxed">{option.text}</span>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Navigation */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex justify-between">
-                  <Button
-                    onClick={prevQuestion}
-                    disabled={currentQuestion === 0}
-                    variant="outline"
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-2" />
-                    Previous
-                  </Button>
-
+              <Card className="overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
                   <div className="text-center">
-                    <p className="text-sm text-gray-600">
-                      {Object.keys(answers).length} of {personaQuestions.length} questions answered
-                    </p>
+                    <div className="text-6xl mb-4">{calculatedPersona.persona.avatar}</div>
+                    <CardTitle className="text-2xl text-indigo-900">{calculatedPersona.persona.type}</CardTitle>
+                    <p className="text-indigo-700 mt-2">{calculatedPersona.persona.description}</p>
+                    <Badge variant="default" className="mt-3">
+                      {calculatedPersona.confidence}% match confidence
+                    </Badge>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-6 pt-6">
+                  {/* Key Characteristics */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h4 className="flex items-center space-x-2 font-semibold text-green-900">
+                        <Target className="h-5 w-5" />
+                        <span>Key Motivations</span>
+                      </h4>
+                      <ul className="space-y-2">
+                        {calculatedPersona.persona.motivations.map((motivation: string, i: number) => (
+                          <li key={i} className="flex items-start space-x-2">
+                            <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm">{motivation}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="flex items-center space-x-2 font-semibold text-red-900">
+                        <Shield className="h-5 w-5" />
+                        <span>Key Concerns</span>
+                      </h4>
+                      <ul className="space-y-2">
+                        {calculatedPersona.persona.fears.map((fear: string, i: number) => (
+                          <li key={i} className="flex items-start space-x-2">
+                            <CheckCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm">{fear}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
 
-                  <Button
-                    onClick={nextQuestion}
-                    disabled={currentAnswer === undefined}
-                  >
-                    {currentQuestion === personaQuestions.length - 1 ? (
+                  {/* Psychological Profile */}
+                  <div className="space-y-4">
+                    <h4 className="flex items-center space-x-2 font-semibold text-blue-900">
+                      <Brain className="h-5 w-5" />
+                      <span>Your Investment Psychology</span>
+                    </h4>
+                    <div className="grid md:grid-cols-2 gap-4 text-sm">
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <strong className="text-blue-900">Decision Making:</strong>
+                        <p className="text-blue-800 mt-1">{calculatedPersona.persona.psychologicalProfile.decisionMaking}</p>
+                      </div>
+                      <div className="bg-purple-50 p-3 rounded-lg">
+                        <strong className="text-purple-900">Stress Response:</strong>
+                        <p className="text-purple-800 mt-1">{calculatedPersona.persona.psychologicalProfile.stressResponse}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Communication Preferences */}
+                  <div className="space-y-4">
+                    <h4 className="flex items-center space-x-2 font-semibold text-purple-900">
+                      <Heart className="h-5 w-5" />
+                      <span>Communication Preferences</span>
+                    </h4>
+                    <div className="grid md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <strong>Frequency:</strong> {calculatedPersona.persona.communicationNeeds.frequency}
+                      </div>
+                      <div>
+                        <strong>Style:</strong> {calculatedPersona.persona.communicationNeeds.style}
+                      </div>
+                      <div>
+                        <strong>Format:</strong> {calculatedPersona.persona.communicationNeeds.format}
+                      </div>
+                      <div>
+                        <strong>Meeting Preference:</strong> {calculatedPersona.persona.communicationNeeds.meetingPreference}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Score Breakdown */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-900">Assessment Score Breakdown</h4>
+                    <div className="space-y-2">
+                      {Object.entries(calculatedPersona.scores).map(([level, score]) => {
+                        const persona = investorPersonas[level]
+                        const percentage = (score / Math.max(...Object.values(calculatedPersona.scores))) * 100
+                        return (
+                          <div key={level} className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-lg">{persona.avatar}</span>
+                              <span className="text-sm font-medium">{persona.type}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-32 bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className={cn(
+                                    "h-2 rounded-full",
+                                    level === calculatedPersona.level ? "bg-indigo-600" : "bg-gray-400"
+                                  )}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm text-gray-600 w-12">{score} pts</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ADDED - Success Message & Document Generation */}
+                  {savedAssessmentId && showDocumentGeneration && (
+                    <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <p className="font-medium text-green-800">Assessment saved successfully!</p>
+                      </div>
+                      <div className="flex items-center justify-center">
+                        <DocumentGenerationButton
+                          assessmentType="persona"
+                          assessmentId={savedAssessmentId}
+                          clientId={clientId!}
+                          clientName={clientName}
+                          clientEmail={clientEmail}
+                          onSuccess={handleDocumentGenerationSuccess}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* UPDATED Actions - Better button layout after save */}
+                  <div className="flex justify-center space-x-4">
+                    {!savedAssessmentId ? (
                       <>
-                        <Users className="h-4 w-4 mr-2" />
-                        Discover My Persona
+                        <Button onClick={resetAssessment} variant="outline">
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retake Assessment
+                        </Button>
+                        <Button 
+                          onClick={savePersona}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4 mr-2" />
+                              Save Persona
+                            </>
+                          )}
+                        </Button>
                       </>
                     ) : (
                       <>
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-2" />
+                        <Button onClick={handleBack} variant="outline">
+                          <ArrowLeft className="h-4 w-4 mr-2" />
+                          Return to Hub
+                        </Button>
+                        <Button onClick={resetAssessment} variant="outline">
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retake Assessment
+                        </Button>
                       </>
                     )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </>
-        )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            // Question flow
+            <div className="space-y-6">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Question {currentQuestion + 1} of {personaQuestions.length}</span>
+                    <span className="text-sm font-medium">{Math.round(progress)}% Complete</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                </CardContent>
+              </Card>
+
+              {currentQuestionData && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center space-x-3">
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-100">
+                        <span className="font-bold">{currentQuestion + 1}</span>
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-lg">{currentQuestionData.text}</CardTitle>
+                        <Badge variant="secondary" className="mt-2">
+                          {currentQuestionData.category.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {currentQuestionData.options.map((option, index) => (
+                        <label
+                          key={index}
+                          className={cn(
+                            "flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all",
+                            currentAnswer === index
+                              ? "border-indigo-500 bg-indigo-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name={currentQuestionData.id}
+                            value={index}
+                            checked={currentAnswer === index}
+                            onChange={() => handleAnswer(index)}
+                            className="sr-only"
+                          />
+                          <div className={cn(
+                            "w-5 h-5 rounded-full border-2 mr-3",
+                            currentAnswer === index
+                              ? "border-indigo-500 bg-indigo-500"
+                              : "border-gray-300"
+                          )}>
+                            {currentAnswer === index && (
+                              <div className="w-full h-full rounded-full bg-white scale-50" />
+                            )}
+                          </div>
+                          <span className="text-gray-700">{option.text}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-between mt-8">
+                      <Button
+                        variant="outline"
+                        onClick={prevQuestion}
+                        disabled={currentQuestion === 0}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-2" />
+                        Previous
+                      </Button>
+                      <Button
+                        onClick={nextQuestion}
+                        disabled={currentAnswer === undefined}
+                      >
+                        {currentQuestion === personaQuestions.length - 1 ? 'Complete' : 'Next'}
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </NavigationGuard>
   )
 }
-
-// ===================================================================
-// PHASE 1 NAVIGATION FIX COMPLETE
-// ===================================================================
-
-/*
-PHASE 1 IMPLEMENTATION SUMMARY:
-
-✅ NavigationGuard Integration
-   - Wrapped entire component in NavigationGuard
-   - Prevents access without client selection
-
-✅ URL-Based Context
-   - Replaced alert with actual save functionality
-   - Uses useClientContext hook for client data
-   - No sessionStorage dependencies
-
-✅ Navigation Updates
-   - Added back button to return to assessment hub
-   - Save function navigates back after completion
-   - All navigation stays within assessment context
-
-✅ Prospect Support
-   - Shows prospect indicator badge
-   - Displays warning banner
-   - Save functionality works for prospects (local storage)
-
-✅ All Features Preserved
-   - 8-question assessment flow
-   - Persona calculation logic
-   - Results display with breakdown
-   - Retake functionality
-
-TESTING CHECKLIST:
-□ Direct URL access redirects to guard
-□ Refresh maintains client context
-□ Back button navigates to hub
-□ Prospect mode shows warnings
-□ Assessment flow works correctly
-□ Save navigates back to hub
-*/

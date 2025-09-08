@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ===================================================================
 // src/services/migration/ClientMigrationService.ts - PRODUCTION READY - Complete File
 // ===================================================================

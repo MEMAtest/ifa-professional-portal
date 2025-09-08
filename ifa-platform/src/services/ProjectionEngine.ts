@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ================================================================
 // src/services/ProjectionEngine.ts - FIXED v2
 // All property mismatches and type errors resolved

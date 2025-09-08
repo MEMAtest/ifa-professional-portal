@@ -1,6 +1,7 @@
 // ================================================================
-// src/components/cashflow/CashFlowDashboard.tsx - COMPLETELY FIXED
-// All TypeScript compilation errors resolved
+// src/components/cashflow/CashFlowDashboard.tsx - UPDATED
+// Integrated real StressTestModal instead of placeholder
+// All existing functionality preserved
 // ================================================================
 
 'use client';
@@ -27,6 +28,7 @@ import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import { clientService } from '@/services/ClientService';
 import GenerateReportModal from '@/components/cashflow/EnhancedGenerateReportModal';
+import { StressTestModal } from '@/components/cashflow/StressTestModal'; // NEW: Import real component
 
 // FIX: Add proper type imports
 import type { 
@@ -522,18 +524,13 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
         scenario={selectedScenario}
       />
 
-      {/* Stress Test Modal - Phase 3 Placeholder */}
-      {showStressTestModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Stress Testing</h3>
-            <p className="text-gray-600 mb-4">Stress testing will be available in Phase 3.</p>
-            <Button onClick={() => setShowStressTestModal(false)} className="w-full">
-              Close
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* NEW: Real Stress Test Modal replacing placeholder */}
+      <StressTestModal
+        isOpen={showStressTestModal}
+        onClose={() => setShowStressTestModal(false)}
+        scenario={selectedScenario}
+        client={client} // Pass client for mitigation strategies
+      />
     </div>
   );
 }

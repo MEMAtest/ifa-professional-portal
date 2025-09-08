@@ -1,28 +1,20 @@
+// src/app/api/activity-log/route.ts
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
-// src/app/api/activity-log/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createBrowserClient } from '@supabase/ssr';
-
-// Initialize Supabase client
-function getSupabaseClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
+import { createClient } from '@/lib/supabase/server'  // FIXED: Changed from client to server
 
 // GET - Fetch activity log for a client OR recent activities for dashboard
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
-    const recent = searchParams.get('recent'); // Add this to get recent activities
+    const recent = searchParams.get('recent');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const supabase = getSupabaseClient();
+    const supabase = await createClient();  // FIXED: Using await, no parameters
 
     // If requesting recent activities across all clients
     if (recent === 'true') {
@@ -118,7 +110,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = await createClient();  // FIXED: Using await, no parameters
 
     // Create the activity log entry matching your table structure
     const { data, error } = await supabase
@@ -153,6 +145,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// REMOVED: getRecentActivities export (not a valid Next.js route handler)
-// Now integrated into GET handler with ?recent=true parameter

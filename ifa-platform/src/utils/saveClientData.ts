@@ -1,7 +1,9 @@
 // utils/saveClientData.ts
 // Utility to save client data to your Supabase database with JSONB structure
 
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
+
+const supabase = createClient()
 
 interface SaveClientDataParams {
   clientId?: string  // If provided, update existing client

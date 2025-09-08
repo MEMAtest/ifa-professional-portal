@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // /src/services/ClientAnalyticsService.ts
 // Core analytics service that connects market data to individual client stories
 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { 
   Shield, 
   Calculator, 
@@ -21,6 +21,7 @@ interface RiskProfileTabProps {
 
 export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
   const router = useRouter();
+  const supabase = createClient(); // ✅ ADD THIS LINE
   const [atrAssessment, setAtrAssessment] = useState<any>(null);
   const [cflAssessment, setCflAssessment] = useState<any>(null);
   const [riskProfile, setRiskProfile] = useState<any>(null);

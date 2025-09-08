@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // src/services/emailService.ts
 export interface EmailPayload {
   to: string[]

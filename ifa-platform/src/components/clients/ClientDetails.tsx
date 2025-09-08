@@ -45,7 +45,7 @@ import {
   getRiskLevelColor,
   calculateAge
 } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { useClientDetailsData, createCommunication, scheduleReview } from '@/hooks/useClientDetailsData';
 
 // Import the Cash Flow Dashboard component
@@ -98,6 +98,7 @@ export function ClientDetails({
 }: ClientDetailsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const supabase = createClient(); // ✅ ADD THIS LINE
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [hasCashFlowAnalysis, setHasCashFlowAnalysis] = useState(false);
   const [cashFlowCount, setCashFlowCount] = useState(0);
@@ -186,6 +187,7 @@ export function ClientDetails({
   // Risk Profile Tab Component (internal to ClientDetails)
   const RiskProfileTabContent = ({ clientId, client }: { clientId: string; client: Client }) => {
     const router = useRouter();
+    const supabase = createClient();
     const [atrAssessment, setAtrAssessment] = useState<AtrAssessment | null>(null);
     const [cflAssessment, setCflAssessment] = useState<CflAssessment | null>(null);
     const [riskProfile, setRiskProfile] = useState<RiskProfileData | null>(null);

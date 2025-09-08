@@ -2,6 +2,7 @@
 // src/components/cashflow/advanced/StressTestVisualizations.tsx
 // Advanced visualization components for stress test results
 // Includes impact charts, recovery timeline, probability funnel, heat maps
+// FIXED: Added yAxisId to ReferenceLine
 // ================================================================
 
 import React, { useMemo } from 'react';
@@ -343,6 +344,7 @@ export function StressTestVisualizations({
                 }
                 return <Rectangle {...props} />;
               }} />
+              {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
               <ReferenceLine y={100} stroke="#666" strokeDasharray="3 3" />
             </BarChart>
           </ResponsiveContainer>
@@ -523,6 +525,7 @@ export function StressTestVisualizations({
               <Bar dataKey="survivalProbability" fill={COLORS.positive} name="Survival Probability" />
               <Bar dataKey="resilienceScore" fill={COLORS.primary} name="Resilience Score" />
               <Bar dataKey="shortfallRisk" fill={COLORS.negative} name="Shortfall Risk" />
+              {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
               <ReferenceLine y={0} stroke="#666" />
             </BarChart>
           </ResponsiveContainer>

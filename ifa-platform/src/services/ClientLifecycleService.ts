@@ -1,8 +1,11 @@
 // src/services/ClientLifecycleService.ts
-import { supabase } from '@/lib/supabase';
+
+import { createClient } from '@/lib/supabase/client';
 import type { Client } from '@/types/client';
 
 export class ClientLifecycleService {
+  // Remove instance property since all methods are static
+
   /**
    * Handle all tasks after client creation
    */
@@ -30,6 +33,8 @@ export class ClientLifecycleService {
    * Create default cash flow scenario
    */
   private static async createDefaultCashFlowScenario(clientId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Get client data for scenario defaults
       const { data: client } = await supabase
@@ -100,6 +105,8 @@ export class ClientLifecycleService {
    * Schedule initial client review
    */
   private static async scheduleInitialReview(clientId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Schedule review for 3 months after onboarding
       const reviewDate = new Date();
@@ -130,6 +137,8 @@ export class ClientLifecycleService {
    * Create initial document workflow
    */
   private static async createInitialDocumentWorkflow(clientId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Check if client agreement template exists
       const { data: template } = await supabase
@@ -162,6 +171,8 @@ export class ClientLifecycleService {
    * Initialize assessment tracking
    */
   private static async initializeAssessmentTracking(clientId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Create placeholder for suitability assessment
       const { error } = await supabase
@@ -194,6 +205,8 @@ export class ClientLifecycleService {
     action: string, 
     details: string
   ): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       await supabase
         .from('activity_log')
@@ -245,6 +258,8 @@ export class ClientLifecycleService {
   }
 
   private static async scheduleAnnualReview(clientId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     const nextYear = new Date();
     nextYear.setFullYear(nextYear.getFullYear() + 1);
 

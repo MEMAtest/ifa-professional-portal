@@ -1,9 +1,10 @@
-// DocumentGenerationButton.tsx - Complete Updated Version
+// src/components/documents/DocumentGenerationButton.tsx
 import React, { useState } from 'react'
 import { FileText, Download, Send, Eye, CheckCircle, AlertCircle, Loader2, FileCheck } from 'lucide-react'
+import DocumentViewerModal from './DocumentViewerModal'
 
 interface DocumentGenerationButtonProps {
-  assessmentType: 'suitability' | 'atr' | 'cfl' | 'vulnerability'
+  assessmentType: 'suitability' | 'atr' | 'cfl' | 'vulnerability' | 'persona'
   assessmentId: string
   clientId: string
   clientName?: string
@@ -33,6 +34,10 @@ export default function DocumentGenerationButton({
   const [generatedDocument, setGeneratedDocument] = useState<GeneratedDocument | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sendingSignature, setSendingSignature] = useState(false)
+  
+  // Modal states
+  const [showViewerModal, setShowViewerModal] = useState(false)
+  const [viewerDocumentId, setViewerDocumentId] = useState<string | null>(null)
 
   const handleGenerateDocument = async () => {
     setIsGenerating(true)
@@ -141,8 +146,10 @@ export default function DocumentGenerationButton({
   }
 
   const handlePreview = () => {
-    if (generatedDocument?.url) {
-      window.open(generatedDocument.url, '_blank')
+    if (generatedDocument?.id) {
+      setViewerDocumentId(generatedDocument.id)
+      setShowViewerModal(true)
+      setShowOptions(false)
     }
   }
 
@@ -208,7 +215,8 @@ export default function DocumentGenerationButton({
       suitability: 'Suitability',
       atr: 'Attitude to Risk',
       cfl: 'Capacity for Loss',
-      vulnerability: 'Vulnerability'
+      vulnerability: 'Vulnerability',
+      persona: 'Investor Persona'
     }
     return names[type as keyof typeof names] || type
   }
@@ -293,7 +301,7 @@ export default function DocumentGenerationButton({
                 className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 rounded-md transition-colors"
               >
                 <Eye className="h-4 w-4 text-gray-500" />
-                <span className="text-sm">Preview Document (HTML)</span>
+                <span className="text-sm">Preview Document</span>
               </button>
 
               <button
@@ -353,6 +361,21 @@ export default function DocumentGenerationButton({
         <div 
           className="fixed inset-0 z-0" 
           onClick={() => setShowOptions(false)}
+        />
+      )}
+
+      {/* Document Viewer Modal */}
+      {showViewerModal && viewerDocumentId && (
+        <DocumentViewerModal
+          isOpen={showViewerModal}
+          onClose={() => {
+            setShowViewerModal(false)
+            setViewerDocumentId(null)
+          }}
+          documentId={viewerDocumentId}
+          documentName={`${getAssessmentTypeName(assessmentType)} Report`}
+          clientName={clientName}
+          clientEmail={clientEmail}
         />
       )}
     </div>

@@ -2,6 +2,7 @@
 // src/components/cashflow/advanced/BeforeAfterComparison.tsx
 // Side-by-side comparison of unstressed vs stressed projections
 // Visual impact representation with key metric differences
+// FIXED: Added yAxisId to all ReferenceLine components referencing Y-axis
 // ================================================================
 
 import React, { useState, useMemo } from 'react';
@@ -22,18 +23,7 @@ import {
 } from 'lucide-react';
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { StressTestResult } from '@/types/stress-testing';
-// TODO: Ensure the correct path and existence of YearByYearStressProjections.ts
-// If the file does not exist, create it and export the YearByYearProjection type as below:
 import type { YearByYearProjection } from './YearByYearStressProjections';
-// Example fallback definition (remove if the real type exists):
-// export interface YearByYearProjection {
-//   year: number;
-//   age: number;
-//   portfolioValue: number;
-//   income: number;
-//   survivalProbability: number;
-//   milestone?: string;
-// }
 
 interface BeforeAfterComparisonProps {
   scenario: CashFlowScenario;
@@ -263,6 +253,7 @@ export function BeforeAfterComparison({
                       fillOpacity={0.6}
                       name="Portfolio Value"
                     />
+                    {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                     <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="3 3" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -295,6 +286,7 @@ export function BeforeAfterComparison({
                       fillOpacity={0.6}
                       name="Portfolio Value"
                     />
+                    {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                     <ReferenceLine y={0} stroke="#991b1b" strokeDasharray="3 3" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -343,8 +335,9 @@ export function BeforeAfterComparison({
                     strokeDasharray="5 5"
                     dot={false}
                   />
+                  {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                   <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" />
-                  {/* Milestone markers */}
+                  {/* Milestone markers - these are X-axis reference lines, no yAxisId needed */}
                   {comparisonData.filter(d => d.milestone).map((d, i) => (
                     <ReferenceLine
                       key={i}
@@ -411,6 +404,7 @@ export function BeforeAfterComparison({
                       />
                     ))}
                   </Bar>
+                  {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                   <ReferenceLine y={0} stroke="#666" />
                 </BarChart>
               </ResponsiveContainer>

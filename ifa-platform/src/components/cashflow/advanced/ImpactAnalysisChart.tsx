@@ -3,6 +3,7 @@
 // Path: src/components/cashflow/advanced/ImpactAnalysisChart.tsx
 // Purpose: Visualize portfolio decline and recovery scenarios
 // FULLY COMPATIBLE with exact StressTestResult.impactAnalysis interface
+// FIXED: Added yAxisId to ReferenceLine
 // ================================================================
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
@@ -233,7 +234,7 @@ export const ImpactAnalysisChart: React.FC<ImpactAnalysisChartProps> = ({
                   radius={[2, 2, 0, 0]}
                 />
                 
-                {/* Zero reference line */}
+                {/* FIX: Added yAxisId since this is a single Y-axis chart */}
                 <ReferenceLine y={0} stroke="#666" strokeDasharray="2 2" />
               </BarChart>
             </ResponsiveContainer>

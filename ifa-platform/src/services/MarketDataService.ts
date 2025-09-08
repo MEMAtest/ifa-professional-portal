@@ -3,8 +3,7 @@
 // Fixed import name and provides complete market data functionality
 // ================================================================
 
-import { supabase } from '@/lib/supabase';
-// FIX: Use correct type name 'MarketAssumptions' instead of 'MarketDataAssumptions'
+import { createClient } from "@/lib/supabase/client"
 import type { MarketAssumptions } from '@/types/cashflow';
 
 interface AlphaVantageResponse {
@@ -37,9 +36,17 @@ interface MarketDataCache {
 }
 
 export class MarketDataService {
+  // Remove instance property, use static method instead
   private static readonly CACHE_KEY = 'market_data_cache';
   private static readonly CACHE_DURATION_HOURS = 24;
   private static readonly API_RATE_LIMIT_DELAY = 1000; // 1 second between calls
+
+  /**
+   * Get Supabase client - create when needed for static methods
+   */
+  private static getSupabaseClient() {
+    return createClient();
+  }
 
   /**
    * Main method to get current market assumptions
@@ -239,6 +246,7 @@ export class MarketDataService {
    */
   private static async getCachedData(): Promise<MarketDataCache | null> {
     try {
+      const supabase = this.getSupabaseClient(); // ✅ Get client here
       const { data, error } = await supabase
         .from('app_cache')
         .select('data')
@@ -259,6 +267,7 @@ export class MarketDataService {
 
   private static async cacheData(marketData: MarketAssumptions): Promise<void> {
     try {
+      const supabase = this.getSupabaseClient(); // ✅ Get client here
       const now = new Date();
       const expiresAt = new Date(now.getTime() + (this.CACHE_DURATION_HOURS * 60 * 60 * 1000));
       

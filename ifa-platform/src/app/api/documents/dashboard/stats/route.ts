@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
@@ -7,9 +8,10 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
     // Get current user and firm context
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -93,7 +95,7 @@ export async function GET(request: NextRequest) {
       }, {} as Record<string, number>)
 
       documentsByCategory = Object.entries(categoryCounts)
-        .map(([category, count]) => ({ category, count }))
+        .map(([category, count]) => ({ category, count: Number(count) })) // <-- FIXED: Explicitly convert to number
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
     }
@@ -117,9 +119,9 @@ export async function GET(request: NextRequest) {
 
     // Build response
     const stats = {
-      totalDocuments: totalDocuments || 0,
-      pendingSignatures: pendingSignatures || 0,
-      completedThisMonth: completedThisMonth || 0,
+      totalDocuments: totalDocuments !== null ? Number(totalDocuments) : 0, // <-- FIXED: Convert to number
+      pendingSignatures: pendingSignatures !== null ? Number(pendingSignatures) : 0, // <-- FIXED: Convert to number
+      completedThisMonth: completedThisMonth !== null ? Number(completedThisMonth) : 0, // <-- FIXED: Convert to number
       activeClients,
       recentActivity,
       documentsByCategory,

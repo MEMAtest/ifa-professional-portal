@@ -2,11 +2,17 @@
 export const dynamic = 'force-dynamic'
 
 // src/app/api/clients/[id]/route.ts
-// ✅ DEFINITIVE FIX: Enhanced error handling and parameter extraction
+// ✅ FIXED: Using proper server-side Supabase client
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+
+// Create Supabase client for server-side operations
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 /**
  * GET /api/clients/[id]
@@ -14,7 +20,7 @@ import { revalidatePath } from 'next/cache';
  */
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }  // Changed parameter name for clarity
+  context: { params: { id: string } }
 ) {
   try {
     // Enhanced logging to debug the issue

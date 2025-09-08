@@ -1,7 +1,7 @@
 // src/hooks/useAutoSave.ts
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 
 interface AutoSaveOptions {
   debounceMs?: number;
@@ -30,6 +30,9 @@ export function useAutoSave<T extends Record<string, any>>(
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const previousDataRef = useRef<string>();
+  
+  // ✅ Create the supabase client
+  const supabase = createClient();
 
   // Track changes
   useEffect(() => {
@@ -61,7 +64,7 @@ export function useAutoSave<T extends Record<string, any>>(
 
         if (id) {
           // Update existing record
-          const { error } = await supabase
+          const { error } = await supabase  // ✅ Now supabase is defined
             .from(tableName)
             .update(saveData)
             .eq(idField, id);
@@ -93,7 +96,7 @@ export function useAutoSave<T extends Record<string, any>>(
     } finally {
       setIsSaving(false);
     }
-  }, [data, id, enabled, hasUnsavedChanges, onSave, tableName, idField, toast]);
+  }, [data, id, enabled, hasUnsavedChanges, onSave, tableName, idField, toast, supabase]); // ✅ Add supabase to deps
 
   // Debounced save
   useEffect(() => {

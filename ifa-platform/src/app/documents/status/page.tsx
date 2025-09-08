@@ -3,7 +3,7 @@
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -23,7 +23,8 @@ import {
   Filter,
   Mail
 } from 'lucide-react'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface DocumentStatus {
   id: string
@@ -47,10 +48,15 @@ export default function DocumentStatusPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState<string>('all')
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  // Supabase client with proper initialization pattern
+  const supabase = useMemo<SupabaseClient | null>(() => {
+    try {
+      return createClient()
+    } catch (error) {
+      console.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
+      return null
+    }
+  }, [])
 
   useEffect(() => {
     loadDocumentStatuses()
@@ -61,6 +67,13 @@ export default function DocumentStatusPage() {
   }, [documents, statusFilter, searchQuery, dateFilter])
 
   const loadDocumentStatuses = async () => {
+    if (!supabase) {
+      console.error("Action failed: Supabase client is not available in loadDocumentStatuses.")
+      setDocuments(getMockDocuments())
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     
     try {

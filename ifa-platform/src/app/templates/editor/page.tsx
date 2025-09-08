@@ -3,7 +3,7 @@
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -27,7 +27,8 @@ import {
   Mail,
   Building
 } from 'lucide-react'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/Alert'
 
 // Template variables with icons and descriptions
@@ -203,10 +204,15 @@ export default function TemplateEditorPage() {
   const [saving, setSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  // Supabase client with proper initialization pattern
+  const supabase = useMemo<SupabaseClient | null>(() => {
+    try {
+      return createClient()
+    } catch (error) {
+      console.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
+      return null
+    }
+  }, [])
 
   // Process template for preview
   const processTemplateForPreview = () => {
@@ -249,6 +255,12 @@ export default function TemplateEditorPage() {
 
   // Save template
   const saveTemplate = async () => {
+    if (!supabase) {
+      console.error("Action failed: Supabase client is not available in saveTemplate.")
+      alert("Cannot save template: Supabase client is not available")
+      return
+    }
+
     setSaving(true)
     
     try {
@@ -267,9 +279,13 @@ export default function TemplateEditorPage() {
       if (!error) {
         setShowSuccess(true)
         setTimeout(() => setShowSuccess(false), 3000)
+      } else {
+        console.error('Save error:', error)
+        alert('Failed to save template')
       }
     } catch (err) {
       console.error('Save error:', err)
+      alert('Failed to save template')
     } finally {
       setSaving(false)
     }

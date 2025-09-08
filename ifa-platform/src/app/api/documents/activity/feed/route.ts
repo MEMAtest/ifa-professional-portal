@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+
 import { cookies } from 'next/headers'
 
 // ===================================================================
@@ -53,6 +54,7 @@ interface ActivityFilters {
 // ===================================================================
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
    
     

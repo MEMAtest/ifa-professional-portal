@@ -226,12 +226,12 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
               }}
             >
               <iframe
-                srcDoc={previewContent}
-                className="w-full h-full border-0"
-                style={{ minHeight: '297mm' }}
-                title="Report Preview"
-                sandbox="allow-same-origin"
-              />
+  srcDoc={previewContent}
+  className="w-full h-full border-0"
+  style={{ minHeight: '297mm' }}
+  title="Report Preview"
+  sandbox="allow-same-origin allow-scripts allow-modals allow-popups"
+/>
             </div>
           </div>
         )}

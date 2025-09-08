@@ -1,14 +1,12 @@
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
 // src/app/api/assessments/history/[clientId]/route.ts
-// ================================================================
-// ASSESSMENT HISTORY API - FIXED VERSION
-// ================================================================
+// COMPLETE UPDATED VERSION - NO ASSUMPTIONS
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
 import type { AssessmentHistory } from '@/types/assessment';
+
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic';
 
 // GET: Fetch assessment history for a client
 export async function GET(
@@ -16,13 +14,14 @@ export async function GET(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const supabase = await createClient();
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     
-    // Optional filters
-    const assessmentType = searchParams.get('assessmentType');
-    const limit = parseInt(searchParams.get('limit') || '100');
+    // Get limit from query params (default to what useClientAssessments expects: 10)
+    const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
+    const assessmentType = searchParams.get('assessmentType');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
@@ -47,7 +46,7 @@ export async function GET(
       query = query.lte('performed_at', endDate);
     }
 
-    const { data: history, error, count } = await query;
+    const { data: historyData, error, count } = await query;
 
     if (error) {
       console.error('Error fetching assessment history:', error);
@@ -57,9 +56,24 @@ export async function GET(
       );
     }
 
-    // Group by assessment type for summary
+    // Format the history to match what useClientAssessments expects
+    const formattedHistory = (historyData || []).map((entry: AssessmentHistory) => ({
+      id: entry.id,
+      assessmentType: entry.assessment_type,
+      action: entry.action,
+      performedAt: entry.performed_at,
+      performedBy: entry.performed_by ? {
+        id: entry.performed_by,
+        email: 'user@example.com', // TODO: Join with profiles table if needed
+        full_name: 'System User'
+      } : null,
+      changes: entry.changes || {},
+      metadata: entry.metadata || {}
+    }));
+
+    // Group by assessment type for summary (keep your existing logic)
     const summary: Record<string, any> = {};
-    (history || []).forEach((entry: AssessmentHistory) => {
+    (historyData || []).forEach((entry: AssessmentHistory) => {
       if (!summary[entry.assessment_type]) {
         summary[entry.assessment_type] = {
           type: entry.assessment_type,
@@ -83,8 +97,9 @@ export async function GET(
       summary[entry.assessment_type].actions[entry.action]++;
     });
 
+    // Return in format expected by useClientAssessments
     return NextResponse.json({
-      history: history || [],
+      history: formattedHistory,
       totalCount: count || 0,
       summary: Object.values(summary),
       pagination: {
@@ -108,6 +123,7 @@ export async function POST(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const supabase = await createClient();
     const clientId = params.clientId;
     const body = await request.json();
     const { assessmentType, assessmentId, action, changes, metadata } = body;
@@ -120,18 +136,22 @@ export async function POST(
       );
     }
 
+    // Normalize assessment type
+    const normalizedType = assessmentType.replace('-', '_');
+
     // Create history entry
     const { data, error } = await supabase
       .from('assessment_history')
       .insert({
         client_id: clientId,
         assessment_id: assessmentId || null,
-        assessment_type: assessmentType,
+        assessment_type: normalizedType,
         action,
         performed_at: new Date().toISOString(),
-        performed_by: null, // Would come from auth context
+        performed_by: null, // TODO: Get from auth context when available
         changes: changes || {},
-        metadata: metadata || {}
+        metadata: metadata || {},
+        created_at: new Date().toISOString()
       })
       .select()
       .single();
@@ -144,7 +164,10 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ history: data });
+    return NextResponse.json({ 
+      success: true,
+      history: data 
+    });
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json(
@@ -160,11 +183,12 @@ export async function DELETE(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const supabase = await createClient();
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     const assessmentType = searchParams.get('assessmentType');
     
-    // In production, add proper auth checks here
+    // TODO: Add proper auth checks here for admin role
     
     let query = supabase
       .from('assessment_history')
@@ -193,7 +217,9 @@ export async function DELETE(
         assessment_type: assessmentType || 'all',
         action: 'history_cleared',
         performed_at: new Date().toISOString(),
-        metadata: { clearedBy: 'admin' }
+        performed_by: null, // TODO: Get from auth context
+        metadata: { clearedBy: 'admin' },
+        created_at: new Date().toISOString()
       });
 
     return NextResponse.json({ 

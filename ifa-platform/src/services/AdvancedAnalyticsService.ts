@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 import { StressTestingEngine } from './StressTestingEngine';
 import { FCAComplianceService } from './FCAComplianceService';
 import { 

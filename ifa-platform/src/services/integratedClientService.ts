@@ -4,7 +4,7 @@
 // Make sure to replace your ENTIRE file with this version
 // ===================================================================
 
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
 import type { Client, ClientFormData } from '@/types/client'
 
 // ===================================================================
@@ -97,10 +97,7 @@ export class IntegratedClientService {
   private supabase
 
   constructor() {
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    this.supabase = createClient()
   }
 
   // Create client

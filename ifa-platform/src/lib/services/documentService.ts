@@ -3,7 +3,7 @@
 // Handles all document operations with Supabase integration
 // ===================================================================
 
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
 
 // ====================================
 // 2. DocumentService.ts - UUID Fix
@@ -137,10 +137,7 @@ export type SignatureStatus = 'pending' | 'sent' | 'completed' | 'declined' | 'e
 // ===================================================================
 
 export class DocumentService {
-  private supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  // Remove direct initialization - will create client per method
 
   // ===================================================================
   // DOCUMENT OPERATIONS
@@ -148,12 +145,14 @@ export class DocumentService {
 
   async uploadDocument(uploadData: DocumentUpload): Promise<Document> {
     try {
+      const supabase = await createClient();
+      
       // 1. Upload file to Supabase Storage
       const fileExtension = uploadData.file.name.split('.').pop()
       const fileName = `${generateUUID()}.${fileExtension}`
       const storagePath = `documents/${fileName}`
 
-      const { data: uploadResult, error: uploadError } = await this.supabase.storage
+      const { data: uploadResult, error: uploadError } = await supabase.storage
         .from('documents')
         .upload(storagePath, uploadData.file)
 
@@ -175,14 +174,14 @@ export class DocumentService {
         client_id: uploadData.clientId,
         client_name: uploadData.clientName,
         compliance_status: 'pending' as ComplianceStatus,
-        created_by: (await this.supabase.auth.getUser()).data.user?.id,
+        created_by: (await supabase.auth.getUser()).data.user?.id,
         tags: uploadData.tags || [],
         version_number: 1,
         is_template: false,
         is_archived: false
       }
 
-      const { data: document, error: dbError } = await this.supabase
+      const { data: document, error: dbError } = await supabase
         .from('documents')
         .insert(documentData)
         .select()
@@ -190,12 +189,12 @@ export class DocumentService {
 
       if (dbError) {
         // Clean up uploaded file if database insert fails
-        await this.supabase.storage.from('documents').remove([storagePath])
+        await supabase.storage.from('documents').remove([storagePath])
         throw new Error(`Document creation failed: ${dbError.message}`)
       }
 
       // 3. Log access
-      await this.logDocumentAccess(document.id, 'upload')
+      await this.logDocumentAccess(supabase, document.id, 'upload')
 
       return this.mapDatabaseDocument(document)
     } catch (error) {
@@ -206,7 +205,9 @@ export class DocumentService {
 
   async getDocuments(filters?: DocumentFilters): Promise<Document[]> {
     try {
-      let query = this.supabase
+      const supabase = await createClient();
+      
+      let query = supabase
         .from('documents')
         .select(`
           *,
@@ -277,7 +278,9 @@ export class DocumentService {
 
   async getDocumentById(id: string): Promise<Document | null> {
     try {
-      const { data: document, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: document, error } = await supabase
         .from('documents')
         .select(`
           *,
@@ -298,7 +301,7 @@ export class DocumentService {
       }
 
       // Log access
-      await this.logDocumentAccess(id, 'view')
+      await this.logDocumentAccess(supabase, id, 'view')
 
       return this.mapDatabaseDocument(document)
     } catch (error) {
@@ -309,7 +312,9 @@ export class DocumentService {
 
   async updateDocument(id: string, updates: Partial<Document>): Promise<Document> {
     try {
-      const { data: document, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: document, error } = await supabase
         .from('documents')
         .update({
           title: updates.title,
@@ -320,7 +325,7 @@ export class DocumentService {
           client_name: updates.clientName,
           compliance_status: updates.complianceStatus,
           tags: updates.tags,
-          last_modified_by: (await this.supabase.auth.getUser()).data.user?.id
+          last_modified_by: (await supabase.auth.getUser()).data.user?.id
         })
         .eq('id', id)
         .select()
@@ -331,7 +336,7 @@ export class DocumentService {
       }
 
       // Log access
-      await this.logDocumentAccess(id, 'edit')
+      await this.logDocumentAccess(supabase, id, 'edit')
 
       return this.mapDatabaseDocument(document)
     } catch (error) {
@@ -342,6 +347,8 @@ export class DocumentService {
 
   async deleteDocument(id: string): Promise<void> {
     try {
+      const supabase = await createClient();
+      
       // Get document details first
       const document = await this.getDocumentById(id)
       if (!document) {
@@ -349,7 +356,7 @@ export class DocumentService {
       }
 
       // Delete from storage
-      const { error: storageError } = await this.supabase.storage
+      const { error: storageError } = await supabase.storage
         .from('documents')
         .remove([document.storagePath])
 
@@ -358,7 +365,7 @@ export class DocumentService {
       }
 
       // Delete from database
-      const { error: dbError } = await this.supabase
+      const { error: dbError } = await supabase
         .from('documents')
         .delete()
         .eq('id', id)
@@ -368,7 +375,7 @@ export class DocumentService {
       }
 
       // Log access
-      await this.logDocumentAccess(id, 'delete')
+      await this.logDocumentAccess(supabase, id, 'delete')
     } catch (error) {
       console.error('Delete document error:', error)
       throw error
@@ -377,12 +384,14 @@ export class DocumentService {
 
   async downloadDocument(id: string): Promise<{ blob: Blob; fileName: string }> {
     try {
+      const supabase = await createClient();
+      
       const document = await this.getDocumentById(id)
       if (!document) {
         throw new Error('Document not found')
       }
 
-      const { data: blob, error } = await this.supabase.storage
+      const { data: blob, error } = await supabase.storage
         .from('documents')
         .download(document.storagePath)
 
@@ -391,7 +400,7 @@ export class DocumentService {
       }
 
       // Log access
-      await this.logDocumentAccess(id, 'download')
+      await this.logDocumentAccess(supabase, id, 'download')
 
       return {
         blob,
@@ -409,7 +418,9 @@ export class DocumentService {
 
   async getCategories(): Promise<DocumentCategory[]> {
     try {
-      const { data: categories, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: categories, error } = await supabase
         .from('document_categories')
         .select('*')
         .order('name')
@@ -427,7 +438,9 @@ export class DocumentService {
 
   async createCategory(category: Omit<DocumentCategory, 'id' | 'createdAt' | 'updatedAt'>): Promise<DocumentCategory> {
     try {
-      const { data: newCategory, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: newCategory, error } = await supabase
         .from('document_categories')
         .insert({
           name: category.name,
@@ -456,7 +469,9 @@ export class DocumentService {
 
   async createSignatureRequest(request: Omit<SignatureRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<SignatureRequest> {
     try {
-      const { data: signatureRequest, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: signatureRequest, error } = await supabase
         .from('signature_requests')
         .insert({
           document_id: request.documentId,
@@ -487,7 +502,9 @@ export class DocumentService {
 
   async getSignatureRequests(documentId?: string): Promise<SignatureRequest[]> {
     try {
-      let query = this.supabase.from('signature_requests').select('*')
+      const supabase = await createClient();
+      
+      let query = supabase.from('signature_requests').select('*')
 
       if (documentId) {
         query = query.eq('document_id', documentId)
@@ -510,6 +527,8 @@ export class DocumentService {
 
   async updateSignatureStatus(id: string, status: SignatureStatus, metadata?: any): Promise<SignatureRequest> {
     try {
+      const supabase = await createClient();
+      
       const updateData: any = {
         docuseal_status: status
       }
@@ -521,7 +540,7 @@ export class DocumentService {
         updateData.signed_document_path = metadata?.signedDocumentPath
       }
 
-      const { data: request, error } = await this.supabase
+      const { data: request, error } = await supabase
         .from('signature_requests')
         .update(updateData)
         .eq('id', id)
@@ -533,7 +552,7 @@ export class DocumentService {
       }
 
       // Log signature event
-      await this.supabase
+      await supabase
         .from('signature_events')
         .insert({
           signature_request_id: id,
@@ -554,7 +573,9 @@ export class DocumentService {
 
   async getTemplates(): Promise<DocumentTemplate[]> {
     try {
-      const { data: templates, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: templates, error } = await supabase
         .from('document_templates')
         .select(`
           *,
@@ -583,7 +604,9 @@ export class DocumentService {
     categoryId?: string
   ): Promise<string> {
     try {
-      const { data: template, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: template, error } = await supabase
         .from('document_templates')
         .select('*')
         .eq('id', templateId)
@@ -654,7 +677,9 @@ export class DocumentService {
 
   async getDocumentStatistics(): Promise<any> {
     try {
-      const { data: stats, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: stats, error } = await supabase
         .rpc('get_document_statistics')
 
       if (error) {
@@ -683,7 +708,9 @@ export class DocumentService {
 
   async getAuditTrail(documentId: string): Promise<any[]> {
     try {
-      const { data: trail, error } = await this.supabase
+      const supabase = await createClient();
+      
+      const { data: trail, error } = await supabase
         .from('document_access_log')
         .select('*')
         .eq('document_id', documentId)
@@ -704,11 +731,11 @@ export class DocumentService {
   // UTILITY METHODS
   // ===================================================================
 
-  private async logDocumentAccess(documentId: string, action: string): Promise<void> {
+  private async logDocumentAccess(supabase: any, documentId: string, action: string): Promise<void> {
     try {
-      const user = await this.supabase.auth.getUser()
+      const user = await supabase.auth.getUser()
       
-      await this.supabase
+      await supabase
         .from('document_access_log')
         .insert({
           document_id: documentId,
@@ -804,4 +831,13 @@ export class DocumentService {
 // SINGLETON INSTANCE
 // ===================================================================
 
-export const documentService = new DocumentService()
+let documentServiceInstance: DocumentService | null = null;
+
+export const documentService = {
+  getInstance: (): DocumentService => {
+    if (!documentServiceInstance) {
+      documentServiceInstance = new DocumentService();
+    }
+    return documentServiceInstance;
+  }
+};

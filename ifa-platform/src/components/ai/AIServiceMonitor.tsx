@@ -1,6 +1,6 @@
 // src/components/ai/AIServiceMonitor.tsx
 // ================================================================
-// AI SERVICE MONITORING DASHBOARD
+// AI SERVICE MONITORING DASHBOARD - FIXED VERSION
 // Real-time metrics and performance tracking
 // ================================================================
 
@@ -24,16 +24,18 @@ import {
 } from 'lucide-react'
 import { aiAssistantService } from '@/services/aiAssistantService'
 
+// Updated interface to match what the service actually returns
 interface AIMetrics {
   totalRequests: number
   cacheHits: number
   apiCalls: number
   errors: number
-  rateLimitHits: number
   avgResponseTime: number
-  cacheSize: number
-  queueSize: number
-  rateLimitRemaining: number
+  // Optional fields that may or may not be present
+  rateLimitHits?: number
+  cacheSize?: number
+  queueSize?: number
+  rateLimitRemaining?: number
 }
 
 const AIServiceMonitor: React.FC = () => {
@@ -41,12 +43,32 @@ const AIServiceMonitor: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
+  // Helper function to ensure metrics have default values
+  const normalizeMetrics = (rawMetrics: any): AIMetrics => {
+    return {
+      totalRequests: rawMetrics?.totalRequests || 0,
+      cacheHits: rawMetrics?.cacheHits || 0,
+      apiCalls: rawMetrics?.apiCalls || 0,
+      errors: rawMetrics?.errors || 0,
+      avgResponseTime: rawMetrics?.avgResponseTime || 0,
+      rateLimitHits: rawMetrics?.rateLimitHits || 0,
+      cacheSize: rawMetrics?.cacheSize || 0,
+      queueSize: rawMetrics?.queueSize || 0,
+      rateLimitRemaining: rawMetrics?.rateLimitRemaining || 100
+    }
+  }
+
   // Fetch metrics every 5 seconds
   useEffect(() => {
     const fetchMetrics = () => {
-      const currentMetrics = aiAssistantService.getMetrics()
-      setMetrics(currentMetrics)
-      setLastUpdate(new Date())
+      try {
+        const currentMetrics = aiAssistantService.getMetrics()
+        const normalizedMetrics = normalizeMetrics(currentMetrics)
+        setMetrics(normalizedMetrics)
+        setLastUpdate(new Date())
+      } catch (error) {
+        console.error('Failed to fetch AI metrics:', error)
+      }
     }
 
     fetchMetrics()
@@ -57,9 +79,14 @@ const AIServiceMonitor: React.FC = () => {
 
   const handleRefresh = () => {
     setIsRefreshing(true)
-    const currentMetrics = aiAssistantService.getMetrics()
-    setMetrics(currentMetrics)
-    setLastUpdate(new Date())
+    try {
+      const currentMetrics = aiAssistantService.getMetrics()
+      const normalizedMetrics = normalizeMetrics(currentMetrics)
+      setMetrics(normalizedMetrics)
+      setLastUpdate(new Date())
+    } catch (error) {
+      console.error('Failed to refresh AI metrics:', error)
+    }
     setTimeout(() => setIsRefreshing(false), 500)
   }
 
@@ -86,6 +113,12 @@ const AIServiceMonitor: React.FC = () => {
   const cacheHitRateNum = metrics.totalRequests > 0 
     ? (metrics.cacheHits / metrics.totalRequests * 100)
     : 0
+
+  // Safe access to optional metrics
+  const queueSize = metrics.queueSize || 0
+  const rateLimitHits = metrics.rateLimitHits || 0
+  const rateLimitRemaining = metrics.rateLimitRemaining || 100
+  const cacheSize = metrics.cacheSize || 0
 
   return (
     <Card className="w-full">
@@ -177,12 +210,12 @@ const AIServiceMonitor: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Rate Limit Usage</span>
-              <Badge variant={metrics.rateLimitRemaining > 50 ? 'success' : metrics.rateLimitRemaining > 20 ? 'warning' : 'destructive'}>
-                {metrics.rateLimitRemaining}/100 remaining
+              <Badge variant={rateLimitRemaining > 50 ? 'success' : rateLimitRemaining > 20 ? 'warning' : 'destructive'}>
+                {rateLimitRemaining}/100 remaining
               </Badge>
             </div>
             <Progress 
-              value={100 - metrics.rateLimitRemaining} 
+              value={100 - rateLimitRemaining} 
               className="h-2"
             />
           </div>
@@ -191,13 +224,13 @@ const AIServiceMonitor: React.FC = () => {
         {/* Status Indicators */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <div className={`h-2 w-2 rounded-full ${metrics.queueSize > 0 ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
-            <span>Queue: {metrics.queueSize}</span>
+            <div className={`h-2 w-2 rounded-full ${queueSize > 0 ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
+            <span>Queue: {queueSize}</span>
           </div>
 
           <div className="flex items-center gap-2 text-sm">
-            <div className={`h-2 w-2 rounded-full ${metrics.rateLimitHits > 0 ? 'bg-orange-500' : 'bg-green-500'}`} />
-            <span>Rate Limits: {metrics.rateLimitHits}</span>
+            <div className={`h-2 w-2 rounded-full ${rateLimitHits > 0 ? 'bg-orange-500' : 'bg-green-500'}`} />
+            <span>Rate Limits: {rateLimitHits}</span>
           </div>
 
           <div className="flex items-center gap-2 text-sm">
@@ -207,7 +240,7 @@ const AIServiceMonitor: React.FC = () => {
 
           <div className="flex items-center gap-2 text-sm">
             <div className="h-2 w-2 rounded-full bg-blue-500" />
-            <span>Cache: {metrics.cacheSize} items</span>
+            <span>Cache: {cacheSize} items</span>
           </div>
         </div>
 
@@ -221,20 +254,20 @@ const AIServiceMonitor: React.FC = () => {
           </Alert>
         )}
 
-        {metrics.rateLimitRemaining < 20 && (
+        {rateLimitRemaining < 20 && (
           <Alert className="border-orange-200 bg-orange-50">
             <AlertCircle className="h-4 w-4 text-orange-600" />
             <AlertDescription className="text-orange-800">
-              Approaching rate limit. {metrics.rateLimitRemaining} requests remaining this minute.
+              Approaching rate limit. {rateLimitRemaining} requests remaining this minute.
             </AlertDescription>
           </Alert>
         )}
 
-        {metrics.queueSize > 10 && (
+        {queueSize > 10 && (
           <Alert className="border-yellow-200 bg-yellow-50">
             <AlertCircle className="h-4 w-4 text-yellow-600" />
             <AlertDescription className="text-yellow-800">
-              {metrics.queueSize} requests queued. High demand detected.
+              {queueSize} requests queued. High demand detected.
             </AlertDescription>
           </Alert>
         )}

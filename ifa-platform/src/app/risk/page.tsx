@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { clientService } from '@/services/ClientService';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { 
   AlertTriangle, 
   Shield, 
@@ -40,6 +40,7 @@ interface RiskClient extends Client {
 }
 
 export default function RiskManagementPage() {
+  const supabase = createClient()
   const router = useRouter();
   const [clients, setClients] = useState<RiskClient[]>([]);
   const [filteredClients, setFilteredClients] = useState<RiskClient[]>([]);

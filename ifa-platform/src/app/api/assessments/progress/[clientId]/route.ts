@@ -1,224 +1,269 @@
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
 // src/app/api/assessments/progress/[clientId]/route.ts
-// ================================================================
-// ASSESSMENT PROGRESS TRACKING API - FIXED VERSION
-// ================================================================
+// COMPLETE UNABRIDGED CODE - MATCHES useAssessmentProgress.ts EXACTLY
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import type { AssessmentProgress } from '@/types/assessment';
+import { createClient } from '@/lib/supabase/server';
 
-// GET: Fetch assessment progress for a client
+export const dynamic = 'force-dynamic';
+
+interface AssessmentProgressRecord {
+  status: 'not_started' | 'in_progress' | 'completed' | 'needs_review';
+  startedAt?: string;
+  completedAt?: string;
+  completedBy?: string;
+  score?: any;
+  metadata?: any;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const supabase = await createClient();
     const clientId = params.clientId;
 
-    // Get all assessment progress for this client
-    const { data: progress, error } = await supabase
+    if (!clientId) {
+      return NextResponse.json(
+        { error: 'Client ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get all assessment progress for the client
+    const { data: progressData, error: progressError } = await supabase
       .from('assessment_progress')
       .select('*')
       .eq('client_id', clientId)
       .order('assessment_type');
 
-    if (error) {
-      console.error('Error fetching assessment progress:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch assessment progress' },
-        { status: 500 }
-      );
+    if (progressError) {
+      console.error('Error fetching assessment progress:', progressError);
+      throw new Error('Failed to fetch assessment progress');
     }
 
-    // Calculate overall stats
-    const requiredTypes = ['atr', 'cfl', 'persona', 'suitability'];
-    const completedRequired = (progress || []).filter(
-      (p: AssessmentProgress) => requiredTypes.includes(p.assessment_type) && p.status === 'completed'
-    ).length;
+    // Transform array to Record<string, AssessmentProgressRecord> format expected by the hook
+    const progressRecord: Record<string, AssessmentProgressRecord> = {};
+    let completedCount = 0;
+    
+    // Define all assessment types
+    const allAssessmentTypes = [
+      'atr',
+      'cfl', 
+      'suitability',
+      'monte_carlo',
+      'cashflow',
+      'persona',
+      'investor_persona'
+    ];
 
-    const stats = {
-      totalAssessments: progress?.length || 0,
-      completedAssessments: (progress || []).filter((p: AssessmentProgress) => p.status === 'completed').length,
-      requiredComplete: completedRequired,
-      requiredTotal: requiredTypes.length,
-      overallProgress: requiredTypes.length > 0 
-        ? Math.round((completedRequired / requiredTypes.length) * 100)
-        : 0
-    };
+    // Process existing progress data
+    if (progressData && progressData.length > 0) {
+      progressData.forEach(item => {
+        // Normalize assessment type
+        const normalizedType = item.assessment_type.replace('-', '_');
+        
+        // Auto-correct status based on progress_percentage
+        let correctedStatus = item.status;
+        if (item.progress_percentage === 100 && item.status !== 'completed') {
+          correctedStatus = 'completed';
+        } else if (item.progress_percentage > 0 && item.progress_percentage < 100 && item.status === 'not_started') {
+          correctedStatus = 'in_progress';
+        }
+        
+        if (correctedStatus === 'completed') {
+          completedCount++;
+        }
+        
+        progressRecord[normalizedType] = {
+          status: correctedStatus as 'not_started' | 'in_progress' | 'completed' | 'needs_review',
+          startedAt: item.started_at || undefined,
+          completedAt: item.completed_at || undefined,
+          completedBy: item.completed_by || undefined,
+          score: item.score || undefined,
+          metadata: item.metadata || undefined
+        };
+      });
+    }
 
-    return NextResponse.json({
-      progress: progress || [],
-      stats
+    // Add default entries for missing assessment types
+    allAssessmentTypes.forEach(type => {
+      if (!progressRecord[type]) {
+        progressRecord[type] = {
+          status: 'not_started'
+        };
+      }
     });
+
+    const totalAssessments = allAssessmentTypes.length;
+    const overallProgress = totalAssessments > 0 
+      ? Math.round((completedCount / totalAssessments) * 100) 
+      : 0;
+
+    // Return in the exact format expected by useAssessmentProgress hook
+    return NextResponse.json({
+      progress: progressRecord,
+      overallProgress,
+      completedCount,
+      totalAssessments
+    });
+
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('Error in assessment progress GET:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Failed to fetch assessment progress',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
 
-// POST: Create or update assessment progress
 export async function POST(
   request: NextRequest,
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const supabase = await createClient();
     const clientId = params.clientId;
     const body = await request.json();
-    const { assessmentType, status, progressPercentage, metadata } = body;
 
-    // Validate required fields
-    if (!assessmentType || !status) {
+    const { 
+      assessmentType, 
+      status, 
+      score,
+      metadata 
+    } = body;
+
+    if (!clientId || !assessmentType) {
       return NextResponse.json(
-        { error: 'Missing required fields: assessmentType, status' },
+        { error: 'Client ID and assessment type are required' },
         { status: 400 }
       );
     }
 
-    // Check if progress record exists
-    const { data: existing } = await supabase
-      .from('assessment_progress')
-      .select('id')
-      .eq('client_id', clientId)
-      .eq('assessment_type', assessmentType)
-      .single();
+    // Normalize assessment type (convert any hyphens to underscores)
+    const normalizedType = assessmentType.replace('-', '_');
 
-    const now = new Date().toISOString();
-    
-    if (existing) {
-      // Update existing progress
-      const updateData: any = {
-        status,
-        progress_percentage: progressPercentage || 0,
-        last_updated: now,
-        metadata: metadata || {}
-      };
+    // Build update object
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString(),
+      last_updated: new Date().toISOString()
+    };
 
-      if (status === 'completed') {
-        updateData.completed_at = now;
-      }
-
-      const { data, error } = await supabase
+    // Calculate progress percentage based on status
+    if (status === 'completed') {
+      updateData.progress_percentage = 100;
+      updateData.completed_at = new Date().toISOString();
+    } else if (status === 'in_progress') {
+      // Don't override existing progress_percentage unless it's 0 or null
+      const { data: existing } = await supabase
         .from('assessment_progress')
-        .update(updateData)
-        .eq('id', existing.id)
-        .select()
+        .select('progress_percentage, started_at')
+        .eq('client_id', clientId)
+        .eq('assessment_type', normalizedType)
         .single();
 
-      if (error) {
-        console.error('Error updating progress:', error);
-        return NextResponse.json(
-          { error: 'Failed to update progress' },
-          { status: 500 }
-        );
+      if (existing) {
+        if (!existing.progress_percentage || existing.progress_percentage === 0) {
+          updateData.progress_percentage = 1; // Set to 1% to indicate started
+        }
+        if (!existing.started_at) {
+          updateData.started_at = new Date().toISOString();
+        }
+      } else {
+        updateData.progress_percentage = 1;
+        updateData.started_at = new Date().toISOString();
       }
-
-      // Log to history
-      await logAssessmentHistory(clientId, assessmentType, 'progress_updated', {
-        status,
-        progress_percentage: progressPercentage
-      });
-
-      return NextResponse.json({ progress: data });
-    } else {
-      // Create new progress record
-      const { data, error } = await supabase
-        .from('assessment_progress')
-        .insert({
-          client_id: clientId,
-          assessment_type: assessmentType,
-          status,
-          progress_percentage: progressPercentage || 0,
-          started_at: now,
-          last_updated: now,
-          completed_at: status === 'completed' ? now : null,
-          metadata: metadata || {}
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating progress:', error);
-        return NextResponse.json(
-          { error: 'Failed to create progress' },
-          { status: 500 }
-        );
-      }
-
-      // Log to history
-      await logAssessmentHistory(clientId, assessmentType, 'started', {
-        status,
-        progress_percentage: progressPercentage
-      });
-
-      return NextResponse.json({ progress: data });
-    }
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// PATCH: Update progress percentage
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { clientId: string } }
-) {
-  try {
-    const clientId = params.clientId;
-    const body = await request.json();
-    const { assessmentType, progressPercentage } = body;
-
-    if (!assessmentType || progressPercentage === undefined) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    } else if (status === 'not_started') {
+      updateData.progress_percentage = 0;
+      updateData.started_at = null;
+      updateData.completed_at = null;
+    } else if (status === 'needs_review') {
+      // Keep existing progress_percentage for needs_review status
     }
 
-    const { data, error } = await supabase
+    if (score !== undefined) {
+      updateData.score = score;
+    }
+
+    if (metadata !== undefined) {
+      updateData.metadata = metadata;
+    }
+
+    // Try to update first
+    const { data: updateResult, error: updateError } = await supabase
       .from('assessment_progress')
-      .update({
-        progress_percentage: progressPercentage,
-        last_updated: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('client_id', clientId)
-      .eq('assessment_type', assessmentType)
+      .eq('assessment_type', normalizedType)
       .select()
       .single();
 
-    if (error) {
-      console.error('Error updating progress percentage:', error);
-      return NextResponse.json(
-        { error: 'Failed to update progress' },
-        { status: 500 }
-      );
+    if (updateError) {
+      // If record doesn't exist (PGRST116), create it
+      if (updateError.code === 'PGRST116' || updateError.message?.includes('0 rows')) {
+        const insertData = {
+          client_id: clientId,
+          assessment_type: normalizedType,
+          ...updateData,
+          created_at: new Date().toISOString()
+        };
+
+        const { data: insertResult, error: insertError } = await supabase
+          .from('assessment_progress')
+          .insert(insertData)
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error creating assessment progress:', insertError);
+          throw new Error('Failed to create assessment progress');
+        }
+
+        // Log to history
+        await logAssessmentHistory(supabase, clientId, normalizedType, status, updateData);
+
+        return NextResponse.json({ 
+          success: true, 
+          data: insertResult,
+          created: true 
+        });
+      }
+
+      console.error('Error updating assessment progress:', updateError);
+      throw new Error('Failed to update assessment progress');
     }
 
-    return NextResponse.json({ progress: data });
+    // Log to history
+    await logAssessmentHistory(supabase, clientId, normalizedType, status, updateData);
+
+    return NextResponse.json({ 
+      success: true, 
+      data: updateResult 
+    });
+
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('Error in assessment progress POST:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Failed to update assessment progress',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
 
-// Helper function to log to assessment history
+// Helper function to log assessment history
 async function logAssessmentHistory(
+  supabase: any,
   clientId: string,
   assessmentType: string,
   action: string,
-  changes?: any
+  changes: any
 ) {
   try {
     await supabase
@@ -226,13 +271,25 @@ async function logAssessmentHistory(
       .insert({
         client_id: clientId,
         assessment_type: assessmentType,
-        action,
+        action: action === 'completed' ? 'completed' : 
+                action === 'in_progress' ? 'started' : 
+                action === 'needs_review' ? 'marked_for_review' : 
+                'updated',
         performed_at: new Date().toISOString(),
-        changes: changes || {},
-        metadata: {}
+        changes: changes,
+        metadata: changes.metadata || {},
+        created_at: new Date().toISOString()
       });
   } catch (error) {
-    console.error('Error logging to history:', error);
-    // Don't throw - logging failure shouldn't break the main operation
+    console.error('Error logging assessment history:', error);
+    // Don't throw - history logging is non-critical
   }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { clientId: string } }
+) {
+  // Redirect PATCH to POST for compatibility
+  return POST(request, { params });
 }

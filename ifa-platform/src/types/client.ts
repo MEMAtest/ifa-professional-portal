@@ -1,10 +1,6 @@
-// src/types/client.ts
 // ===================================================================
-// DEFINITIVE, ELEVATED AND CORRECTED - FULL FILE
-// This version preserves the original ~700 line structure and all
-// existing utility functions and prop types. The single, critical
-// change is adding the 'integrationStatus' property to the core
-// 'Client' interface to resolve the final service-layer errors.
+// FILE: src/types/client.ts
+// ENHANCED VERSION WITH COMPLETE FINANCIAL PROFILE
 // ===================================================================
 
 // ===================================================================
@@ -76,16 +72,33 @@ export interface InsurancePolicy {
   description?: string;
 }
 
+// ===================================================================
+// ENHANCED FINANCIAL PROFILE WITH ALL REQUIRED PROPERTIES
+// ===================================================================
+
 export interface FinancialProfile {
+  // Core income and worth metrics
   annualIncome: number;
   netWorth: number;
   liquidAssets: number;
   monthlyExpenses: number;
+  
+  // Investment details
   investmentTimeframe: string;
   investmentObjectives: string[];
   existingInvestments: Investment[];
   pensionArrangements: PensionArrangement[];
   insurancePolicies: InsurancePolicy[];
+  
+  // Additional financial metrics for suitability assessment
+  totalAssets?: number;           // Total value of all assets
+  mortgageOutstanding?: number;    // Outstanding mortgage balance
+  otherLiabilities?: number;       // Other debts and liabilities
+  propertyValue?: number;          // Total property value
+  emergencyFund?: number;          // Emergency savings amount
+  disposableIncome?: number;       // Monthly disposable income
+  
+  // Scenario linkage
   linkedScenarioId?: string;
 }
 
@@ -117,11 +130,6 @@ export interface RiskProfile {
 
 export type ClientStatus = 'prospect' | 'active' | 'review_due' | 'inactive' | 'archived';
 
-/**
- * ✅ THE CORE FIX: This is the single, authoritative `Client` interface.
- * It is structured with the nested objects that all components expect,
- * AND it now includes the 'integrationStatus' property required by the service layer.
- */
 export interface Client {
   id: string;
   createdAt: string;
@@ -136,7 +144,6 @@ export interface Client {
   riskProfile: RiskProfile;
   status: ClientStatus;
   notes?: string;
-  // ✅ FIX: Added the 'integrationStatus' field to match its usage in the service layer.
   integrationStatus?: {
     hasAssessment: boolean;
     hasScenario: boolean;
@@ -147,7 +154,7 @@ export interface Client {
 }
 
 // ===================================================================
-// FORM AND API TYPES (Preserved and Corrected)
+// FORM AND API TYPES
 // ===================================================================
 
 export interface ClientFormData {
@@ -162,7 +169,7 @@ export interface ClientFormData {
 }
 
 // ===================================================================
-// SEARCH AND FILTER TYPES (Preserved from original file)
+// SEARCH AND FILTER TYPES
 // ===================================================================
 
 export interface ClientFilters {
@@ -197,7 +204,7 @@ export interface SearchResult {
 }
 
 // ===================================================================
-// STATISTICS AND ANALYTICS TYPES (Preserved from original file)
+// STATISTICS AND ANALYTICS TYPES
 // ===================================================================
 
 export interface ClientStatistics {
@@ -218,7 +225,7 @@ export interface ClientStatistics {
 }
 
 // ===================================================================
-// COMMUNICATION AND ACTIVITY TYPES (Preserved from original file)
+// COMMUNICATION AND ACTIVITY TYPES
 // ===================================================================
 
 export interface ClientCommunication {
@@ -275,7 +282,7 @@ export interface ClientAssessment {
 }
 
 // ===================================================================
-// AUDIT AND ACTIVITY TYPES (Preserved from original file)
+// AUDIT AND ACTIVITY TYPES
 // ===================================================================
 
 export interface AuditLog {
@@ -300,7 +307,7 @@ export interface RecentActivity {
 }
 
 // ===================================================================
-// MIGRATION TYPES (Preserved from original file)
+// MIGRATION TYPES
 // ===================================================================
 
 export interface LegacyClientData {
@@ -335,7 +342,7 @@ export interface MigrationResult {
 }
 
 // ===================================================================
-// ERROR TYPES (Preserved from original file)
+// ERROR TYPES
 // ===================================================================
 
 export interface ClientError {
@@ -351,7 +358,7 @@ export interface ValidationError extends ClientError {
 }
 
 // ===================================================================
-// COMPONENT PROP TYPES (Preserved from original file)
+// COMPONENT PROP TYPES
 // ===================================================================
 
 export interface ClientListProps {
@@ -406,7 +413,7 @@ export interface ClientCardProps {
 }
 
 // ===================================================================
-// SERVICE INTERFACE (Preserved from original file)
+// SERVICE INTERFACE
 // ===================================================================
 
 export interface ClientService {
@@ -427,7 +434,7 @@ export interface ClientService {
 }
 
 // ===================================================================
-// UTILITY TYPES (Preserved from original file)
+// UTILITY TYPES
 // ===================================================================
 
 export type CommunicationType = ClientCommunication['communicationType'];
@@ -436,7 +443,7 @@ export type DocumentType = ClientDocument['documentType'];
 export type AssessmentType = ClientAssessment['assessmentType'];
 
 // ===================================================================
-// HELPER FUNCTIONS - ROBUST AND ERROR-PROOF (Preserved from original file)
+// ENHANCED HELPER FUNCTIONS
 // ===================================================================
 
 export function getVulnerabilityStatus(vulnerabilityAssessment?: VulnerabilityAssessment | null | any): boolean {
@@ -499,7 +506,14 @@ export function getDefaultClientFormData(): ClientFormData {
     financialProfile: {
       annualIncome: 0, netWorth: 0, liquidAssets: 0, monthlyExpenses: 0,
       investmentTimeframe: '', investmentObjectives: [], existingInvestments: [],
-      pensionArrangements: [], insurancePolicies: []
+      pensionArrangements: [], insurancePolicies: [],
+      // Include new optional fields with defaults
+      totalAssets: 0,
+      mortgageOutstanding: 0,
+      otherLiabilities: 0,
+      propertyValue: 0,
+      emergencyFund: 0,
+      disposableIncome: 0
     },
     vulnerabilityAssessment: createVulnerabilityAssessment(false),
     riskProfile: {
@@ -510,6 +524,7 @@ export function getDefaultClientFormData(): ClientFormData {
   };
 }
 
+// Enhanced normalization function that includes new fields
 export function normalizeFinancialProfile(partial?: Partial<FinancialProfile>): FinancialProfile {
   return {
     annualIncome: Number(partial?.annualIncome) || 0,
@@ -520,7 +535,44 @@ export function normalizeFinancialProfile(partial?: Partial<FinancialProfile>): 
     investmentObjectives: Array.isArray(partial?.investmentObjectives) ? partial.investmentObjectives : [],
     existingInvestments: Array.isArray(partial?.existingInvestments) ? partial.existingInvestments : [],
     pensionArrangements: Array.isArray(partial?.pensionArrangements) ? partial.pensionArrangements : [],
-    insurancePolicies: Array.isArray(partial?.insurancePolicies) ? partial.insurancePolicies : []
+    insurancePolicies: Array.isArray(partial?.insurancePolicies) ? partial.insurancePolicies : [],
+    // Include new optional fields
+    totalAssets: Number(partial?.totalAssets) || 0,
+    mortgageOutstanding: Number(partial?.mortgageOutstanding) || 0,
+    otherLiabilities: Number(partial?.otherLiabilities) || 0,
+    propertyValue: Number(partial?.propertyValue) || 0,
+    emergencyFund: Number(partial?.emergencyFund) || 0,
+    disposableIncome: Number(partial?.disposableIncome) || 0
+  };
+}
+
+// Enhanced calculation helper for financial totals
+export function calculateFinancialTotals(profile: FinancialProfile): {
+  totalAssets: number;
+  totalLiabilities: number;
+  netWorth: number;
+  monthlyDisposable: number;
+} {
+  // Calculate total assets from all sources
+  const investmentTotal = profile.existingInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
+  const pensionTotal = profile.pensionArrangements.reduce((sum, pension) => sum + (pension.currentValue || 0), 0);
+  const totalAssets = investmentTotal + pensionTotal + profile.liquidAssets + (profile.propertyValue || 0);
+  
+  // Calculate total liabilities
+  const totalLiabilities = (profile.mortgageOutstanding || 0) + (profile.otherLiabilities || 0);
+  
+  // Calculate net worth
+  const netWorth = totalAssets - totalLiabilities;
+  
+  // Calculate monthly disposable income
+  const monthlyGross = profile.annualIncome / 12;
+  const monthlyDisposable = monthlyGross - profile.monthlyExpenses;
+  
+  return {
+    totalAssets,
+    totalLiabilities,
+    netWorth,
+    monthlyDisposable
   };
 }
 
@@ -541,5 +593,6 @@ export function formatNumber(value: number | null | undefined): string {
   return safeValue.toLocaleString('en-GB');
 }
 
+// Backward compatibility exports
 export const validateClientFormData = validateClientData;
 export const getEmptyClientFormData = getDefaultClientFormData;

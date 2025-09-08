@@ -478,14 +478,14 @@ export default function ATRAssessmentPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId,
-          answers,
-          score: atrResult.totalScore,
-          category: atrResult.riskCategory,
-          level: atrResult.riskLevel,
-          categoryScores: atrResult.categoryScores,
-          recommendations: atrResult.recommendations
-        }),
+  clientId,
+  answers,
+  totalScore: atrResult.totalScore,  // Access from atrResult object
+  riskCategory: atrResult.riskCategory,  // Access from atrResult object
+  riskLevel: atrResult.riskLevel,  // Access from atrResult object
+  categoryScores: atrResult.categoryScores,  // Access from atrResult object
+  recommendations: atrResult.recommendations  // Access from atrResult object
+}),
       })
 
       if (response.ok) {
@@ -509,15 +509,15 @@ export default function ATRAssessmentPage() {
         })
         
         toast({
-          title: 'Success',
-          description: 'ATR assessment saved successfully',
-          variant: 'default'
-        })
-        
-        // Navigate to assessment hub after save
-        setTimeout(() => {
-          router.push(`/assessments/client/${clientId}${isProspect ? '?isProspect=true' : ''}`)
-        }, 2000)
+  title: 'Success',
+  description: 'ATR assessment saved successfully',
+  variant: 'default'
+})
+
+// REMOVED automatic navigation - user stays on page
+// setTimeout(() => {
+//   router.push(`/assessments/client/${clientId}${isProspect ? '?isProspect=true' : ''}`)
+// }, 2000)
       } else {
         throw new Error('Failed to save assessment')
       }

@@ -1,9 +1,9 @@
 // ================================================================
 // src/services/CashFlowDataService.ts - COMPLETELY FIXED
-// All TypeScript errors eliminated + Enhanced with auto-transform
+// All TypeScript errors eliminated - Direct Supabase usage
 // ================================================================
 
-import { supabase, dbTransform, cashFlowDB } from '@/lib/supabase'; // Using completely fixed supabase
+import { createClient } from '@/lib/supabase/client';
 import { clientService } from '@/services/ClientService';
 import { AssessmentService } from '@/services/AssessmentService';
 import type { Client, FinancialProfile } from '@/types/client';
@@ -16,15 +16,44 @@ import type {
   ScenarioType
 } from '@/types/cashflow';
 
+// Transform functions for snake_case <-> camelCase conversion
+function transformToCamelCase(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(transformToCamelCase);
+  
+  const result: any = {};
+  for (const key in obj) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    result[camelKey] = transformToCamelCase(obj[key]);
+  }
+  return result;
+}
+
+function transformToSnakeCase(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(transformToSnakeCase);
+  
+  const result: any = {};
+  for (const key in obj) {
+    const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    result[snakeKey] = transformToSnakeCase(obj[key]);
+  }
+  return result;
+}
+
 export class CashFlowDataService {
+  // Remove instance property since all methods are static
+
   /**
    * Creates a cash flow scenario from existing client and assessment data
-   * COMPLETELY FIXED: All type errors resolved + enhanced with auto-transform
+   * COMPLETELY FIXED: Using direct Supabase calls
    */
   static async createScenarioFromClient(
     clientId: string, 
     scenarioType: ScenarioType = 'base'
   ): Promise<CashFlowScenario> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const client = await clientService.getClientById(clientId);
       const assessment = await AssessmentService.getClientAssessment(clientId);
@@ -34,105 +63,112 @@ export class CashFlowDataService {
       }
 
       // Get current user ID safely
-      // Get actual authenticated user
-const { data: { user } } = await supabase.auth.getUser();
-const currentUserId = user?.id || null;
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id || null;
 
       // Get risk-based returns - ensure riskScore is a number
       const riskScore = assessment?.riskMetrics?.finalRiskProfile || 5;
       const returnAssumptions = this.getRiskBasedReturns(riskScore);
 
-      // FIXED: Use correct FinancialProfile property names + camelCase for auto-transform
+      // Build scenario object with snake_case for database
       const scenario = {
-        clientId, // Auto-converts to client_id
-        scenarioName: `${client.personalDetails?.firstName || 'Client'} ${client.personalDetails?.lastName || ''} - ${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} Case`,
-        scenarioType,
-        createdBy: currentUserId,
+        client_id: clientId,
+        scenario_name: `${client.personalDetails?.firstName || 'Client'} ${client.personalDetails?.lastName || ''} - ${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} Case`,
+        scenario_type: scenarioType,
+        created_by: currentUserId,
         
         // Projection Settings
-        projectionYears: 40,
-        inflationRate: 2.5,
+        projection_years: 40,
+        inflation_rate: 2.5,
         
         // Risk-based return assumptions
-        realEquityReturn: returnAssumptions.realEquityReturn,
-        realBondReturn: returnAssumptions.realBondReturn,
-        realCashReturn: returnAssumptions.realCashReturn,
+        real_equity_return: returnAssumptions.realEquityReturn,
+        real_bond_return: returnAssumptions.realBondReturn,
+        real_cash_return: returnAssumptions.realCashReturn,
         
         // Client Demographics
-        clientAge: this.calculateAge(client.personalDetails?.dateOfBirth),
-        retirementAge: 67,
-        lifeExpectancy: this.calculateLifeExpectancy(
+        client_age: this.calculateAge(client.personalDetails?.dateOfBirth),
+        retirement_age: 67,
+        life_expectancy: this.calculateLifeExpectancy(
           client.personalDetails?.dateOfBirth,
           client.personalDetails?.maritalStatus
         ),
         dependents: client.personalDetails?.dependents || 0,
         
-        // Financial Position - FIXED: Use correct FinancialProfile properties
-        currentSavings: client.financialProfile?.liquidAssets || 0, // ✅ FIXED: liquidAssets exists
-        pensionValue: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
-        pensionPotValue: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
-        investmentValue: this.calculateTotalInvestments(client.financialProfile?.existingInvestments || []), // ✅ FIXED: existingInvestments exists
-        propertyValue: 0, // ✅ FIXED: Default value, not from FinancialProfile
+        // Financial Position
+        current_savings: client.financialProfile?.liquidAssets || 0,
+        pension_value: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
+        pension_pot_value: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
+        investment_value: this.calculateTotalInvestments(client.financialProfile?.existingInvestments || []),
+        property_value: 0,
         
-        // Income - FIXED: Use correct FinancialProfile properties
-        currentIncome: client.financialProfile?.annualIncome || 0, // ✅ FIXED: annualIncome exists
-        pensionContributions: this.calculatePensionContributions(client.financialProfile?.pensionArrangements || []),
-        statePensionAge: 67,
-        statePensionAmount: this.estimateStatePension(client.financialProfile?.annualIncome || 0),
-        otherIncome: 0, // ✅ FIXED: Default value, not from FinancialProfile
+        // Income
+        current_income: client.financialProfile?.annualIncome || 0,
+        pension_contributions: this.calculatePensionContributions(client.financialProfile?.pensionArrangements || []),
+        state_pension_age: 67,
+        state_pension_amount: this.estimateStatePension(client.financialProfile?.annualIncome || 0),
+        other_income: 0,
         
-        // Expenses - FIXED: Use correct FinancialProfile properties
-        currentExpenses: client.financialProfile?.monthlyExpenses ? 
-          client.financialProfile.monthlyExpenses * 12 : 0, // ✅ FIXED: monthlyExpenses exists
-        essentialExpenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.7,
-        lifestyleExpenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.2,
-        discretionaryExpenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.1,
+        // Expenses
+        current_expenses: client.financialProfile?.monthlyExpenses ? 
+          client.financialProfile.monthlyExpenses * 12 : 0,
+        essential_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.7,
+        lifestyle_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.2,
+        discretionary_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.1,
         
-        // Debt - FIXED: Default values, not from FinancialProfile
-        mortgageBalance: 0, // ✅ FIXED: Default value
-        mortgagePayment: 0, // ✅ FIXED: Default value
-        otherDebts: 0, // ✅ FIXED: Default value
+        // Debt
+        mortgage_balance: 0,
+        mortgage_payment: 0,
+        other_debts: 0,
         
-        // Goals - FIXED: Use correct calculations
-        retirementIncomeTarget: this.estimateRetirementIncomeTarget(client.financialProfile?.annualIncome || 0),
-        retirementIncomeDesired: this.estimateRetirementIncomeDesired(client.financialProfile?.annualIncome || 0),
-        emergencyFundTarget: (client.financialProfile?.monthlyExpenses || 0) * 6,
-        legacyTarget: 0, // ✅ FIXED: Default value
+        // Goals
+        retirement_income_target: this.estimateRetirementIncomeTarget(client.financialProfile?.annualIncome || 0),
+        retirement_income_desired: this.estimateRetirementIncomeDesired(client.financialProfile?.annualIncome || 0),
+        emergency_fund_target: (client.financialProfile?.monthlyExpenses || 0) * 6,
+        legacy_target: 0,
         
-        // Asset Allocation - camelCase auto-converts to snake_case
-        equityAllocation: this.getEquityAllocation(riskScore),
-        bondAllocation: this.getBondAllocation(riskScore),
-        cashAllocation: this.getCashAllocation(riskScore),
-        alternativeAllocation: 0, // ✅ This converts to alternative_allocation!
+        // Asset Allocation
+        equity_allocation: this.getEquityAllocation(riskScore),
+        bond_allocation: this.getBondAllocation(riskScore),
+        cash_allocation: this.getCashAllocation(riskScore),
+        alternative_allocation: 0,
         
         // Assumptions and Documentation
-        assumptionBasis: `Based on client risk profile ${riskScore}/10 and current market conditions`,
-        marketDataSource: 'Alpha Vantage, BoE, ONS',
-        lastAssumptionsReview: new Date().toISOString().split('T')[0],
+        assumption_basis: `Based on client risk profile ${riskScore}/10 and current market conditions`,
+        market_data_source: 'Alpha Vantage, BoE, ONS',
+        last_assumptions_review: new Date().toISOString().split('T')[0],
         
         // Vulnerability adjustments
-        vulnerabilityAdjustments: this.getVulnerabilityAdjustments(client),
+        vulnerability_adjustments: this.getVulnerabilityAdjustments(client),
         
         // Optional assessment scores
-        riskScore: riskScore,
-        capacityForLossScore: this.mapRiskToCapacity(riskScore),
-        knowledgeExperienceScore: this.mapPersonaToKnowledge(assessment?.persona?.type)
+        risk_score: riskScore,
+        capacity_for_loss_score: this.mapRiskToCapacity(riskScore),
+        knowledge_experience_score: this.mapPersonaToKnowledge(assessment?.persona?.type),
+        
+        // Add these required fields
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
-      // FIXED: Use simple helper that returns proper types
-      const result = await dbTransform.insert('cash_flow_scenarios', scenario);
+      // FIXED: Direct Supabase insert
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .insert(scenario)
+        .select()
+        .single();
 
-      if (result.error) {
-        console.error('Database error details:', result.error);
-        throw new Error(`Failed to create cash flow scenario: ${result.error || 'Unknown error'}`);
+      if (error) {
+        console.error('Database error details:', error);
+        throw new Error(`Failed to create cash flow scenario: ${error.message}`);
       }
 
-      // FIXED: Proper type handling
-      if (!result.data) {
+      if (!data) {
         throw new Error('No data returned from database');
       }
 
-      return result.data as CashFlowScenario;
+      return transformToCamelCase(data) as CashFlowScenario;
       
     } catch (error) {
       console.error('Error creating cash flow scenario from client:', error);
@@ -142,22 +178,23 @@ const currentUserId = user?.id || null;
 
   /**
    * Retrieve scenarios for a client
-   * FIXED: Proper return type handling
+   * FIXED: Direct Supabase query
    */
   static async getClientScenarios(clientId: string): Promise<CashFlowScenario[]> {
-  try {
-    // Change from clientId to client_id
-    const result = await dbTransform.select('cash_flow_scenarios', '*', { 
-      client_id: clientId,  // ✅ FIXED: was 'clientId'
-      is_active: true       // ✅ FIXED: was 'isActive'
-    });
+    const supabase = createClient(); // Create client for this method
+    
+    try {
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('is_active', true);
 
-      if (result.error) {
-        throw new Error(`Failed to fetch scenarios: ${result.error || 'Unknown error'}`);
+      if (error) {
+        throw new Error(`Failed to fetch scenarios: ${error.message}`);
       }
 
-      // FIXED: Proper type handling with fallback
-      const scenarios = (result.data || []) as CashFlowScenario[];
+      const scenarios = (data || []).map(transformToCamelCase) as CashFlowScenario[];
       
       return scenarios.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -175,30 +212,37 @@ const currentUserId = user?.id || null;
 
   /**
    * Update scenario assumptions
-   * FIXED: Proper return type handling
+   * FIXED: Direct Supabase update
    */
   static async updateScenarioAssumptions(
     scenarioId: string, 
     assumptions: Partial<CashFlowScenario>
   ): Promise<CashFlowScenario> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const updateData = {
-        ...assumptions,
-        lastAssumptionsReview: new Date().toISOString().split('T')[0],
-        updatedAt: new Date().toISOString()
+        ...transformToSnakeCase(assumptions),
+        last_assumptions_review: new Date().toISOString().split('T')[0],
+        updated_at: new Date().toISOString()
       };
 
-      const result = await dbTransform.update('cash_flow_scenarios', updateData, { id: scenarioId });
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .update(updateData)
+        .eq('id', scenarioId)
+        .select()
+        .single();
 
-      if (result.error) {
-        throw new Error(`Failed to update scenario: ${result.error || 'Unknown error'}`);
+      if (error) {
+        throw new Error(`Failed to update scenario: ${error.message}`);
       }
 
-      if (!result.data) {
+      if (!data) {
         throw new Error('No data returned from update');
       }
 
-      return result.data as CashFlowScenario;
+      return transformToCamelCase(data) as CashFlowScenario;
     } catch (error) {
       console.error('Error updating scenario assumptions:', error);
       throw error;
@@ -207,18 +251,24 @@ const currentUserId = user?.id || null;
 
   /**
    * Get single scenario
-   * FIXED: Proper return type handling
+   * FIXED: Direct Supabase query
    */
   static async getScenario(scenarioId: string): Promise<CashFlowScenario | null> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
-      const result = await cashFlowDB.getById(scenarioId);
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select('*')
+        .eq('id', scenarioId)
+        .single();
 
-      if (result.error) {
-        if ((result.error as any)?.code === 'PGRST116') return null;
-        throw result.error;
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw error;
       }
 
-      return result.data as CashFlowScenario | null;
+      return data ? transformToCamelCase(data) as CashFlowScenario : null;
     } catch (error) {
       console.error('Error fetching scenario:', error);
       return null;
@@ -227,19 +277,26 @@ const currentUserId = user?.id || null;
 
   /**
    * Update scenario
-   * FIXED: Proper return type handling
+   * FIXED: Direct Supabase update
    */
   static async updateScenario(scenarioId: string, updates: Partial<CashFlowScenario>): Promise<CashFlowScenario> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
-      const result = await dbTransform.update('cash_flow_scenarios', updates, { id: scenarioId });
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .update(transformToSnakeCase(updates))
+        .eq('id', scenarioId)
+        .select()
+        .single();
 
-      if (result.error) throw result.error;
+      if (error) throw error;
       
-      if (!result.data) {
+      if (!data) {
         throw new Error('No data returned from update');
       }
 
-      return result.data as CashFlowScenario;
+      return transformToCamelCase(data) as CashFlowScenario;
     } catch (error) {
       console.error('Error updating scenario:', error);
       throw error;
@@ -248,11 +305,18 @@ const currentUserId = user?.id || null;
 
   /**
    * Delete scenario
+   * FIXED: Direct Supabase delete
    */
   static async deleteScenario(scenarioId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
-      const result = await dbTransform.delete('cash_flow_scenarios', { id: scenarioId });
-      if (result.error) throw result.error;
+      const { error } = await supabase
+        .from('cash_flow_scenarios')
+        .delete()
+        .eq('id', scenarioId);
+        
+      if (error) throw error;
     } catch (error) {
       console.error('Error deleting scenario:', error);
       throw error;
@@ -261,15 +325,20 @@ const currentUserId = user?.id || null;
 
   /**
    * Get user scenarios
-   * FIXED: Proper return type handling
+   * FIXED: Direct Supabase query
    */
   static async getUserScenarios(userId: string): Promise<CashFlowScenario[]> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
-      const result = await dbTransform.select('cash_flow_scenarios', '*', { createdBy: userId });
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select('*')
+        .eq('created_by', userId);
 
-      if (result.error) throw result.error;
+      if (error) throw error;
       
-      const scenarios = (result.data || []) as CashFlowScenario[];
+      const scenarios = (data || []).map(transformToCamelCase) as CashFlowScenario[];
       
       return scenarios.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

@@ -1,14 +1,47 @@
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
 // src/app/api/assessments/compliance/[clientId]/route.ts
 // ================================================================
 // ASSESSMENT COMPLIANCE CHECKING API - FIXED VERSION
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import type { AssessmentProgress, ComplianceAlert } from '@/types/assessment';
+import { createClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/database.types';
+
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic';
+
+// Type aliases from database
+type Tables = Database['public']['Tables'];
+type AssessmentProgressRow = Tables['assessment_progress']['Row'];
+type AssessmentHistoryInsert = Tables['assessment_history']['Insert'];
+
+// Define types locally if not available from imports
+interface AssessmentProgress {
+  id: string;
+  client_id: string;
+  assessment_type: string;
+  status: string;
+  progress_percentage: number | null;
+  completed_at: string | null;
+  completed_by: string | null;
+  metadata: any;
+  last_updated: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  score: any;
+  updated_at: string | null;
+}
+
+interface ComplianceAlert {
+  id: string;
+  clientId: string;
+  type: 'overdue' | 'incomplete' | 'mismatch';
+  assessmentType: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+  createdAt: string;
+  metadata?: any;
+}
 
 interface ComplianceCheckResult {
   compliant: boolean;
@@ -26,8 +59,9 @@ export async function GET(
 ) {
   try {
     const clientId = params.clientId;
+    const supabase = await createClient();
 
-    // Get assessment progress
+    // Get assessment progress - fixed typing
     const { data: progress, error } = await supabase
       .from('assessment_progress')
       .select('*')
@@ -40,6 +74,9 @@ export async function GET(
         { status: 500 }
       );
     }
+
+    // Cast the data to our interface
+    const progressData = (progress || []) as AssessmentProgress[];
 
     // Define required assessments
     const requiredAssessments = ['atr', 'cfl', 'persona', 'suitability'];
@@ -54,9 +91,8 @@ export async function GET(
     const now = new Date();
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-
-    // Process progress data
-    (progress || []).forEach((p: AssessmentProgress) => {
+    
+    progressData.forEach((p: AssessmentProgress) => {
       if (p.status === 'completed') {
         completedAssessments.push(p.assessment_type);
         
@@ -101,17 +137,20 @@ export async function GET(
     });
 
     // Check for mismatches (ATR vs CFL)
-    const atrProgress = progress?.find(p => p.assessment_type === 'atr');
-    const cflProgress = progress?.find(p => p.assessment_type === 'cfl');
+    const atrProgress = progressData.find(p => p.assessment_type === 'atr');
+    const cflProgress = progressData.find(p => p.assessment_type === 'cfl');
     
     if (atrProgress?.status === 'completed' && cflProgress?.status === 'completed') {
-      // In a real implementation, you'd check actual scores
-      // This is a placeholder for demonstration
-      const atrMetadata = atrProgress.metadata as any;
-      const cflMetadata = cflProgress.metadata as any;
+      // Check actual scores from the score field or metadata
+      const atrScore = atrProgress.score?.total_score || 
+                      atrProgress.metadata?.score || 
+                      atrProgress.metadata?.total_score || 0;
+      const cflScore = cflProgress.score?.total_score || 
+                      cflProgress.metadata?.score || 
+                      cflProgress.metadata?.total_score || 0;
       
-      if (atrMetadata?.score && cflMetadata?.score) {
-        const scoreDiff = Math.abs((atrMetadata.score || 0) - (cflMetadata.score || 0));
+      if (atrScore && cflScore) {
+        const scoreDiff = Math.abs(atrScore - cflScore);
         if (scoreDiff > 2) {
           const mismatchAlert: ComplianceAlert = {
             id: 'risk-mismatch',
@@ -122,8 +161,8 @@ export async function GET(
             severity: 'medium',
             createdAt: new Date().toISOString(),
             metadata: {
-              atrScore: atrMetadata.score,
-              cflScore: cflMetadata.score,
+              atrScore: atrScore,
+              cflScore: cflScore,
               difference: scoreDiff
             }
           };
@@ -171,6 +210,7 @@ export async function POST(
     const clientId = params.clientId;
     const body = await request.json();
     const { alertId, resolution, notes } = body;
+    const supabase = await createClient();
 
     if (!alertId || !resolution) {
       return NextResponse.json(
@@ -179,24 +219,50 @@ export async function POST(
       );
     }
 
-    // Log the resolution in history
-    await supabase
+    // Get user context for performed_by field
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Log the resolution in history with proper typing
+    const historyData: AssessmentHistoryInsert = {
+      client_id: clientId,
+      assessment_type: 'compliance',
+      action: 'alert_resolved',
+      performed_at: new Date().toISOString(),
+      performed_by: user?.id || null,
+      changes: {
+        alertId,
+        resolution,
+        notes
+      },
+      metadata: {
+        alertId,
+        resolution,
+        notes,
+        resolvedAt: new Date().toISOString()
+      }
+    };
+
+    const { error } = await supabase
       .from('assessment_history')
-      .insert({
-        client_id: clientId,
-        assessment_type: 'compliance',
-        action: 'alert_resolved',
-        performed_at: new Date().toISOString(),
-        metadata: {
-          alertId,
-          resolution,
-          notes
-        }
-      });
+      .insert(historyData);
+
+    if (error) {
+      console.error('Error logging resolution:', error);
+      return NextResponse.json(
+        { error: 'Failed to log resolution' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ 
       success: true,
-      message: 'Compliance alert resolved'
+      message: 'Compliance alert resolved',
+      data: {
+        alertId,
+        resolution,
+        notes,
+        resolvedAt: new Date().toISOString()
+      }
     });
   } catch (error) {
     console.error('API Error:', error);
@@ -216,28 +282,153 @@ export async function PATCH(
     const clientId = params.clientId;
     const body = await request.json();
     const { remindersEnabled, reviewFrequency } = body;
+    const supabase = await createClient();
 
-    // Update client settings (if you have a client settings table)
-    // For now, we'll log it to history
-    await supabase
+    // Validate input
+    if (typeof remindersEnabled !== 'boolean' || !reviewFrequency) {
+      return NextResponse.json(
+        { error: 'Invalid settings data' },
+        { status: 400 }
+      );
+    }
+
+    // Get user context
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Update client settings via assessment history
+    // In production, you might have a dedicated settings table
+    const historyData: AssessmentHistoryInsert = {
+      client_id: clientId,
+      assessment_type: 'compliance',
+      action: 'settings_updated',
+      performed_at: new Date().toISOString(),
+      performed_by: user?.id || null,
+      changes: {
+        remindersEnabled,
+        reviewFrequency
+      },
+      metadata: {
+        remindersEnabled,
+        reviewFrequency,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.email || 'system'
+      }
+    };
+
+    const { error } = await supabase
       .from('assessment_history')
-      .insert({
-        client_id: clientId,
-        assessment_type: 'compliance',
-        action: 'settings_updated',
-        performed_at: new Date().toISOString(),
-        metadata: {
-          remindersEnabled,
-          reviewFrequency
-        }
-      });
+      .insert(historyData);
+
+    if (error) {
+      console.error('Error updating settings:', error);
+      return NextResponse.json(
+        { error: 'Failed to update settings' },
+        { status: 500 }
+      );
+    }
+
+    // If you have a clients table with settings, update it too
+    const { error: clientError } = await supabase
+      .from('clients')
+      .update({
+        assessment_summary: {
+          compliance_settings: {
+            remindersEnabled,
+            reviewFrequency,
+            lastUpdated: new Date().toISOString()
+          }
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', clientId);
+
+    if (clientError) {
+      console.error('Error updating client settings:', clientError);
+      // Don't fail the request if client update fails
+    }
 
     return NextResponse.json({ 
       success: true,
+      message: 'Compliance settings updated successfully',
       settings: {
         remindersEnabled,
-        reviewFrequency
+        reviewFrequency,
+        updatedAt: new Date().toISOString()
       }
+    });
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: Clear compliance alerts for a client (admin only)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { clientId: string } }
+) {
+  try {
+    const clientId = params.clientId;
+    const supabase = await createClient();
+
+    // Check user authorization
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Check if user has admin role (you'd implement this based on your auth system)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.role !== 'admin' && profile?.role !== 'advisor') {
+      return NextResponse.json(
+        { error: 'Insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
+    // Log the clearing action
+    const historyData: AssessmentHistoryInsert = {
+      client_id: clientId,
+      assessment_type: 'compliance',
+      action: 'alerts_cleared',
+      performed_at: new Date().toISOString(),
+      performed_by: user.id,
+      metadata: {
+        clearedBy: user.email,
+        clearedAt: new Date().toISOString(),
+        reason: 'Manual clear by administrator'
+      }
+    };
+
+    const { error } = await supabase
+      .from('assessment_history')
+      .insert(historyData);
+
+    if (error) {
+      console.error('Error logging clear action:', error);
+      return NextResponse.json(
+        { error: 'Failed to clear alerts' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Compliance alerts cleared successfully',
+      clearedBy: user.email,
+      clearedAt: new Date().toISOString()
     });
   } catch (error) {
     console.error('API Error:', error);

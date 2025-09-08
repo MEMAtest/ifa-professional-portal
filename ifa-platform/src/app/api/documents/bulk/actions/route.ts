@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, dbTransform } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 
 // ===================================================================
 // TYPES
@@ -59,6 +59,7 @@ interface DocumentProcessingResult {
 // ===================================================================
 
 export async function POST(request: NextRequest) {
+  const supabase = await createClient()
   try {
     // Get current user - using your existing supabase client
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -98,7 +99,8 @@ export async function POST(request: NextRequest) {
         file_path,
         signature_status,
         is_archived,
-        requires_signature
+        requires_signature,
+        firm_id
       `)
       .in('id', documentIds)
       .eq('firm_id', firmId)
@@ -121,7 +123,7 @@ export async function POST(request: NextRequest) {
     const jobId = `bulk_${action}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
     // Log the bulk operation if table exists
-    if (await tableExists('bulk_operations_log')) {
+    if (await tableExists('bulk_operations_log', supabase)) {
       await supabase
         .from('bulk_operations_log')
         .insert({
@@ -143,27 +145,27 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'archive':
-        results = await processArchiveDocuments(documents, actionParams)
+        results = await processArchiveDocuments(documents, actionParams, supabase)
         break
         
       case 'delete':
-        results = await processDeleteDocuments(documents)
+        results = await processDeleteDocuments(documents, supabase)
         break
         
       case 'restore':
-        results = await processRestoreDocuments(documents)
+        results = await processRestoreDocuments(documents, supabase)
         break
         
       case 'send':
-        results = await processSendDocuments(documents, actionParams, user.id, firmId)
+        results = await processSendDocuments(documents, actionParams, user.id, firmId, supabase)
         break
         
       case 'resend':
-        results = await processResendDocuments(documents, actionParams, user.id, firmId)
+        results = await processResendDocuments(documents, actionParams, user.id, firmId, supabase)
         break
         
       case 'download':
-        const downloadResult = await processDownloadDocuments(documents, firmId)
+        const downloadResult = await processDownloadDocuments(documents, firmId, supabase)
         results = downloadResult.results
         downloadUrl = downloadResult.downloadUrl
         break
@@ -179,7 +181,7 @@ export async function POST(request: NextRequest) {
     const successful = results.filter(r => r.success)
     const failed = results.filter(r => !r.success)
 
-    if (await tableExists('bulk_operations_log')) {
+    if (await tableExists('bulk_operations_log', supabase)) {
       await supabase
         .from('bulk_operations_log')
         .update({
@@ -239,7 +241,8 @@ export async function POST(request: NextRequest) {
 
 async function processArchiveDocuments(
   documents: any[],
-  actionParams: any
+  actionParams: any,
+  supabase: any
 ): Promise<DocumentProcessingResult[]> {
   const results: DocumentProcessingResult[] = []
 
@@ -256,7 +259,7 @@ async function processArchiveDocuments(
       if (error) throw error
 
       // Log audit entry if table exists
-      if (await tableExists('document_audit_log')) {
+      if (await tableExists('document_audit_log', supabase)) {
         await supabase
           .from('document_audit_log')
           .insert({
@@ -287,7 +290,8 @@ async function processArchiveDocuments(
 }
 
 async function processDeleteDocuments(
-  documents: any[]
+  documents: any[],
+  supabase: any
 ): Promise<DocumentProcessingResult[]> {
   const results: DocumentProcessingResult[] = []
 
@@ -305,7 +309,7 @@ async function processDeleteDocuments(
       if (error) throw error
 
       // Log audit entry if table exists
-      if (await tableExists('document_audit_log')) {
+      if (await tableExists('document_audit_log', supabase)) {
         await supabase
           .from('document_audit_log')
           .insert({
@@ -336,7 +340,8 @@ async function processDeleteDocuments(
 }
 
 async function processRestoreDocuments(
-  documents: any[]
+  documents: any[],
+  supabase: any
 ): Promise<DocumentProcessingResult[]> {
   const results: DocumentProcessingResult[] = []
 
@@ -375,7 +380,8 @@ async function processSendDocuments(
   documents: any[],
   actionParams: any,
   userId: string,
-  firmId: string
+  firmId: string,
+  supabase: any
 ): Promise<DocumentProcessingResult[]> {
   const results: DocumentProcessingResult[] = []
 
@@ -392,7 +398,7 @@ async function processSendDocuments(
       }
 
       // Create signature request if table exists
-      if (await tableExists('signature_requests')) {
+      if (await tableExists('signature_requests', supabase)) {
         const { error } = await supabase
           .from('signature_requests')
           .insert({
@@ -440,15 +446,17 @@ async function processResendDocuments(
   documents: any[],
   actionParams: any,
   userId: string,
-  firmId: string
+  firmId: string,
+  supabase: any
 ): Promise<DocumentProcessingResult[]> {
   // Similar to send but only for documents already sent
-  return processSendDocuments(documents, actionParams, userId, firmId)
+  return processSendDocuments(documents, actionParams, userId, firmId, supabase)
 }
 
 async function processDownloadDocuments(
   documents: any[],
-  firmId: string
+  firmId: string,
+  supabase: any
 ): Promise<{ results: DocumentProcessingResult[], downloadUrl?: string }> {
   const results: DocumentProcessingResult[] = []
 
@@ -472,7 +480,7 @@ async function processDownloadDocuments(
 // UTILITY FUNCTIONS
 // ===================================================================
 
-async function tableExists(tableName: string): Promise<boolean> {
+async function tableExists(tableName: string, supabase: any): Promise<boolean> {
   try {
     const { error } = await supabase
       .from(tableName)
@@ -487,6 +495,7 @@ async function tableExists(tableName: string): Promise<boolean> {
 
 // GET endpoint for checking bulk operation status
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
     const { searchParams } = new URL(request.url)
     const jobId = searchParams.get('jobId')
@@ -504,7 +513,7 @@ export async function GET(request: NextRequest) {
     const firmId = user.user_metadata?.firm_id || '00000000-0000-0000-0000-000000000001'
 
     // Check if bulk operations log table exists
-    if (!(await tableExists('bulk_operations_log'))) {
+    if (!(await tableExists('bulk_operations_log', supabase))) {
       return NextResponse.json({ 
         error: 'Bulk operations tracking not available' 
       }, { status: 404 })

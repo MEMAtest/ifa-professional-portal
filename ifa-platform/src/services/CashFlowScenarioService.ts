@@ -1,27 +1,92 @@
 // src/services/CashFlowScenarioService.ts
-// ✅ COMPLETE ERROR-FREE VERSION
+// ✅ COMPLETE FIXED VERSION - All queries use correct Supabase syntax
 
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import type { CashFlowScenario, CashFlowProjection, ClientGoal, ScenarioSummary, ClientOption } from '@/types/cash-flow-scenario';
 
 export class CashFlowScenarioService {
+  // Remove instance property since all methods are static
   
+  /**
+   * ✅ FIXED: Get active scenarios with correct query syntax
+   * This might be the method causing the 400 error on dashboard
+   */
+  static async getActiveScenarios() {
+    const supabase = createClient(); // Create client for this method
+    
+    try {
+      // ✅ CORRECT SYNTAX: Use .not('column', 'is', null)
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select('id, client_id, last_analysis_date')
+        .not('client_id', 'is', null)  // ✅ FIXED: Correct syntax
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching active scenarios:', error);
+        throw error;
+      }
+
+      return { data: data || [], error: null };
+    } catch (error) {
+      console.error('Error in getActiveScenarios:', error);
+      return { data: [], error };
+    }
+  }
+
+  /**
+   * ✅ NEW: Get scenarios for dashboard display
+   */
+  static async getDashboardScenarios() {
+    const supabase = createClient(); // Create client for this method
+    
+    try {
+      // Get scenarios with client info
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select(`
+          id,
+          client_id,
+          scenario_name,
+          scenario_type,
+          last_analysis_date,
+          updated_at,
+          is_active
+        `)
+        .eq('is_active', true)
+        .not('client_id', 'is', null)  // ✅ Correct syntax
+        .order('updated_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching dashboard scenarios:', error);
+      return [];
+    }
+  }
+
   /**
    * Get all clients with their scenario counts for dropdown
    */
   static async getClientsWithScenarios(): Promise<ClientOption[]> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Get all clients
       const { data: clients, error: clientError } = await supabase
         .from('clients')
-        .select('id, personal_details, client_ref');
+        .select('id, personal_details, client_ref')
+        .order('created_at', { ascending: false });
 
       if (clientError) throw clientError;
 
-      // Get scenario counts separately
+      // Get scenario counts
       const { data: scenarios, error: scenarioError } = await supabase
         .from('cash_flow_scenarios')
-        .select('client_id');
+        .select('client_id')
+        .not('client_id', 'is', null);  // ✅ Correct syntax
 
       if (scenarioError) throw scenarioError;
 
@@ -35,7 +100,7 @@ export class CashFlowScenarioService {
 
       return (clients || []).map(client => {
         let name = `Client ${client.client_ref || client.id.slice(0, 8)}`;
-        let age: number | undefined = undefined; // ✅ FIX: Use undefined instead of null
+        let age: number | undefined = undefined;
         
         try {
           const personalDetails = typeof client.personal_details === 'string' 
@@ -63,7 +128,7 @@ export class CashFlowScenarioService {
         return {
           id: client.id,
           name,
-          age, // ✅ Now properly typed as number | undefined
+          age,
           scenarioCount: scenarioCounts[client.id] || 0
         };
       });
@@ -77,6 +142,8 @@ export class CashFlowScenarioService {
    * Get all scenarios for a specific client
    */
   static async getClientScenarios(clientId: string): Promise<CashFlowScenario[]> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const { data, error } = await supabase
         .from('cash_flow_scenarios')
@@ -96,6 +163,8 @@ export class CashFlowScenarioService {
    * Get scenario with projections and goals
    */
   static async getScenarioSummary(scenarioId: string): Promise<ScenarioSummary> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Get scenario details
       const { data: scenario, error: scenarioError } = await supabase
@@ -166,6 +235,8 @@ export class CashFlowScenarioService {
     clientId: string, 
     scenarioData: Partial<CashFlowScenario>
   ): Promise<CashFlowScenario> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Get current user's firm_id
       const { data: { user } } = await supabase.auth.getUser();
@@ -200,6 +271,21 @@ export class CashFlowScenarioService {
         client_age: scenarioData.client_age || 45,
         retirement_age: scenarioData.retirement_age || 67,
         life_expectancy: scenarioData.life_expectancy || 85,
+        current_savings: scenarioData.current_savings || 0,
+        pension_value: scenarioData.pension_value || 0,
+        investment_value: scenarioData.investment_value || 0,
+        current_income: scenarioData.current_income || 50000,
+        current_expenses: scenarioData.current_expenses || 40000,
+        state_pension_age: scenarioData.state_pension_age || 67,
+        state_pension_amount: scenarioData.state_pension_amount || 11502,
+        risk_score: scenarioData.risk_score || 5,
+        vulnerability_adjustments: scenarioData.vulnerability_adjustments || {},
+        assumption_basis: scenarioData.assumption_basis || 'Default assumptions based on current market conditions',
+        // Allocation fields
+        equity_allocation: (scenarioData as any).equity_allocation || 60,
+        bond_allocation: (scenarioData as any).bond_allocation || 30,
+        cash_allocation: (scenarioData as any).cash_allocation || 10,
+        alternative_allocation: (scenarioData as any).alternative_allocation || 0,
         ...scenarioData
       };
 
@@ -221,6 +307,8 @@ export class CashFlowScenarioService {
    * Check if client has any scenarios, create default if not
    */
   static async ensureClientHasScenario(clientId: string): Promise<CashFlowScenario> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       // Check for existing scenarios
       const scenarios = await this.getClientScenarios(clientId);
@@ -264,9 +352,8 @@ export class CashFlowScenarioService {
         clientName = `Client ${client.client_ref || clientId.slice(0, 8)}`;
       }
 
-      // ✅ FIX: Create scenario without explicitly setting allocation fields
-      // They will be included if they exist in the database
-      const scenarioToCreate: any = {
+      // Create default scenario
+      return await this.createBasicScenario(clientId, {
         scenario_name: `${clientName} - Base Case Projection`,
         scenario_type: 'base',
         projection_years: 25,
@@ -286,21 +373,8 @@ export class CashFlowScenarioService {
         state_pension_amount: 11502,
         risk_score: 5,
         vulnerability_adjustments: {},
-        assumption_basis: 'Default assumptions based on current market conditions',
-        alternative_allocation: 0
-      };
-
-      // Add allocation fields if they're in the database schema
-      // but not enforced by TypeScript
-      if (true) { // Always true, but keeps TypeScript happy
-        Object.assign(scenarioToCreate, {
-          equity_allocation: 60,
-          bond_allocation: 30,
-          cash_allocation: 10
-        });
-      }
-
-      return await this.createBasicScenario(clientId, scenarioToCreate);
+        assumption_basis: 'Default assumptions based on current market conditions'
+      } as any);
     } catch (error) {
       console.error('Error ensuring client scenario:', error);
       throw new Error('Failed to create default scenario');
@@ -330,6 +404,8 @@ export class CashFlowScenarioService {
    * Get Monte Carlo results for scenario
    */
   static async getMonteCarloResults(clientId: string): Promise<any> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const { data, error } = await supabase
         .from('monte_carlo_results')
@@ -351,9 +427,11 @@ export class CashFlowScenarioService {
   }
 
   /**
-   * Get scenarios summary for polling
+   * ✅ FIXED: Get scenarios summary for polling with correct query
    */
-  static async getScenariosSummary(): Promise<Array<{id: string, client_id: string, updated_at: string}>> {
+  static async getScenariosSummary(): Promise<Array<{id: string, client_id: string | null, updated_at: string}>> {
+    const supabase = createClient(); // Create client for this method
+    
     try {
       const { data, error } = await supabase
         .from('cash_flow_scenarios')
@@ -362,10 +440,37 @@ export class CashFlowScenarioService {
         .limit(100);
 
       if (error) throw error;
-      return data || [];
+      
+      // Return with proper typing
+      return (data || []).map(item => ({
+        id: item.id,
+        client_id: item.client_id || null,
+        updated_at: item.updated_at
+      }));
     } catch (error) {
       console.error('Error fetching scenarios summary:', error);
       return [];
+    }
+  }
+
+  /**
+   * ✅ NEW: Update scenario last analysis date
+   */
+  static async updateLastAnalysisDate(scenarioId: string): Promise<void> {
+    const supabase = createClient(); // Create client for this method
+    
+    try {
+      const { error } = await supabase
+        .from('cash_flow_scenarios')
+        .update({ 
+          last_analysis_date: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', scenarioId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating last analysis date:', error);
     }
   }
 }

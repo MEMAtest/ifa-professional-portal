@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ===================================================================
 // STEP 2: DocuSeal Service
 // File: src/services/docuSealService.ts

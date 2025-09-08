@@ -1,5 +1,5 @@
 // ============================================
-// FILE 1: /src/app/calendar/page.tsx - COMPLETE WITH ALL FIXES
+// FILE: /src/app/calendar/page.tsx - COMPLETE PRODUCTION FIX
 // ============================================
 'use client'
 import React, { useState, useEffect } from 'react'
@@ -23,7 +23,7 @@ import {
   RefreshCw,
   AlertCircle
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client' // FIXED IMPORT
 import { useToast } from '@/hooks/use-toast'
 
 // Meeting types with hex colors
@@ -116,8 +116,11 @@ const tooltipStyles = `
 `;
 
 export default function CalendarPage() {
+
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = createClient() // Create client instance
+  
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [events, setEvents] = useState<CalendarEvent[]>([])

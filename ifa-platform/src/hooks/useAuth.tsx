@@ -6,7 +6,7 @@
 
 'use client'
 import { useState, useEffect, createContext, useContext } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { User, AuthState, LoginCredentials, SignUpData } from '@/types/auth'
 import type { Session } from '@supabase/supabase-js'
 
@@ -42,6 +42,7 @@ export const useAuth = () => {
 // ================================================================
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const supabase = createClient() // ✅ FIX: Create supabase client here
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase]) // Add supabase to dependencies
 
   // ================================================================
   // AUTH METHODS - SIMPLIFIED

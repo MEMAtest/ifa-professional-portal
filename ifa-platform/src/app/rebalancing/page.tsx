@@ -21,7 +21,7 @@ import {
   BarChart3
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -66,6 +66,7 @@ interface Client {
 }
 
 export default function RebalancingPage() {
+  const supabase = createClient()
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const router = useRouter()

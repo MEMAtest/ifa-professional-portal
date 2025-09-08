@@ -8,7 +8,7 @@ import { ClientService } from './ClientService';
 import { CashFlowDataService } from './CashFlowDataService';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import type { CashFlowScenario, ProjectionResult } from '@/types/cashflow';
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase/client';
 import type { Client } from '@/types/client';
 
 export interface CashFlowReportOptions {
@@ -362,16 +362,12 @@ export class CashFlowReportService {
     return insights.map(insight => `<li style="margin-bottom: 8px;">${insight}</li>`).join('');
   }
 
-  private async getDocumentDownloadUrl(filePath: string): Promise<string> {
-    const { data } = await this.supabase.storage
-      .from('documents')
-      .createSignedUrl(filePath, 3600); // 1 hour expiry
+private async getDocumentDownloadUrl(filePath: string): Promise<string> {
+  const supabase = await createClient();
+  const { data } = await supabase.storage
+    .from('documents')
+    .createSignedUrl(filePath, 3600); // 1 hour expiry
 
-    return data?.signedUrl || '';
-  }
-
-private supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+  return data?.signedUrl || '';
+}
 }

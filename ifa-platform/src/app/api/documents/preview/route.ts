@@ -6,14 +6,11 @@ export const dynamic = 'force-dynamic'
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = await createClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {

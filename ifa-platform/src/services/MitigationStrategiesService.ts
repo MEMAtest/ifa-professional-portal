@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ================================================================
 // src/services/MitigationStrategiesService.ts
 // Generates actionable mitigation strategies based on stress test results

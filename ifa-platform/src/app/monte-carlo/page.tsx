@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { clientService } from '@/services/ClientService';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { MonteCarloReportButton } from '@/components/monte-carlo/MonteCarloReport';
 import NuclearMonteCarlo from '@/components/monte-carlo/NuclearMonteCarlo';
@@ -101,6 +101,7 @@ type ViewMode = 'dashboard' | 'simulation' | 'results' | 'history';
 type StatFilter = 'all' | 'active' | 'with-scenarios' | 'high-success';
 
 export default function MonteCarloPage() {
+  const supabase = createClient()
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientId = searchParams?.get('clientId');

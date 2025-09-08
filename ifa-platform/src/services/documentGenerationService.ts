@@ -2,7 +2,7 @@
 // ✅ ELEVATION: Added 'export' to the interface definition.
 // This is the ONLY change. All original functionality is preserved.
 
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
 import { DocumentTemplateService } from './documentTemplateService'
 
 // ===================================================================
@@ -35,10 +35,7 @@ export class DocumentGenerationService {
   private templateService: DocumentTemplateService;
 
   constructor() {
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    this.supabase = createClient();
     this.templateService = DocumentTemplateService.getInstance();
   }
 

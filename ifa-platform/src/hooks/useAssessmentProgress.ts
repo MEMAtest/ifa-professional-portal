@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 
 interface AssessmentProgressData {
   progress: Record<string, {
@@ -26,6 +26,7 @@ interface UpdateProgressParams {
 }
 
 export function useAssessmentProgress(clientId: string) {
+  const supabase = createClient()
   const queryClient = useQueryClient()
   const [isSubscribed, setIsSubscribed] = useState(false)
 

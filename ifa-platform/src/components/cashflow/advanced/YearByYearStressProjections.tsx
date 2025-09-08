@@ -2,6 +2,8 @@
 // src/components/cashflow/advanced/YearByYearStressProjections.tsx
 // Detailed year-by-year projections under stress conditions
 // Shows portfolio values, cash flows, and recovery trajectory
+// FIXED: Added yAxisId to all ReferenceLine components referencing Y-axis
+// FIXED: Resolved 'metrics' possibly null TypeScript errors
 // ================================================================
 
 import React, { useState, useMemo } from 'react';
@@ -132,8 +134,57 @@ export function YearByYearStressProjections({
     return years;
   }, [scenario, stressResult]);
 
-  // Calculate key metrics
+  // Chart data based on selected metric
+  const chartData = useMemo(() => {
+    switch (selectedMetric) {
+      case 'portfolio':
+        return projections.map(p => ({
+          year: p.year,
+          age: p.age,
+          'Portfolio Value': p.portfolioValue,
+          'Real Value': p.inflationAdjustedValue,
+          milestone: p.milestone
+        }));
+      
+      case 'cashflow':
+        return projections.map(p => ({
+          year: p.year,
+          age: p.age,
+          Income: p.income,
+          Expenses: p.expenses,
+          'Net Cash Flow': p.netCashFlow,
+          milestone: p.milestone
+        }));
+      
+      case 'probability':
+        return projections.map(p => ({
+          year: p.year,
+          age: p.age,
+          'Survival Probability': p.survivalProbability,
+          'Success Threshold': 50, // Reference line
+          milestone: p.milestone
+        }));
+      
+      default:
+        return [];
+    }
+  }, [projections, selectedMetric]);
+
+  // Calculate key metrics - FIXED: Always return valid object
   const metrics = useMemo(() => {
+    // Default values for when there's no data
+    if (projections.length === 0) {
+      return {
+        finalValue: 0,
+        minValue: 0,
+        depletionYear: undefined,
+        totalIncome: 0,
+        totalExpenses: 0,
+        netResult: 0,
+        avgSurvivalProb: 0
+      };
+    }
+
     const finalValue = projections[projections.length - 1]?.portfolioValue || 0;
     const minValue = Math.min(...projections.map(p => p.portfolioValue));
     const depletionYear = projections.find(p => p.portfolioValue <= 0)?.year;
@@ -172,42 +223,6 @@ export function YearByYearStressProjections({
     }
     setExpandedYears(newExpanded);
   };
-
-  // Chart data based on selected metric
-  const chartData = useMemo(() => {
-    switch (selectedMetric) {
-      case 'portfolio':
-        return projections.map(p => ({
-          year: p.year,
-          age: p.age,
-          'Portfolio Value': p.portfolioValue,
-          'Real Value': p.inflationAdjustedValue,
-          milestone: p.milestone
-        }));
-      
-      case 'cashflow':
-        return projections.map(p => ({
-          year: p.year,
-          age: p.age,
-          Income: p.income,
-          Expenses: p.expenses,
-          'Net Cash Flow': p.netCashFlow,
-          milestone: p.milestone
-        }));
-      
-      case 'probability':
-        return projections.map(p => ({
-          year: p.year,
-          age: p.age,
-          'Survival Probability': p.survivalProbability,
-          'Success Threshold': 50, // Reference line
-          milestone: p.milestone
-        }));
-      
-      default:
-        return [];
-    }
-  }, [projections, selectedMetric]);
 
   // Custom chart tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -285,7 +300,7 @@ export function YearByYearStressProjections({
         </div>
       </div>
 
-      {/* Key Metrics Summary */}
+      {/* Key Metrics Summary - Now metrics is always defined */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -391,8 +406,9 @@ export function YearByYearStressProjections({
                     fill="#10b981" 
                     fillOpacity={0.3}
                   />
+                  {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                   <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="3 3" />
-                  {/* Add milestone markers */}
+                  {/* Add milestone markers - these are X-axis reference lines, no yAxisId needed */}
                   {chartData.filter(d => d.milestone).map((d, i) => (
                     <ReferenceLine
                       key={i}
@@ -425,6 +441,7 @@ export function YearByYearStressProjections({
                     stroke="#3b82f6" 
                     strokeWidth={2}
                   />
+                  {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                   <ReferenceLine y={0} stroke="#666" />
                   <Brush dataKey="year" height={30} stroke="#3b82f6" />
                 </BarChart>
@@ -448,6 +465,7 @@ export function YearByYearStressProjections({
                     strokeWidth={3}
                     dot={{ fill: '#3b82f6', r: 4 }}
                   />
+                  {/* FIX: No yAxisId needed since this is a single Y-axis chart */}
                   <ReferenceLine 
                     y={50} 
                     stroke="#f59e0b" 

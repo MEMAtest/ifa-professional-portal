@@ -3,7 +3,7 @@
 // PDF Generation Engine for reports
 // ================================================================
 
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase/client'
 
 export interface PDFGenerationOptions {
   format: 'A4' | 'Letter';
@@ -137,12 +137,9 @@ export class PDFGenerationEngine {
     fileName: string,
     bucket: string = 'documents'
   ): Promise<string> {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const supabase = createClient()
 
-    const { data, error } = await supabase.storage
+    const { data, error } = await (await supabase).storage
       .from(bucket)
       .upload(fileName, pdfBuffer, {
         contentType: 'application/pdf',

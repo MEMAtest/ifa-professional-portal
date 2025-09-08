@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+
 
 // ===================================================================
 // TYPES (Based on your existing schema)
@@ -69,6 +70,7 @@ interface DashboardStats {
 // ===================================================================
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient()
   try {
     // Get current user - using your existing supabase client
     const { data: { user }, error: authError } = await supabase.auth.getUser()

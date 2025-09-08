@@ -4,9 +4,11 @@ export const dynamic = 'force-dynamic'
 // src/app/api/assessments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database.types'; // <-- ADD THIS IMPORT
+import type { TablesInsert } from '@/types/database.types'; // <-- ADD THIS IMPORT
 
 // Lazy initialization to prevent build-time errors
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null; // <-- Type the client
 
 function getSupabaseAdmin() {
   if (!supabaseAdmin) {
@@ -17,7 +19,7 @@ function getSupabaseAdmin() {
       throw new Error('Missing Supabase environment variables');
     }
     
-    supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceKey); // <-- Type the client
   }
   return supabaseAdmin;
 }
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('assessments')
-      .insert([insertData])
+      .insert<TablesInsert<'assessments'>>([insertData]) // <-- FIXED: Added type argument
       .select()
       .single();
 

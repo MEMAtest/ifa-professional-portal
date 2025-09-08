@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/client"
 // ================================================================
 // src/services/MonteCarloIntegrationService.ts
 // Integrates Monte Carlo simulations with cash flow projections

@@ -1,6 +1,5 @@
-// ================================================================
 // src/components/cashflow/MonteCarloAnalysis.tsx
-// Complete file - copy this entire content
+// FIXED VERSION - Handles missing results gracefully
 // ================================================================
 
 'use client';
@@ -57,12 +56,28 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
     const checkForResults = async () => {
       try {
         const response = await fetch(`/api/monte-carlo/results/${scenario.id}?latest=true`);
+        
+        // Check response status first
+        if (!response.ok) {
+          if (response.status === 404) {
+            // No results yet - this is expected for new scenarios
+            console.log(`No Monte Carlo results yet for scenario ${scenario.id}`);
+            return;
+          }
+          // Other errors are unexpected
+          console.error(`Monte Carlo results API error: ${response.status}`);
+          return;
+        }
+        
         const data = await response.json();
         if (data.result && data.result.created_at > (simulationResults?.created_at || 0)) {
           setSimulationResults(data.result);
         }
       } catch (error) {
-        console.error('Error checking for results:', error);
+        // Only log actual errors, not expected 404s
+        if (error instanceof Error && !error.message.includes('404')) {
+          console.error('Error checking for Monte Carlo results:', error);
+        }
       }
     };
 
@@ -71,19 +86,65 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
     return () => clearInterval(interval);
   }, [scenario.id, simulationResults]);
 
+  // FIXED: Robust handling of API responses
   const loadHistoricalResults = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(`/api/monte-carlo/results/${scenario.id}`);
-      const data = await response.json();
-      if (data.results) {
-        setHistoricalResults(data.results);
-        // Set the latest result if we don't have one
-        if (!simulationResults && data.results.length > 0) {
-          setSimulationResults(data.results[0]);
+      
+      // Check if response is ok
+      if (!response.ok) {
+        if (response.status === 404) {
+          // No results found - this is normal for new scenarios
+          console.log(`No historical Monte Carlo results for scenario ${scenario.id}`);
+          setHistoricalResults([]);
+          setSimulationResults(null);
+          return;
         }
+        throw new Error(`API returned ${response.status}`);
       }
+      
+      // Parse JSON safely
+      const data = await response.json();
+      
+      // Handle different response formats gracefully
+      let results: any[] = [];
+      
+      // Check for 'results' array (expected format)
+      if (Array.isArray(data.results)) {
+        results = data.results;
+      }
+      // Check for 'data' object (single result)
+      else if (data.data && typeof data.data === 'object') {
+        results = [data.data];
+      }
+      // Check if root is array
+      else if (Array.isArray(data)) {
+        results = data;
+      }
+      // Check if root is single result object
+      else if (data && typeof data === 'object' && data.id) {
+        results = [data];
+      }
+      
+      // Set results
+      setHistoricalResults(results);
+      
+      // Set the latest result if we don't have one
+      if (!simulationResults && results.length > 0) {
+        setSimulationResults(results[0]);
+      }
+      
     } catch (error) {
-      console.error('Error loading historical results:', error);
+      // Handle errors gracefully
+      console.warn('Error loading historical Monte Carlo results:', error);
+      setHistoricalResults([]);
+      
+      // Don't clear existing simulation results on error
+      // User might be viewing them
+      
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -154,7 +215,7 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Monte Carlo Runner Integration - Without onComplete */}
+      {/* Monte Carlo Runner Integration */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -170,7 +231,7 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Use existing MonteCarloRunner without onComplete */}
+          {/* Use existing MonteCarloRunner */}
           <MonteCarloRunner 
             scenarioId={scenario.id}
             simulationCount={5000}
@@ -185,35 +246,35 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
               disabled={isLoading}
             >
               <History className="w-4 h-4 mr-2" />
-              Refresh Results
+              {isLoading ? 'Loading...' : 'Refresh Results'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Enhanced Results Visualization */}
+      {/* Enhanced Results Visualization - Only show if we have results */}
       {simulationResults && (
         <>
           {/* Interpretation Panel */}
-          {showInterpretation && (
+          {showInterpretation && interpretation && (
             <Card className={`border-2 ${
-              interpretation?.riskLevel === 'low' ? 'border-green-200 bg-green-50' :
-              interpretation?.riskLevel === 'high' ? 'border-red-200 bg-red-50' :
+              interpretation.riskLevel === 'low' ? 'border-green-200 bg-green-50' :
+              interpretation.riskLevel === 'high' ? 'border-red-200 bg-red-50' :
               'border-yellow-200 bg-yellow-50'
             }`}>
               <CardContent className="pt-6">
                 <div className="flex items-start gap-3">
                   <Info className={`w-5 h-5 mt-0.5 ${
-                    interpretation?.riskLevel === 'low' ? 'text-green-600' :
-                    interpretation?.riskLevel === 'high' ? 'text-red-600' :
+                    interpretation.riskLevel === 'low' ? 'text-green-600' :
+                    interpretation.riskLevel === 'high' ? 'text-red-600' :
                     'text-yellow-600'
                   }`} />
                   <div>
                     <h4 className="font-medium mb-2">Analysis Interpretation</h4>
-                    <p className="text-sm mb-3">{interpretation?.overall}</p>
+                    <p className="text-sm mb-3">{interpretation.overall}</p>
                     <h5 className="font-medium text-sm mb-1">Recommendations:</h5>
                     <ul className="text-sm space-y-1">
-                      {interpretation?.recommendations.map((rec, idx) => (
+                      {interpretation.recommendations.map((rec, idx) => (
                         <li key={idx} className="flex items-start gap-2">
                           <span className="text-gray-400">•</span>
                           {rec}
@@ -226,86 +287,88 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
             </Card>
           )}
 
-          {/* Confidence Intervals Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Projected Wealth Distribution</CardTitle>
-              <p className="text-sm text-gray-600">
-                Shows the range of possible outcomes based on {simulationResults.simulation_count?.toLocaleString()} simulations
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <ComposedChart data={confidenceData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="age" 
-                    label={{ value: 'Age', position: 'insideBottom', offset: -5 }}
-                  />
-                  <YAxis 
-                    tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
-                    label={{ value: 'Portfolio Value', angle: -90, position: 'insideLeft' }}
-                  />
-                  <Tooltip 
-                    formatter={(value: any) => `£${(value / 1000).toFixed(0)}k`}
-                    labelFormatter={(label) => `Age ${label}`}
-                  />
-                  <Legend />
-                  
-                  {/* Confidence bands */}
-                  <Area
-                    type="monotone"
-                    dataKey="p90"
-                    stackId="1"
-                    stroke="none"
-                    fill="#bbf7d0"
-                    name="90th Percentile"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p75"
-                    stackId="2"
-                    stroke="none"
-                    fill="#86efac"
-                    name="75th Percentile"
-                  />
-                  
-                  {/* Median line */}
-                  <Line
-                    type="monotone"
-                    dataKey="p50"
-                    stroke="#3b82f6"
-                    strokeWidth={3}
-                    dot={false}
-                    name="Median (50th)"
-                  />
-                  
-                  {/* Lower bounds */}
-                  <Line
-                    type="monotone"
-                    dataKey="p25"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={false}
-                    name="25th Percentile"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="p10"
-                    stroke="#ef4444"
-                    strokeWidth={2}
-                    strokeDasharray="3 3"
-                    dot={false}
-                    name="10th Percentile"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {/* Confidence Intervals Chart - Only show if we have data */}
+          {confidenceData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Projected Wealth Distribution</CardTitle>
+                <p className="text-sm text-gray-600">
+                  Shows the range of possible outcomes based on {simulationResults.simulation_count?.toLocaleString() || 'multiple'} simulations
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <ComposedChart data={confidenceData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="age" 
+                      label={{ value: 'Age', position: 'insideBottom', offset: -5 }}
+                    />
+                    <YAxis 
+                      tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
+                      label={{ value: 'Portfolio Value', angle: -90, position: 'insideLeft' }}
+                    />
+                    <Tooltip 
+                      formatter={(value: any) => `£${(value / 1000).toFixed(0)}k`}
+                      labelFormatter={(label) => `Age ${label}`}
+                    />
+                    <Legend />
+                    
+                    {/* Confidence bands */}
+                    <Area
+                      type="monotone"
+                      dataKey="p90"
+                      stackId="1"
+                      stroke="none"
+                      fill="#bbf7d0"
+                      name="90th Percentile"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="p75"
+                      stackId="2"
+                      stroke="none"
+                      fill="#86efac"
+                      name="75th Percentile"
+                    />
+                    
+                    {/* Median line */}
+                    <Line
+                      type="monotone"
+                      dataKey="p50"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      dot={false}
+                      name="Median (50th)"
+                    />
+                    
+                    {/* Lower bounds */}
+                    <Line
+                      type="monotone"
+                      dataKey="p25"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="25th Percentile"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="p10"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      strokeDasharray="3 3"
+                      dot={false}
+                      name="10th Percentile"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Historical Comparison */}
-          {historicalResults.length > 0 && (
+          {historicalResults.length > 1 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -319,20 +382,20 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
                     <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
                         <p className="text-sm font-medium">
-                          {new Date(result.run_date).toLocaleDateString()}
+                          {new Date(result.run_date || result.created_at).toLocaleDateString()}
                         </p>
                         <p className="text-xs text-gray-600">
-                          {result.simulation_count} simulations
+                          {result.simulation_count || 1000} simulations
                         </p>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className="text-sm font-medium">{result.success_probability}%</p>
+                          <p className="text-sm font-medium">{result.success_probability || 0}%</p>
                           <p className="text-xs text-gray-600">Success Rate</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-medium">
-                            £{(result.confidence_intervals?.p50 / 1000).toFixed(0)}k
+                            £{((result.confidence_intervals?.p50 || 0) / 1000).toFixed(0)}k
                           </p>
                           <p className="text-xs text-gray-600">Median</p>
                         </div>
@@ -345,12 +408,22 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
           )}
         </>
       )}
+
+      {/* No results message */}
+      {!simulationResults && !isLoading && (
+        <Card>
+          <CardContent className="py-8 text-center text-gray-500">
+            <Info className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+            <p>No simulation results yet. Run a Monte Carlo simulation to see projections.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
 
-// CRITICAL: Named export - this is what was missing!
+// Named export
 export { MonteCarloAnalysis };
 
-// Also add default export for flexibility
+// Default export
 export default MonteCarloAnalysis;

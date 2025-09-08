@@ -1,9 +1,9 @@
 // ===================================================================
-// CLIENT SERVICE - COMPLETE FIXED VERSION WITH WORKFLOW HANDLING
+// CLIENT SERVICE - COMPLETE FIXED VERSION WITH GRACEFUL ERROR HANDLING
 // File: src/services/ClientService.ts
 // ===================================================================
 
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
 import type { 
   Client, 
   ClientFormData, 
@@ -27,10 +27,7 @@ export class ClientService {
   private baseUrl = '/api/clients'
 
   constructor() {
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    this.supabase = createClient()
   }
 
   // Core CRUD operations
@@ -75,24 +72,52 @@ export class ClientService {
     }
   }
 
+  // ✅ FIXED: Better error handling for missing clients
   async getClientById(id: string): Promise<Client> {
     try {
+      // Validate ID format first
+      if (!id || typeof id !== 'string' || id.trim() === '') {
+        throw new Error('Invalid client ID provided')
+      }
+
       const { data, error } = await this.supabase
         .from('clients')
         .select('*')
         .eq('id', id)
-        .single()
+        .maybeSingle() // Use maybeSingle to handle missing records gracefully
 
-      if (error) throw error
+      // Check for Supabase errors (network, permissions, etc.)
+      if (error) {
+        // This is an actual database error, not just a missing record
+        console.error('Database error fetching client:', error)
+        throw new Error(`Database error: ${error.message}`)
+      }
 
+      // Check if client was found
+      if (!data) {
+        // Client not found - this is an expected case, not an error
+        // Use console.warn instead of console.error
+        console.warn(`Client lookup: Client with ID ${id} not found in database`)
+        // Still throw the error so calling code can handle it
+        throw new Error(`Client with ID ${id} not found`)
+      }
+
+      // Transform and return the client data
       return this.transformDbClient(data)
     } catch (error) {
-      console.error('Error fetching client by ID:', error)
-      throw new Error(`Client with ID ${id} not found`)
+      // Only use console.error for unexpected errors
+      // Check if it's a "not found" error
+      if (error instanceof Error && error.message.includes('not found')) {
+        // Don't log again - already logged as warning above
+        throw error
+      } else {
+        // This is an unexpected error
+        console.error('Unexpected error in getClientById:', error)
+        throw error
+      }
     }
   }
 
-  // ✅ FIXED: Create client with safe workflow handling
   async createClient(clientData: ClientFormData): Promise<Client> {
     try {
       const dbData = this.transformToDbFormat(clientData)
@@ -107,15 +132,15 @@ export class ClientService {
 
       const client = this.transformDbClient(data)
 
-      // ✅ FIXED: Try to create workflow but don't fail if table doesn't exist
-// try {
-//   await this.createClientWorkflow(client.id, 'onboarding', {
-//     step: 'client_created',
-//     created_at: new Date().toISOString()
-//   })
-// } catch (workflowError) {
-//   console.warn('Could not create client workflow (table may not exist):', workflowError)
-// }
+      // Try to create workflow but don't fail if table doesn't exist
+      try {
+        await this.createClientWorkflow(client.id, 'onboarding', {
+          step: 'client_created',
+          created_at: new Date().toISOString()
+        })
+      } catch (workflowError) {
+        console.warn('Could not create client workflow (table may not exist):', workflowError)
+      }
 
       return client
     } catch (error) {
@@ -124,7 +149,6 @@ export class ClientService {
     }
   }
 
-  // ✅ FIXED: Update client with safe workflow handling
   async updateClient(id: string, updates: Partial<ClientFormData>): Promise<Client> {
     try {
       const dbUpdates = this.transformToDbFormat(updates, true)
@@ -143,15 +167,15 @@ export class ClientService {
 
       const client = this.transformDbClient(data)
 
-      // ✅ FIXED: Try to update workflow but don't fail if table doesn't exist
-// try {
-//   await this.updateClientWorkflow(id, {
-//     last_updated: new Date().toISOString(),
-//     updated_fields: Object.keys(updates)
-//   })
-// } catch (workflowError) {
-//   console.warn('Could not update client workflow:', workflowError)
-// }
+      // Try to update workflow but don't fail if table doesn't exist
+      try {
+        await this.updateClientWorkflow(id, {
+          last_updated: new Date().toISOString(),
+          updated_fields: Object.keys(updates)
+        })
+      } catch (workflowError) {
+        console.warn('Could not update client workflow:', workflowError)
+      }
 
       return client
     } catch (error) {
@@ -348,7 +372,7 @@ export class ClientService {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Error fetching client communications:', error)
+        console.warn('Communications table may not exist:', error)
         return []
       }
 
@@ -368,7 +392,7 @@ export class ClientService {
         method: comm.method
       }))
     } catch (error) {
-      console.error('Error in getClientCommunications:', error)
+      console.warn('Error in getClientCommunications:', error)
       return []
     }
   }
@@ -459,7 +483,10 @@ export class ClientService {
         .eq('client_id', clientId)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.warn('Audit logs table may not exist:', error)
+        return []
+      }
 
       return (data || []).map(log => ({
         id: log.id,
@@ -472,7 +499,7 @@ export class ClientService {
         createdAt: log.created_at
       }))
     } catch (error) {
-      console.error('Error fetching audit log:', error)
+      console.warn('Error fetching audit log:', error)
       return []
     }
   }
@@ -573,7 +600,7 @@ export class ClientService {
     }
   }
 
-  // ✅ NEW: Safe workflow management methods
+  // Safe workflow management methods
   private async createClientWorkflow(clientId: string, workflowType: string, workflowData: any): Promise<void> {
     try {
       const { error } = await this.supabase
@@ -588,7 +615,7 @@ export class ClientService {
 
       if (error) {
         // Don't throw, just log
-        console.warn('Workflow creation failed:', error)
+        console.warn('Workflow creation failed (table may not exist):', error.message)
       }
     } catch (error) {
       console.warn('Workflow operation failed:', error)
@@ -608,14 +635,13 @@ export class ClientService {
         .eq('workflow_status', 'in_progress')
 
       if (error) {
-        console.warn('Workflow update failed:', error)
+        console.warn('Workflow update failed (table may not exist):', error.message)
       }
     } catch (error) {
       console.warn('Workflow operation failed:', error)
     }
   }
 
-  // ✅ NEW: Check if workflow table exists
   async checkWorkflowTableExists(): Promise<boolean> {
     try {
       const { error } = await this.supabase
@@ -869,7 +895,7 @@ export class ClientService {
 // Export singleton instance
 export const clientService = new ClientService()
 
-// ✅ EXPORT: Helper function to check if workflows are available
+// Helper function to check if workflows are available
 export async function checkClientWorkflowsTable(): Promise<boolean> {
   return clientService.checkWorkflowTableExists()
 }

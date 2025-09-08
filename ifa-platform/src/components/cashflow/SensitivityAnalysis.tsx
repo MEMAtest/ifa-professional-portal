@@ -4,7 +4,7 @@
 // ================================================================
 
 'use client';
-
+console.log("SensitivityAnalysis loaded - UPDATED VERSION");
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Slider } from '@/components/ui/Slider';
@@ -340,11 +340,12 @@ export const SensitivityAnalysis: React.FC<SensitivityAnalysisProps> = ({
                   <Tooltip />
                   <Legend />
                   <ReferenceLine 
-                    x={parameters.find(p => p.id === selectedParameter)?.baseValue} 
-                    stroke="red" 
-                    strokeDasharray="5 5"
-                    label="Base"
-                  />
+  yAxisId="left"
+  x={parameters.find(p => p.id === selectedParameter)?.baseValue} 
+  stroke="red" 
+  strokeDasharray="5 5"
+  label="Base"
+/>
                   <Line
                     yAxisId="left"
                     type="monotone"
