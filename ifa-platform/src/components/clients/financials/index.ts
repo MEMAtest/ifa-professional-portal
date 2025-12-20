@@ -1,0 +1,9 @@
+// Client Financials Components
+export { ClientFinancialsPage } from './ClientFinancialsPage'
+export { FinancialSummaryCards } from './FinancialSummaryCards'
+export { InvestmentHoldings } from './InvestmentHoldings'
+export { PensionArrangements } from './PensionArrangements'
+export { InsurancePolicies } from './InsurancePolicies'
+export { IncomeBreakdown } from './IncomeBreakdown'
+export { ExpenseBreakdown } from './ExpenseBreakdown'
+export { FinancialHealthScore } from './FinancialHealthScore'

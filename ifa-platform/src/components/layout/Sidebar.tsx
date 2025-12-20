@@ -7,12 +7,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useClientContext } from '@/hooks/useClientContext';
 import { createClient } from '@/lib/supabase/client';
 import {
   BarChart3,
+  Bell,
   Users,
   FileText,
   PoundSterling,
@@ -66,6 +67,8 @@ interface CashFlowStats {
 export const Sidebar = () => {
   const supabase = createClient()
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get('tab');
   const { clientId, isProspect } = useClientContext();
   const [cashFlowStats, setCashFlowStats] = useState<CashFlowStats>({
     totalScenarios: 0,
@@ -102,16 +105,17 @@ export const Sidebar = () => {
       title: 'Dashboard',
       items: [
         { name: 'Overview', href: '/dashboard', icon: BarChart3 },
-        { name: 'AI Insights', href: '/dashboard', icon: PieChart },
-        { name: 'Risk Profiling', href: '/assessments/atr', icon: Shield, requiresClient: true },
+        { name: 'AI Insights', href: '/dashboard/ai-insights', icon: Brain },
       ],
     },
     {
       title: 'Client Management',
       items: [
         { name: 'All Clients', href: '/clients', icon: Users },
-        { name: 'Suitability Assessments', href: '/assessments/suitability-clients', icon: FileText },
-        { name: 'Risk Management', href: '/risk', icon: Shield },
+        { name: 'Client Financials', href: '/clients/financials', icon: PoundSterling },
+        { name: 'Reporting Hub', href: '/clients/reports', icon: PieChart },
+        { name: 'Suitability Assessments', href: '/assessments/suitability', icon: FileText },
+        { name: 'Risk Center', href: '/risk', icon: Shield },
       ],
     },
     {
@@ -127,8 +131,8 @@ export const Sidebar = () => {
       items: [
         { name: 'Assessment Dashboard', href: '/assessments/dashboard', icon: ClipboardList },
         { name: 'Suitability Assessment', href: '/assessments/suitability', icon: FileCheck, requiresClient: true },
-        { name: 'Risk Assessment (ATR)', href: '/assessments/atr', icon: Brain, requiresClient: true },
-        { name: 'Risk Assessment (CFL)', href: '/assessments/cfl', icon: Calculator, requiresClient: true },
+        { name: 'ATR Questionnaire', href: '/assessments/atr', icon: Brain, requiresClient: true },
+        { name: 'CFL Questionnaire', href: '/assessments/cfl', icon: Calculator, requiresClient: true },
         { name: 'Investor Persona', href: '/assessments/persona-assessment', icon: Target, requiresClient: true },
         { name: 'Persona Library', href: '/assessments/personas', icon: Users },
       ],
@@ -145,16 +149,20 @@ export const Sidebar = () => {
     {
       title: 'Communication',
       items: [
-        { name: 'Messages', href: '/messages', icon: MessageSquare },
-        { name: 'Calendar', href: '/calendar', icon: Calendar },
-        { name: 'Calls', href: '/calls', icon: Phone },
-        { name: 'Inbox', href: '/inbox', icon: Mail },
+        { name: 'Notifications', href: '/notifications', icon: Bell },
+        { name: 'Communication Hub', href: '/communication', icon: MessageSquare },
+      ],
+    },
+    {
+      title: 'Compliance & Risk',
+      items: [
+        { name: 'Compliance Hub', href: '/compliance', icon: Shield },
+        { name: 'Compliance Metrics', href: '/compliance/metrics', icon: BarChart3 },
       ],
     },
     {
       title: 'Settings',
       items: [
-        { name: 'Compliance', href: '/compliance', icon: BookOpen },
         { name: 'Settings', href: '/settings', icon: Settings },
       ],
     },
@@ -171,8 +179,8 @@ export const Sidebar = () => {
           .not('client_id', 'is', null);
 
         if (scenarios) {
-          const uniqueClients = new Set(scenarios.map(s => s.client_id));
-          const needingReview = scenarios.filter(s => {
+          const uniqueClients = new Set(scenarios.map((s: { client_id: string }) => s.client_id));
+          const needingReview = scenarios.filter((s: { last_analysis_date: string | null }) => {
             if (!s.last_analysis_date) return true;
             const lastAnalysis = new Date(s.last_analysis_date);
             const threeMonthsAgo = new Date();
@@ -261,7 +269,17 @@ export const Sidebar = () => {
                     const requiresClient = item.requiresClient || isAssessmentTool(item.href);
                     const isDisabled = requiresClient && !clientId;
                     const finalHref = requiresClient && clientId ? getAssessmentUrl(item.href) : item.href;
-                    const isActive = pathname === item.href.split('?')[0];
+
+                    // Parse item href to get path and tab
+                    const [itemPath, itemQuery] = item.href.split('?');
+                    const itemTab = itemQuery ? new URLSearchParams(itemQuery).get('tab') : null;
+
+                    // Check if this item is active - must match both path and tab (if tab exists)
+                    const pathMatches = pathname === itemPath;
+                    const isActive = itemTab
+                      ? pathMatches && currentTab === itemTab  // Must match path AND tab
+                      : pathMatches && !currentTab;             // Must match path with NO tab
+
                     const Icon = item.icon;
 
                     return (
