@@ -15,6 +15,7 @@ import { InvestmentHoldings } from '@/components/clients/financials/InvestmentHo
 import { PensionArrangements } from '@/components/clients/financials/PensionArrangements'
 import { InsurancePolicies } from '@/components/clients/financials/InsurancePolicies'
 import { FinancialHealthScore } from '@/components/clients/financials/FinancialHealthScore'
+import { WealthBreakdownChart } from '@/components/clients/financials/WealthBreakdownChart'
 
 export function ClientFinancialTab(props: {
   client: ExtendedClientProfile
@@ -37,8 +38,9 @@ export function ClientFinancialTab(props: {
         netWorth={fp.netWorth || 0}
       />
 
-      {/* Financial Health Score and Active Scenario */}
+      {/* Wealth Breakdown and Financial Health Score */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <WealthBreakdownChart financialProfile={fp} showLiabilities={true} />
         <FinancialHealthScore
           savingsRate={health.savingsRate}
           liquidityRatio={health.liquidityRatio}
