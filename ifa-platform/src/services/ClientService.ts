@@ -51,7 +51,7 @@ export class ClientService {
 
       if (error) throw error
 
-      const clients = (data || []).map(this.transformDbClient)
+      const clients = (data || []).map((dbClient: any) => this.transformDbClient(dbClient))
 
       return {
         clients,
@@ -213,7 +213,7 @@ export class ClientService {
 
       if (error) throw error
 
-      const clients = (data || []).map(this.transformDbClient)
+      const clients = (data || []).map((dbClient: any) => this.transformDbClient(dbClient))
 
       return {
         clients,
@@ -250,48 +250,51 @@ export class ClientService {
       const now = new Date()
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
+      const statusCounts = {
+        prospect: data?.filter((c: any) => c.status === 'prospect').length || 0,
+        active: data?.filter((c: any) => c.status === 'active').length || 0,
+        review_due: data?.filter((c: any) => c.status === 'review_due').length || 0,
+        inactive: data?.filter((c: any) => c.status === 'inactive').length || 0,
+        archived: data?.filter((c: any) => c.status === 'archived').length || 0
+      }
+
       const stats: ClientStatistics = {
         totalClients: data?.length || 0,
-        activeClients: data?.filter(c => c.status === 'active').length || 0,
-        prospectsCount: data?.filter(c => c.status === 'prospect').length || 0,
-        reviewsDue: data?.filter(c => c.status === 'review_due').length || 0,
-        vulnerableClients: data?.filter(c => c.vulnerability_assessment?.is_vulnerable === true).length || 0,
-        highRiskClients: data?.filter(c => {
+        activeClients: statusCounts.active,
+        prospectsCount: statusCounts.prospect,
+        reviewsDue: statusCounts.review_due,
+        vulnerableClients: data?.filter((c: any) => c.vulnerability_assessment?.is_vulnerable === true).length || 0,
+        highRiskClients: data?.filter((c: any) => {
           const riskLevel = c.risk_profile?.attitudeToRisk
           return riskLevel && riskLevel >= 8
         }).length || 0,
-        recentlyAdded: data?.filter(c => {
+        recentlyAdded: data?.filter((c: any) => {
           const createdDate = new Date(c.created_at)
           const daysDiff = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)
           return daysDiff <= 30
         }).length || 0,
-        newThisMonth: data?.filter(c => {
+        newThisMonth: data?.filter((c: any) => {
           const createdDate = new Date(c.created_at)
           return createdDate >= startOfMonth
         }).length || 0,
-        byStatus: {
-          prospect: data?.filter(c => c.status === 'prospect').length || 0,
-          active: data?.filter(c => c.status === 'active').length || 0,
-          review_due: data?.filter(c => c.status === 'review_due').length || 0,
-          inactive: data?.filter(c => c.status === 'inactive').length || 0,
-          archived: data?.filter(c => c.status === 'archived').length || 0
-        },
+        byStatus: statusCounts,
         byRiskLevel: {},
         averagePortfolioValue: 0,
         totalAssetsUnderManagement: 0,
-        clientsByStatus: {
-          prospect: data?.filter(c => c.status === 'prospect').length || 0,
-          active: data?.filter(c => c.status === 'active').length || 0,
-          review_due: data?.filter(c => c.status === 'review_due').length || 0,
-          inactive: data?.filter(c => c.status === 'inactive').length || 0,
-          archived: data?.filter(c => c.status === 'archived').length || 0
-        },
+        clientsByStatus: statusCounts,
         clientsByRiskLevel: {}
       }
 
       return stats
     } catch (error) {
       console.error('Error fetching client statistics:', error)
+      const emptyStatusCounts = {
+        prospect: 0,
+        active: 0,
+        review_due: 0,
+        inactive: 0,
+        archived: 0
+      }
       return {
         totalClients: 0,
         activeClients: 0,
@@ -300,24 +303,12 @@ export class ClientService {
         vulnerableClients: 0,
         highRiskClients: 0,
         recentlyAdded: 0,
-        byStatus: {
-          prospect: 0,
-          active: 0,
-          review_due: 0,
-          inactive: 0,
-          archived: 0
-        },
+        newThisMonth: 0,
+        byStatus: emptyStatusCounts,
         byRiskLevel: {},
         averagePortfolioValue: 0,
         totalAssetsUnderManagement: 0,
-        newThisMonth: 0,
-        clientsByStatus: {
-          prospect: 0,
-          active: 0,
-          review_due: 0,
-          inactive: 0,
-          archived: 0
-        },
+        clientsByStatus: emptyStatusCounts,
         clientsByRiskLevel: {}
       }
     }
@@ -376,7 +367,7 @@ export class ClientService {
         return []
       }
 
-      return (data || []).map(comm => ({
+      return (data || []).map((comm: any) => ({
         id: comm.id || `comm_${Date.now()}`,
         clientId: comm.client_id || clientId,
         communicationType: comm.communication_type || 'email',
@@ -488,7 +479,7 @@ export class ClientService {
         return []
       }
 
-      return (data || []).map(log => ({
+      return (data || []).map((log: any) => ({
         id: log.id,
         clientId: log.client_id,
         action: log.action,
@@ -577,15 +568,15 @@ export class ClientService {
       progressCallback?.(100, 'Migration completed')
 
       // Calculate summary
-      const successful = results.filter(r => r.status === 'migrated').length
-      const failed = results.filter(r => r.status === 'error').length
-      const skipped = results.filter(r => r.status === 'skipped').length
+      const successful = results.filter((r: MigrationError) => r.status === 'migrated').length
+      const failed = results.filter((r: MigrationError) => r.status === 'error').length
+      const skipped = results.filter((r: MigrationError) => r.status === 'skipped').length
 
       return {
         success: failed === 0,
         clientsProcessed: total,
         clientsMigrated: successful,
-        errors: results.filter(r => r.status === 'error'),
+        errors: results.filter((r: MigrationError) => r.status === 'error'),
         summary: {
           total,
           successful,
@@ -601,7 +592,7 @@ export class ClientService {
   }
 
   // Safe workflow management methods
-  private async createClientWorkflow(clientId: string, workflowType: string, workflowData: any): Promise<void> {
+  private async createClientWorkflow(clientId: string, workflowType: string, workflowData: Record<string, any>): Promise<void> {
     try {
       const { error } = await this.supabase
         .from('client_workflows')
@@ -622,7 +613,7 @@ export class ClientService {
     }
   }
 
-  private async updateClientWorkflow(clientId: string, updates: any): Promise<void> {
+  private async updateClientWorkflow(clientId: string, updates: Record<string, any>): Promise<void> {
     try {
       const { error } = await this.supabase
         .from('client_workflows')
@@ -656,7 +647,7 @@ export class ClientService {
   }
 
   // Helper methods for transformation
-  private transformLegacyData(legacy: any): ClientFormData {
+  private transformLegacyData(legacy: LegacyClientData): ClientFormData {
     return {
       personalDetails: {
         title: legacy.title || '',
@@ -721,7 +712,7 @@ export class ClientService {
     }
   }
 
-  private mapMaritalStatus(status: any): PersonalDetails['maritalStatus'] {
+  private mapMaritalStatus(status: string | undefined): PersonalDetails['maritalStatus'] {
     const statusMap: Record<string, PersonalDetails['maritalStatus']> = {
       'single': 'single',
       'married': 'married',
@@ -733,7 +724,7 @@ export class ClientService {
     return statusMap[String(status).toLowerCase()] || 'single'
   }
 
-  private mapEmploymentStatus(status: any): PersonalDetails['employmentStatus'] {
+  private mapEmploymentStatus(status: string | undefined): PersonalDetails['employmentStatus'] {
     const statusMap: Record<string, PersonalDetails['employmentStatus']> = {
       'employed': 'employed',
       'self_employed': 'self_employed',
@@ -744,7 +735,7 @@ export class ClientService {
     return statusMap[String(status).toLowerCase()] || 'employed'
   }
 
-  private mapClientStatus(status: any): ClientStatus {
+  private mapClientStatus(status: string | undefined): ClientStatus {
     const statusMap: Record<string, ClientStatus> = {
       'prospect': 'prospect',
       'active': 'active',
@@ -769,7 +760,7 @@ export class ClientService {
   }
 
   // Database transformation helpers
-  private transformDbClient(dbClient: any): Client {
+  private transformDbClient(dbClient: Record<string, any>): Client {
     return {
       id: dbClient.id,
       clientRef: dbClient.client_ref || `CLI${dbClient.id.slice(-4)}`,
@@ -778,6 +769,7 @@ export class ClientService {
         firstName: dbClient.personal_details?.firstName || dbClient.personal_details?.first_name || '',
         lastName: dbClient.personal_details?.lastName || dbClient.personal_details?.last_name || '',
         dateOfBirth: dbClient.personal_details?.dateOfBirth || dbClient.personal_details?.date_of_birth || '',
+        gender: dbClient.personal_details?.gender || '',
         nationality: dbClient.personal_details?.nationality || 'UK',
         maritalStatus: dbClient.personal_details?.maritalStatus || 'single',
         dependents: dbClient.personal_details?.dependents || 0,
@@ -841,8 +833,8 @@ export class ClientService {
     }
   }
 
-  private transformToDbFormat(clientData: any, isUpdate: boolean = false): any {
-    const dbData: any = {}
+  private transformToDbFormat(clientData: Partial<ClientFormData>, isUpdate: boolean = false): Record<string, any> {
+    const dbData: Record<string, any> = {}
 
     if (!isUpdate || clientData.clientRef) {
       dbData.client_ref = clientData.clientRef
