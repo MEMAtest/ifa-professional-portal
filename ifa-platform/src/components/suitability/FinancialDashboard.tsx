@@ -3,7 +3,7 @@
 // COMPLETE FINANCIAL DASHBOARD WITH ALL FEATURES
 // =====================================================
 
-import React, { useMemo, useEffect, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Progress } from '@/components/ui/Progress'
@@ -105,16 +105,48 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
   
   // Real-time calculations
   const calculations = useMemo(() => {
-    const annualIncome = formData.financial_situation?.annual_income || 0
-    const monthlyExpenditure = formData.financial_situation?.monthly_expenditure || 0
-    const annualExpenditure = monthlyExpenditure * 12
+    const financial = formData.financial_situation as any
+
+    const num = (value: unknown): number | undefined => {
+      if (value === null || value === undefined) return undefined
+      if (typeof value === 'number') return Number.isNaN(value) ? undefined : value
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (!trimmed) return undefined
+        const parsed = Number(trimmed.replace(/,/g, ''))
+        return Number.isNaN(parsed) ? undefined : parsed
+      }
+      return undefined
+    }
+
+    const annualIncome =
+      num(financial.income_total) ??
+      num(financial.annual_income) ??
+      0
+
+    const essentialAnnual =
+      num(financial.exp_total_essential) ??
+      (num(financial.monthly_expenses) !== undefined ? (num(financial.monthly_expenses) as number) * 12 : undefined) ??
+      0
+
+    const discretionaryAnnual = num(financial.exp_total_discretionary) ?? 0
+    const annualExpenditure = essentialAnnual + discretionaryAnnual
+
+    const monthlyExpenditure =
+      num(financial.monthly_expenses) ??
+      (annualExpenditure > 0 ? Math.round(annualExpenditure / 12) : 0)
+
     const disposableIncome = annualIncome - annualExpenditure
-    
-    const liquidAssets = formData.financial_situation?.liquid_assets || 0
-    const propertyValue = formData.financial_situation?.property_value || 0
-    const mortgage = formData.financial_situation?.outstanding_mortgage || 0
-    const otherLiabilities = formData.financial_situation?.other_liabilities || 0
-    const emergencyFund = formData.financial_situation?.emergency_fund || 0
+
+    const liquidAssets =
+      num(financial.savings) ??
+      num(financial.liquid_assets) ??
+      0
+
+    const propertyValue = num(financial.property_value) ?? 0
+    const mortgage = num(financial.mortgage_outstanding) ?? num(financial.outstanding_mortgage) ?? 0
+    const otherLiabilities = num(financial.other_debts) ?? num(financial.other_liabilities) ?? 0
+    const emergencyFund = num(financial.emergency_fund) ?? 0
     
     const totalAssets = liquidAssets + propertyValue
     const totalLiabilities = mortgage + otherLiabilities
@@ -197,31 +229,12 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     surplus: Math.round(calculations.disposableIncome / 12)
   }))
   
-  // Auto-update calculated fields
-  useEffect(() => {
-    if (calculations.netWorth !== formData.financial_situation?.net_worth) {
-      onUpdateField('net_worth', calculations.netWorth)
-    }
-    if (calculations.disposableIncome !== formData.financial_situation?.disposable_income) {
-      onUpdateField('disposable_income', calculations.disposableIncome)
-    }
-    // Update emergency fund months
-    const emergencyMonths = calculations.emergencyFundMonths > 0 
-      ? `${calculations.emergencyFundMonths} months` 
-      : 'No coverage'
-    if (emergencyMonths !== formData.financial_situation?.emergency_months) {
-      onUpdateField('emergency_months', emergencyMonths)
-    }
-  }, [calculations, formData.financial_situation, onUpdateField])
-  
   // Handle updating expense categories
   const handleUpdateCategories = (categories: any[]) => {
     onUpdateField('expense_categories', categories)
-    // Calculate total from categories and update monthly_expenditure
+    // Calculate total from categories and update monthly expenses (legacy dashboard helper)
     const total = categories.reduce((sum, cat) => sum + cat.amount, 0)
-    if (total !== calculations.monthlyExpenditure) {
-      onUpdateField('monthly_expenditure', total)
-    }
+    if (Number.isFinite(total) && total !== calculations.monthlyExpenditure) onUpdateField('monthly_expenses', total)
   }
   
   return (

@@ -142,7 +142,6 @@ export const Sidebar = () => {
       items: [
         { name: 'Documents', href: '/documents', icon: FileText },
         { name: 'Reports', href: '/reports', icon: Briefcase },
-        { name: 'Reviews', href: '/reviews', icon: RotateCcw },
         { name: 'Signatures', href: '/signatures', icon: FileCheck },
       ],
     },
@@ -158,6 +157,7 @@ export const Sidebar = () => {
       items: [
         { name: 'Compliance Hub', href: '/compliance', icon: Shield },
         { name: 'Compliance Metrics', href: '/compliance/metrics', icon: BarChart3 },
+        { name: 'Client Reviews', href: '/reviews', icon: RotateCcw },
       ],
     },
     {

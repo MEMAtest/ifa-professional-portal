@@ -123,7 +123,7 @@ export default function RebalancingPage() {
       return
     }
 
-    setClients(clientData || [])
+    setClients((clientData || []) as any)
   }
 
   const createMockPortfolioData = () => {

@@ -515,7 +515,7 @@ export class IntegratedClientService {
         return []
       }
 
-      return (data || []).map(action => ({
+      return (data || []).map((action: any) => ({
         type: action.action_type,
         title: action.title,
         description: action.description,
@@ -549,7 +549,7 @@ export class IntegratedClientService {
             .limit(5)
 
           if (!altError && altDocs) {
-            return altDocs.map(doc => ({
+            return altDocs.map((doc: any) => ({
               id: doc.id,
               name: doc.name || doc.document_name || 'Unknown Document',
               type: doc.type || doc.document_type || 'document',
@@ -561,7 +561,7 @@ export class IntegratedClientService {
         return []
       }
 
-      return (documents || []).map(doc => ({
+      return (documents || []).map((doc: any) => ({
         id: doc.id,
         name: doc.name || doc.document_name || 'Unknown Document',
         type: doc.type || doc.document_type || 'document',

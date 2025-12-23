@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { log } from '@/lib/logging/structured';
+import { notifyReviewDue, notifyReviewOverdue, notifyReviewCompleted } from '@/lib/notifications/notificationService';
 
 
 // Initialize Supabase client
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
       .order('due_date', { ascending: false });
 
     if (error) {
-      console.error('Error fetching reviews:', error);
+      log.error('Error fetching reviews', error);
       return NextResponse.json(
         { error: 'Failed to fetch reviews' },
         { status: 500 }
@@ -47,10 +49,10 @@ export async function GET(request: NextRequest) {
     // Check for overdue reviews and update their status
     const now = new Date();
     const updatedData = await Promise.all(
-      (data || []).map(async (review) => {
+      (data || []).map(async (review: any) => {
         if (
-          review.status === 'pending' && 
-          review.due_date && 
+          review.status === 'pending' &&
+          review.due_date &&
           new Date(review.due_date) < now
         ) {
           // Update status to overdue
@@ -60,7 +62,28 @@ export async function GET(request: NextRequest) {
             .eq('id', review.id)
             .select()
             .single();
-          
+
+          // Send overdue notification
+          try {
+            const { data: clientData } = await supabase
+              .from('clients')
+              .select('first_name, last_name, advisor_id')
+              .eq('id', clientId)
+              .single();
+
+            if (clientData?.advisor_id) {
+              const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
+              await notifyReviewOverdue(
+                clientData.advisor_id,
+                clientId!,
+                clientName,
+                review.id
+              );
+            }
+          } catch (notifyError) {
+            log.warn('Could not send overdue notification', { error: notifyError instanceof Error ? notifyError.message : 'Unknown' });
+          }
+
           return updated || review;
         }
         return review;
@@ -69,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: updatedData });
   } catch (error) {
-    console.error('Error in GET /api/reviews:', error);
+    log.error('Error in GET /api/reviews', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -118,7 +141,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating review:', error);
+      log.error('Error creating review', error);
       return NextResponse.json(
         { error: 'Failed to create review' },
         { status: 500 }
@@ -136,15 +159,38 @@ export async function POST(request: NextRequest) {
           date: new Date().toISOString()
         });
     } catch (logError) {
-      console.warn('Could not create activity log:', logError);
+      log.warn('Could not create activity log for review', { error: logError instanceof Error ? logError.message : 'Unknown' });
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      data 
+    // Send notification for review scheduled
+    try {
+      // Fetch client name for the notification
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('first_name, last_name, advisor_id')
+        .eq('id', clientId)
+        .single();
+
+      if (clientData?.advisor_id) {
+        const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
+        await notifyReviewDue(
+          clientData.advisor_id,
+          clientId,
+          clientName,
+          data.id,
+          dueDate
+        );
+      }
+    } catch (notifyError) {
+      log.warn('Could not send review notification', { error: notifyError instanceof Error ? notifyError.message : 'Unknown' });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data
     });
   } catch (error) {
-    console.error('Error in POST /api/reviews:', error);
+    log.error('Error in POST /api/reviews', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -183,14 +229,14 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error updating review:', error);
+      log.error('Error updating review', error);
       return NextResponse.json(
         { error: 'Failed to update review' },
         { status: 500 }
       );
     }
 
-    // Log completion to activity log
+    // Log completion to activity log and send notification
     if (updates.status === 'completed') {
       try {
         await supabase
@@ -202,16 +248,37 @@ export async function PATCH(request: NextRequest) {
             date: new Date().toISOString()
           });
       } catch (logError) {
-        console.warn('Could not create activity log:', logError);
+        log.warn('Could not create activity log for review completion', { error: logError instanceof Error ? logError.message : 'Unknown' });
+      }
+
+      // Send notification for review completion
+      try {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('first_name, last_name, advisor_id')
+          .eq('id', data.client_id)
+          .single();
+
+        if (clientData?.advisor_id) {
+          const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
+          await notifyReviewCompleted(
+            clientData.advisor_id,
+            data.client_id,
+            clientName,
+            id
+          );
+        }
+      } catch (notifyError) {
+        log.warn('Could not send review completion notification', { error: notifyError instanceof Error ? notifyError.message : 'Unknown' });
       }
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      data 
+    return NextResponse.json({
+      success: true,
+      data
     });
   } catch (error) {
-    console.error('Error in PATCH /api/reviews:', error);
+    log.error('Error in PATCH /api/reviews', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -240,18 +307,18 @@ export async function DELETE(request: NextRequest) {
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting review:', error);
+      log.error('Error deleting review', error);
       return NextResponse.json(
         { error: 'Failed to delete review' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ 
-      success: true 
+    return NextResponse.json({
+      success: true
     });
   } catch (error) {
-    console.error('Error in DELETE /api/reviews:', error);
+    log.error('Error in DELETE /api/reviews', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

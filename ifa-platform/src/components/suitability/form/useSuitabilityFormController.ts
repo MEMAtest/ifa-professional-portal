@@ -1,0 +1,439 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+import { safeWriteToClipboard } from '@/lib/utils'
+import { validationEngine } from '@/lib/suitability/validationEngine'
+import { calculateSuitabilityCompletion } from '@/lib/suitability/completion'
+import { getMissingRequiredFieldErrors } from '@/lib/suitability/requiredFields'
+import type { SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
+import { aiAssistantService } from '@/services/aiAssistantService'
+import type { SaveStatus } from '@/hooks/suitability/useSaveMutex'
+import { canGenerateAISuggestions, formatSectionLabel, isValidAISuggestion } from '@/lib/suitability/ui/aiHelpers'
+import { getIncompleteRequiredSections, getSubmissionErrorMessage } from '@/lib/suitability/ui/submitHelpers'
+import { getCompletionGate, getComplianceGate, getValidationGate } from '@/lib/suitability/ui/submissionGates'
+import { finalizeSuitabilityAndBuildRedirect } from '@/lib/suitability/ui/finalizeFlow'
+import { calculateReconciledRisk } from '@/lib/assessments/riskReconciliation'
+import { generateSuitabilityDraftHtmlReport, generateSuitabilityPdfReport } from './reportActions'
+
+import { SECTIONS } from '@/lib/suitability/ui/sectionsMeta'
+
+import { useSuitabilityForm } from '@/hooks/suitability/useSuitabilityForm'
+import { useSuitabilityNotifications } from '@/hooks/suitability/useSuitabilityNotifications'
+
+import type { AISuggestion, SuitabilityFormData, ValidationError } from '@/types/suitability'
+
+type FormState = {
+  currentSection: string
+  expandedSections: Set<string>
+  showAIPanel: boolean
+  showValidation: boolean
+  showFinancialDashboard: boolean
+  showVersionHistory: boolean
+  isSubmitting: boolean
+  lastActivity: Date
+}
+
+export type SuitabilityFormController = ReturnType<typeof useSuitabilityFormController>
+
+export function useSuitabilityFormController(params: {
+  clientId: string
+  assessmentId?: string
+  isProspect: boolean
+  allowAI: boolean
+  autoSaveInterval: number
+  onAssessmentIdChange?: (assessmentId: string) => void
+  onComplete?: (data: SuitabilityFormData) => void
+  onSaved?: (assessmentId: string) => void
+  onCancel?: () => void
+}) {
+  const router = useRouter()
+  const realtimeEnabled = false
+
+  const {
+    formData,
+    pulledData,
+    assessmentId: activeAssessmentId,
+    updateField,
+    updateSection,
+    isLoading,
+    isSaving,
+    lastSaved,
+    saveError,
+    enhancedSaveState,
+    validationErrors: hookValidationErrors,
+    getConditionalFields,
+    saveManually,
+    resetSaveError,
+    atrCflData,
+    refreshATRCFL,
+    isATRComplete,
+    isCFLComplete,
+    isPersonaComplete,
+    personaAssessment,
+    assessmentsNeedUpdate,
+    saveState
+  } = useSuitabilityForm({
+    clientId: params.clientId,
+    assessmentId: params.assessmentId,
+    isProspect: params.isProspect,
+    autoSave: true,
+    autoSaveInterval: params.autoSaveInterval,
+    syncEnabled: realtimeEnabled,
+    enableConditionalLogic: true,
+    enableValidation: true
+  })
+
+  const { notifications, showNotification } = useSuitabilityNotifications()
+
+  const reconciledRisk = useMemo(() => {
+    return calculateReconciledRisk({
+      atrScore: atrCflData?.atrScore,
+      atrCategory: atrCflData?.atrCategory,
+      cflScore: atrCflData?.cflScore,
+      cflCategory: atrCflData?.cflCategory
+    })
+  }, [atrCflData?.atrCategory, atrCflData?.atrScore, atrCflData?.cflCategory, atrCflData?.cflScore])
+
+  useEffect(() => {
+    if (!params.onAssessmentIdChange) return
+    if (activeAssessmentId) {
+      params.onAssessmentIdChange(activeAssessmentId)
+    }
+  }, [activeAssessmentId, params])
+
+  const [formState, setFormState] = useState<FormState>({
+    currentSection: 'personal_information',
+    expandedSections: new Set(['personal_information']),
+    showAIPanel: false,
+    showValidation: false,
+    showFinancialDashboard: false,
+    showVersionHistory: false,
+    isSubmitting: false,
+    lastActivity: new Date()
+  })
+
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, AISuggestion>>({})
+  const [isLoadingAI, setIsLoadingAI] = useState<Record<string, boolean>>({})
+
+  const effectiveValidationErrors = hookValidationErrors || validationErrors
+
+  const requiredFieldErrors = useMemo<ValidationError[]>(() => {
+    return getMissingRequiredFieldErrors(formData, pulledData)
+  }, [formData, pulledData])
+
+  const submissionValidationErrors = useMemo(() => {
+    const keyOf = (e: ValidationError) => `${e.sectionId}.${e.fieldId}.${e.code || e.message}`
+    const map = new Map<string, ValidationError>()
+    for (const error of effectiveValidationErrors) map.set(keyOf(error), error)
+    for (const error of requiredFieldErrors) map.set(keyOf(error), error)
+    return Array.from(map.values())
+  }, [effectiveValidationErrors, requiredFieldErrors])
+
+  const combinedValidationErrors = useMemo(() => {
+    if (!formState.showValidation && !formState.isSubmitting) return effectiveValidationErrors
+    return submissionValidationErrors
+  }, [effectiveValidationErrors, formState.isSubmitting, formState.showValidation, submissionValidationErrors])
+
+  const validationIssueCount = submissionValidationErrors.length
+
+  const validationResult = useMemo(() => validationEngine.validateComplete(formData, pulledData), [formData, pulledData])
+
+  const completion = useMemo(() => calculateSuitabilityCompletion(formData, pulledData), [formData, pulledData])
+  const completionScore = completion.overallPercentage
+
+  const incompleteRequiredSections = useMemo(() => {
+    return getIncompleteRequiredSections(SECTIONS, completion.sectionProgress)
+  }, [completion.sectionProgress])
+
+  const submissionErrorsBySection = useMemo(() => {
+    const bySection = new Map<string, ValidationError[]>()
+    for (const error of submissionValidationErrors) {
+      if (!bySection.has(error.sectionId)) bySection.set(error.sectionId, [])
+      bySection.get(error.sectionId)!.push(error)
+    }
+
+    return SECTIONS.map((section) => {
+      const errors = bySection.get(section.id) ?? []
+      return { section, errors }
+    }).filter(({ errors }) => errors.length > 0)
+  }, [submissionValidationErrors])
+
+  useEffect(() => {
+    setValidationErrors(validationResult.errors)
+  }, [validationResult])
+
+  const handleFieldUpdate = useCallback(
+    (sectionId: string, fieldId: string, value: any, options?: any) => {
+      const allowBroadcast = realtimeEnabled && options?.broadcast !== false
+      updateField(sectionId, fieldId, value, { ...options, broadcast: allowBroadcast })
+    },
+    [realtimeEnabled, updateField]
+  )
+
+  const handleSectionUpdate = useCallback((sectionId: string, data: any, options?: any) => {
+    updateSection(sectionId, data, options)
+  }, [updateSection])
+
+  const handleGetAISuggestion = useCallback(
+    async (sectionId: string) => {
+      const aiOk = canGenerateAISuggestions({ allowAI: params.allowAI, formData, pulledData })
+      if (!aiOk.ok) {
+        showNotification({ title: 'AI Unavailable', description: aiOk.reason, type: 'warning' })
+        return
+      }
+
+      setIsLoadingAI((prev) => ({ ...prev, [sectionId]: true }))
+
+      try {
+        const suggestion = await aiAssistantService.generateSuggestion(sectionId, formData, pulledData)
+        if (!isValidAISuggestion(suggestion)) throw new Error('Invalid AI suggestion response')
+
+        setAiSuggestions((prev) => ({ ...prev, [sectionId]: suggestion }))
+
+        showNotification({
+          title: 'AI Suggestions Ready',
+          description: `Generated suggestions for ${formatSectionLabel(sectionId)}`,
+          type: 'success'
+        })
+      } catch (error) {
+        console.error('AI suggestion error:', error)
+        showNotification({ title: 'AI Error', description: 'Failed to generate suggestions', type: 'error' })
+      } finally {
+        setIsLoadingAI((prev) => ({ ...prev, [sectionId]: false }))
+      }
+    },
+    [formData, params.allowAI, pulledData, showNotification]
+  )
+
+  const navigateToSection = useCallback((sectionId: string, opts?: { openValidation?: boolean }) => {
+    setFormState((prev) => ({
+      ...prev,
+      currentSection: sectionId,
+      expandedSections: new Set([...prev.expandedSections, sectionId]),
+      ...(opts?.openValidation ? { showValidation: true } : null)
+    }))
+
+    if (typeof document === 'undefined') return
+    requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
+  const handleSectionNavigation = useCallback(
+    (direction: 'prev' | 'next') => {
+      const currentIndex = SECTIONS.findIndex((s) => s.id === formState.currentSection)
+      const newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1
+
+      if (newIndex >= 0 && newIndex < SECTIONS.length) {
+        navigateToSection(SECTIONS[newIndex].id)
+      }
+    },
+    [formState.currentSection, navigateToSection]
+  )
+
+  const handleSubmit = useCallback(async () => {
+    const completionGate = getCompletionGate({ completionScore, sections: SECTIONS, sectionProgress: completion.sectionProgress })
+    if (completionGate.kind === 'block') {
+      showNotification(completionGate.notification)
+      if (completionGate.navigateToSectionId) {
+        navigateToSection(completionGate.navigateToSectionId, { openValidation: completionGate.openValidation })
+      } else if (completionGate.openValidation) {
+        setFormState((prev) => ({ ...prev, showValidation: true }))
+      }
+      return
+    }
+    if (completionGate.kind === 'confirm') {
+      const ok = window.confirm(completionGate.message)
+      if (!ok) return
+    }
+
+    const validationGate = getValidationGate({ completionScore, submissionValidationErrors, sections: SECTIONS })
+    if (validationGate.kind === 'block') {
+      showNotification(validationGate.notification)
+      if (validationGate.navigateToSectionId) {
+        navigateToSection(validationGate.navigateToSectionId, { openValidation: validationGate.openValidation })
+      } else if (validationGate.openValidation) {
+        setFormState((prev) => ({ ...prev, showValidation: true }))
+      }
+      return
+    }
+    if (validationGate.kind === 'confirm') {
+      const ok = window.confirm(validationGate.message)
+      if (!ok) {
+        if (validationGate.onCancelShowValidation) setFormState((prev) => ({ ...prev, showValidation: true }))
+        return
+      }
+    }
+
+    const complianceGate = getComplianceGate({ compliance: validationResult.compliance })
+    if (complianceGate.kind === 'block') {
+      showNotification(complianceGate.notification)
+      if (complianceGate.openValidation) setFormState((prev) => ({ ...prev, showValidation: true }))
+      return
+    }
+
+    setFormState((prev) => ({ ...prev, isSubmitting: true }))
+
+    try {
+      const { destination } = await finalizeSuitabilityAndBuildRedirect({
+        clientId: params.clientId,
+        assessmentId: activeAssessmentId || params.assessmentId,
+        fallbackAssessmentId: activeAssessmentId || params.assessmentId,
+        formData,
+        completionPercentage: completionScore,
+        onSaved: params.onSaved,
+        onComplete: params.onComplete
+      })
+
+      showNotification({
+        title: 'Assessment Complete',
+        description: 'Suitability assessment submitted successfully',
+        type: 'success',
+        duration: 7000
+      })
+      router.push(destination)
+    } catch (error) {
+      const errorMessage = getSubmissionErrorMessage(error)
+      showNotification({ title: 'Submission Failed', description: errorMessage, type: 'error', duration: 10000 })
+      console.error('Detailed submission error:', { error, clientId: params.clientId, completionScore })
+    } finally {
+      setFormState((prev) => ({ ...prev, isSubmitting: false }))
+    }
+  }, [
+    activeAssessmentId,
+    aiSuggestions,
+    completion.sectionProgress,
+    completionScore,
+    formData,
+    navigateToSection,
+    params,
+    pulledData,
+    router,
+    saveState,
+    showNotification,
+    submissionValidationErrors
+  ])
+
+  const handleGenerateDraftReport = useCallback(() => {
+    return generateSuitabilityDraftHtmlReport({
+      formData,
+      completionScore,
+      activeAssessmentId,
+      assessmentId: params.assessmentId,
+      showNotification
+    })
+  }, [activeAssessmentId, completionScore, formData, params.assessmentId, showNotification])
+
+  const handleGeneratePDFReport = useCallback(
+    (reportType: SuitabilityReportVariant = 'fullReport') => {
+      return generateSuitabilityPdfReport({
+        reportType,
+        activeAssessmentId,
+        assessmentId: params.assessmentId,
+        clientId: params.clientId,
+        showNotification
+      })
+    },
+    [activeAssessmentId, params.assessmentId, params.clientId, showNotification]
+  )
+
+  const toggleExpandedSection = useCallback((sectionId: string) => {
+    setFormState((prev) => {
+      const newExpanded = new Set(prev.expandedSections)
+      if (newExpanded.has(sectionId)) newExpanded.delete(sectionId)
+      else newExpanded.add(sectionId)
+      return { ...prev, expandedSections: newExpanded }
+    })
+  }, [])
+
+  const handleSaveDraftClick = useCallback(async () => {
+    const success = await saveManually()
+    if (success) {
+      showNotification({ title: 'Draft Saved', description: 'Your progress has been saved', type: 'success', duration: 3000 })
+      return
+    }
+    showNotification({ title: 'Save Failed', description: 'Unable to save draft. Please try again.', type: 'error', duration: 5000 })
+  }, [saveManually, showNotification])
+
+  const openVersionHistory = useCallback(() => {
+    setFormState((prev) => ({ ...prev, showVersionHistory: true }))
+  }, [])
+
+  const handleShareLink = useCallback(async () => {
+    const url = `${window.location.origin}/assessments/${params.assessmentId}/share`
+    const ok = await safeWriteToClipboard(url)
+    showNotification(
+      ok
+        ? { title: 'Link Copied', description: 'Share link copied to clipboard', type: 'success' }
+        : { title: 'Copy Failed', description: 'Clipboard not available in this browser', type: 'error' }
+    )
+  }, [params.assessmentId, showNotification])
+
+  const sectionErrorsMap = useMemo(() => {
+    return SECTIONS.reduce<Record<string, boolean>>((acc, s) => {
+      acc[s.id] = combinedValidationErrors.some((e) => e.sectionId === s.id)
+      return acc
+    }, {})
+  }, [combinedValidationErrors])
+
+  return {
+    formData,
+    pulledData,
+    activeAssessmentId,
+    isLoading,
+    isSaving,
+    lastSaved,
+    saveError,
+    enhancedSaveState,
+    saveState,
+    saveStatus: {
+      status: ((enhancedSaveState?.status || 'idle') as SaveStatus),
+      lastSaved: enhancedSaveState?.lastSaved || lastSaved || null,
+      lastError: enhancedSaveState?.lastError || saveError || null,
+      pendingChanges: Boolean(enhancedSaveState?.pendingChanges),
+      onRetry: resetSaveError
+        ? () => {
+            resetSaveError()
+            void saveManually()
+          }
+        : undefined
+    },
+    notifications,
+    showNotification,
+    reconciledRisk,
+    formState,
+    setFormState,
+    aiSuggestions,
+    isLoadingAI,
+    completion,
+    completionScore,
+    validationResult,
+    combinedValidationErrors,
+    submissionValidationErrors,
+    validationIssueCount,
+    sectionErrorsMap,
+    incompleteRequiredSections,
+    submissionErrorsBySection,
+    assessmentsNeedUpdate,
+    atrCflData,
+    personaAssessment,
+    isATRComplete,
+    isCFLComplete,
+    isPersonaComplete,
+    refreshATRCFL,
+    getConditionalFields,
+    handleFieldUpdate,
+    handleSectionUpdate,
+    handleGetAISuggestion,
+    navigateToSection,
+    handleSectionNavigation,
+    handleSubmit,
+    handleGenerateDraftReport,
+    handleGeneratePDFReport,
+    toggleExpandedSection,
+    handleSaveDraftClick,
+    openVersionHistory,
+    handleShareLink
+  }
+}

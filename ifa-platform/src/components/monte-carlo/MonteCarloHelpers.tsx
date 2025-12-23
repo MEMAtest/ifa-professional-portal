@@ -79,14 +79,24 @@ export const validateParameters = (params: SimulationParameters): ValidationResu
     result.isValid = false;
   }
 
-  // Withdrawal rate checks
+  // Withdrawal rate checks based on industry-standard guidance
+  // ≤4%: Safe (traditional 4% rule)
+  // 4-5%: Moderate (acceptable for shorter time horizons or higher risk tolerance)
+  // >5%: Elevated risk (warning zone)
+  // >7%: High risk (critical warning)
+  // >10%: Unsustainable (error)
   if (withdrawalRate > 10) {
-    result.errors.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% is extremely high and will likely deplete your portfolio`);
+    result.errors.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% is unsustainable and will very likely deplete your portfolio`);
     result.isValid = false;
-  } else if (withdrawalRate > 6) {
-    result.warnings.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% is high. Consider reducing to 4-5% for better sustainability`);
+  } else if (withdrawalRate > 7) {
+    result.warnings.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% is high. Consider reducing to 4-5% for better long-term sustainability`);
   } else if (withdrawalRate > 5) {
-    result.warnings.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% is above the typical 4% safe withdrawal rate`);
+    result.warnings.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% is above the moderate range. The traditional 4% rule provides a more conservative baseline`);
+  } else if (withdrawalRate > 4) {
+    // 4-5% is moderate - only warn if time horizon is very long
+    if (params.timeHorizon > 30) {
+      result.warnings.push(`Your withdrawal rate of ${withdrawalRate.toFixed(1)}% may be elevated for a ${params.timeHorizon}-year time horizon. Consider 3.5-4% for longer retirements`);
+    }
   }
 
   // Real return check
@@ -112,9 +122,11 @@ export const validateParameters = (params: SimulationParameters): ValidationResu
     result.suggestions.push('Consider inflation-protected investments or adjusting withdrawal strategy');
   }
 
-  // Positive suggestions
-  if (withdrawalRate >= 3 && withdrawalRate <= 4.5 && realReturn > withdrawalRate) {
-    result.suggestions.push('Your withdrawal rate is within a reasonable range for sustainable retirement income');
+  // Positive suggestions based on the 4% rule
+  if (withdrawalRate <= 4 && realReturn > withdrawalRate) {
+    result.suggestions.push('Your withdrawal rate is within the safe range (≤4%) based on the traditional 4% rule');
+  } else if (withdrawalRate > 4 && withdrawalRate <= 5 && realReturn > withdrawalRate) {
+    result.suggestions.push('Your withdrawal rate is moderate (4-5%). This may be acceptable for shorter time horizons or with flexible spending');
   }
 
   return result;
@@ -179,11 +191,18 @@ export const ValidationDisplay: React.FC<ValidationDisplayProps> = ({
             <div>
               <p className="text-sm font-medium">Withdrawal Rate</p>
               <p className={`text-2xl font-bold ${
-                withdrawalRate > 6 ? 'text-red-600' : 
-                withdrawalRate > 4.5 ? 'text-yellow-600' : 
+                withdrawalRate > 7 ? 'text-red-600' :
+                withdrawalRate > 5 ? 'text-orange-600' :
+                withdrawalRate > 4 ? 'text-yellow-600' :
                 'text-green-600'
               }`}>
                 {withdrawalRate.toFixed(1)}%
+              </p>
+              <p className="text-xs text-gray-500">
+                {withdrawalRate > 7 ? 'High risk' :
+                 withdrawalRate > 5 ? 'Elevated' :
+                 withdrawalRate > 4 ? 'Moderate' :
+                 'Safe range'}
               </p>
             </div>
             <div className="text-right">

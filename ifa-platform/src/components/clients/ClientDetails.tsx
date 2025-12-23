@@ -89,6 +89,19 @@ interface RiskProfileData {
   final_risk_category: string;
 }
 
+// Helper function to format gender display
+const formatGender = (gender: string | undefined): string => {
+  if (!gender) return 'Not Specified';
+  const genderMap: Record<string, string> = {
+    'male': 'Male',
+    'female': 'Female',
+    'non_binary': 'Non-Binary',
+    'prefer_not_to_say': 'Prefer Not to Say',
+    'other': 'Other'
+  };
+  return genderMap[gender.toLowerCase()] || gender;
+};
+
 export function ClientDetails({ 
   client, 
   onEdit, 
@@ -238,9 +251,9 @@ export function ClientDetails({
 
         const profile = clientData?.risk_profile || null;
 
-        setAtrAssessment(atr);
-        setCflAssessment(cfl);
-        setRiskProfile(profile);
+        setAtrAssessment(atr as any);
+        setCflAssessment(cfl as any);
+        setRiskProfile(profile as any);
       } catch (error) {
         console.error('Error loading assessments:', error);
       } finally {
@@ -663,9 +676,15 @@ export function ClientDetails({
                   <p className="font-medium">{age ? `${age} years` : 'Not available'}</p>
                 </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Occupation</p>
-                <p className="font-medium">{client.personalDetails?.occupation || 'Not specified'}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Gender</p>
+                  <p className="font-medium">{formatGender(client.personalDetails?.gender)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Occupation</p>
+                  <p className="font-medium">{client.personalDetails?.occupation || 'Not specified'}</p>
+                </div>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">Marital Status</p>

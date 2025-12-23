@@ -275,7 +275,8 @@ export const ProjectionChart: React.FC<BaseChartProps> = (props) => {
         padding: 12,
         callbacks: {
           label: (context) => {
-            return `${context.dataset.label}: £${context.parsed.y.toLocaleString()}`
+            const value = context.parsed.y ?? 0
+            return `${context.dataset.label}: £${value.toLocaleString()}`
           }
         }
       }
@@ -410,7 +411,8 @@ export const ComparisonChart: React.FC<BaseChartProps> = (props) => {
       tooltip: {
         callbacks: {
           label: (context) => {
-            return `£${context.parsed.x.toLocaleString()}`
+            const value = context.parsed.x ?? 0
+            return `£${value.toLocaleString()}`
           }
         }
       }

@@ -29,17 +29,8 @@ interface PageParams {
 export default function ClientMigrationPage() {
   const router = useRouter();
   const rawParams = useParams();
-  
-  // Safe params handling
-  const params: PageParams | null = rawParams && typeof rawParams.id === 'string' 
-    ? { id: rawParams.id }
-    : null;
 
-  if (!params) {
-    notFound();
-    return null;
-  }
-
+  // Hooks must be called unconditionally at the top level
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -57,23 +48,28 @@ export default function ClientMigrationPage() {
   // ✅ FIXED: Define legacyClients using sample data
   const legacyClients: LegacyClientData[] = sampleLegacyClients;
 
-  // Load client data
+  // Safe params handling
+  const params: PageParams | null = rawParams && typeof rawParams.id === 'string'
+    ? { id: rawParams.id }
+    : null;
+
+  // Load client data - useEffect must be called unconditionally
   useEffect(() => {
     const loadClientData = async () => {
-      if (!params.id) return;
-      
+      // Guard clause for missing params
+      if (!params?.id) return;
+
       try {
         setLoading(true);
-        
+
         // Load client, communications, and audit log in parallel
         const [clientData, commsData] = await Promise.all([
-  clientService.getClientById(params.id),
-  clientService.getClientCommunications(params.id),
-  // clientService.getAuditLog(params.id) // Temporarily commented
-]);
+          clientService.getClientById(params.id),
+          clientService.getClientCommunications(params.id),
+        ]);
 
-const auditData: AuditLog[] = []; // Empty array for now
-        
+        const auditData: AuditLog[] = []; // Empty array for now
+
         setClient(clientData);
         setCommunications(commsData);
         setAuditLog(auditData);
@@ -91,7 +87,13 @@ const auditData: AuditLog[] = []; // Empty array for now
     };
 
     loadClientData();
-  }, [params.id, toast]);
+  }, [params?.id, toast]);
+
+  // Early return for missing params (after all hooks)
+  if (!params) {
+    notFound();
+    return null;
+  }
 
   // Handle migration
   const handleMigration = async () => {

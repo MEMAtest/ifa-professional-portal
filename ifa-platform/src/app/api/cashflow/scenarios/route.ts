@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 // Fixed route for cash flow scenarios with correct column names
 
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/lib/logging/structured';
 
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true);     // ✅ FIXED: was 'isActive'
 
     if (error) {
-      console.error('Cash flow scenarios error:', error);
+      log.error('Cash flow scenarios error:', error);
       return NextResponse.json({ 
         error: error.message,
         hint: error.hint,
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Cash flow route error:', error);
+    log.error('Cash flow route error:', error);
     return NextResponse.json({ 
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Create scenario error:', error);
+      log.error('Create scenario error:', error);
       return NextResponse.json({ 
         error: error.message 
       }, { status: 400 });
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Create scenario error:', error);
+    log.error('Create scenario error:', error);
     return NextResponse.json({ 
       error: 'Failed to create scenario' 
     }, { status: 500 });

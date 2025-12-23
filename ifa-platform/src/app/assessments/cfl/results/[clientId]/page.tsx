@@ -362,7 +362,7 @@ export default function CFLResultsPage() {
           <CardContent className="text-center py-12">
             <TrendingUp className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">No CFL Assessment Found</h2>
-            <p className="text-gray-600 mb-6">This client hasn't completed a CFL assessment yet.</p>
+            <p className="text-gray-600 mb-6">This client has not completed a CFL assessment yet.</p>
             <div className="flex justify-center gap-3">
               <Button variant="outline" onClick={handleBack}>
                 <ArrowLeft className="h-4 w-4 mr-2" />

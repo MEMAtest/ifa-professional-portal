@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { isSupabaseRealtimeEnabled } from '@/lib/supabase/realtime'
 
 interface AssessmentProgressData {
   progress: Record<string, {
@@ -61,6 +62,7 @@ export function useAssessmentProgress(clientId: string) {
 
   // Set up real-time subscription
   useEffect(() => {
+    if (!isSupabaseRealtimeEnabled()) return
     if (!clientId || isSubscribed) return
 
     const channel = supabase
@@ -73,12 +75,12 @@ export function useAssessmentProgress(clientId: string) {
           table: 'assessment_progress',
           filter: `client_id=eq.${clientId}`,
         },
-        (payload) => {
+        (payload: unknown) => {
           console.log('Assessment progress change:', payload)
           refetch()
         }
       )
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         if (status === 'SUBSCRIBED') {
           setIsSubscribed(true)
         }

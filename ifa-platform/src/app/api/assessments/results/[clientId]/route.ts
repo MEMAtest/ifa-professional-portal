@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { log } from '@/lib/logging/structured';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,7 +88,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error fetching assessment results:', error);
+    log.error('Error fetching assessment results:', error);
     return NextResponse.json(
       { error: 'Failed to fetch assessment results' },
       { status: 500 }

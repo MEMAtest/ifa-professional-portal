@@ -1,20 +1,21 @@
 // src/components/monte-carlo/MonteCarloReport.tsx
 // FIXED VERSION - Null safety and type integrity
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Download, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 // Type definitions with strict typing
 interface MonteCarloScenario {
   id: string;
   scenario_name: string;
-  created_at: string;
-  initial_wealth?: number;
-  time_horizon?: number;
-  withdrawal_amount?: number;
-  risk_score?: number;
-  inflation_rate?: number;
+  created_at: string | null;
+  initial_wealth?: number | null;
+  time_horizon?: number | null;
+  withdrawal_amount?: number | null;
+  risk_score?: number | null;
+  inflation_rate?: number | null;
 }
 
 interface MonteCarloResult {
@@ -58,11 +59,17 @@ export const MonteCarloReportButton: React.FC<MonteCarloReportButtonProps> = ({
   variant = 'outline',
   className = ''
 }) => {
+  const { toast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const handleGenerateReport = async () => {
     try {
+      setIsGenerating(true);
       // Null safety checks
       if (!scenario || !client) {
         console.error('Missing required data for report generation');
+        toast({ title: 'Error', description: 'Missing scenario or client data', variant: 'destructive' });
+        setIsGenerating(false);
         return;
       }
 
@@ -120,15 +127,44 @@ export const MonteCarloReportButton: React.FC<MonteCarloReportButtonProps> = ({
         } : null
       };
 
-      // TODO: Implement actual PDF generation
-      console.log('Generating report with data:', reportData);
-      
-      // For now, show a placeholder message
-      alert('Report generation will be implemented. Data is ready and safe.');
-      
+      const response = await fetch('/api/documents/generate-monte-carlo-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenarioId: scenario.id,
+          clientId: client.id,
+          resultId: result?.id
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to generate report');
+      }
+
+      const payload = await response.json();
+      console.log('Generated report with data:', reportData);
+
+      if (payload.signedUrl) {
+        window.open(payload.signedUrl, '_blank');
+        toast({ title: 'Report ready', description: 'Opened Monte Carlo PDF in a new tab.' });
+      } else if (payload.inlinePdf) {
+        const blob = b64ToBlob(payload.inlinePdf, 'application/pdf');
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        toast({ title: 'Report ready', description: 'Opened inline Monte Carlo PDF.' });
+      } else {
+        toast({ title: 'Report saved', description: 'Report stored; download from Documents.' });
+      }
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Failed to generate report. Please try again.');
+      toast({
+        title: 'Report failed',
+        description: error instanceof Error ? error.message : 'Could not generate Monte Carlo report.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -141,12 +177,28 @@ export const MonteCarloReportButton: React.FC<MonteCarloReportButtonProps> = ({
         handleGenerateReport();
       }}
       className={className}
+      disabled={isGenerating}
     >
       <FileText className="h-4 w-4 mr-1" />
-      Report
+      {isGenerating ? 'Generating…' : 'Report'}
     </Button>
   );
 };
+
+function b64ToBlob(base64: string, contentType: string) {
+  const byteCharacters = atob(base64);
+  const byteArrays: Uint8Array[] = [];
+  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+    const slice = byteCharacters.slice(offset, offset + 512);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+  return new Blob(byteArrays, { type: contentType });
+}
 
 // Export a default report viewer component as well
 export default function MonteCarloReportViewer({ 
@@ -167,7 +219,7 @@ export default function MonteCarloReportViewer({
         <div>
           <h3 className="font-semibold">Scenario Details</h3>
           <p>{scenario.scenario_name}</p>
-          <p>Date: {new Date(scenario.created_at).toLocaleDateString()}</p>
+          <p>Date: {scenario.created_at ? new Date(scenario.created_at).toLocaleDateString() : 'Unknown'}</p>
         </div>
         
         {result && (

@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { log } from '@/lib/logging/structured'
 
 // ✅ FIXED: Add supabase client
 const supabase = createClient(
@@ -35,43 +36,65 @@ export async function GET(
     const assessmentType = searchParams.get('assessmentType')
     const assessmentVersion = searchParams.get('version')
 
-    console.log('Document fetch params:', { 
-      clientId, 
-      assessmentId, 
-      assessmentType, 
-      assessmentVersion 
+    log.debug('Document fetch params', {
+      clientId,
+      assessmentId,
+      assessmentType,
+      assessmentVersion
     })
 
     // Start building the query
+    // Try to select with signature_requests, but handle gracefully if relationship doesn't exist
+    let selectFields = '*'
+
+    // Check if signature_requests table/relationship exists by trying a simple query first
+    const { error: relationError } = await supabase
+      .from('documents')
+      .select('id')
+      .limit(1)
+
+    // If documents table works, try with signature_requests join
+    if (!relationError) {
+      const { error: joinError } = await supabase
+        .from('documents')
+        .select('*, signature_requests(*)')
+        .limit(1)
+
+      // Only include join if it works
+      if (!joinError) {
+        selectFields = `
+          *,
+          signature_requests (
+            id,
+            status,
+            docuseal_submission_id,
+            sent_at,
+            completed_at
+          )
+        `
+      }
+    }
+
     let query = supabase
       .from('documents')
-      .select(`
-        *,
-        signature_requests (
-          id,
-          status,
-          docuseal_submission_id,
-          sent_at,
-          completed_at
-        )
-      `)
+      .select(selectFields)
       .eq('client_id', clientId)
 
     // ✅ ADDED: Apply filters based on query parameters
     if (assessmentId) {
       // Filter by specific assessment ID (most specific)
       query = query.eq('assessment_id', assessmentId)
-      console.log('Filtering by assessment_id:', assessmentId)
+      log.debug('Filtering by assessment_id', { assessmentId })
     } else if (assessmentType && assessmentVersion) {
       // Filter by assessment type and version (e.g., ATR version 3)
       query = query
         .eq('document_type', `${assessmentType}_report`)
         .eq('assessment_version', assessmentVersion)
-      console.log('Filtering by type and version:', assessmentType, assessmentVersion)
+      log.debug('Filtering by type and version', { assessmentType, assessmentVersion })
     } else if (assessmentType) {
       // Filter by assessment type only (e.g., all ATR documents)
       query = query.eq('document_type', `${assessmentType}_report`)
-      console.log('Filtering by type only:', assessmentType)
+      log.debug('Filtering by type only', { assessmentType })
     }
 
     // Execute query with ordering
@@ -80,7 +103,7 @@ export async function GET(
     const { data: documents, error } = await query
 
     if (error) {
-      console.error('Database error:', error)
+      log.error('Database error', error)
       return NextResponse.json(
         { 
           error: 'Failed to fetch documents',
@@ -92,10 +115,10 @@ export async function GET(
 
     // ✅ Handle case where no documents found (not an error, just empty)
     if (!documents || documents.length === 0) {
-      console.log('No documents found for criteria:', { 
-        clientId, 
-        assessmentId, 
-        assessmentType 
+      log.debug('No documents found for criteria', {
+        clientId,
+        assessmentId,
+        assessmentType
       })
       
       return NextResponse.json({
@@ -146,7 +169,7 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error('API Get documents error:', error)
+    log.error('API Get documents error', error)
     return NextResponse.json(
       { 
         error: 'Internal server error',

@@ -3,7 +3,7 @@
 // STANDALONE VALIDATION SUMMARY COMPONENT
 // =====================================================
 
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 import { AlertCircle, CheckCircle, AlertTriangle, ChevronRight, Shield } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -30,7 +30,7 @@ interface ValidationSummaryProps {
   onQuickFix?: (errorId: string) => void
 }
 
-export const ValidationSummary: React.FC<ValidationSummaryProps> = ({
+export const ValidationSummary = memo(function ValidationSummary({
   errors = [],
   warnings = [],
   compliance,
@@ -38,19 +38,19 @@ export const ValidationSummary: React.FC<ValidationSummaryProps> = ({
   className,
   showQuickFix = false,
   onQuickFix
-}) => {
+}: ValidationSummaryProps) {
   // Group errors by section for better organization
-  const errorsBySection = errors.reduce((acc, error) => {
+  const errorsBySection = useMemo(() => errors.reduce((acc, error) => {
     if (!acc[error.sectionId]) {
       acc[error.sectionId] = []
     }
     acc[error.sectionId].push(error)
     return acc
-  }, {} as Record<string, ValidationError[]>)
+  }, {} as Record<string, ValidationError[]>), [errors])
 
   // Count critical errors
-  const criticalErrors = errors.filter(e => e.severity === 'critical')
-  const standardErrors = errors.filter(e => e.severity === 'error')
+  const criticalErrors = useMemo(() => errors.filter(e => e.severity === 'critical'), [errors])
+  const standardErrors = useMemo(() => errors.filter(e => e.severity === 'error'), [errors])
 
   // FCA compliance status
   const fcaCompliant = compliance?.fcaChecks ? 
@@ -255,7 +255,7 @@ export const ValidationSummary: React.FC<ValidationSummaryProps> = ({
       )}
     </div>
   )
-}
+})
 
 // Error Item Component
 interface ErrorItemProps {
@@ -266,13 +266,13 @@ interface ErrorItemProps {
   variant: 'critical' | 'standard'
 }
 
-const ErrorItem: React.FC<ErrorItemProps> = ({
+const ErrorItem = memo(function ErrorItem({
   error,
   onNavigate,
   showQuickFix,
   onQuickFix,
   variant
-}) => {
+}: ErrorItemProps) {
   return (
     <div className={cn(
       "p-3 rounded-md border",
@@ -321,6 +321,6 @@ const ErrorItem: React.FC<ErrorItemProps> = ({
       </div>
     </div>
   )
-}
+})
 
 export default ValidationSummary

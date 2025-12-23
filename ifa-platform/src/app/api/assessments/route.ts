@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database.types'; // <-- ADD THIS IMPORT
 import type { TablesInsert } from '@/types/database.types'; // <-- ADD THIS IMPORT
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { log } from '@/lib/logging/structured'
 
 // Lazy initialization to prevent build-time errors
 let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null; // <-- Type the client
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Assessment save error:', error);
+      log.error('Assessment save error', error);
       return NextResponse.json(
         { error: error.message, details: error },
         { status: 400 }
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Assessment route error:', error);
+    log.error('Assessment route error', error);
     return NextResponse.json(
       { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -99,48 +101,60 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
     const assessmentId = searchParams.get('id');
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? Math.min(50, Math.max(1, Number(limitParam))) : null
 
-    // Get supabase client (lazy initialization)
-    const supabaseAdmin = getSupabaseAdmin();
+    // Prefer a session-bound client for GET requests (avoids hard dependency on service role env vars)
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Build the query based on parameters
     if (assessmentId) {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('assessments')
         .select('*')
         .eq('id', assessmentId)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        console.error('Assessment fetch error:', error);
+        log.error('Assessment fetch error by ID', error, { assessmentId });
         return NextResponse.json(
           { error: error.message },
           { status: 400 }
         );
       }
 
-      return NextResponse.json({ 
-        success: true, 
-        data 
+      return NextResponse.json({
+        success: true,
+        data
       });
     } else if (clientId) {
-      const { data, error } = await supabaseAdmin
+      let query = supabase
         .from('assessments')
         .select('*')
         .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+
+      if (limit) {
+        query = query.limit(limit)
+      }
+
+      const { data, error } = await query
 
       if (error) {
-        console.error('Assessment fetch error:', error);
+        log.error('Assessment fetch error by clientId', error, { clientId });
         return NextResponse.json(
           { error: error.message },
           { status: 400 }
         );
       }
 
-      return NextResponse.json({ 
-        success: true, 
-        data 
+      return NextResponse.json({
+        success: true,
+        data
       });
     } else {
       return NextResponse.json(
@@ -150,7 +164,7 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Assessment GET error:', error);
+    log.error('Assessment GET error', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

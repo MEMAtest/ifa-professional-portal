@@ -1,0 +1,255 @@
+// src/app/api/assessments/share/route.ts
+// API for creating and listing assessment share tokens
+// Phase 2: Added Zod validation for type safety
+
+import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
+import { ShareAssessmentInputSchema, formatValidationErrors } from '@/lib/validation/schemas'
+import { logger, getErrorMessage } from '@/lib/errors'
+import { createAuditLogger } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
+
+// Assessment type labels for emails
+const ASSESSMENT_LABELS: Record<string, string> = {
+  atr: 'Attitude to Risk (ATR)',
+  cfl: 'Capacity for Loss (CFL)',
+  investor_persona: 'Investor Persona'
+}
+
+// Generate a cryptographically secure token
+function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+// POST: Create a new assessment share
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+
+    // Validate input using Zod schema
+    const validationResult = ShareAssessmentInputSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json(
+        formatValidationErrors(validationResult.error),
+        { status: 400 }
+      )
+    }
+
+    // Use validated and typed data
+    const {
+      clientId,
+      assessmentType,
+      clientEmail,
+      clientName,
+      expiryDays,
+      customMessage,
+      sendEmail
+    } = validationResult.data
+
+    // Generate secure token
+    const token = generateToken()
+
+    // Calculate expiry date
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + expiryDays)
+
+    // Get advisor info for email
+    const { data: advisor } = await supabase
+      .from('users')
+      .select('full_name, email')
+      .eq('id', user.id)
+      .single()
+
+    // Get client info if not provided
+    let finalClientName = clientName
+    if (!finalClientName) {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('personal_details')
+        .eq('id', clientId)
+        .single()
+
+      if (client?.personal_details) {
+        const pd = client.personal_details as { firstName?: string; lastName?: string; first_name?: string; last_name?: string }
+        const firstName = pd.firstName || pd.first_name || ''
+        const lastName = pd.lastName || pd.last_name || ''
+        finalClientName = `${firstName} ${lastName}`.trim() || 'Client'
+      }
+    }
+
+    // Create the share record
+    const { data: share, error: insertError } = await supabase
+      .from('assessment_shares')
+      .insert({
+        token,
+        assessment_type: assessmentType,
+        client_id: clientId,
+        advisor_id: user.id,
+        client_email: clientEmail,
+        client_name: finalClientName,
+        expires_at: expiresAt.toISOString(),
+        custom_message: customMessage,
+        metadata: {
+          advisor_name: advisor?.full_name || 'Your Financial Advisor',
+          advisor_email: advisor?.email
+        }
+      })
+      .select()
+      .single()
+
+    if (insertError) {
+      logger.error('Error creating share', insertError, { clientId, assessmentType })
+      return NextResponse.json(
+        { error: 'Failed to create assessment share' },
+        { status: 500 }
+      )
+    }
+
+    // Audit log the share creation
+    const auditLogger = createAuditLogger(supabase)
+    await auditLogger.logShareCreated(
+      share.id,
+      clientId,
+      user.id,
+      assessmentType,
+      clientEmail
+    )
+
+    logger.info('Assessment share created', { shareId: share.id, clientId, assessmentType })
+
+    // Generate the share URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin')
+    if (!baseUrl) {
+      logger.error('NEXT_PUBLIC_APP_URL not configured')
+      return NextResponse.json(
+        { error: 'Application URL not configured' },
+        { status: 500 }
+      )
+    }
+    const shareUrl = `${baseUrl}/client/assessment/${token}`
+
+    // Send email if requested
+    if (sendEmail) {
+      try {
+        await fetch(`${baseUrl}/api/notifications/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'assessmentInvite',
+            recipient: clientEmail,
+            data: {
+              clientName: finalClientName,
+              advisorName: advisor?.full_name || 'Your Financial Advisor',
+              assessmentType: ASSESSMENT_LABELS[assessmentType] || assessmentType,
+              link: shareUrl,
+              expiryDate: expiresAt.toLocaleDateString('en-GB', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }),
+              customMessage
+            }
+          })
+        })
+      } catch (emailError) {
+        logger.warn('Failed to send share email', { clientEmail, error: getErrorMessage(emailError) })
+        // Don't fail the request if email fails
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      share: {
+        id: share.id,
+        token,
+        shareUrl,
+        assessmentType,
+        clientEmail,
+        clientName: finalClientName,
+        expiresAt: expiresAt.toISOString(),
+        status: 'pending'
+      }
+    })
+
+  } catch (error) {
+    logger.error('Error in POST /api/assessments/share', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// GET: List assessment shares for current user or specific client
+export async function GET(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+
+    // Get current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const clientId = searchParams.get('clientId')
+    const status = searchParams.get('status')
+
+    // Build query
+    let query = supabase
+      .from('assessment_shares')
+      .select('*')
+      .eq('advisor_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (clientId) {
+      query = query.eq('client_id', clientId)
+    }
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    const { data: shares, error: queryError } = await query
+
+    if (queryError) {
+      logger.error('Error fetching shares', queryError)
+      return NextResponse.json(
+        { error: 'Failed to fetch assessment shares' },
+        { status: 500 }
+      )
+    }
+
+    // Update expired shares
+    const now = new Date()
+    const updatedShares = shares?.map((share: any) => {
+      if (share.status === 'pending' && new Date(share.expires_at) < now) {
+        return { ...share, status: 'expired' }
+      }
+      return share
+    }) || []
+
+    return NextResponse.json({
+      success: true,
+      shares: updatedShares
+    })
+
+  } catch (error) {
+    logger.error('Error in GET /api/assessments/share', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

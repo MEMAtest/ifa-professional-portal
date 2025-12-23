@@ -3,6 +3,8 @@
 // ===================================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { getSupabaseAuthHeaders } from '@/lib/auth/clientAuth';
 import type {
   Document,
   DocumentCategory,
@@ -33,11 +35,11 @@ interface DocumentAnalytics {
   documentsThisMonth: number
   documentsThisWeek: number
   documentsToday: number
-  
-  // Advanced metrics
-  averageProcessingTime: number
-  clientSatisfactionScore: number
-  riskScore: number
+
+  // Advanced metrics (optional - from real data when available)
+  averageProcessingTime?: number
+  clientSatisfactionScore?: number
+  riskScore?: number
   
   // Trending data
   trends?: {
@@ -104,6 +106,13 @@ interface DocumentAnalytics {
       compliance_score: number
     }>
   }
+
+  // Daily trends for charts
+  dailyTrends?: Array<{
+    date: string
+    day: string
+    documents: number
+  }>
 }
 
 interface AnalyticsFilters {
@@ -165,7 +174,12 @@ export function useDocuments(initialParams?: DocumentListParams) {
         searchParams.append('search', filters.search);
       }
 
-      const response = await fetch(`/api/documents?${searchParams.toString()}`);
+      const supabase = createClient();
+      const headers = await getSupabaseAuthHeaders(supabase);
+      const response = await fetch(`/api/documents?${searchParams.toString()}`, {
+        credentials: 'include',
+        headers,
+      });
 
       if (!response.ok) {
         throw new DocumentError('Failed to fetch documents', 'FETCH_ERROR', response.status);
@@ -189,7 +203,12 @@ export function useDocuments(initialParams?: DocumentListParams) {
   // Fetch document categories
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await fetch('/api/documents/categories');
+      const supabase = createClient();
+      const headers = await getSupabaseAuthHeaders(supabase);
+      const response = await fetch('/api/documents/categories', {
+        credentials: 'include',
+        headers,
+      });
 
       if (!response.ok) {
         throw new DocumentError('Failed to fetch categories', 'FETCH_ERROR', response.status);
@@ -691,7 +710,7 @@ export function useDocumentAnalytics(filters?: AnalyticsFilters) {
 
       const data = await response.json()
 
-      // Enhanced analytics processing with fallbacks
+      // Enhanced analytics processing with fallbacks - REAL DATA ONLY
       const processedAnalytics: DocumentAnalytics = {
         // Basic metrics with fallbacks
         totalDocuments: data.totalDocuments || 0,
@@ -702,16 +721,11 @@ export function useDocumentAnalytics(filters?: AnalyticsFilters) {
         documentsThisWeek: data.documentsThisWeek || 0,
         documentsToday: data.documentsToday || 0,
 
-        // Advanced metrics with fallbacks
-        averageProcessingTime: data.averageProcessingTime || 0,
-        clientSatisfactionScore: data.clientSatisfactionScore || 85, // Mock fallback
-        riskScore: data.riskScore || calculateRiskScore(data),
-
-        // Trends calculation with safeguards
+        // Trends calculation with real data
         trends: {
           documents: calculateTrend(data.documentsThisMonth || 0, data.documentsLastMonth || 0),
-          signatures: calculateTrend(data.completedSignatures || 0, data.lastMonthSignatures || 0),
-          compliance: calculateTrend(data.complianceScore || 0, data.lastMonthCompliance || 0),
+          signatures: calculateTrend(data.completedSignatures || 0, 0),
+          compliance: calculateTrend(data.complianceScore || 0, 0),
         },
 
         // Recent activity with fallbacks
@@ -735,6 +749,9 @@ export function useDocumentAnalytics(filters?: AnalyticsFilters) {
           activeClients: data.clientMetrics?.activeClients || 0,
           topClients: data.clientMetrics?.topClients || [],
         },
+
+        // Real daily trends for charts
+        dailyTrends: data.dailyTrends || [],
       }
 
       setAnalytics(processedAnalytics)
@@ -812,7 +829,7 @@ export function useDocumentAnalytics(filters?: AnalyticsFilters) {
 
   const getRiskLevel = useCallback(() => {
     if (!analytics) return 'unknown'
-    const riskScore = analytics.riskScore
+    const riskScore = analytics.riskScore ?? 0
     if (riskScore >= 80) return 'low'
     if (riskScore >= 60) return 'medium'
     return 'high'
@@ -879,7 +896,12 @@ export function useDocumentCategories() {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch('/api/documents/categories')
+        const supabase = createClient()
+        const headers = await getSupabaseAuthHeaders(supabase)
+        const response = await fetch('/api/documents/categories', {
+          credentials: 'include',
+          headers
+        })
         
         if (!response.ok) {
           throw new DocumentError('Failed to fetch categories', 'FETCH_ERROR', response.status)
@@ -912,35 +934,61 @@ export function useSignatureRequests() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<DocumentError | null>(null)
 
+  const fetchSignatureRequests = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await fetch('/api/signatures')
+
+      if (!response.ok) {
+        throw new DocumentError('Failed to fetch signature requests', 'FETCH_ERROR', response.status)
+      }
+
+      const result = await response.json()
+      setSignatureRequests(result.signatureRequests || [])
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch signature requests'
+      setError(new DocumentError(errorMessage, 'FETCH_ERROR'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const createSignatureRequest = async (request: {
-    document_id: string
+    documentId: string
     signers: Array<{
       email: string
       name: string
       role?: string
     }>
-    subject?: string
-    message?: string
-    expiresInDays?: number
+    options?: {
+      expiryDays?: number
+      autoReminder?: boolean
+      remindOnceInEvery?: number
+      mergeCertificate?: boolean
+    }
   }) => {
     try {
       setError(null)
-      const response = await fetch('/api/documents/signatures', {
+      const response = await fetch('/api/signatures/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(request),
       })
-      
+
       if (!response.ok) {
         throw new DocumentError('Failed to create signature request', 'SIGNATURE_ERROR', response.status)
       }
-      
+
       const result = await response.json()
-      const newRequest = result.signatureRequest
-      setSignatureRequests(prev => [newRequest, ...prev])
-      return newRequest
+      if (result.success) {
+        fetchSignatureRequests() // Refresh the list
+        return result
+      } else {
+        throw new Error(result.error || 'Failed to create signature request')
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create signature request'
       setError(new DocumentError(errorMessage, 'SIGNATURE_ERROR'))
@@ -948,11 +996,246 @@ export function useSignatureRequests() {
     }
   }
 
+  const sendSignatureRequest = async (signatureRequestId: string) => {
+    try {
+      setError(null)
+      const response = await fetch('/api/signatures/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ signatureRequestId }),
+      })
+
+      if (!response.ok) {
+        throw new DocumentError('Failed to send signature request', 'SIGNATURE_ERROR', response.status)
+      }
+
+      const result = await response.json()
+      if (result.success) {
+        fetchSignatureRequests() // Refresh the list
+        return result
+      } else {
+        throw new Error(result.error || 'Failed to send signature request')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send signature request'
+      setError(new DocumentError(errorMessage, 'SIGNATURE_ERROR'))
+      throw err
+    }
+  }
+
+  const getSignatureStatus = async (signatureRequestId: string) => {
+    try {
+      setError(null)
+      const response = await fetch(`/api/signatures/status/${signatureRequestId}`)
+
+      if (!response.ok) {
+        throw new DocumentError('Failed to get signature status', 'SIGNATURE_ERROR', response.status)
+      }
+
+      const result = await response.json()
+      if (result.success) {
+        return result.signatureRequest
+      } else {
+        throw new Error(result.error || 'Failed to get signature status')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to get signature status'
+      setError(new DocumentError(errorMessage, 'SIGNATURE_ERROR'))
+      throw err
+    }
+  }
+
+  const downloadSignedDocument = async (signatureRequestId: string) => {
+    try {
+      setError(null)
+      const response = await fetch(`/api/signatures/download/${signatureRequestId}`)
+
+      if (!response.ok) {
+        throw new DocumentError('Failed to download signed document', 'DOWNLOAD_ERROR', response.status)
+      }
+
+      // Handle file download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `signed-document-${signatureRequestId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      return true
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to download signed document'
+      setError(new DocumentError(errorMessage, 'DOWNLOAD_ERROR'))
+      throw err
+    }
+  }
+
+  // Initialize data on mount
+  useEffect(() => {
+    fetchSignatureRequests()
+  }, [])
+
   return {
     signatureRequests,
     loading,
     error,
-    createSignatureRequest
+    fetchSignatureRequests,
+    createSignatureRequest,
+    sendSignatureRequest,
+    getSignatureStatus,
+    downloadSignedDocument,
+    refresh: fetchSignatureRequests,
+    clearError: () => setError(null)
+  }
+}
+
+// ===================================================================
+// ASSESSMENT METRICS HOOK - For Reports Page
+// ===================================================================
+
+interface AssessmentMetrics {
+  clientCoverage: {
+    assessed: number
+    total: number
+    percentage: number
+    byType: {
+      atr: number
+      cfl: number
+      persona: number
+      suitability: number
+      monte_carlo: number
+      cashflow: number
+    }
+  }
+  assessmentStats: {
+    byType: {
+      atr: number
+      cfl: number
+      persona: number
+      suitability: number
+      monte_carlo: number
+      cashflow: number
+    }
+    totalAssessments: number
+  }
+  activityMetrics: {
+    last7Days: number
+    last30Days: number
+  }
+  summary: {
+    totalClients: number
+    assessedClients: number
+  }
+}
+
+export function useAssessmentMetrics() {
+  const [metrics, setMetrics] = useState<AssessmentMetrics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchMetrics = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch('/api/assessments/metrics')
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Authentication required')
+        }
+        throw new Error('Failed to fetch assessment metrics')
+      }
+
+      const data = await response.json()
+
+      if (data.success && data.metrics) {
+        setMetrics(data.metrics)
+      } else {
+        throw new Error(data.error || 'Invalid response')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch metrics'
+      setError(errorMessage)
+      console.error('Assessment metrics error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchMetrics()
+  }, [fetchMetrics])
+
+  return {
+    metrics,
+    loading,
+    error,
+    refresh: fetchMetrics
+  }
+}
+
+// ===================================================================
+// CLIENT STATISTICS HOOK - For Reports Page
+// ===================================================================
+
+interface ClientStatistics {
+  totalClients: number
+  activeClients: number
+  archivedClients: number
+  vulnerableClients: number
+  prospectsCount: number
+  reviewsDue: number
+  highRiskClients: number
+  recentlyAdded: number
+  byStatus: Record<string, number>
+  byRiskLevel: Record<string, number>
+}
+
+export function useClientStatistics() {
+  const [stats, setStats] = useState<ClientStatistics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchStats = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch('/api/clients/statistics')
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Authentication required')
+        }
+        throw new Error('Failed to fetch client statistics')
+      }
+
+      const data = await response.json()
+      setStats(data)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch statistics'
+      setError(errorMessage)
+      console.error('Client statistics error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
+
+  return {
+    stats,
+    loading,
+    error,
+    refresh: fetchStats
   }
 }
 
@@ -961,5 +1244,7 @@ export default {
   useDocuments,
   useDocumentAnalytics,
   useDocumentCategories,
-  useSignatureRequests
+  useSignatureRequests,
+  useAssessmentMetrics,
+  useClientStatistics
 }

@@ -78,6 +78,7 @@ export default function DocumentStatusPage() {
     
     try {
       // Try to load from generated_documents table first
+      // Note: document_templates join removed due to missing FK relationship
       const { data: generatedDocs, error } = await supabase
         .from('generated_documents')
         .select(`
@@ -85,9 +86,6 @@ export default function DocumentStatusPage() {
           clients (
             personal_details,
             contact_info
-          ),
-          document_templates (
-            name
           )
         `)
         .order('created_at', { ascending: false })
@@ -96,11 +94,11 @@ export default function DocumentStatusPage() {
         const formattedDocs: DocumentStatus[] = generatedDocs.map(doc => ({
           id: doc.id,
           document_name: doc.title || 'Untitled Document',
-          client_name: doc.clients ? 
-            `${doc.clients.personal_details?.firstName || ''} ${doc.clients.personal_details?.lastName || ''}`.trim() : 
+          client_name: doc.clients ?
+            `${doc.clients.personal_details?.firstName || ''} ${doc.clients.personal_details?.lastName || ''}`.trim() :
             'Unknown Client',
           client_email: doc.clients?.contact_info?.email || 'No email',
-          template_name: doc.document_templates?.name || 'Custom Template',
+          template_name: doc.file_name || 'Generated Document',
           status: doc.status || 'sent',
           sent_at: doc.created_at,
           created_at: doc.created_at

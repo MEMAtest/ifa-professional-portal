@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { log } from '@/lib/logging/structured'
 
 import { cookies } from 'next/headers'
 
@@ -64,8 +65,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const firmId = user.user_metadata?.firm_id || '00000000-0000-0000-0000-000000000001'
-    
+    const firmId = user.user_metadata?.firm_id
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     // Parse query parameters
     const { searchParams } = new URL(request.url)
     const filters: ActivityFilters = {
@@ -179,7 +186,7 @@ export async function GET(request: NextRequest) {
       .limit((filters.limit || 20) * 2) // Get more to process into activities
 
     if (docsError) {
-      console.error('Documents query error:', docsError)
+      log.error('Documents query error', docsError)
     }
 
     // ===================================================================
@@ -292,7 +299,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (error) {
-        console.warn('Could not fetch user names:', error)
+        log.warn('Could not fetch user names', { error: error instanceof Error ? error.message : 'Unknown' })
       }
     }
 
@@ -317,8 +324,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error('Activity feed API error:', error)
-    
+    log.error('Activity feed API error', error)
+
     return NextResponse.json(
       { 
         error: 'Failed to fetch activity feed',

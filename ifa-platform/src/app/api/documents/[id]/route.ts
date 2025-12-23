@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { log } from '@/lib/logging/structured'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -26,7 +27,7 @@ export async function GET(
       )
     }
 
-    console.log('📄 Fetching document:', documentId)
+    log.info('Fetching document', { documentId })
 
     // Fetch document with related data
     const { data: document, error } = await supabase
@@ -44,7 +45,7 @@ export async function GET(
       .single()
 
     if (error || !document) {
-      console.error('Document fetch error:', error)
+      log.error('Document fetch error:', error)
       return NextResponse.json(
         { 
           error: 'Document not found',
@@ -85,11 +86,11 @@ export async function GET(
       client: document.clients || null
     }
 
-    console.log('✅ Document fetched successfully')
+    log.info('Document fetched successfully', { documentId })
     return NextResponse.json(transformedDocument)
 
   } catch (error) {
-    console.error('❌ Document fetch error:', error)
+    log.error('Document fetch error:', error)
     return NextResponse.json(
       { 
         error: 'Failed to fetch document',
@@ -116,7 +117,7 @@ export async function PUT(
       )
     }
 
-    console.log('📝 Updating document:', documentId)
+    log.info('Updating document', { documentId })
 
     // Remove fields that shouldn't be updated
     const { id, created_at, ...updateData } = updates
@@ -132,7 +133,7 @@ export async function PUT(
       .single()
 
     if (error) {
-      console.error('Document update error:', error)
+      log.error('Document update error:', error)
       return NextResponse.json(
         { 
           error: 'Failed to update document',
@@ -142,7 +143,7 @@ export async function PUT(
       )
     }
 
-    console.log('✅ Document updated successfully')
+    log.info('Document updated successfully', { documentId })
     return NextResponse.json({
       success: true,
       document: document,
@@ -150,9 +151,9 @@ export async function PUT(
     })
 
   } catch (error) {
-    console.error('❌ Document update error:', error)
+    log.error('Document update error:', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to update document',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -176,7 +177,7 @@ export async function DELETE(
       )
     }
 
-    console.log('🗑️ Deleting document:', documentId)
+    log.info('Deleting document', { documentId })
 
     // First, get the document to find the file path
     const { data: document, error: fetchError } = await supabase
@@ -186,7 +187,7 @@ export async function DELETE(
       .single()
 
     if (fetchError) {
-      console.error('Document fetch error:', fetchError)
+      log.error('Document fetch error:', fetchError)
       return NextResponse.json(
         { 
           error: 'Document not found',
@@ -204,12 +205,12 @@ export async function DELETE(
           .remove([document.file_path])
         
         if (storageError) {
-          console.error('Storage deletion error (non-critical):', storageError)
+          log.warn('Storage deletion error (non-critical)', { error: storageError })
         } else {
-          console.log('✅ File removed from storage')
+          log.info('File removed from storage', { documentId })
         }
       } catch (storageError) {
-        console.error('Storage deletion error (non-critical):', storageError)
+        log.warn('Storage deletion error (non-critical)', { error: storageError })
       }
     }
 
@@ -220,7 +221,7 @@ export async function DELETE(
       .eq('id', documentId)
 
     if (deleteError) {
-      console.error('Document deletion error:', deleteError)
+      log.error('Document deletion error:', deleteError)
       return NextResponse.json(
         { 
           error: 'Failed to delete document',
@@ -230,16 +231,16 @@ export async function DELETE(
       )
     }
 
-    console.log('✅ Document deleted successfully')
+    log.info('Document deleted successfully', { documentId })
     return NextResponse.json({
       success: true,
       message: 'Document deleted successfully'
     })
 
   } catch (error) {
-    console.error('❌ Document deletion error:', error)
+    log.error('Document deletion error:', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to delete document',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

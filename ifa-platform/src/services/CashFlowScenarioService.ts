@@ -91,20 +91,20 @@ export class CashFlowScenarioService {
       if (scenarioError) throw scenarioError;
 
       // Count scenarios per client
-      const scenarioCounts = scenarios.reduce((acc: Record<string, number>, scenario) => {
+      const scenarioCounts = scenarios.reduce((acc: Record<string, number>, scenario: any) => {
         if (scenario.client_id) {
           acc[scenario.client_id] = (acc[scenario.client_id] || 0) + 1;
         }
         return acc;
       }, {});
 
-      return (clients || []).map(client => {
+      return (clients || []).map((client: any) => {
         let name = `Client ${client.client_ref || client.id.slice(0, 8)}`;
         let age: number | undefined = undefined;
-        
+
         try {
-          const personalDetails = typeof client.personal_details === 'string' 
-            ? JSON.parse(client.personal_details) 
+          const personalDetails = typeof client.personal_details === 'string'
+            ? JSON.parse(client.personal_details)
             : client.personal_details;
 
           if (personalDetails?.firstName && personalDetails?.lastName) {
@@ -442,7 +442,7 @@ export class CashFlowScenarioService {
       if (error) throw error;
       
       // Return with proper typing
-      return (data || []).map(item => ({
+      return (data || []).map((item: any) => ({
         id: item.id,
         client_id: item.client_id || null,
         updated_at: item.updated_at

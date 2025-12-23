@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 // src/app/api/clients/statistics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/lib/logging/structured';
 
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ interface ClientStatistics {
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   try {
-    console.log('📊 GET /api/clients/statistics - Fetching statistics...');
+    log.debug('GET /api/clients/statistics - Fetching statistics');
     
     const searchParams = request.nextUrl.searchParams;
     const advisorId = searchParams.get('advisorId');
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     const { data: clients, error, count } = await query;
     
     if (error) {
-      console.error('❌ Database error:', error);
+      log.error('Statistics database error', error);
       return NextResponse.json(getDefaultStats());
     }
     
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
     };
     
     // Process clients with comprehensive vulnerability check
-    clients?.forEach(client => {
+    clients?.forEach((client: any) => {
       const status = client.status || 'prospect';
       
       // Direct status counts
@@ -123,11 +124,11 @@ export async function GET(request: NextRequest) {
     
     stats.recentlyAdded = recentCount || 0;
     
-    console.log('✅ Statistics calculated:', stats);
+    log.info('Statistics calculated', { totalClients: stats.totalClients, activeClients: stats.activeClients });
     return NextResponse.json(stats);
-    
+
   } catch (error) {
-    console.error('❌ Error in statistics route:', error);
+    log.error('Error in statistics route', error);
     return NextResponse.json(getDefaultStats());
   }
 }

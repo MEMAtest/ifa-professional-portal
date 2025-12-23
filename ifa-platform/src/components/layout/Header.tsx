@@ -1,20 +1,19 @@
 // File: src/components/layout/Header.tsx
-// Updated version with Plannetic Logo component
+// Updated version with Plannetic Logo component and Global Search
 'use client'
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { Logo } from '@/components/ui/Logo'
-import { 
-  LogOut, 
-  Search, 
-  Bell, 
-  Settings, 
-  Home, 
-  ChevronRight, 
-  Users, 
-  FileText, 
+import {
+  LogOut,
+  Settings,
+  Home,
+  Bell,
+  ChevronRight,
+  Users,
+  FileText,
   BarChart3,
   Briefcase,
   PoundSterling,
@@ -24,6 +23,8 @@ import {
   HelpCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { NotificationBell } from '@/components/notifications'
+import { GlobalSearchInput } from '@/components/search'
 
 interface BreadcrumbItem {
   label: string
@@ -33,7 +34,6 @@ interface BreadcrumbItem {
 
 export const Header: React.FC = () => {
   const { user, signOut } = useAuth()
-  const [searchQuery, setSearchQuery] = useState('')
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const pathname = usePathname()
 
@@ -55,7 +55,9 @@ export const Header: React.FC = () => {
     switch (segments[0]) {
       case 'clients':
         breadcrumbs.push({ label: 'Clients', href: '/clients', icon: Users })
-        if (segments[1] && segments[1] !== 'new' && segments[1] !== 'migrate' && segments[1] !== 'migration') {
+        if (segments[1] === 'reports') {
+          breadcrumbs.push({ label: 'Reporting Hub', href: '/clients/reports' })
+        } else if (segments[1] && segments[1] !== 'new' && segments[1] !== 'migrate' && segments[1] !== 'migration') {
           breadcrumbs.push({ label: `Client Details`, href: `/clients/${segments[1]}` })
           if (segments[2] === 'edit') {
             breadcrumbs.push({ label: 'Edit Client' })
@@ -90,6 +92,9 @@ export const Header: React.FC = () => {
         break
       case 'settings':
         breadcrumbs.push({ label: 'Settings', href: '/settings', icon: Settings })
+        break
+      case 'notifications':
+        breadcrumbs.push({ label: 'Notifications', href: '/notifications', icon: Bell })
         break
       case 'cashflow':
         breadcrumbs.push({ label: 'Cash Flow Modeling', href: '/cashflow', icon: PoundSterling })
@@ -162,16 +167,7 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex-1 max-w-lg mx-8">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <input
-              type="text"
-              placeholder="Search clients, assessments, documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-plannetic-primary focus:border-transparent"
-            />
-          </div>
+          <GlobalSearchInput />
         </div>
 
         <div className="flex items-center space-x-4 flex-shrink-0">
@@ -185,9 +181,7 @@ export const Header: React.FC = () => {
             </Link>
           )}
 
-          <button className="p-2 text-gray-400 hover:text-gray-600 rounded-md">
-            <Bell className="h-5 w-5" />
-          </button>
+          <NotificationBell />
 
           <button className="p-2 text-gray-400 hover:text-gray-600 rounded-md">
             <Settings className="h-5 w-5" />

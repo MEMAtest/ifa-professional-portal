@@ -3,8 +3,7 @@
 // ENHANCED VERSION - WITH SMART ADDRESS & VISUAL CONSISTENCY
 // =====================================================
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { SuitabilitySection } from './SuitabilitySection'
+import React, { useState, useCallback, useEffect } from 'react'
 import { SmartAddressField } from './SmartAddressField'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -25,6 +24,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ValidationError, PulledPlatformData } from '@/types/suitability'
+import { EnhancedInput } from './contact-details/EnhancedInput'
+import { formatPhoneNumber, validateEmail, validateUKPhone, validateUKPostcode } from './contact-details/formatting'
 
 interface ContactDetailsProps {
   sectionData: {
@@ -48,158 +49,6 @@ interface ContactDetailsProps {
   formData?: any
   isExpanded?: boolean
   onToggle?: () => void
-}
-
-// =====================================================
-// PHONE NUMBER FORMATTING UTILITIES
-// =====================================================
-
-const formatPhoneNumber = (value: string): string => {
-  const digits = value.replace(/\D/g, '')
-  
-  if (!digits) return ''
-  
-  // Handle UK numbers
-  if (digits.startsWith('44')) {
-    const number = digits.slice(2)
-    if (number.length <= 10) {
-      return `+44 ${number.slice(0, 4)} ${number.slice(4)}`
-    }
-  } else if (digits.startsWith('0')) {
-    const number = digits.slice(1)
-    if (number.length <= 10) {
-      return `+44 ${number.slice(0, 4)} ${number.slice(4)}`
-    }
-  } else if (digits.length <= 10) {
-    return `+44 ${digits.slice(0, 4)} ${digits.slice(4)}`
-  }
-  
-  return digits.replace(/(\d{4})(\d{3})(\d{4})/, '$1 $2 $3')
-}
-
-const validateUKPhone = (phone: string): boolean => {
-  const digits = phone.replace(/\D/g, '')
-  
-  if (digits.startsWith('44')) {
-    const number = digits.slice(2)
-    return number.length >= 10 && /^[1-9]/.test(number)
-  } else if (digits.startsWith('0')) {
-    return digits.length >= 11 && /^0[1-9]/.test(digits)
-  }
-  
-  return digits.length >= 10
-}
-
-const validateEmail = (email: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
-}
-
-const validateUKPostcode = (postcode: string): boolean => {
-  const postcodeRegex = /^([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}|GIR\s?0AA)$/i
-  return postcodeRegex.test(postcode)
-}
-
-// =====================================================
-// ENHANCED INPUT COMPONENT
-// =====================================================
-
-interface EnhancedInputProps {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  onBlur?: () => void
-  placeholder?: string
-  type?: 'text' | 'email' | 'tel'
-  required?: boolean
-  error?: string
-  disabled?: boolean
-  icon?: React.ReactNode
-  helperText?: string
-  className?: string
-}
-
-const EnhancedInput: React.FC<EnhancedInputProps> = ({
-  label,
-  value,
-  onChange,
-  onBlur,
-  placeholder,
-  type = 'text',
-  required,
-  error,
-  disabled,
-  icon,
-  helperText,
-  className
-}) => {
-  const [isFocused, setIsFocused] = useState(false)
-  const [internalValue, setInternalValue] = useState(value)
-  const inputRef = useRef<HTMLInputElement>(null)
-  
-  useEffect(() => {
-    setInternalValue(value)
-  }, [value])
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value
-    setInternalValue(newValue)
-    onChange(newValue)
-  }
-  
-  const handleFocus = () => setIsFocused(true)
-  
-  const handleBlur = () => {
-    setIsFocused(false)
-    onBlur?.()
-  }
-  
-  return (
-    <div className={cn("space-y-2", className)}>
-      <label className="block text-sm font-medium text-gray-700">
-        {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
-      </label>
-      
-      <div className="relative">
-        {icon && (
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <div className="text-gray-400">{icon}</div>
-          </div>
-        )}
-        
-        <input
-          ref={inputRef}
-          type={type}
-          value={internalValue}
-          onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder={placeholder}
-          disabled={disabled}
-          className={cn(
-            "w-full px-3 py-2 border rounded-md shadow-sm transition-colors duration-200",
-            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-            icon && "pl-10",
-            error ? "border-red-300 focus:ring-red-500 focus:border-red-500" : "border-gray-300",
-            disabled && "bg-gray-50 text-gray-500 cursor-not-allowed",
-            isFocused && !error && "border-blue-300"
-          )}
-        />
-      </div>
-      
-      {helperText && !error && (
-        <p className="text-xs text-gray-500">{helperText}</p>
-      )}
-      
-      {error && (
-        <div className="flex items-center gap-1 text-red-600">
-          <AlertTriangle className="h-3 w-3" />
-          <span className="text-xs">{error}</span>
-        </div>
-      )}
-    </div>
-  )
 }
 
 // =====================================================
@@ -324,25 +173,13 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
   const hasErrors = validationErrors.length > 0
   const status: 'error' | 'complete' | 'partial' | 'incomplete' = hasErrors ? 'error' : completionPercentage === 100 ? 'complete' : 
                  completionPercentage > 0 ? 'partial' : 'incomplete'
-  
-  // Section configuration for SuitabilitySection wrapper
-  const section = {
-    id: 'contact_details',
-    title: 'Contact Details',
-    icon: Phone,
-    status,
-    fields: [], // We'll render custom fields
-    conditionalFields: [],
-    aiEnabled: false,
-    chartEnabled: false,
-    pulledDataFields: []
-  }
-  
+
   // Render the content
   const renderContent = () => (
     <div className="space-y-6">
       {/* Phone Number */}
       <EnhancedInput
+        id="phone"
         label="Phone Number"
         value={phoneDisplayValue}
         onChange={handlePhoneChange}
@@ -360,6 +197,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
       
       {/* Email Address */}
       <EnhancedInput
+        id="email"
         label="Email Address"
         value={emailValue}
         onChange={handleEmailChange}
@@ -421,6 +259,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
         <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <EnhancedInput
+              id="address_line_1"
               label="Address Line 1"
               value={sectionData.address_line_1 || ''}
               onChange={(value) => updateField('address_line_1', value)}
@@ -432,6 +271,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
             />
             
             <EnhancedInput
+              id="address_line_2"
               label="Address Line 2"
               value={sectionData.address_line_2 || ''}
               onChange={(value) => updateField('address_line_2', value)}
@@ -441,6 +281,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
             />
             
             <EnhancedInput
+              id="city"
               label="City/Town"
               value={sectionData.city || ''}
               onChange={(value) => updateField('city', value)}
@@ -451,6 +292,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
             />
             
             <EnhancedInput
+              id="county"
               label="County"
               value={sectionData.county || ''}
               onChange={(value) => updateField('county', value)}
@@ -459,6 +301,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
             />
             
             <EnhancedInput
+              id="postcode"
               label="Postcode"
               value={sectionData.postcode || ''}
               onChange={handlePostcodeChange}
@@ -472,6 +315,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
             />
             
             <EnhancedInput
+              id="country"
               label="Country"
               value={sectionData.country || 'United Kingdom'}
               onChange={(value) => updateField('country', value)}

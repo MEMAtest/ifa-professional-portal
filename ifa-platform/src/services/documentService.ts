@@ -134,10 +134,9 @@ export class DocumentService {
         }
       }
       
-      // 4. For development/testing - use a default firm_id
+      // 4. Firm ID is required - no hardcoded fallbacks for security
       if (!firmId) {
-        console.warn('No firm_id found, using default for development')
-        firmId = '12345678-1234-1234-1234-123456789012'
+        throw new Error('Firm ID not configured. Your account must be associated with a firm.')
       }
 
       return { 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 // ✅ FIXED: Using correct Supabase import for API routes
 
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/lib/logging/structured';
 
 
 // Force dynamic rendering to prevent build-time errors
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
       .order('communication_date', { ascending: false });
 
     if (error) {
-      console.error('Error fetching communications:', error);
+      log.error('Error fetching communications', error);
       return NextResponse.json(
         { error: 'Failed to fetch communications' },
         { status: 500 }
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform to expected format for frontend
-    const transformedData = (data || []).map(comm => ({
+    const transformedData = (data || []).map((comm: any) => ({
       id: comm.id,
       clientId: comm.client_id,
       type: comm.communication_type,
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
       success: true 
     });
   } catch (error) {
-    console.error('Error in GET /api/communications:', error);
+    log.error('Error in GET /api/communications', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -91,9 +92,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+    // Get current user - NO hardcoded fallback for security
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+    const userId = user.id;
 
     // Insert with correct column names
     const { data, error } = await supabase
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating communication:', error);
+      log.error('Error creating communication', error);
       return NextResponse.json(
         { 
           error: 'Failed to create communication',
@@ -138,7 +145,7 @@ export async function POST(request: NextRequest) {
           user_name: user?.email || 'System'
         });
     } catch (logError) {
-      console.warn('Could not create activity log:', logError);
+      log.warn('Could not create activity log for communication', { error: logError instanceof Error ? logError.message : 'Unknown' });
     }
 
     return NextResponse.json({ 
@@ -146,7 +153,7 @@ export async function POST(request: NextRequest) {
       data 
     });
   } catch (error) {
-    console.error('Error in POST /api/communications:', error);
+    log.error('Error in POST /api/communications', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -188,7 +195,7 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error updating communication:', error);
+      log.error('Error updating communication', error);
       return NextResponse.json(
         { 
           error: 'Failed to update communication',
@@ -203,7 +210,7 @@ export async function PATCH(request: NextRequest) {
       data 
     });
   } catch (error) {
-    console.error('Error in PATCH /api/communications:', error);
+    log.error('Error in PATCH /api/communications', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -231,7 +238,7 @@ export async function DELETE(request: NextRequest) {
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting communication:', error);
+      log.error('Error deleting communication', error);
       return NextResponse.json(
         { 
           error: 'Failed to delete communication',
@@ -245,7 +252,7 @@ export async function DELETE(request: NextRequest) {
       success: true 
     });
   } catch (error) {
-    console.error('Error in DELETE /api/communications:', error);
+    log.error('Error in DELETE /api/communications', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

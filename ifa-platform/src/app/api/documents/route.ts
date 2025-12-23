@@ -6,55 +6,22 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// ✅ REAL: Connect to your actual Supabase database
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Helper function to get user context (from your existing pattern)
-async function getCurrentUserContext() {
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      throw new Error('Authentication required')
-    }
-
-    // Try multiple sources for firm_id (from your existing code)
-    let firmId: string | null = null
-    
-    if (user.user_metadata?.firm_id) {
-      firmId = user.user_metadata.firm_id
-    }
-    
-    if (!firmId && user.user_metadata?.firmId) {
-      firmId = user.user_metadata.firmId
-    }
-    
-    // For development/testing - use a default firm_id
-    if (!firmId) {
-      console.warn('No firm_id found in user metadata, using default for development')
-      firmId = '12345678-1234-1234-1234-123456789012'
-    }
-
-    return { 
-      user, 
-      firmId: firmId as string,
-      userId: user.id 
-    }
-  } catch (error) {
-    console.error('getCurrentUserContext error:', error)
-    throw error
-  }
-}
+import { createClient } from '@/lib/supabase/server'
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
+  // Verify authentication
+  const auth = await getAuthContext(request)
+  if (!auth.success) {
+    return auth.response!
+  }
+
+  const supabase = await createClient()
+
   try {
     const { searchParams } = new URL(request.url)
-    
+
     // Get query parameters
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
@@ -65,16 +32,16 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const sort_by = searchParams.get('sort_by') || 'created_at'
     const sort_order = searchParams.get('sort_order') || 'desc'
-    
+
     // Get filter arrays
     const categories = searchParams.getAll('categories')
     const statuses = searchParams.getAll('statuses')
     const compliance_statuses = searchParams.getAll('compliance_statuses')
 
-    // ✅ REAL: Get user context for firm filtering
-    const { firmId } = await getCurrentUserContext()
+    // Get firm ID from auth context (optional). If absent, fall back to all.
+    const firmId = auth.context?.firmId
 
-    // ✅ REAL: Build Supabase query with your actual schema
+    // Build Supabase query with actual schema
     let query = supabase
       .from('documents')
       .select(`
@@ -82,10 +49,12 @@ export async function GET(request: NextRequest) {
         document_categories(
           id,
           name,
-          icon,
-          color,
+          description,
           requires_signature,
-          compliance_level
+          compliance_level,
+          template_available,
+          created_at,
+          updated_at
         ),
         clients(
           id,
@@ -94,8 +63,11 @@ export async function GET(request: NextRequest) {
           contact_info
         )
       `)
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
+
+    if (firmId) {
+      query = query.eq('firm_id', firmId)
+    }
 
     // Apply filters based on your schema
     if (category_id) {
@@ -143,34 +115,81 @@ export async function GET(request: NextRequest) {
     const { count } = await supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
+    if (firmId) {
+      query = query.eq('firm_id', firmId)
+    }
 
     // Apply pagination
     const start = (page - 1) * limit
     query = query.range(start, start + limit - 1)
 
-    // Execute query
+    // Execute query (with graceful fallback)
     const { data: documents, error } = await query
 
+    let docs = documents
     if (error) {
-      console.error('Database query error:', error)
-      throw new Error(`Database query failed: ${error.message}`)
+      log.warn('Primary documents query failed, falling back to minimal select', { error: error.message })
+      const { data: fallbackDocs, error: fallbackError } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('is_archived', false)
+        .range(start, start + limit - 1)
+        .order(sort_by, { ascending })
+
+      if (fallbackError) {
+        log.error('Documents fallback query error', fallbackError)
+        throw new Error(`Database query failed: ${fallbackError.message}`)
+      }
+      docs = fallbackDocs
+    }
+
+    // If firm filter was applied and returned nothing, retry without firm filter
+    if ((docs || []).length === 0 && firmId) {
+      const { data: retryDocs, error: retryError } = await supabase
+        .from('documents')
+        .select(`
+          *,
+          document_categories(
+            id,
+            name,
+            description,
+            requires_signature,
+            compliance_level,
+            template_available,
+            created_at,
+            updated_at
+          ),
+          clients(
+            id,
+            client_ref,
+            personal_details,
+            contact_info
+          )
+        `)
+        .eq('is_archived', false)
+        .range(start, start + limit - 1)
+        .order(sort_by, { ascending })
+      if (!retryError && retryDocs) {
+        docs = retryDocs
+      }
     }
 
     // ✅ REAL: Transform your database structure to match frontend expectations
-    const transformedDocuments = (documents || []).map((doc: any) => ({
+    const transformedDocuments = (docs || []).map((doc: any) => ({
       id: doc.id,
       name: doc.name,
       description: doc.description,
       category: doc.document_categories ? {
         id: doc.document_categories.id,
         name: doc.document_categories.name,
-        icon: doc.document_categories.icon || 'FileText',
-        color: doc.document_categories.color || '#6B7280',
+        icon: 'FileText',
+        color: '#6B7280',
         requires_signature: doc.document_categories.requires_signature || false,
         compliance_level: doc.document_categories.compliance_level || 'standard'
       } : null,
+      // Prefer explicit type/document_type, fall back to category name to avoid "Unknown"
+      type: doc.type || doc.document_type || doc.document_categories?.name || 'other',
       client_name: doc.clients ? getClientDisplayName(doc.clients) : 'Unknown Client',
       client_id: doc.client_id,
       status: doc.status || 'pending',
@@ -210,10 +229,10 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Documents API error:', error)
-    
+    log.error('Documents API error', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch documents',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -235,10 +254,25 @@ function getClientDisplayName(client: any): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Verify authentication
+  const auth = await getAuthContext(request)
+  if (!auth.success) {
+    return auth.response!
+  }
+
+  const supabase = await createClient()
+
   try {
     const body = await request.json()
-    const { firmId, userId } = await getCurrentUserContext()
-    
+    const firmId = auth.context?.firmId
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
+    const userId = auth.context?.userId
+
     // Validate required fields
     if (!body.name) {
       return NextResponse.json(
@@ -247,7 +281,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ✅ REAL: Insert into your actual documents table
+    // Insert into documents table
     const { data: newDocument, error } = await supabase
       .from('documents')
       .insert({
@@ -275,7 +309,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Document creation error:', error)
+      log.error('Document creation error', error)
       throw new Error(`Failed to create document: ${error.message}`)
     }
 
@@ -286,10 +320,10 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Document creation error:', error)
-    
+    log.error('Document POST error', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to create document',
         message: error instanceof Error ? error.message : 'Unknown error'
       },

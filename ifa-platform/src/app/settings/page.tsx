@@ -106,11 +106,13 @@ export default function SettingsPage() {
   }
 
   const loadUserProfile = async () => {
+    if (!user?.id) return
+
     // ✅ FIXED: Use actual profiles table schema
     const { data: profileData, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', user?.id)
+      .eq('id', user.id)
       .single()
 
     if (error) {
@@ -123,10 +125,11 @@ export default function SettingsPage() {
     if (profileData) {
       setUserProfile(prev => ({
         ...prev,
-        ...profileData,
+        ...(profileData as any),
+        phone: (profileData as any).phone || '',
         preferences: {
           ...prev.preferences,
-          ...(profileData.preferences || {})
+          ...((profileData as any).preferences || {})
         }
       }))
     }
@@ -178,7 +181,7 @@ export default function SettingsPage() {
 
       const { error } = await supabase
         .from('profiles')
-        .upsert(profileUpdate)
+        .upsert(profileUpdate as any)
 
       if (error) {
         throw new Error(`Failed to save profile: ${error.message}`)

@@ -3,8 +3,14 @@
 
 class ClientMigrationService {
   constructor() {
-    this.SUPABASE_URL = 'https://maandodhonjolrmcxivo.supabase.co';
-    this.SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hYW5kb2Rob25qb2xybWN4aXZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1NDg3NjIsImV4cCI6MjA2NDEyNDc2Mn0.Ku89ldqO_b1ptFBQFtQPhzmmnrg04LpcMeCw21sjlAE';
+    // Use environment variables - never hardcode credentials
+    this.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    this.SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!this.SUPABASE_URL || !this.SUPABASE_KEY) {
+      throw new Error('Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    }
+
     this.supabase = supabase.createClient(this.SUPABASE_URL, this.SUPABASE_KEY);
   }
 

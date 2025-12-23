@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import type { AssessmentHistory } from '@/types/assessment';
+import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured';
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,8 @@ export async function GET(
     const { data: historyData, error, count } = await query;
 
     if (error) {
-      console.error('Error fetching assessment history:', error);
+      const logger = createRequestLogger(request);
+      logger.error('Error fetching assessment history', error, { clientId });
       return NextResponse.json(
         { error: 'Failed to fetch assessment history' },
         { status: 500 }
@@ -109,7 +111,8 @@ export async function GET(
       }
     });
   } catch (error) {
-    console.error('API Error:', error);
+    const logger = createRequestLogger(request);
+    logger.error('Assessment history GET failed', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -157,19 +160,21 @@ export async function POST(
       .single();
 
     if (error) {
-      console.error('Error creating history entry:', error);
+      const logger = createRequestLogger(request);
+      logger.error('Error creating history entry', error, { clientId, assessmentType });
       return NextResponse.json(
         { error: 'Failed to create history entry' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      history: data 
+      history: data
     });
   } catch (error) {
-    console.error('API Error:', error);
+    const logger = createRequestLogger(request);
+    logger.error('Assessment history POST failed', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -187,9 +192,31 @@ export async function DELETE(
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     const assessmentType = searchParams.get('assessmentType');
-    
-    // TODO: Add proper auth checks here for admin role
-    
+
+    // Auth check - admin role required for deletion
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get user role from profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    // Only admins can delete history
+    if (profile?.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden - Admin role required' },
+        { status: 403 }
+      );
+    }
+
     let query = supabase
       .from('assessment_history')
       .delete()
@@ -202,7 +229,8 @@ export async function DELETE(
     const { error } = await query;
 
     if (error) {
-      console.error('Error deleting history:', error);
+      const logger = createRequestLogger(request);
+      logger.error('Error deleting history', error, { clientId, assessmentType });
       return NextResponse.json(
         { error: 'Failed to delete history' },
         { status: 500 }
@@ -222,14 +250,15 @@ export async function DELETE(
         created_at: new Date().toISOString()
       });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      message: assessmentType 
+      message: assessmentType
         ? `History cleared for ${assessmentType}`
         : 'All history cleared'
     });
   } catch (error) {
-    console.error('API Error:', error);
+    const logger = createRequestLogger(request);
+    logger.error('Assessment history DELETE failed', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

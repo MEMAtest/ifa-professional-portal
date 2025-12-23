@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { log } from '@/lib/logging/structured';
 
 // Review type configurations
 const REVIEW_EVENT_CONFIG = {
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching calendar events:', error);
+      log.error('Error fetching calendar events', error);
       return NextResponse.json(
         { error: 'Failed to fetch calendar events' },
         { status: 500 }
@@ -144,7 +145,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error in GET /api/calendar:', error);
+    log.error('Error in GET /api/calendar', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating calendar event:', error);
+      log.error('Error creating calendar event', error);
       return NextResponse.json(
         { error: 'Failed to create calendar event' },
         { status: 500 }
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error in POST /api/calendar:', error);
+    log.error('Error in POST /api/calendar', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -318,7 +319,7 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error updating calendar event:', error);
+      log.error('Error updating calendar event', error);
       return NextResponse.json(
         { error: 'Failed to update calendar event' },
         { status: 500 }
@@ -344,7 +345,7 @@ export async function PATCH(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error in PATCH /api/calendar:', error);
+    log.error('Error in PATCH /api/calendar', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -396,7 +397,7 @@ export async function DELETE(request: NextRequest) {
       .eq('user_id', user.id); // Ensure user owns the event
 
     if (error) {
-      console.error('Error deleting calendar event:', error);
+      log.error('Error deleting calendar event', error);
       return NextResponse.json(
         { error: 'Failed to delete calendar event' },
         { status: 500 }
@@ -408,7 +409,7 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error in DELETE /api/calendar:', error);
+    log.error('Error in DELETE /api/calendar', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

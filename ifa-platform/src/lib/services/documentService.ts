@@ -4,20 +4,14 @@
 // ===================================================================
 
 import { createClient } from '@/lib/supabase/client'
+import { safeUUID } from '@/lib/utils'
 
 // ====================================
 // 2. DocumentService.ts - UUID Fix
 // ====================================
 
 function generateUUID(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+  return safeUUID()
 }
 
 // ===================================================================
@@ -183,7 +177,7 @@ export class DocumentService {
 
       const { data: document, error: dbError } = await supabase
         .from('documents')
-        .insert(documentData)
+        .insert(documentData as any)
         .select()
         .single()
 
@@ -617,8 +611,8 @@ export class DocumentService {
       }
 
       // Replace variables in template content
-      let generatedContent = template.template_content
-      
+      let generatedContent = template.template_content || ''
+
       Object.entries(variables).forEach(([key, value]) => {
         const regex = new RegExp(`{{${key}}}`, 'g')
         generatedContent = generatedContent.replace(regex, value)

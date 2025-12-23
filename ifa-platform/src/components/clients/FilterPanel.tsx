@@ -100,12 +100,20 @@ export default function FilterPanel({ filters, onChange, onClear, advisors = [] 
     });
   };
 
+  const handleAdvisorChange = (advisorId: string) => {
+    onChange({
+      ...filters,
+      advisorId: advisorId || undefined
+    });
+  };
+
   const getActiveFilterCount = (): number => {
     let count = 0;
     if (filters.status && filters.status.length > 0) count++;
     if (filters.riskLevel && filters.riskLevel.length > 0) count++;
     if (filters.vulnerabilityStatus && filters.vulnerabilityStatus !== 'all') count++;
     if (filters.dateRange && (filters.dateRange.start || filters.dateRange.end)) count++;
+    if (filters.advisorId) count++;
     return count;
   };
 
@@ -266,7 +274,11 @@ export default function FilterPanel({ filters, onChange, onClear, advisors = [] 
         {advisors.length > 0 && (
           <div>
             <h4 className="font-medium text-sm text-gray-700 mb-3">Advisor</h4>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+            <select
+              value={filters.advisorId || ''}
+              onChange={(e) => handleAdvisorChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
               <option value="">All Advisors</option>
               {advisors.map((advisor) => (
                 <option key={advisor.id} value={advisor.id}>

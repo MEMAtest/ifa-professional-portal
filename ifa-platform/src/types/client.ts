@@ -12,6 +12,7 @@ export interface PersonalDetails {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
+  gender?: 'male' | 'female' | 'non_binary' | 'prefer_not_to_say' | 'other';
   nationality: string;
   maritalStatus: 'single' | 'married' | 'divorced' | 'widowed' | 'civil_partnership' | 'other';
   dependents: number;
@@ -166,6 +167,8 @@ export interface ClientFormData {
   status?: ClientStatus;
   clientRef?: string;
   notes?: string;
+  advisorId?: string | null;
+  firmId?: string | null;
 }
 
 // ===================================================================
@@ -494,7 +497,7 @@ export function validateClientData(data: Partial<ClientFormData>): ValidationErr
 export function getDefaultClientFormData(): ClientFormData {
   return {
     personalDetails: {
-      title: '', firstName: '', lastName: '', dateOfBirth: '', nationality: 'UK',
+      title: '', firstName: '', lastName: '', dateOfBirth: '', gender: 'prefer_not_to_say', nationality: 'UK',
       maritalStatus: 'single', dependents: 0, employmentStatus: 'employed', occupation: ''
     },
     contactInfo: {

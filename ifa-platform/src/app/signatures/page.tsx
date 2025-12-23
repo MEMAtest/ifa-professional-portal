@@ -3,32 +3,152 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSignatureRequests } from '@/lib/hooks/useDocuments'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
-import { 
-  PenToolIcon, 
-  ClockIcon, 
-  CheckCircleIcon, 
+import {
+  PenToolIcon,
+  ClockIcon,
+  CheckCircleIcon,
   XCircleIcon,
   EyeIcon,
   MailIcon,
   SearchIcon,
   FilterIcon,
-  PlusIcon
+  PlusIcon,
+  XIcon,
+  FileTextIcon,
+  UserIcon
 } from 'lucide-react'
+
+interface Client {
+  id: string
+  client_ref: string
+  personal_details: {
+    firstName?: string
+    lastName?: string
+    title?: string
+  }
+  contact_info?: {
+    email?: string
+  }
+}
+
+interface Template {
+  id: string
+  name: string
+}
 
 export default function SignaturesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [selectedDocument, setSelectedDocument] = useState<string>('')
-  
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [clients, setClients] = useState<Client[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [selectedClient, setSelectedClient] = useState<string>('')
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+  const [signerEmail, setSignerEmail] = useState('')
+  const [signerName, setSignerName] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
   // This would typically load all signature requests for the firm
   const { signatureRequests, loading, error, createSignatureRequest } = useSignatureRequests()
+
+  // Fetch clients and templates for the modal
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch clients
+        const clientsRes = await fetch('/api/clients?limit=100')
+        const clientsData = await clientsRes.json()
+        if (clientsData.clients) {
+          setClients(clientsData.clients)
+        }
+
+        // Fetch templates
+        const templatesRes = await fetch('/api/documents/templates/all')
+        const templatesData = await templatesRes.json()
+        if (templatesData.templates) {
+          setTemplates(templatesData.templates)
+        }
+      } catch (err) {
+        console.error('Failed to fetch data:', err)
+      }
+    }
+    fetchData()
+  }, [])
+
+  // Update signer info when client is selected
+  useEffect(() => {
+    if (selectedClient) {
+      const client = clients.find(c => c.id === selectedClient)
+      if (client) {
+        const name = `${client.personal_details?.title || ''} ${client.personal_details?.firstName || ''} ${client.personal_details?.lastName || ''}`.trim()
+        setSignerName(name)
+        setSignerEmail(client.contact_info?.email || '')
+      }
+    }
+  }, [selectedClient, clients])
+
+  const handleCreateSignatureRequest = async () => {
+    if (!selectedClient || !signerEmail || !signerName) {
+      setCreateError('Please fill in all required fields')
+      return
+    }
+
+    setIsCreating(true)
+    setCreateError(null)
+
+    try {
+      const response = await fetch('/api/signatures/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: selectedClient,
+          templateId: selectedTemplate || undefined,
+          signers: [{
+            email: signerEmail,
+            name: signerName,
+            role: 'Client'
+          }],
+          options: {
+            expiryDays: 30,
+            autoReminder: true,
+            remindOnceInEvery: 3
+          }
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setShowCreateModal(false)
+        setSelectedClient('')
+        setSelectedTemplate('')
+        setSignerEmail('')
+        setSignerName('')
+        // Refresh the list
+        window.location.reload()
+      } else {
+        setCreateError(result.error || 'Failed to create signature request')
+      }
+    } catch (err) {
+      setCreateError('Failed to create signature request')
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const getClientDisplayName = (client: Client) => {
+    const pd = client.personal_details
+    const title = pd?.title ? `${pd.title} ` : ''
+    return `${title}${pd?.firstName || ''} ${pd?.lastName || ''}`.trim() || client.client_ref
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -120,7 +240,10 @@ export default function SignaturesPage() {
             <h1 className="text-2xl font-bold text-gray-900">Digital Signatures</h1>
             <p className="text-gray-600 mt-1">Manage signature requests and track document signing status</p>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700">
+          <Button
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={() => setShowCreateModal(true)}
+          >
             <PlusIcon className="h-4 w-4 mr-2" />
             New Signature Request
           </Button>
@@ -234,7 +357,10 @@ export default function SignaturesPage() {
                   : 'Get started by creating your first signature request.'
                 }
               </p>
-              <Button className="bg-blue-600 hover:bg-blue-700">
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => setShowCreateModal(true)}
+              >
                 <PlusIcon className="h-4 w-4 mr-2" />
                 Create Signature Request
               </Button>
@@ -310,6 +436,144 @@ export default function SignaturesPage() {
           )}
         </div>
       </div>
+
+      {/* Create Signature Request Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Create Signature Request
+              </h2>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false)
+                  setCreateError(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {createError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                  <p className="text-sm text-red-700">{createError}</p>
+                </div>
+              )}
+
+              {/* Client Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Client *
+                </label>
+                <select
+                  value={selectedClient}
+                  onChange={(e) => setSelectedClient(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choose a client...</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {getClientDisplayName(client)} ({client.client_ref})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Template Selection (Optional) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Document Template (Optional)
+                </label>
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => setSelectedTemplate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">No template - upload document</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Signer Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Signer Name *
+                </label>
+                <div className="relative">
+                  <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    value={signerName}
+                    onChange={(e) => setSignerName(e.target.value)}
+                    placeholder="Full name of the signer"
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Signer Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Signer Email *
+                </label>
+                <div className="relative">
+                  <MailIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="email"
+                    value={signerEmail}
+                    onChange={(e) => setSignerEmail(e.target.value)}
+                    placeholder="email@example.com"
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-600">
+                <p className="flex items-center">
+                  <FileTextIcon className="h-4 w-4 mr-2" />
+                  The signer will receive an email with a link to sign the document.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCreateModal(false)
+                  setCreateError(null)
+                }}
+                disabled={isCreating}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={handleCreateSignatureRequest}
+                disabled={isCreating || !selectedClient || !signerEmail || !signerName}
+              >
+                {isCreating ? (
+                  <>
+                    <ClockIcon className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <PenToolIcon className="h-4 w-4 mr-2" />
+                    Create Request
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }

@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { log } from '@/lib/logging/structured'
 
 // ===================================================================
 // TYPES
@@ -67,8 +68,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const firmId = user.user_metadata?.firm_id || '00000000-0000-0000-0000-000000000001'
-    
+    const firmId = user.user_metadata?.firm_id
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     // Parse request body
     const body: BulkActionRequest = await request.json()
     const { documentIds, action, actionParams = {} } = body
@@ -223,8 +230,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error('Bulk operations API error:', error)
-    
+    log.error('Bulk operations API error', error)
+
     return NextResponse.json(
       { 
         error: 'Bulk operation failed',
@@ -510,7 +517,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const firmId = user.user_metadata?.firm_id || '00000000-0000-0000-0000-000000000001'
+    const firmId = user.user_metadata?.firm_id
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
 
     // Check if bulk operations log table exists
     if (!(await tableExists('bulk_operations_log', supabase))) {
@@ -543,7 +556,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Bulk status API error:', error)
+    log.error('Bulk status API error', error)
     return NextResponse.json(
       { error: 'Failed to fetch operation status' },
       { status: 500 }

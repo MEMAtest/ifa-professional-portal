@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 import path from 'path'
+import { log } from '@/lib/logging/structured'
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -77,11 +78,11 @@ export async function POST(request: NextRequest) {
     const body: GenerateDocumentRequest = await request.json()
     const { assessmentType, assessmentId, clientId, reportType = 'standard' } = body
 
-    console.log('📄 Document generation requested:', { 
-      assessmentType, 
-      assessmentId, 
+    log.info('Document generation requested', {
+      assessmentType,
+      assessmentId,
       clientId,
-      reportType 
+      reportType
     })
 
     // Validate required fields
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (assessmentError || !assessment) {
-      console.error('Assessment fetch error:', assessmentError)
+      log.error('Assessment fetch error', assessmentError)
       return NextResponse.json(
         { error: 'Assessment not found' },
         { status: 404 }
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (clientError || !client) {
-      console.error('Client fetch error:', clientError)
+      log.error('Client fetch error', clientError)
       return NextResponse.json(
         { error: 'Client not found' },
         { status: 404 }
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
     const clientRef = clientData.client_ref || clientData.id
     const clientAddress = clientData.contact_info?.address
 
-    console.log('📋 Generating PDF for:', clientName)
+    log.info('Generating PDF for client', { clientName, clientId, assessmentType })
 
     // Generate Enhanced PDF
     let pdfBuffer: Buffer
@@ -177,7 +178,7 @@ export async function POST(request: NextRequest) {
           doc.addImage(logoBase64, 'PNG', 20, 10, 35, 14)
         }
       } catch (logoError) {
-        console.log('Logo not found, continuing without it')
+        log.debug('Logo not found, continuing without it', { logoError })
       }
       
       // Professional header
@@ -319,10 +320,10 @@ export async function POST(request: NextRequest) {
       // Get PDF as buffer
       const pdfOutput = doc.output('arraybuffer')
       pdfBuffer = Buffer.from(pdfOutput)
-      
-      console.log('✅ PDF generated successfully, size:', pdfBuffer.length, 'bytes')
+
+      log.info('PDF generated successfully', { size: pdfBuffer.length, clientId, assessmentType })
     } catch (pdfError) {
-      console.error('PDF generation error:', pdfError)
+      log.error('PDF generation error', pdfError)
       return NextResponse.json(
         { error: 'Failed to generate PDF' },
         { status: 500 }
@@ -346,7 +347,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error('Storage upload error:', uploadError)
+      log.error('Storage upload error', uploadError)
       throw new Error(`Storage upload failed: ${uploadError.message}`)
     }
 
@@ -399,7 +400,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (docError) {
-      console.error('Document record creation error:', docError)
+      log.error('Document record creation error', docError)
       throw new Error('Failed to create document record')
     }
 
@@ -411,7 +412,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Document generation error:', error)
+    log.error('Document generation error', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

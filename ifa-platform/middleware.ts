@@ -9,9 +9,15 @@ export async function middleware(request: NextRequest) {
     },
   })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return response
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
@@ -55,8 +61,33 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // This will refresh session if expired - required for Server Components
-  const { data: { user } } = await supabase.auth.getUser()
+  // Public routes that don't require authentication
+  const publicRoutes = [
+    '/client/assessment', // Client assessment portal (public access via token)
+    '/login',
+    '/signup',
+    '/auth',
+    '/forgot-password',
+    '/reset-password'
+  ]
+
+  const isPublicRoute = publicRoutes.some(route =>
+    request.nextUrl.pathname.startsWith(route)
+  )
+
+  // Skip auth check for public routes
+  if (isPublicRoute) {
+    return response
+  }
+
+  // This will refresh session if expired - required for Server Components.
+  // Never let transient Supabase/network issues take the whole app down.
+  try {
+    await supabase.auth.getUser()
+  } catch (error) {
+    console.warn('[middleware] supabase.auth.getUser failed:', error)
+    return response
+  }
 
   // Add any additional middleware logic here
   // For example, protecting routes:
@@ -77,6 +108,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
-}
+} 

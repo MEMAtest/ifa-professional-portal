@@ -512,7 +512,7 @@ export default function ReportGenerationModal({
               {section.editable ? (
                 <ReactQuill
                   value={section.content}
-                  onChange={(content) => updateSection(section.id, content)}
+                  onChange={(content: string) => updateSection(section.id, content)}
                   theme="snow"
                   modules={{
                     toolbar: [
@@ -556,7 +556,7 @@ export default function ReportGenerationModal({
               
               <ReactQuill
                 value={section.content}
-                onChange={(content) => updateCustomSection(section.id, { content })}
+                onChange={(content: string) => updateCustomSection(section.id, { content })}
                 theme="snow"
                 modules={{
                   toolbar: [

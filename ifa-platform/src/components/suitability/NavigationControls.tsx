@@ -2,7 +2,7 @@
 // FILE: src/components/suitability/NavigationControls.tsx
 // =====================================================
 
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 import { Button } from '@/components/ui/Button'
 import { ChevronLeft, ChevronRight, Send, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,7 +18,7 @@ interface NavigationControlsProps {
   isSubmitting: boolean
 }
 
-export const NavigationControls: React.FC<NavigationControlsProps> = ({
+export const NavigationControls = memo(function NavigationControls({
   currentSection,
   sections,
   onNavigate,
@@ -27,8 +27,8 @@ export const NavigationControls: React.FC<NavigationControlsProps> = ({
   canSubmit,
   onSubmit,
   isSubmitting
-}) => {
-  const currentIndex = sections.findIndex(s => s.id === currentSection)
+}: NavigationControlsProps) {
+  const currentIndex = useMemo(() => sections.findIndex(s => s.id === currentSection), [sections, currentSection])
   const isFirst = currentIndex === 0
   const isLast = currentIndex === sections.length - 1
   
@@ -59,26 +59,25 @@ export const NavigationControls: React.FC<NavigationControlsProps> = ({
         ))}
       </div>
       
-      {isLast ? (
-        <Button
-          onClick={onSubmit}
-          disabled={!canSubmit || isSubmitting}
-        >
-          {isSubmitting ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4 mr-2" />
-          )}
-          Submit Assessment
-        </Button>
-      ) : (
-        <Button
-          onClick={onNext}
-        >
-          Next
-          <ChevronRight className="w-4 h-4 ml-2" />
-        </Button>
-      )}
+      <div className="flex items-center gap-2">
+        {!isLast && (
+          <Button onClick={onNext}>
+            Next
+            <ChevronRight className="w-4 h-4 ml-2" />
+          </Button>
+        )}
+
+        {(isLast || canSubmit) && (
+          <Button onClick={onSubmit} disabled={!canSubmit || isSubmitting}>
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4 mr-2" />
+            )}
+            Submit Assessment
+          </Button>
+        )}
+      </div>
     </div>
   )
-}
+}) 

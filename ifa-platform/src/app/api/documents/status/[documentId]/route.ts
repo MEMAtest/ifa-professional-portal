@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { log } from '@/lib/logging/structured'
 
 interface StatusParams {
   params: {
@@ -68,7 +69,7 @@ export async function PUT(request: NextRequest, { params }: StatusParams) {
       document
     })
   } catch (error) {
-    console.error('Error in status update:', error)
+    log.error('Error in status update', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

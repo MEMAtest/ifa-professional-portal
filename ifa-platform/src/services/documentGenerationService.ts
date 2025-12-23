@@ -14,6 +14,7 @@ export interface DocumentGenerationParams {
   clientId: string;
   variables: Record<string, any>;
   outputFormat?: 'pdf' | 'html';
+  title?: string; // Added optional title field
 }
 
 export interface GeneratedDocument {
@@ -53,7 +54,7 @@ export class DocumentGenerationService {
       }
 
       // 2. Populate the template with variables
-      let populatedContent = this.populateTemplate(template.content, params.variables);
+      let populatedContent = this.populateTemplate(template.template_content || '', params.variables);
 
       // 3. (Future enhancement) Convert to PDF if requested
       if (params.outputFormat === 'pdf') {
@@ -85,6 +86,7 @@ export class DocumentGenerationService {
           file_name: fileName,
           file_path: filePath,
           file_type: fileType,
+          title: params.title || fileName, // Use provided title or fallback to filename
         })
         .select()
         .single();
@@ -95,7 +97,16 @@ export class DocumentGenerationService {
         throw new Error(`Failed to save document record: ${dbError.message}`);
       }
 
-      return data as GeneratedDocument;
+      // Map database fields to interface
+      return {
+        id: data.id,
+        clientId: data.client_id,
+        templateId: data.template_id,
+        fileName: data.file_name,
+        filePath: data.file_path, // Map snake_case to camelCase
+        fileType: data.file_type,
+        createdAt: data.created_at || new Date().toISOString()
+      } as GeneratedDocument;
     } catch (error) {
       console.error('Error in generateDocument:', error);
       throw error;

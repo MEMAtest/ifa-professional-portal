@@ -10,6 +10,14 @@ import type {
   PulledPlatformData 
 } from '@/types/suitability'
 
+const DEBUG_AUTOGEN = process.env.NEXT_PUBLIC_DEBUG_SUITABILITY === 'true'
+const debugLog = (...args: any[]) => {
+  if (DEBUG_AUTOGEN) console.log(...args)
+}
+const debugWarn = (...args: any[]) => {
+  if (DEBUG_AUTOGEN) console.warn(...args)
+}
+
 interface AutoGenerationOptions {
   client?: any
   pulledData?: PulledPlatformData
@@ -70,11 +78,11 @@ export class AutoGenerationService {
     const { client, pulledData = {}, formData = {} as SuitabilityFormData, skipExistingValues = true } = options
     const updates: Partial<SuitabilityFormData> = {}
     
-    console.log('🔄 Processing auto-generation for', sections.length, 'sections')
-    console.log('Client available:', !!client)
+    debugLog('🔄 Processing auto-generation for', sections.length, 'sections')
+    debugLog('Client available:', !!client)
     
     if (client) {
-      console.log('Client structure:', {
+      debugLog('Client structure:', {
         personalDetails: !!client.personalDetails,
         contactInfo: !!client.contactInfo,
         financialProfile: !!client.financialProfile,
@@ -86,14 +94,14 @@ export class AutoGenerationService {
       if (!section.fields) return
       
       const sectionUpdates: Record<string, any> = {}
-      console.log(`\n📋 Processing section: ${section.id}`)
+      debugLog(`\n📋 Processing section: ${section.id}`)
       
       section.fields.forEach(field => {
         const existingValue = (formData as any)[section.id]?.[field.id]
         
         // Skip if value exists and we're not overriding
         if (skipExistingValues && existingValue !== undefined && existingValue !== null && existingValue !== '') {
-          console.log(`⏭️ Skipping ${field.id} - already has value:`, existingValue)
+          debugLog(`⏭️ Skipping ${field.id} - already has value:`, existingValue)
           return
         }
         
@@ -103,9 +111,9 @@ export class AutoGenerationService {
         if (field.pullFrom && client) {
           generatedValue = this.executePullFrom(field.pullFrom, client)
           if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
-            console.log(`📥 Pulled ${section.id}.${field.id}:`, generatedValue)
+            debugLog(`📥 Pulled ${section.id}.${field.id}:`, generatedValue)
           } else {
-            console.log(`❌ Pull failed for ${field.pullFrom} - got:`, generatedValue)
+            debugLog(`❌ Pull failed for ${field.pullFrom} - got:`, generatedValue)
           }
         }
         
@@ -113,7 +121,7 @@ export class AutoGenerationService {
         if (field.autoGenerate && (generatedValue === undefined || generatedValue === null || generatedValue === '')) {
           generatedValue = this.executeAutoGenerate(field.id, field, client)
           if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
-            console.log(`🤖 Auto-generated ${section.id}.${field.id}:`, generatedValue)
+            debugLog(`🤖 Auto-generated ${section.id}.${field.id}:`, generatedValue)
           }
         }
         
@@ -122,10 +130,10 @@ export class AutoGenerationService {
           try {
             generatedValue = field.smartDefault(formData, pulledData)
             if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
-              console.log(`🧠 Smart default ${section.id}.${field.id}:`, generatedValue)
+              debugLog(`🧠 Smart default ${section.id}.${field.id}:`, generatedValue)
             }
           } catch (error) {
-            console.warn(`Smart default failed for ${section.id}.${field.id}:`, error)
+            debugWarn(`Smart default failed for ${section.id}.${field.id}:`, error)
           }
         }
         
@@ -133,7 +141,7 @@ export class AutoGenerationService {
         if (field.calculate && (generatedValue === undefined || generatedValue === null || generatedValue === '')) {
           generatedValue = this.executeCalculation(field.calculate, formData, section.id, field.id)
           if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
-            console.log(`🧮 Calculated ${section.id}.${field.id}:`, generatedValue)
+            debugLog(`🧮 Calculated ${section.id}.${field.id}:`, generatedValue)
           }
         }
         
@@ -145,12 +153,12 @@ export class AutoGenerationService {
       
       // Add section updates if any
       if (Object.keys(sectionUpdates).length > 0) {
-        console.log(`✅ Section ${section.id} updates:`, sectionUpdates)
+        debugLog(`✅ Section ${section.id} updates:`, sectionUpdates)
         updates[section.id as keyof SuitabilityFormData] = sectionUpdates as any
       }
     })
     
-    console.log('✅ Auto-generation complete, updated sections:', Object.keys(updates))
+    debugLog('✅ Auto-generation complete, updated sections:', Object.keys(updates))
     return updates
   }
   
@@ -158,8 +166,8 @@ export class AutoGenerationService {
    * ✅ FIXED: Execute pullFrom logic - extract data from client object
    */
   private static executePullFrom(pullFromPath: string, client: any): any {
-    console.log(`🔍 Executing pullFrom: ${pullFromPath}`)
-    console.log('Client data structure:', client)
+    debugLog(`🔍 Executing pullFrom: ${pullFromPath}`)
+    debugLog('Client data structure:', client)
     
     // Handle different pullFrom patterns
     const cleanPath = pullFromPath.replace('client.', '')
@@ -171,14 +179,26 @@ export class AutoGenerationService {
         const pd = c.personalDetails
         if (!pd) return undefined
         const fullName = `${pd.title || ''} ${pd.firstName || ''} ${pd.lastName || ''}`.trim()
-        console.log('Generated full name:', fullName)
+        debugLog('Generated full name:', fullName)
         return fullName || undefined
       },
       'personalDetails.firstName': (c) => c.personalDetails?.firstName,
       'personalDetails.lastName': (c) => c.personalDetails?.lastName,
       'personalDetails.title': (c) => c.personalDetails?.title,
       'personalDetails.dateOfBirth': (c) => c.personalDetails?.dateOfBirth,
-      'personalDetails.maritalStatus': (c) => c.personalDetails?.maritalStatus,
+      'personalDetails.maritalStatus': (c) => {
+        const raw = c.personalDetails?.maritalStatus || c.personalDetails?.marital_status
+        if (!raw) return raw
+        const normalized = String(raw).trim().toLowerCase().replace(/\s+/g, '_')
+        const map: Record<string, string> = {
+          single: 'Single',
+          married: 'Married',
+          civil_partnership: 'Civil Partnership',
+          divorced: 'Divorced',
+          widowed: 'Widowed'
+        }
+        return map[normalized] || (String(raw).charAt(0).toUpperCase() + String(raw).slice(1))
+      },
       'personalDetails.occupation': (c) => c.personalDetails?.occupation,
       'personalDetails.employmentStatus': (c) => {
         const status = c.personalDetails?.employmentStatus || c.personalDetails?.employment_status
@@ -196,9 +216,38 @@ export class AutoGenerationService {
       
       // Contact Info Mappings
       'contactInfo.address': (c) => this.formatAddress(c.contactInfo?.address),
-      'contactInfo.phone': (c) => c.contactInfo?.phone,
+      'contactInfo.address.postcode': (c) => c.contactInfo?.address?.postcode,
+      'contactInfo.address.line1': (c) => c.contactInfo?.address?.line1,
+      'contactInfo.address.line2': (c) => c.contactInfo?.address?.line2,
+      'contactInfo.address.city': (c) => c.contactInfo?.address?.city,
+      'contactInfo.address.county': (c) => c.contactInfo?.address?.county,
+      'contactInfo.postcode': (c) => c.contactInfo?.address?.postcode || c.contactInfo?.postcode,
+      'contactInfo.phone': (c) =>
+        c.contactInfo?.phone || c.contactInfo?.alternativePhone || c.contactInfo?.mobile,
       'contactInfo.email': (c) => c.contactInfo?.email,
-      'contactInfo.preferredContact': (c) => c.contactInfo?.preferredContact || c.contactInfo?.preferredContactMethod,
+      'contactInfo.preferredContact': (c) => {
+        const raw = c.contactInfo?.preferredContact || c.contactInfo?.preferredContactMethod
+        if (!raw) return raw
+        const normalized = String(raw).trim().toLowerCase()
+        const map: Record<string, string> = {
+          email: 'Email',
+          phone: 'Phone',
+          mobile: 'Phone',
+          post: 'Post',
+          sms: 'SMS',
+          text: 'SMS',
+          letter: 'Post'
+        }
+        return map[normalized] || (String(raw).charAt(0).toUpperCase() + String(raw).slice(1))
+      },
+
+      // Form field aliases - map form fields to client data
+      'date_of_birth': (c) => c.personalDetails?.dateOfBirth || c.personalDetails?.date_of_birth,
+      'occupation': (c) => c.personalDetails?.occupation || c.employment?.occupation,
+      'postcode': (c) => c.contactInfo?.address?.postcode || c.contactInfo?.postcode,
+      'email': (c) => c.contactInfo?.email,
+      'phone': (c) => c.contactInfo?.phone || c.contactInfo?.alternativePhone || c.contactInfo?.mobile,
+      'address': (c) => this.formatAddress(c.contactInfo?.address),
       
       // Financial Profile Mappings
       'financialProfile.annualIncome': (c) => c.financialProfile?.annualIncome,
@@ -244,19 +293,46 @@ export class AutoGenerationService {
         }
         return capacity
       },
-      'riskProfile.knowledgeExperience': (c) => c.riskProfile?.knowledgeExperience
+      'riskProfile.knowledgeExperience': (c) => {
+        const raw = c.riskProfile?.knowledgeExperience
+        if (raw === undefined || raw === null || raw === '') return raw
+
+        // If numeric-like, treat as years of experience and bucketize.
+        const rawStr = String(raw).trim().toLowerCase()
+        if (/^\d+(\.\d+)?$/.test(rawStr)) {
+          const years = Number(rawStr)
+          if (years <= 0) return 'None'
+          if (years < 1) return 'Less than 1'
+          if (years <= 3) return '1-3'
+          if (years <= 5) return '3-5'
+          if (years <= 10) return '5-10'
+          return 'More than 10'
+        }
+
+        // Common knowledge-level enums from ATR flows; map to an experience bucket.
+        const levelMap: Record<string, string> = {
+          none: 'None',
+          beginner: 'Less than 1',
+          basic: '1-3',
+          good: '3-5',
+          intermediate: '3-5',
+          advanced: '5-10',
+          expert: 'More than 10'
+        }
+        return levelMap[rawStr] || raw
+      }
     }
     
     // Try mapped path first
     if (pathMappings[cleanPath]) {
       const result = pathMappings[cleanPath](client)
-      console.log(`✅ Mapped path ${cleanPath} result:`, result)
+      debugLog(`✅ Mapped path ${cleanPath} result:`, result)
       return result
     }
     
     // Fallback to nested property access
     const result = getNestedValue(client, cleanPath)
-    console.log(`⚠️ Fallback nested access ${cleanPath} result:`, result)
+    debugLog(`⚠️ Fallback nested access ${cleanPath} result:`, result)
     return result
   }
   
@@ -264,7 +340,7 @@ export class AutoGenerationService {
    * ✅ ENHANCED: Execute auto-generation logic for specific field types
    */
   private static executeAutoGenerate(fieldId: string, field: any, client: any): any {
-    console.log(`🤖 Auto-generating field: ${fieldId}`)
+    debugLog(`🤖 Auto-generating field: ${fieldId}`)
     
     switch (fieldId) {
       case 'client_reference':
@@ -278,7 +354,7 @@ export class AutoGenerationService {
           return undefined
         }
         const age = dob ? calculateAge(dob) : undefined
-        console.log(`Age calculated from DOB ${dob}:`, age)
+        debugLog(`Age calculated from DOB ${dob}:`, age)
         return age
         
       case 'client_name':
@@ -286,7 +362,7 @@ export class AutoGenerationService {
         if (client?.personalDetails) {
           const { title, firstName, lastName } = client.personalDetails
           const fullName = `${title || ''} ${firstName || ''} ${lastName || ''}`.trim()
-          console.log(`Generated client name: ${fullName}`)
+          debugLog(`Generated client name: ${fullName}`)
           return fullName || undefined
         }
         return undefined
@@ -297,7 +373,7 @@ export class AutoGenerationService {
           calculateAge(client.personalDetails.dateOfBirth) : undefined
         if (currentAge && currentAge > 0) {
           const targetAge = Math.max(65, currentAge + 5) // Minimum 65, or current age + 5 years
-          console.log(`Target retirement age based on current age ${currentAge}:`, targetAge)
+          debugLog(`Target retirement age based on current age ${currentAge}:`, targetAge)
           return targetAge
         }
         return 65
@@ -316,41 +392,148 @@ export class AutoGenerationService {
     sectionId: string, 
     fieldId: string
   ): any {
-    console.log(`🧮 Calculating ${calculationType} for ${sectionId}.${fieldId}`)
+    debugLog(`🧮 Calculating ${calculationType} for ${sectionId}.${fieldId}`)
     
     switch (calculationType) {
       case 'age':
         const dob = formData.personal_information?.date_of_birth || 
                    (formData as any).partner_information?.partner_date_of_birth
         const age = dob ? calculateAge(dob) : undefined
-        console.log(`Age calculated from form DOB ${dob}:`, age)
+        debugLog(`Age calculated from form DOB ${dob}:`, age)
         return age
         
       case 'net_worth':
-        const assets = Number(formData.financial_situation?.liquid_assets || 0) +
-                      Number(formData.financial_situation?.property_value || 0)
-        const liabilities = Number(formData.financial_situation?.outstanding_mortgage || 0) +
-                           Number(formData.financial_situation?.other_liabilities || 0)
+        // Support both legacy keys (liquid_assets/outstanding_mortgage/other_liabilities)
+        // and current suitability form keys (savings/mortgage_outstanding/other_debts).
+        const rawSavings =
+          (formData.financial_situation as any)?.savings ?? formData.financial_situation?.liquid_assets
+        const rawProperty = (formData.financial_situation as any)?.property_value
+        const rawMortgage =
+          (formData.financial_situation as any)?.mortgage_outstanding ??
+          formData.financial_situation?.outstanding_mortgage
+        const rawDebts =
+          (formData.financial_situation as any)?.other_debts ?? formData.financial_situation?.other_liabilities
+
+        const hasAny = [rawSavings, rawProperty, rawMortgage, rawDebts].some(
+          (v) => v !== null && v !== undefined && v !== ''
+        )
+        if (!hasAny) return undefined
+
+        const savings = Number(rawSavings || 0)
+        const property = Number(rawProperty || 0)
+        const mortgage = Number(rawMortgage || 0)
+        const debts = Number(rawDebts || 0)
+        const assets = savings + property
+        const liabilities = mortgage + debts
         const netWorth = assets - liabilities
-        console.log(`Net worth: ${assets} - ${liabilities} = ${netWorth}`)
+        debugLog(`Net worth: ${assets} - ${liabilities} = ${netWorth}`)
         return netWorth
         
       case 'disposable_income':
-        const income = Number(formData.financial_situation?.annual_income || 0) / 12
-        const expenses = Number(formData.financial_situation?.monthly_expenditure || 0)
+        const rawAnnualIncome = formData.financial_situation?.annual_income
+        const rawMonthlyExpenses =
+          (formData.financial_situation as any)?.monthly_expenses ??
+          formData.financial_situation?.monthly_expenditure
+
+        // Only calculate when BOTH income and expenses are provided to avoid injecting misleading `0` values.
+        const hasIncomeAndExpenses = [rawAnnualIncome, rawMonthlyExpenses].every(
+          (v) => v !== null && v !== undefined && v !== ''
+        )
+        if (!hasIncomeAndExpenses) return undefined
+
+        const income = Number(rawAnnualIncome || 0) / 12
+        const expenses = Number(rawMonthlyExpenses || 0)
         const surplus = Math.max(0, income - expenses)
-        console.log(`Monthly surplus: ${income} - ${expenses} = ${surplus}`)
+        debugLog(`Monthly surplus: ${income} - ${expenses} = ${surplus}`)
         return surplus
         
       case 'emergency_months':
-        const monthlyExpenses = Number(formData.financial_situation?.monthly_expenditure || 0)
-        const emergencyFund = Number(formData.financial_situation?.emergency_fund || 0)
-        const months = monthlyExpenses > 0 ? Math.round(emergencyFund / monthlyExpenses) : 0
-        console.log(`Emergency months: ${emergencyFund} / ${monthlyExpenses} = ${months}`)
+        const monthlyExpenses = (formData.financial_situation as any)?.monthly_expenses ?? formData.financial_situation?.monthly_expenditure
+        const emergencyFund = formData.financial_situation?.emergency_fund
+
+        const hasBoth = [monthlyExpenses, emergencyFund].every(
+          (v) => v !== null && v !== undefined && v !== ''
+        )
+        if (!hasBoth) return undefined
+
+        const monthly = Number(monthlyExpenses || 0)
+        const fund = Number(emergencyFund || 0)
+        const months = monthly > 0 ? Math.round(fund / monthly) : undefined
+        debugLog(`Emergency months: ${emergencyFund} / ${monthlyExpenses} = ${months}`)
         return months
+
+      case 'income_total': {
+        const incomeFields = [
+          (formData.financial_situation as any)?.income_employment,
+          (formData.financial_situation as any)?.income_rental,
+          (formData.financial_situation as any)?.income_dividends,
+          (formData.financial_situation as any)?.income_other
+        ]
+
+        const hasAny = incomeFields.some((v) => v !== null && v !== undefined && v !== '')
+        if (hasAny) {
+          const total = incomeFields.reduce((sum, v) => sum + Number(v || 0), 0)
+          debugLog(`Income total calculated from breakdown: ${total}`)
+          return total
+        }
+
+        const annualIncome = Number((formData.financial_situation as any)?.annual_income || 0)
+        if (annualIncome > 0) {
+          debugLog(`Income total fallback to annual_income: ${annualIncome}`)
+          return annualIncome
+        }
+
+        return undefined
+      }
+
+      case 'exp_total_essential': {
+        const essentialFields = [
+          (formData.financial_situation as any)?.exp_housing,
+          (formData.financial_situation as any)?.exp_utilities,
+          (formData.financial_situation as any)?.exp_food,
+          (formData.financial_situation as any)?.exp_transport,
+          (formData.financial_situation as any)?.exp_healthcare
+        ]
+
+        const hasAny = essentialFields.some((v) => v !== null && v !== undefined && v !== '')
+        if (hasAny) {
+          const total = essentialFields.reduce((sum, v) => sum + Number(v || 0), 0)
+          debugLog(`Essential expenditure total calculated from breakdown: ${total}`)
+          return total
+        }
+
+        const monthlyEssential = Number(
+          (formData.financial_situation as any)?.monthly_expenses ??
+            formData.financial_situation?.monthly_expenditure ??
+            0
+        )
+
+        if (monthlyEssential > 0) {
+          const total = monthlyEssential * 12
+          debugLog(`Essential expenditure total fallback to monthly essentials × 12: ${total}`)
+          return total
+        }
+
+        return undefined
+      }
+
+      case 'exp_total_discretionary': {
+        const discretionaryFields = [
+          (formData.financial_situation as any)?.exp_leisure,
+          (formData.financial_situation as any)?.exp_holidays,
+          (formData.financial_situation as any)?.exp_other
+        ]
+
+        const hasAny = discretionaryFields.some((v) => v !== null && v !== undefined && v !== '')
+        if (!hasAny) return undefined
+
+        const total = discretionaryFields.reduce((sum, v) => sum + Number(v || 0), 0)
+        debugLog(`Discretionary expenditure total calculated from breakdown: ${total}`)
+        return total
+      }
         
       default:
-        console.warn(`Unknown calculation type: ${calculationType}`)
+        debugWarn(`Unknown calculation type: ${calculationType}`)
         return undefined
     }
   }
@@ -374,7 +557,7 @@ export class AutoGenerationService {
     ].filter(Boolean)
     
     const formatted = parts.join(', ')
-    console.log('Formatted address:', formatted)
+    debugLog('Formatted address:', formatted)
     return formatted
   }
   
@@ -406,7 +589,7 @@ export class AutoGenerationService {
     const affectsCalculations = this.fieldAffectsCalculations(changedSectionId, changedFieldId)
     if (!affectsCalculations) return updates
     
-    console.log(`🔄 Re-calculating fields due to change in ${changedSectionId}.${changedFieldId}`)
+    debugLog(`🔄 Re-calculating fields due to change in ${changedSectionId}.${changedFieldId}`)
     
     sections.forEach(section => {
       if (!section.fields) return
@@ -418,7 +601,7 @@ export class AutoGenerationService {
           const newValue = this.executeCalculation(field.calculate, formData, section.id, field.id)
           if (newValue !== undefined) {
             sectionUpdates[field.id] = newValue
-            console.log(`♻️ Recalculated ${section.id}.${field.id}:`, newValue)
+            debugLog(`♻️ Recalculated ${section.id}.${field.id}:`, newValue)
           }
         }
       })
@@ -441,19 +624,37 @@ export class AutoGenerationService {
       'personal_information.date_of_birth',
       'partner_information.partner_date_of_birth', 
       'financial_situation.liquid_assets',
+      'financial_situation.savings',
       'financial_situation.property_value',
       'financial_situation.outstanding_mortgage',
+      'financial_situation.mortgage_outstanding',
       'financial_situation.other_liabilities',
+      'financial_situation.other_debts',
       'financial_situation.annual_income',
       'financial_situation.monthly_expenditure',
-      'financial_situation.emergency_fund'
+      'financial_situation.monthly_expenses',
+      'financial_situation.emergency_fund',
+      // Income breakdown
+      'financial_situation.income_employment',
+      'financial_situation.income_rental',
+      'financial_situation.income_dividends',
+      'financial_situation.income_other',
+      // Expenditure breakdown
+      'financial_situation.exp_housing',
+      'financial_situation.exp_utilities',
+      'financial_situation.exp_food',
+      'financial_situation.exp_transport',
+      'financial_situation.exp_healthcare',
+      'financial_situation.exp_leisure',
+      'financial_situation.exp_holidays',
+      'financial_situation.exp_other'
     ]
     
     const fieldKey = `${sectionId}.${fieldId}`
     const affects = calculationTriggers.includes(fieldKey)
     
     if (affects) {
-      console.log(`🎯 Field change ${fieldKey} will trigger recalculations`)
+      debugLog(`🎯 Field change ${fieldKey} will trigger recalculations`)
     }
     
     return affects

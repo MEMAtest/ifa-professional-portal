@@ -9,6 +9,7 @@ import { CashFlowDataService } from './CashFlowDataService';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import { PDFGenerationEngine } from '@/lib/pdf/generatePDF';
 import { EnhancedChartService, type ChartImageResult } from './EnhancedChartService';
+import { ExcelGenerator } from '@/lib/export/ExcelGenerator';
 import { createClient } from '@/lib/supabase/client'
 import { QueryClient, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CashFlowScenario, ProjectionResult, CashFlowProjection } from '@/types/cashflow';
@@ -206,6 +207,12 @@ export class EnhancedCashFlowReportService {
     },
     onProgress?: (progress: ReportProgress) => void
   ): Promise<EnhancedReportResult> {
+    console.log('🔍 EnhancedCashFlowReportService.generateCompleteReport called with:', {
+      scenarioId,
+      templateType,
+      outputFormat: options.outputFormat
+    });
+
     const reportId = `${scenarioId}-${templateType}-${Date.now()}`;
     let currentRetry = 0;
 
@@ -260,7 +267,9 @@ export class EnhancedCashFlowReportService {
         // 4. Generate the report based on output format
         updateProgress('finalizing', 85, 'Finalizing document...');
         const result = await this.generateFinalDocument(
+          client,
           scenario,
+          projectionResult,
           templateType,
           options,
           variables,
@@ -292,8 +301,16 @@ export class EnhancedCashFlowReportService {
         };
 
       } catch (error) {
+        console.error('❌ EnhancedCashFlowReportService error details:', {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : 'No stack trace',
+          templateType,
+          scenarioId,
+          attempt: currentRetry + 1
+        });
+
         currentRetry++;
-        
+
         const reportError = this.createReportError(error, 'generation', currentRetry <= this.MAX_RETRIES);
         
         if (currentRetry <= this.MAX_RETRIES) {
@@ -1164,7 +1181,9 @@ export class EnhancedCashFlowReportService {
   }
 
   private async generateFinalDocument(
+    client: Client,
     scenario: CashFlowScenario,
+    projectionResult: ProjectionResult,
     templateType: string,
     options: EnhancedReportOptions,
     variables: Record<string, any>,
@@ -1181,7 +1200,7 @@ export class EnhancedCashFlowReportService {
           templateType as 'cashflow' | 'suitability' | 'review',
           options
         );
-        
+
         const htmlContent = this.populateTemplate(templateContent, variables);
 
         const pdfBuffer = await PDFGenerationEngine.generatePDFFromHTML(
@@ -1196,20 +1215,76 @@ export class EnhancedCashFlowReportService {
 
         document = await this.savePDFToStorage(
           pdfBuffer,
-          `${templateType}-report-${scenario.clientId}-${Date.now()}.pdf`,
+          `${templateType || 'report'}-report-${scenario.clientId}-${Date.now()}.pdf`,
           scenario.clientId
         );
 
-        downloadUrl = await this.getDocumentDownloadUrl(document.filePath);
+        downloadUrl = await this.getDocumentDownloadUrl(document.file_path);
         break;
 
       case 'excel':
-        // TODO: Implement Excel generation
-        throw new Error('Excel format not yet implemented');
+        // Generate Excel using ExcelGenerator
+        const excelResult = ExcelGenerator.generateCashFlowReport({
+          client,
+          scenario,
+          projectionResult,
+          options: {
+            includeAssumptions: options.includeAssumptions,
+            includeRiskAnalysis: options.includeRiskAnalysis,
+            locale: options.locale,
+          },
+        });
+
+        if (!excelResult.success || !excelResult.buffer) {
+          throw new Error(excelResult.error || 'Excel generation failed');
+        }
+
+        document = await this.saveExcelToStorage(
+          excelResult.buffer,
+          excelResult.filename || `report-${scenario.clientId}-${Date.now()}.xlsx`,
+          scenario.clientId
+        );
+
+        downloadUrl = await this.getDocumentDownloadUrl(document.file_path);
+        break;
 
       case 'powerpoint':
-        // TODO: Implement PowerPoint generation
-        throw new Error('PowerPoint format not yet implemented');
+        // PowerPoint generation must be done via API route due to Node.js dependencies
+        // This service method returns a download URL that triggers the API endpoint
+        const pptApiUrl = `/api/export/powerpoint`;
+        const pptResponse = await fetch(pptApiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scenarioId: scenario.id,
+            options: {
+              includeCharts: options.includeCharts,
+              includeAssumptions: options.includeAssumptions,
+              includeRiskAnalysis: options.includeRiskAnalysis,
+              includeProjectionTable: options.includeProjectionTable,
+              locale: options.locale,
+            },
+          }),
+        });
+
+        if (!pptResponse.ok) {
+          const error = await pptResponse.json().catch(() => ({ error: 'PowerPoint generation failed' }));
+          throw new Error(error.error || 'PowerPoint generation failed');
+        }
+
+        // Get the blob and save to storage
+        const pptBlob = await pptResponse.blob();
+        const pptBuffer = Buffer.from(await pptBlob.arrayBuffer());
+        const pptFilename = `CashFlow_Report_${scenario.clientId}_${Date.now()}.pptx`;
+
+        document = await this.savePowerPointToStorage(
+          pptBuffer,
+          pptFilename,
+          scenario.clientId
+        );
+
+        downloadUrl = await this.getDocumentDownloadUrl(document.file_path);
+        break;
 
       default: // HTML
         const result = await this.generateHTMLReport(
@@ -1218,11 +1293,11 @@ export class EnhancedCashFlowReportService {
           variables,
           options
         );
-        
+
         if (!result.success) {
           throw new Error(result.error || 'Failed to generate HTML report');
         }
-        
+
         document = result.document;
         downloadUrl = result.downloadUrl || '';
     }
@@ -1473,7 +1548,8 @@ export class EnhancedCashFlowReportService {
 
     chartResults.forEach((result, index) => {
       const chartType = options.chartTypes?.[index] || 'chart';
-      const title = chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+      console.log('🔍 Chart processing:', { index, chartType, hasChartTypes: !!options.chartTypes });
+      const title = (chartType || 'chart').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
       
       chartsHtml += `
         <div style="margin: 20px 0; text-align: center; page-break-inside: avoid;">
@@ -1564,7 +1640,7 @@ export class EnhancedCashFlowReportService {
       const htmlContent = this.populateTemplate(templateContent, variables);
       
       // Save HTML to storage
-      const fileName = `${templateType}-report-${clientId}-${Date.now()}.html`;
+      const fileName = `${templateType || 'report'}-report-${clientId}-${Date.now()}.html`;
       const filePath = `generated_documents/${clientId}/${fileName}`;
       
       const { error: uploadError } = await this.supabase.storage
@@ -1583,10 +1659,11 @@ export class EnhancedCashFlowReportService {
         .from('generated_documents')
         .insert({
           client_id: clientId,
-          template_id: `${templateType}-report`,
+          template_id: '431bb8f9-a82b-4b9a-81b8-73ea32acdd20',
           file_name: fileName,
           file_path: filePath,
-          file_type: 'text/html'
+          file_type: 'text/html',
+          title: `Enhanced ${templateType || 'Report'} Report` // Added required title field
         })
         .select()
         .single();
@@ -1654,8 +1731,18 @@ export class EnhancedCashFlowReportService {
    * Enhanced template population with Handlebars-style conditionals
    */
   private populateTemplate(content: string, variables: Record<string, any>): string {
+    console.log('🔍 populateTemplate called:', {
+      contentLength: content?.length,
+      variableKeys: Object.keys(variables || {}),
+      contentType: typeof content
+    });
+    if (!content || typeof content !== 'string') {
+      console.error('❌ populateTemplate: Invalid content:', { content, type: typeof content });
+      return content || '';
+    }
+
     let populated = content;
-    
+
     // Handle conditional sections ({{#if CONDITION}} ... {{/if}})
     const conditionalRegex = /{{#if\s+(\w+)}}([\s\S]*?){{\/if}}/g;
     populated = populated.replace(conditionalRegex, (match, condition, innerContent) => {
@@ -1683,16 +1770,18 @@ export class EnhancedCashFlowReportService {
   }
 
   private async generateChartPlaceholders(chartTypes: string[]): Promise<string[]> {
-    return chartTypes.map(type => 
-      `data:image/svg+xml;base64,${btoa(`
+    console.log('🔍 generateChartPlaceholders called:', { chartTypes, length: chartTypes?.length });
+    return chartTypes.map((type, index) => {
+      console.log('🔍 Processing chart type:', { index, type, typeOf: typeof type });
+      return `data:image/svg+xml;base64,${btoa(`
         <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
           <rect width="100%" height="100%" fill="#f8f9fa" stroke="#dee2e6"/>
           <text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" font-size="16" fill="#6c757d">
-            ${type.replace('_', ' ').toUpperCase()} CHART PREVIEW
+            ${(type || 'chart').replace('_', ' ').toUpperCase()} CHART PREVIEW
           </text>
         </svg>
       `)}`
-    );
+    });
   }
 
   /**
@@ -1881,10 +1970,11 @@ export class EnhancedCashFlowReportService {
       .from('generated_documents')
       .insert({
         client_id: clientId,
-        template_id: 'enhanced-cashflow-report',
+        template_id: '431bb8f9-a82b-4b9a-81b8-73ea32acdd20',
         file_name: fileName,
         file_path: filePath,
-        file_type: 'application/pdf'
+        file_type: 'application/pdf',
+        title: 'Enhanced Cash Flow Report (PDF)' // Added required title field
       })
       .select()
       .single();
@@ -1896,9 +1986,90 @@ export class EnhancedCashFlowReportService {
     return data;
   }
 
+  private async saveExcelToStorage(
+    excelBuffer: Buffer,
+    fileName: string,
+    clientId: string
+  ): Promise<any> {
+    const filePath = `generated_documents/${clientId}/${fileName}`;
+
+    const { error: uploadError } = await this.supabase.storage
+      .from('documents')
+      .upload(filePath, excelBuffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        upsert: false
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload Excel: ${uploadError.message}`);
+    }
+
+    const { data, error: dbError } = await this.supabase
+      .from('generated_documents')
+      .insert({
+        client_id: clientId,
+        template_id: '431bb8f9-a82b-4b9a-81b8-73ea32acdd20',
+        file_name: fileName,
+        file_path: filePath,
+        file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        title: 'Cash Flow Report (Excel)'
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      throw new Error(`Failed to save Excel record: ${dbError.message}`);
+    }
+
+    return data;
+  }
+
+  private async savePowerPointToStorage(
+    pptBuffer: Buffer,
+    fileName: string,
+    clientId: string
+  ): Promise<any> {
+    const filePath = `generated_documents/${clientId}/${fileName}`;
+
+    const { error: uploadError } = await this.supabase.storage
+      .from('documents')
+      .upload(filePath, pptBuffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        upsert: false
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload PowerPoint: ${uploadError.message}`);
+    }
+
+    const { data, error: dbError } = await this.supabase
+      .from('generated_documents')
+      .insert({
+        client_id: clientId,
+        template_id: '431bb8f9-a82b-4b9a-81b8-73ea32acdd20',
+        file_name: fileName,
+        file_path: filePath,
+        file_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        title: 'Cash Flow Report (PowerPoint)'
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      throw new Error(`Failed to save PowerPoint record: ${dbError.message}`);
+    }
+
+    return data;
+  }
+
   private async getDocumentDownloadUrl(filePath: string): Promise<string> {
+    if (!filePath || typeof filePath !== 'string') {
+      console.error('❌ getDocumentDownloadUrl: Invalid filePath:', filePath);
+      return '';
+    }
+
     const { data } = await this.supabase.storage
-      .from('documents')  
+      .from('documents')
       .createSignedUrl(filePath, 3600);
 
     return data?.signedUrl || '';

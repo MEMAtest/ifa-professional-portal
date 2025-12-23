@@ -4223,6 +4223,63 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          action_url: string | null
+          client_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          firm_id: string | null
+          id: string
+          message: string | null
+          metadata: Json | null
+          priority: string
+          read: boolean
+          read_at: string | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_url?: string | null
+          client_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          firm_id?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          priority?: string
+          read?: boolean
+          read_at?: string | null
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_url?: string | null
+          client_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          firm_id?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          priority?: string
+          read?: boolean
+          read_at?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       assessment_overview: {

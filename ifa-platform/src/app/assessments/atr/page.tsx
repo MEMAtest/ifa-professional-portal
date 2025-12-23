@@ -521,11 +521,12 @@ export default function ATRAssessmentPage() {
       } else {
         throw new Error('Failed to save assessment')
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving assessment:', error)
       setSaveError('Failed to save assessment. Please try again.')
-      
-      await logHistory('save_failed', { error: error.message })
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      await logHistory('save_failed', { error: errorMessage })
       
       toast({
         title: 'Error',

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/lib/logging/structured';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ interface WeeklyStats {
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   try {
-    console.log('📊 GET /api/dashboard/weekly-activity - Fetching weekly data...');
+    log.debug('GET /api/dashboard/weekly-activity - Fetching weekly data');
     
     // Get the last 7 days
     const endDate = new Date();
@@ -92,21 +93,24 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Weekly activity error:', error);
-    
-    // Return mock data if there's an error
-    const mockWeeklyStats = generateMockWeeklyData();
-    
+    log.error('Weekly activity error', error);
+
+    // Return empty data with error message instead of fake data
     return NextResponse.json({
       success: false,
-      weeklyStats: mockWeeklyStats,
-      error: 'Using mock data due to database error'
-    });
+      weeklyStats: {
+        clientsChart: [],
+        assessmentsChart: [],
+        documentsChart: [],
+        monteCarloChart: []
+      },
+      error: 'Failed to fetch weekly activity data'
+    }, { status: 500 });
   }
 }
 
 // Helper function to get clients for a specific day
-async function getClientsForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
+async function getClientsForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
     const { count, error } = await supabase
       .from('clients')
@@ -115,66 +119,84 @@ async function getClientsForDay(supabase: any, dayStart: Date, dayEnd: Date): Pr
       .lte('created_at', dayEnd.toISOString());
 
     if (error) {
-      console.error('Error fetching clients for day:', error);
-      return Math.floor(Math.random() * 3); // Fallback to random data
+      log.warn('Error fetching clients for day', { error: error.message });
+      return 0;
     }
 
     return count || 0;
   } catch (error) {
-    console.error('Error in getClientsForDay:', error);
-    return Math.floor(Math.random() * 3);
+    log.warn('Error in getClientsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    return 0;
   }
 }
 
 // Helper function to get assessments for a specific day
-async function getAssessmentsForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
+async function getAssessmentsForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
-    // Assuming you have an assessments table
+    // Try suitability_assessments first, then fall back to assessments table
     const { count, error } = await supabase
-      .from('assessments')
+      .from('suitability_assessments')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 
     if (error) {
-      console.error('Error fetching assessments for day:', error);
-      return Math.floor(Math.random() * 5) + 1; // Fallback to random data
+      // Try alternative table name
+      const { count: altCount, error: altError } = await supabase
+        .from('assessments')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', dayStart.toISOString())
+        .lte('created_at', dayEnd.toISOString());
+
+      if (altError) {
+        log.warn('Error fetching assessments for day', { error: altError.message });
+        return 0;
+      }
+      return altCount || 0;
     }
 
     return count || 0;
   } catch (error) {
-    console.error('Error in getAssessmentsForDay:', error);
-    return Math.floor(Math.random() * 5) + 1;
+    log.warn('Error in getAssessmentsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    return 0;
   }
 }
 
 // Helper function to get documents for a specific day
-async function getDocumentsForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
+async function getDocumentsForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
-    // Using your existing documents table
+    // Try generated_documents first, then documents
     const { count, error } = await supabase
-      .from('documents')
+      .from('generated_documents')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', dayStart.toISOString())
-      .lte('created_at', dayEnd.toISOString())
-      .eq('is_archived', false);
+      .lte('created_at', dayEnd.toISOString());
 
     if (error) {
-      console.error('Error fetching documents for day:', error);
-      return Math.floor(Math.random() * 8) + 2; // Fallback to random data
+      // Try alternative table name
+      const { count: altCount, error: altError } = await supabase
+        .from('documents')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', dayStart.toISOString())
+        .lte('created_at', dayEnd.toISOString());
+
+      if (altError) {
+        log.warn('Error fetching documents for day', { error: altError.message });
+        return 0;
+      }
+      return altCount || 0;
     }
 
     return count || 0;
   } catch (error) {
-    console.error('Error in getDocumentsForDay:', error);
-    return Math.floor(Math.random() * 8) + 2;
+    log.warn('Error in getDocumentsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    return 0;
   }
 }
 
 // Helper function to get Monte Carlo simulations for a specific day
-async function getMonteCarloForDay(supabase: any, dayStart: Date, dayEnd: Date): Promise<number> { // ✅ ADD supabase parameter
+async function getMonteCarloForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
-    // Assuming you have a monte_carlo_results or similar table
     const { count, error } = await supabase
       .from('monte_carlo_results')
       .select('*', { count: 'exact', head: true })
@@ -182,43 +204,13 @@ async function getMonteCarloForDay(supabase: any, dayStart: Date, dayEnd: Date):
       .lte('created_at', dayEnd.toISOString());
 
     if (error) {
-      // If table doesn't exist yet, return mock data
-      console.log('Monte Carlo table not found, using mock data');
-      return Math.floor(Math.random() * 4) + 1;
+      log.debug('Monte Carlo table query error', { error: error.message });
+      return 0;
     }
 
     return count || 0;
   } catch (error) {
-    console.error('Error in getMonteCarloForDay:', error);
-    return Math.floor(Math.random() * 4) + 1;
+    log.warn('Error in getMonteCarloForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    return 0;
   }
-}
-
-// Generate mock weekly data for development/fallback
-function generateMockWeeklyData(): WeeklyStats {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const now = new Date();
-  
-  return {
-    clientsChart: days.map((day, index) => ({
-      day,
-      value: Math.floor(Math.random() * 5) + 1,
-      date: new Date(now.getTime() - (6 - index) * 24 * 60 * 60 * 1000).toISOString()
-    })),
-    assessmentsChart: days.map((day, index) => ({
-      day,
-      value: Math.floor(Math.random() * 8) + 2,
-      date: new Date(now.getTime() - (6 - index) * 24 * 60 * 60 * 1000).toISOString()
-    })),
-    documentsChart: days.map((day, index) => ({
-      day,
-      value: Math.floor(Math.random() * 12) + 3,
-      date: new Date(now.getTime() - (6 - index) * 24 * 60 * 60 * 1000).toISOString()
-    })),
-    monteCarloChart: days.map((day, index) => ({
-      day,
-      value: Math.floor(Math.random() * 6) + 1,
-      date: new Date(now.getTime() - (6 - index) * 24 * 60 * 60 * 1000).toISOString()
-    }))
-  };
 }

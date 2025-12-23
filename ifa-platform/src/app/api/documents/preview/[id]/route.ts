@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +14,7 @@ export async function GET(
 ) {
   try {
     const documentId = params.id
-    console.log('👁️ Preview requested for document:', documentId)
+    log.info('Preview requested for document', { documentId })
 
     // Create Supabase client with auth
     const cookieStore = cookies()
@@ -37,7 +38,7 @@ export async function GET(
       .single()
 
     if (error || !document) {
-      console.error('Document not found:', error)
+      log.error('Document not found', error)
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
@@ -46,7 +47,7 @@ export async function GET(
 
     // Option 1: If we have a direct storage URL, redirect to it
     if (document.storage_path && document.storage_path.startsWith('http')) {
-      console.log('✅ Using storage URL for preview')
+      log.info('Using storage URL for preview', { documentId, storage_path: document.storage_path })
       // For preview, we want inline display
       const url = new URL(document.storage_path)
       return NextResponse.redirect(url.toString())
@@ -54,7 +55,7 @@ export async function GET(
 
     // Option 2: If we have a file_path, download from Supabase storage
     if (document.file_path) {
-      console.log('📥 Downloading from Supabase storage:', document.file_path)
+      log.info('Downloading from Supabase storage', { documentId, file_path: document.file_path })
       const { data: fileData, error: downloadError } = await supabase.storage
         .from('documents')
         .download(document.file_path)
@@ -72,7 +73,7 @@ export async function GET(
 
     // Option 3: Check for base64 PDF in metadata (fallback)
     if (document.metadata?.pdf_base64) {
-      console.log('📄 Using base64 PDF from metadata')
+      log.info('Using base64 PDF from metadata', { documentId })
       const pdfBuffer = Buffer.from(document.metadata.pdf_base64, 'base64')
       
       const headers = new Headers()
@@ -85,7 +86,7 @@ export async function GET(
 
     // Option 4: If we have HTML content, wrap it and display
     if (document.html_content || document.metadata?.html_content) {
-      console.log('📄 Displaying HTML content')
+      log.info('Displaying HTML content', { documentId })
       const htmlContent = document.html_content || document.metadata.html_content
       
       const headers = new Headers()
@@ -105,9 +106,9 @@ export async function GET(
     )
 
   } catch (error) {
-    console.error('❌ Preview error:', error)
+    log.error('Preview error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to preview document',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

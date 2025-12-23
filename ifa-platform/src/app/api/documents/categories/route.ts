@@ -6,43 +6,9 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Helper function to get user context
-async function getCurrentUserContext() {
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      throw new Error('Authentication required')
-    }
-
-    let firmId: string | null = null
-    
-    if (user.user_metadata?.firm_id) {
-      firmId = user.user_metadata.firm_id
-    }
-    
-    if (!firmId && user.user_metadata?.firmId) {
-      firmId = user.user_metadata.firmId
-    }
-    
-    if (!firmId) {
-      console.warn('No firm_id found, using default for development')
-      firmId = '12345678-1234-1234-1234-123456789012'
-    }
-
-    return { user, firmId: firmId as string, userId: user.id }
-  } catch (error) {
-    console.error('getCurrentUserContext error:', error)
-    throw error
-  }
-}
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,6 +19,8 @@ export async function GET(request: NextRequest) {
     const systemOnly = searchParams.get('system_only') === 'true'
     const complianceLevel = searchParams.get('compliance_level')
     const requiresSignature = searchParams.get('requires_signature')
+
+    const supabase = getSupabaseServiceClient()
     
     // ✅ REAL: Get categories from your actual database
     let query = supabase
@@ -77,7 +45,7 @@ export async function GET(request: NextRequest) {
     const { data: categories, error } = await query.order('name')
 
     if (error) {
-      console.error('Database query error:', error)
+      log.error('Database query error', error)
       throw new Error(`Failed to fetch categories: ${error.message}`)
     }
 
@@ -85,8 +53,17 @@ export async function GET(request: NextRequest) {
     let categoriesWithCounts = categories || []
 
     if (includeCount) {
-      // Get document counts for each category
-      const { firmId } = await getCurrentUserContext()
+      const auth = await getAuthContext(request)
+      if (!auth.success || !auth.context) {
+        return auth.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const firmId = auth.context.firmId
+      if (!firmId) {
+        return NextResponse.json(
+          { error: 'Firm ID not configured. Please contact support.' },
+          { status: 403 }
+        )
+      }
       
       const categoriesWithCountsPromise = categoriesWithCounts.map(async (category) => {
         const { count } = await supabase
@@ -136,8 +113,8 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Categories API error:', error)
-    
+    log.error('Categories API error', error)
+
     return NextResponse.json(
       { 
         error: 'Failed to fetch categories',
@@ -151,7 +128,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId } = await getCurrentUserContext()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const userId = auth.context.userId
+    const supabase = getSupabaseServiceClient()
     
     // Validate required fields
     if (!body.name) {
@@ -205,7 +187,7 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (error) {
-      console.error('Category creation error:', error)
+      log.error('Category creation error', error)
       throw new Error(`Failed to create category: ${error.message}`)
     }
     
@@ -219,10 +201,10 @@ export async function POST(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Category creation error:', error)
-    
+    log.error('Category creation error', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to create category',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -234,7 +216,12 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId } = await getCurrentUserContext()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const userId = auth.context.userId
+    const supabase = getSupabaseServiceClient()
     const { id } = body
     
     if (!id) {
@@ -259,7 +246,7 @@ export async function PUT(request: NextRequest) {
     }
     
     // Check if it's a system category (can't be fully modified)
-    if (category.is_system && (body.name || body.compliance_level)) {
+    if ((category as any).is_system && (body.name || body.compliance_level)) {
       return NextResponse.json(
         { error: 'Cannot modify core properties of system categories' },
         { status: 403 }
@@ -301,7 +288,7 @@ export async function PUT(request: NextRequest) {
       .single()
     
     if (updateError) {
-      console.error('Category update error:', updateError)
+      log.error('Category update error', updateError)
       throw new Error(`Failed to update category: ${updateError.message}`)
     }
     
@@ -312,10 +299,10 @@ export async function PUT(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Category update error:', error)
-    
+    log.error('Category update error', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to update category',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -326,6 +313,13 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmId = auth.context.firmId ?? undefined
+    const supabase = getSupabaseServiceClient()
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
@@ -351,7 +345,7 @@ export async function DELETE(request: NextRequest) {
     }
     
     // Check if it's a system category (can't be deleted)
-    if (category.is_system) {
+    if ((category as any).is_system) {
       return NextResponse.json(
         { error: 'Cannot delete system categories' },
         { status: 403 }
@@ -359,11 +353,17 @@ export async function DELETE(request: NextRequest) {
     }
     
     // ✅ REAL: Check if category has documents in your database
-    const { count: documentCount } = await supabase
+    let documentsQuery = supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
       .eq('category_id', id)
       .eq('is_archived', false)
+
+    if (firmId) {
+      documentsQuery = documentsQuery.eq('firm_id', firmId)
+    }
+
+    const { count: documentCount } = await documentsQuery
     
     if (documentCount && documentCount > 0) {
       return NextResponse.json(
@@ -383,7 +383,7 @@ export async function DELETE(request: NextRequest) {
       .eq('id', id)
     
     if (deleteError) {
-      console.error('Category deletion error:', deleteError)
+      log.error('Category deletion error', deleteError)
       throw new Error(`Failed to delete category: ${deleteError.message}`)
     }
     
@@ -397,10 +397,10 @@ export async function DELETE(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Category deletion error:', error)
-    
+    log.error('Category deletion error', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to delete category',
         message: error instanceof Error ? error.message : 'Unknown error'
       },

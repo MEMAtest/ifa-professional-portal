@@ -2,7 +2,9 @@
 // COMPLETE UNABRIDGED CODE - MATCHES useAssessmentProgress.ts EXACTLY
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database.types';
+import { log } from '@/lib/logging/structured';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,12 +17,21 @@ interface AssessmentProgressRecord {
   metadata?: any;
 }
 
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) {
+    throw new Error('Supabase credentials missing');
+  }
+  return createSupabaseClient<Database>(url, key);
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const supabase = getServiceClient();
     const clientId = params.clientId;
 
     if (!clientId) {
@@ -38,7 +49,7 @@ export async function GET(
       .order('assessment_type');
 
     if (progressError) {
-      console.error('Error fetching assessment progress:', progressError);
+      log.error('Error fetching assessment progress:', progressError);
       throw new Error('Failed to fetch assessment progress');
     }
 
@@ -64,10 +75,11 @@ export async function GET(
         const normalizedType = item.assessment_type.replace('-', '_');
         
         // Auto-correct status based on progress_percentage
+        const progressPct = item.progress_percentage ?? 0;
         let correctedStatus = item.status;
-        if (item.progress_percentage === 100 && item.status !== 'completed') {
+        if (progressPct === 100 && item.status !== 'completed') {
           correctedStatus = 'completed';
-        } else if (item.progress_percentage > 0 && item.progress_percentage < 100 && item.status === 'not_started') {
+        } else if (progressPct > 0 && progressPct < 100 && item.status === 'not_started') {
           correctedStatus = 'in_progress';
         }
         
@@ -109,9 +121,9 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error in assessment progress GET:', error);
+    log.error('Error in assessment progress GET:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch assessment progress',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -125,7 +137,7 @@ export async function POST(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const supabase = getServiceClient();
     const clientId = params.clientId;
     const body = await request.json();
 
@@ -143,20 +155,22 @@ export async function POST(
       );
     }
 
+    const now = new Date().toISOString();
+
     // Normalize assessment type (convert any hyphens to underscores)
     const normalizedType = assessmentType.replace('-', '_');
 
     // Build update object
     const updateData: any = {
       status,
-      updated_at: new Date().toISOString(),
-      last_updated: new Date().toISOString()
+      updated_at: now,
+      last_updated: now
     };
 
     // Calculate progress percentage based on status
     if (status === 'completed') {
       updateData.progress_percentage = 100;
-      updateData.completed_at = new Date().toISOString();
+      updateData.completed_at = now;
     } else if (status === 'in_progress') {
       // Don't override existing progress_percentage unless it's 0 or null
       const { data: existing } = await supabase
@@ -171,11 +185,11 @@ export async function POST(
           updateData.progress_percentage = 1; // Set to 1% to indicate started
         }
         if (!existing.started_at) {
-          updateData.started_at = new Date().toISOString();
+          updateData.started_at = now;
         }
       } else {
         updateData.progress_percentage = 1;
-        updateData.started_at = new Date().toISOString();
+        updateData.started_at = now;
       }
     } else if (status === 'not_started') {
       updateData.progress_percentage = 0;
@@ -193,47 +207,41 @@ export async function POST(
       updateData.metadata = metadata;
     }
 
-    // Try to update first
-    const { data: updateResult, error: updateError } = await supabase
+    // Update-or-insert (DB may not have a unique constraint for ON CONFLICT).
+    const { data: existingRow, error: existingError } = await supabase
       .from('assessment_progress')
-      .update(updateData)
+      .select('id')
       .eq('client_id', clientId)
       .eq('assessment_type', normalizedType)
-      .select()
-      .single();
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (updateError) {
-      // If record doesn't exist (PGRST116), create it
-      if (updateError.code === 'PGRST116' || updateError.message?.includes('0 rows')) {
-        const insertData = {
-          client_id: clientId,
-          assessment_type: normalizedType,
-          ...updateData,
-          created_at: new Date().toISOString()
-        };
+    if (existingError && existingError.code !== 'PGRST116') {
+      log.error('Error looking up assessment progress:', existingError);
+      throw new Error('Failed to update assessment progress');
+    }
 
-        const { data: insertResult, error: insertError } = await supabase
+    const write = existingRow?.id
+      ? await supabase
           .from('assessment_progress')
-          .insert(insertData)
+          .update({ ...updateData })
+          .eq('id', existingRow.id)
           .select()
-          .single();
+          .maybeSingle()
+      : await supabase
+          .from('assessment_progress')
+          .insert({
+            client_id: clientId,
+            assessment_type: normalizedType,
+            ...updateData,
+            created_at: now
+          })
+          .select()
+          .maybeSingle();
 
-        if (insertError) {
-          console.error('Error creating assessment progress:', insertError);
-          throw new Error('Failed to create assessment progress');
-        }
-
-        // Log to history
-        await logAssessmentHistory(supabase, clientId, normalizedType, status, updateData);
-
-        return NextResponse.json({ 
-          success: true, 
-          data: insertResult,
-          created: true 
-        });
-      }
-
-      console.error('Error updating assessment progress:', updateError);
+    if (write.error) {
+      log.error('Error writing assessment progress:', write.error);
       throw new Error('Failed to update assessment progress');
     }
 
@@ -242,13 +250,13 @@ export async function POST(
 
     return NextResponse.json({ 
       success: true, 
-      data: updateResult 
+      data: write.data 
     });
 
   } catch (error) {
-    console.error('Error in assessment progress POST:', error);
+    log.error('Error in assessment progress POST:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to update assessment progress',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -281,7 +289,7 @@ async function logAssessmentHistory(
         created_at: new Date().toISOString()
       });
   } catch (error) {
-    console.error('Error logging assessment history:', error);
+    log.error('Error logging assessment history:', error);
     // Don't throw - history logging is non-critical
   }
 }

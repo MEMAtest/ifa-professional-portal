@@ -2,6 +2,7 @@
 // FILE: src/services/documentTemplateService.ts - FULLY FIXED VERSION
 // ===================================================================
 import { createClient } from '@/lib/supabase/client'
+import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database.types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -93,7 +94,17 @@ export class DocumentTemplateService {
 
   constructor() {
     try {
-      this.supabase = createClient()
+      // Use a server-friendly client when not in the browser to avoid localStorage errors
+      if (typeof window === 'undefined') {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        if (!url || !key) {
+          throw new Error('Supabase credentials missing')
+        }
+        this.supabase = createSupabaseServiceClient<Database>(url, key)
+      } else {
+        this.supabase = createClient()
+      }
     } catch (error) {
       console.error("CRITICAL: Supabase client initialization failed in DocumentTemplateService. Check environment variables.", error)
       this.supabase = null
@@ -131,10 +142,9 @@ export class DocumentTemplateService {
       firmId = profile?.firm_id
     }
 
-    // Default for development
+    // Firm ID is required - no hardcoded fallbacks for security
     if (!firmId) {
-      console.warn('No firm_id found, using default')
-      firmId = '12345678-1234-1234-1234-123456789012'
+      throw new Error('Firm ID not configured. Your account must be associated with a firm.')
     }
 
     return { user, firmId }

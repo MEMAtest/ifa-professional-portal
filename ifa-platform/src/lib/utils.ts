@@ -239,6 +239,85 @@ export function formatNumber(
   }
 }
 
+// UUID helper
+export function isUUID(value?: string | null): boolean {
+  if (!value) return false
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value)
+}
+
+/**
+ * Generate a UUID v4 safely across browsers (Safari may expose `crypto.randomUUID`
+ * but throw "Not implemented on this platform").
+ */
+export function safeUUID(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch {
+    // fall through to other strategies
+  }
+
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16)
+      crypto.getRandomValues(bytes)
+      // RFC4122 v4
+      bytes[6] = (bytes[6] & 0x0f) | 0x40
+      bytes[8] = (bytes[8] & 0x3f) | 0x80
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+    }
+  } catch {
+    // fall through to Math.random
+  }
+
+  // Last-resort non-crypto fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+/**
+ * Best-effort clipboard write that won't throw/reject in unsupported browsers.
+ * Returns `true` if the copy likely succeeded.
+ */
+export async function safeWriteToClipboard(text: string): Promise<boolean> {
+  try {
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === 'function'
+    ) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fall through to legacy approach
+  }
+
+  try {
+    if (typeof document === 'undefined') return false
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '0'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    textarea.setSelectionRange(0, textarea.value.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 /**
  * Format percentage values safely
  */

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { z } from 'zod'
+import { log } from '@/lib/logging/structured'
 
 // =====================================================
 // TYPES & VALIDATION
@@ -281,7 +282,7 @@ async function logAIRequest(
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY // ✅ FIXED: Changed from SUPABASE_SERVICE_KEY
     
     if (!supabaseUrl || !supabaseKey) {
-      console.warn('Supabase credentials not configured for AI logging')
+      log.warn('Supabase credentials not configured for AI logging')
       return
     }
     
@@ -308,7 +309,7 @@ async function logAIRequest(
       timestamp: new Date().toISOString()
     })
   } catch (err) {
-    console.error('Failed to log AI request:', err)
+    log.error('Failed to log AI request', err)
     // Don't throw - logging failure shouldn't break the main request
   }
 }
@@ -344,7 +345,7 @@ export async function POST(request: NextRequest) {
     
     // Check if provider is configured
     if (config.provider !== 'mock' && !config.apiKey) {
-      console.warn(`${config.provider} API key not configured, using mock responses`)
+      log.warn(`${config.provider} API key not configured, using mock responses`)
       provider = 'mock'
     }
     
@@ -408,8 +409,8 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.error('AI API error:', error)
-    
+    log.error('AI API error', error)
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -422,13 +423,25 @@ export async function POST(request: NextRequest) {
 // =====================================================
 
 export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-client-id',
-      'Access-Control-Max-Age': '86400'
+  const origin = request.headers.get('origin')
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-client-id',
+    'Access-Control-Max-Age': '86400'
+  }
+
+  // Only allow origins from our app or localhost in development
+  if (origin) {
+    if (appUrl && origin === appUrl) {
+      headers['Access-Control-Allow-Origin'] = origin
+      headers['Access-Control-Allow-Credentials'] = 'true'
+    } else if (process.env.NODE_ENV === 'development') {
+      headers['Access-Control-Allow-Origin'] = origin
+      headers['Access-Control-Allow-Credentials'] = 'true'
     }
-  })
+  }
+
+  return new NextResponse(null, { status: 204, headers })
 }

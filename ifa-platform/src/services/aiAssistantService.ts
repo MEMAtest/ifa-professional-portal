@@ -11,7 +11,6 @@ import {
   ChartData
 } from '@/types/suitability'
 import { suitabilityAIPrompts } from '@/prompts/suitability/aiPrompts'
-import { createBrowserClient } from '@supabase/ssr'
 
 // =====================================================
 // CONFIGURATION
@@ -19,6 +18,7 @@ import { createBrowserClient } from '@supabase/ssr'
 
 const AI_API_URL = process.env.NEXT_PUBLIC_AI_API_URL || '/api/ai/complete'
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+const PLATFORM_DATA_TTL_MS = 30 * 1000 // 30 seconds
 const MAX_RETRY_ATTEMPTS = 3
 const RETRY_DELAY_BASE = 1000
 
@@ -64,6 +64,10 @@ interface ExtendedChartData extends ChartData {
 class AIAssistantService {
   private supabase: any
   private responseCache: Map<string, CachedResponse> = new Map()
+  private platformDataCache: Map<
+    string,
+    { data?: PulledPlatformData; expiresAt: number; inFlight?: Promise<PulledPlatformData> }
+  > = new Map()
   private metrics: AIMetrics = {
     totalRequests: 0,
     cacheHits: 0,
@@ -355,31 +359,119 @@ class AIAssistantService {
   // =====================================================
   
   async pullPlatformData(clientId: string): Promise<PulledPlatformData> {
-    try {
-      const [cflData, atrData, vulnerabilityData, clientMetrics, assessmentHistory] = 
-        await Promise.all([
+    const cacheKey = `platform_${clientId}`
+    const cached = this.platformDataCache.get(cacheKey)
+    const now = Date.now()
+
+    if (cached?.data && cached.expiresAt > now) {
+      return cached.data
+    }
+
+    if (cached?.inFlight) {
+      return cached.inFlight
+    }
+
+    const inFlight = (async () => {
+      try {
+        const [cflData, atrData, rawClient, assessmentHistory] = await Promise.all([
           this.pullCFLData(clientId),
           this.pullATRData(clientId),
-          this.pullVulnerabilityData(clientId),
-          this.pullClientMetrics(clientId),
+          this.fetchClientRecord(clientId),
           this.pullAssessmentHistory(clientId)
         ])
-      
-      const extendedData: ExtendedPulledPlatformData = {
-        ...cflData,
-        ...atrData,
-        vulnerabilityFactors: vulnerabilityData.factors,
-        vulnerabilityScore: vulnerabilityData.score,
-        clientMetrics,
-        previousAssessments: assessmentHistory
+
+        const vulnerabilityData = this.extractVulnerabilityData(rawClient)
+        const clientMetrics = this.extractClientMetrics(rawClient)
+
+        const extendedData: ExtendedPulledPlatformData = {
+          ...cflData,
+          ...atrData,
+          vulnerabilityFactors: vulnerabilityData.factors,
+          vulnerabilityScore: vulnerabilityData.score,
+          clientMetrics,
+          previousAssessments: assessmentHistory
+        }
+
+        // Return only the properties defined in PulledPlatformData
+        const { previousAssessments, cflDate, atrDate, ...platformData } = extendedData
+
+        this.platformDataCache.set(cacheKey, {
+          data: platformData,
+          expiresAt: Date.now() + PLATFORM_DATA_TTL_MS
+        })
+
+        return platformData
+      } catch (error) {
+        console.error('Error pulling platform data:', error)
+        this.platformDataCache.delete(cacheKey)
+        return {}
       }
-      
-      // Return only the properties defined in PulledPlatformData
-      const { previousAssessments, cflDate, atrDate, ...platformData } = extendedData
-      return platformData
+    })()
+
+    this.platformDataCache.set(cacheKey, {
+      inFlight,
+      expiresAt: now + PLATFORM_DATA_TTL_MS
+    })
+
+    return inFlight
+  }
+
+  private async fetchClientRecord(clientId: string): Promise<any | null> {
+    try {
+      const response = await fetch(`/api/clients/${clientId}`)
+      if (!response.ok) return null
+      const json = await response.json().catch(() => null)
+      return (json as any)?.client ?? json
     } catch (error) {
-      console.error('Error pulling platform data:', error)
-      return {}
+      console.error('Error fetching client record:', error)
+      return null
+    }
+  }
+
+  private extractVulnerabilityData(client: any | null): { factors: string[]; score: string } {
+    if (!client) return { factors: [], score: 'Unknown' }
+
+    const vuln = (client.vulnerabilityAssessment || client.vulnerability_assessment || {}) as any
+    const factorsRaw = vuln.vulnerabilityFactors || vuln.vulnerability_factors || []
+    const factors = Array.isArray(factorsRaw) ? factorsRaw : []
+    const isVulnerable = Boolean(vuln.is_vulnerable ?? vuln.isVulnerable ?? false)
+
+    return {
+      factors,
+      score: isVulnerable ? 'High' : 'Low'
+    }
+  }
+
+  private extractClientMetrics(client: any | null): PulledPlatformData['clientMetrics'] {
+    if (!client) return {}
+
+    const financial = (client.financialProfile || client.financial_profile || {}) as any
+    const risk = (client.riskProfile || client.risk_profile || {}) as any
+
+    const toNumberOrUndefined = (value: unknown): number | undefined => {
+      if (value === null || value === undefined || value === '') return undefined
+      const parsed = typeof value === 'number' ? value : Number(value)
+      return Number.isFinite(parsed) ? parsed : undefined
+    }
+
+    const totalAssets = toNumberOrUndefined(financial.totalAssets ?? financial.total_assets)
+    const totalLiabilities = toNumberOrUndefined(
+      financial.totalLiabilities ??
+        financial.total_liabilities ??
+        financial.otherLiabilities ??
+        financial.other_liabilities
+    )
+
+    const investmentExperience =
+      (risk.knowledgeExperience ??
+        risk.knowledge_experience ??
+        financial.investmentExperience ??
+        financial.investment_experience) as string | undefined
+
+    return {
+      totalAssets,
+      totalLiabilities,
+      investmentExperience
     }
   }
   
@@ -389,14 +481,17 @@ class AIAssistantService {
       if (!response.ok) return {}
       
       const data = await response.json()
+      const row = (data as any)?.data
+      const scoreRaw = row?.capacity_level
+      const score = typeof scoreRaw === 'number' ? scoreRaw : Number(scoreRaw)
       return {
-        cflScore: data.score || 50,
-        cflCategory: data.category || 'Medium',
-        cflDate: data.assessmentDate
+        cflScore: Number.isFinite(score) ? score : undefined,
+        cflCategory: row?.capacity_category || undefined,
+        cflDate: row?.assessment_date || undefined
       }
     } catch (error) {
       console.error('Error pulling CFL data:', error)
-      return { cflScore: 50, cflCategory: 'Medium' }
+      return {}
     }
   }
   
@@ -406,48 +501,16 @@ class AIAssistantService {
       if (!response.ok) return {}
       
       const data = await response.json()
+      const row = (data as any)?.data
+      const scoreRaw = row?.risk_level
+      const score = typeof scoreRaw === 'number' ? scoreRaw : Number(scoreRaw)
       return {
-        atrScore: data.score || 50,
-        atrCategory: data.category || 'Balanced',
-        atrDate: data.assessmentDate
+        atrScore: Number.isFinite(score) ? score : undefined,
+        atrCategory: row?.risk_category || undefined,
+        atrDate: row?.assessment_date || undefined
       }
     } catch (error) {
       console.error('Error pulling ATR data:', error)
-      return { atrScore: 50, atrCategory: 'Balanced' }
-    }
-  }
-  
-  private async pullVulnerabilityData(clientId: string) {
-    try {
-      const response = await fetch(`/api/clients/${clientId}`)
-      if (!response.ok) return { factors: [], score: 'Low' }
-      
-      const client = await response.json()
-      return {
-        factors: client.vulnerabilityAssessment?.vulnerabilityFactors || [],
-        score: client.vulnerabilityAssessment?.is_vulnerable ? 'High' : 'Low'
-      }
-    } catch (error) {
-      console.error('Error pulling vulnerability data:', error)
-      return { factors: [], score: 'Unknown' }
-    }
-  }
-  
-  private async pullClientMetrics(clientId: string) {
-    try {
-      const response = await fetch(`/api/clients/${clientId}`)
-      if (!response.ok) return {}
-      
-      const client = await response.json()
-      return {
-        totalAssets: client.financialProfile?.totalAssets || 0,
-        totalLiabilities: client.financialProfile?.totalLiabilities || 0,
-        monthlyIncome: client.financialProfile?.monthlyIncome || 0,
-        monthlyExpenses: client.financialProfile?.monthlyExpenses || 0,
-        investmentExperience: client.investmentProfile?.experience || 'None'
-      }
-    } catch (error) {
-      console.error('Error pulling client metrics:', error)
       return {}
     }
   }

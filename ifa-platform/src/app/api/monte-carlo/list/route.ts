@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
+import { log } from '@/lib/logging/structured';
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     clearTimeout(timeoutId);
     
     if (!response.success) {
-      console.error('Failed to list Monte Carlo scenarios:', response.error);
+      log.error('Failed to list Monte Carlo scenarios', { error: response.error });
       return NextResponse.json(
         { 
           success: false, 
@@ -85,8 +86,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
 
   } catch (error: unknown) {
-    console.error('Monte Carlo list API error:', error);
-    
+    log.error('Monte Carlo list API error', error);
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     const errorDetails = error instanceof Error ? error.stack : undefined;
 
@@ -106,16 +107,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  * OPTIONS /api/monte-carlo/list
  * Handle CORS preflight requests
  */
-export async function OPTIONS(): Promise<NextResponse> {
-  return NextResponse.json(
-    { message: 'OK' },
-    { 
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-      }
+export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
+  const origin = request.headers.get('origin')
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400'
+  }
+
+  if (origin) {
+    if (appUrl && origin === appUrl) {
+      headers['Access-Control-Allow-Origin'] = origin
+    } else if (process.env.NODE_ENV === 'development') {
+      headers['Access-Control-Allow-Origin'] = origin
     }
-  );
+  }
+
+  return new NextResponse(null, { status: 204, headers });
 }

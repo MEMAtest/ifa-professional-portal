@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { VulnerabilityBadge } from '@/components/ui/VulnerabilityIndicator';
+import { ExportClientPdfButton } from '@/components/shared/ExportClientPdfButton';
 import { Mail, Phone, TrendingUp, Calendar, MoreVertical, User } from 'lucide-react';
 import type { Client } from '@/types/client';
 import { getVulnerabilityStatus, isValidClientStatus } from '@/types/client';
@@ -164,6 +165,13 @@ export default function ClientCard({ client, onView, onEdit, onDelete }: ClientC
           <Button onClick={handleEdit} variant="outline" size="sm" className="flex-1 text-xs">
             Edit
           </Button>
+          <ExportClientPdfButton
+            clientId={client.id}
+            clientToken={client.clientRef || client.id}
+            variant="outline"
+            size="sm"
+            label="Export"
+          />
           <Button onClick={handleDelete} variant="destructive" size="sm" className="px-3">
             <MoreVertical className="h-4 w-4" />
           </Button>

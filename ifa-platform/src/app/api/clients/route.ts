@@ -3,15 +3,23 @@ import { createClient } from "@/lib/supabase/server"
 // ✅ FIXED: Returns RAW database data, no transformation
 
 import { NextRequest, NextResponse } from 'next/server';
-
+import { getAuthContext } from '@/lib/auth/apiAuth';
+import { createRequestLogger } from '@/lib/logging/structured';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  // Verify authentication
+  const auth = await getAuthContext(request);
+  if (!auth.success) {
+    return auth.response!;
+  }
+
   const supabase = await createClient()
+  const logger = createRequestLogger(request)
   try {
-    console.log('📋 GET /api/clients - Fetching clients...');
+    logger.info('GET /api/clients - Fetching clients');
     
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
@@ -60,9 +68,9 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1);
     
     const { data: clients, error, count } = await query;
-    
+
     if (error) {
-      console.error('❌ Database error:', error);
+      logger.error('Database error fetching clients', error);
       return NextResponse.json({
         success: false,
         error: 'Failed to fetch clients',
@@ -70,7 +78,7 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
     
-    console.log(`✅ Found ${clients?.length || 0} clients (total: ${count})`);
+    logger.info('Clients fetched successfully', { count: clients?.length || 0, total: count });
     
     // ✅ CRITICAL: Return RAW data, no transformation!
     return NextResponse.json({
@@ -83,7 +91,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('❌ GET /api/clients error:', error);
+    logger.error('GET /api/clients error', error);
     return NextResponse.json({
       success: false,
       error: 'Internal server error',
@@ -93,9 +101,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Verify authentication
+  const auth = await getAuthContext(request);
+  if (!auth.success) {
+    return auth.response!;
+  }
+
   const supabase = await createClient()
+  const logger = createRequestLogger(request)
   try {
-    console.log('📋 POST /api/clients - Creating new client...');
+    logger.info('POST /api/clients - Creating new client');
     
     const body = await request.json();
     
@@ -108,6 +123,7 @@ export async function POST(request: NextRequest) {
       vulnerability_assessment: body.vulnerabilityAssessment,
       risk_profile: body.riskProfile,
       status: body.status || 'prospect',
+      advisor_id: auth.context?.advisorId || auth.context?.userId, // Link to current advisor
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -119,15 +135,15 @@ export async function POST(request: NextRequest) {
       .single();
     
     if (error) {
-      console.error('❌ Database error:', error);
+      logger.error('Database error creating client', error);
       return NextResponse.json({
         success: false,
         error: 'Failed to create client',
         details: error.message
       }, { status: 500 });
     }
-    
-    console.log(`✅ Created client: ${client.client_ref}`);
+
+    logger.info('Client created successfully', { clientRef: client.client_ref });
     
     // ✅ Return RAW data
     return NextResponse.json({
@@ -136,7 +152,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
     
   } catch (error) {
-    console.error('❌ POST /api/clients error:', error);
+    logger.error('POST /api/clients error', error);
     return NextResponse.json({
       success: false,
       error: 'Internal server error',

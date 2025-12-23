@@ -45,6 +45,68 @@ export class CashFlowDataService {
   // Remove instance property since all methods are static
 
   /**
+   * Build scenario payload (used by API route)
+   */
+  static buildScenarioPayload(client: Client, assessment: AssessmentResult | null, scenarioType: ScenarioType, currentUserId: string | null) {
+    const riskScore = (assessment as any)?.riskMetrics?.finalRiskProfile || 5;
+    const returnAssumptions = this.getRiskBasedReturns(riskScore);
+    return {
+      client_id: client.id,
+      scenario_name: `${client.personalDetails?.firstName || 'Client'} ${client.personalDetails?.lastName || ''} - ${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} Case`,
+      scenario_type: scenarioType,
+      created_by: currentUserId,
+      projection_years: 40,
+      inflation_rate: 2.5,
+      real_equity_return: returnAssumptions.realEquityReturn,
+      real_bond_return: returnAssumptions.realBondReturn,
+      real_cash_return: returnAssumptions.realCashReturn,
+      client_age: this.calculateAge(client.personalDetails?.dateOfBirth),
+      retirement_age: this.getRetirementAge(client.personalDetails?.dateOfBirth),
+      life_expectancy: this.calculateLifeExpectancy(
+        client.personalDetails?.dateOfBirth,
+        client.personalDetails?.maritalStatus
+      ),
+      dependents: client.personalDetails?.dependents || 0,
+      current_savings: client.financialProfile?.liquidAssets || 0,
+      pension_value: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
+      pension_pot_value: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
+      investment_value: this.calculateTotalInvestments(client.financialProfile?.existingInvestments || []),
+      property_value: 0,
+      current_income: client.financialProfile?.annualIncome || 0,
+      pension_contributions: this.calculatePensionContributions(client.financialProfile?.pensionArrangements || []),
+      state_pension_age: 67,
+      state_pension_amount: this.estimateStatePension(client.financialProfile?.annualIncome || 0),
+      other_income: 0,
+      current_expenses: client.financialProfile?.monthlyExpenses ? 
+        client.financialProfile.monthlyExpenses * 12 : 0,
+      essential_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.7,
+      lifestyle_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.2,
+      discretionary_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.1,
+      mortgage_balance: 0,
+      mortgage_payment: 0,
+      other_debts: 0,
+      retirement_income_target: this.estimateRetirementIncomeTarget(client.financialProfile?.annualIncome || 0),
+      retirement_income_desired: this.estimateRetirementIncomeDesired(client.financialProfile?.annualIncome || 0),
+      emergency_fund_target: (client.financialProfile?.monthlyExpenses || 0) * 6,
+      legacy_target: 0,
+      equity_allocation: this.getEquityAllocation(riskScore),
+      bond_allocation: this.getBondAllocation(riskScore),
+      cash_allocation: this.getCashAllocation(riskScore),
+      alternative_allocation: 0,
+      assumption_basis: `Based on client risk profile ${riskScore}/10 and current market conditions`,
+      market_data_source: 'Alpha Vantage, BoE, ONS',
+      last_assumptions_review: new Date().toISOString().split('T')[0],
+      vulnerability_adjustments: this.getVulnerabilityAdjustments(client),
+      risk_score: riskScore,
+      capacity_for_loss_score: this.mapRiskToCapacity(riskScore),
+      knowledge_experience_score: this.mapPersonaToKnowledge((assessment as any)?.persona?.type),
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  }
+
+  /**
    * Creates a cash flow scenario from existing client and assessment data
    * COMPLETELY FIXED: Using direct Supabase calls
    */
@@ -52,128 +114,18 @@ export class CashFlowDataService {
     clientId: string, 
     scenarioType: ScenarioType = 'base'
   ): Promise<CashFlowScenario> {
-    const supabase = createClient(); // Create client for this method
-    
-    try {
-      const client = await clientService.getClientById(clientId);
-      const assessment = await AssessmentService.getClientAssessment(clientId);
-      
-      if (!client) {
-        throw new Error('Client not found');
-      }
-
-      // Get current user ID safely
-      const { data: { user } } = await supabase.auth.getUser();
-      const currentUserId = user?.id || null;
-
-      // Get risk-based returns - ensure riskScore is a number
-      const riskScore = assessment?.riskMetrics?.finalRiskProfile || 5;
-      const returnAssumptions = this.getRiskBasedReturns(riskScore);
-
-      // Build scenario object with snake_case for database
-      const scenario = {
-        client_id: clientId,
-        scenario_name: `${client.personalDetails?.firstName || 'Client'} ${client.personalDetails?.lastName || ''} - ${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} Case`,
-        scenario_type: scenarioType,
-        created_by: currentUserId,
-        
-        // Projection Settings
-        projection_years: 40,
-        inflation_rate: 2.5,
-        
-        // Risk-based return assumptions
-        real_equity_return: returnAssumptions.realEquityReturn,
-        real_bond_return: returnAssumptions.realBondReturn,
-        real_cash_return: returnAssumptions.realCashReturn,
-        
-        // Client Demographics
-        client_age: this.calculateAge(client.personalDetails?.dateOfBirth),
-        retirement_age: 67,
-        life_expectancy: this.calculateLifeExpectancy(
-          client.personalDetails?.dateOfBirth,
-          client.personalDetails?.maritalStatus
-        ),
-        dependents: client.personalDetails?.dependents || 0,
-        
-        // Financial Position
-        current_savings: client.financialProfile?.liquidAssets || 0,
-        pension_value: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
-        pension_pot_value: this.calculateTotalPensions(client.financialProfile?.pensionArrangements || []),
-        investment_value: this.calculateTotalInvestments(client.financialProfile?.existingInvestments || []),
-        property_value: 0,
-        
-        // Income
-        current_income: client.financialProfile?.annualIncome || 0,
-        pension_contributions: this.calculatePensionContributions(client.financialProfile?.pensionArrangements || []),
-        state_pension_age: 67,
-        state_pension_amount: this.estimateStatePension(client.financialProfile?.annualIncome || 0),
-        other_income: 0,
-        
-        // Expenses
-        current_expenses: client.financialProfile?.monthlyExpenses ? 
-          client.financialProfile.monthlyExpenses * 12 : 0,
-        essential_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.7,
-        lifestyle_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.2,
-        discretionary_expenses: (client.financialProfile?.monthlyExpenses || 0) * 12 * 0.1,
-        
-        // Debt
-        mortgage_balance: 0,
-        mortgage_payment: 0,
-        other_debts: 0,
-        
-        // Goals
-        retirement_income_target: this.estimateRetirementIncomeTarget(client.financialProfile?.annualIncome || 0),
-        retirement_income_desired: this.estimateRetirementIncomeDesired(client.financialProfile?.annualIncome || 0),
-        emergency_fund_target: (client.financialProfile?.monthlyExpenses || 0) * 6,
-        legacy_target: 0,
-        
-        // Asset Allocation
-        equity_allocation: this.getEquityAllocation(riskScore),
-        bond_allocation: this.getBondAllocation(riskScore),
-        cash_allocation: this.getCashAllocation(riskScore),
-        alternative_allocation: 0,
-        
-        // Assumptions and Documentation
-        assumption_basis: `Based on client risk profile ${riskScore}/10 and current market conditions`,
-        market_data_source: 'Alpha Vantage, BoE, ONS',
-        last_assumptions_review: new Date().toISOString().split('T')[0],
-        
-        // Vulnerability adjustments
-        vulnerability_adjustments: this.getVulnerabilityAdjustments(client),
-        
-        // Optional assessment scores
-        risk_score: riskScore,
-        capacity_for_loss_score: this.mapRiskToCapacity(riskScore),
-        knowledge_experience_score: this.mapPersonaToKnowledge(assessment?.persona?.type),
-        
-        // Add these required fields
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      // FIXED: Direct Supabase insert
-      const { data, error } = await supabase
-        .from('cash_flow_scenarios')
-        .insert(scenario)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Database error details:', error);
-        throw new Error(`Failed to create cash flow scenario: ${error.message}`);
-      }
-
-      if (!data) {
-        throw new Error('No data returned from database');
-      }
-
-      return transformToCamelCase(data) as CashFlowScenario;
-      
-    } catch (error) {
-      console.error('Error creating cash flow scenario from client:', error);
-      throw error;
+    // Deprecated in favor of server API; keep for backward compatibility but route through API
+    const response = await fetch('/api/cashflow/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, scenarioType })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create cash flow scenario');
     }
+    const { scenario } = await response.json();
+    return transformToCamelCase(scenario) as CashFlowScenario;
   }
 
   /**
@@ -455,6 +407,14 @@ export class CashFlowDataService {
     if (riskScore <= 3) return 20;
     if (riskScore <= 6) return 10;
     return 5;
+  }
+
+  private static getRetirementAge(dateOfBirth?: string | null): number {
+    const age = this.calculateAge(dateOfBirth ?? undefined);
+    const defaultRetirement = 67;
+    const minRetirement = isNaN(age) ? defaultRetirement : age + 1;
+    const capped = Math.min(75, Math.max(defaultRetirement, minRetirement));
+    return capped;
   }
 
   private static getVulnerabilityAdjustments(client: Client): any {

@@ -150,7 +150,7 @@ export class AssessmentService {
       .eq('status', 'completed');
 
     if (error) throw error;
-    return data?.map(item => item.assessment_type) || [];
+    return data?.map((item: { assessment_type: string }) => item.assessment_type) || [];
   }
 
   // ================================================================

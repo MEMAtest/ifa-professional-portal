@@ -28,6 +28,7 @@ import { format } from 'date-fns'
 import { SuitabilityDataService } from '@/services/suitability/SuitabilityDataService'
 import { createClient } from '@/lib/supabase/client'  // Use your browser client
 import type { Database } from '@/types/database.types'
+import { useAuth } from '@/hooks/useAuth'
 
 // =====================================================
 // TYPES - Based on database schema
@@ -60,6 +61,7 @@ interface CreateNewVersionButtonProps {
   size?: 'default' | 'sm' | 'lg'
   disabled?: boolean
   showHistory?: boolean
+  buttonLabel?: string
 }
 
 interface VersionCreationModalProps {
@@ -220,8 +222,10 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
   variant = 'outline',
   size = 'default',
   disabled = false,
-  showHistory = false
+  showHistory = false,
+  buttonLabel = 'New Version'
 }) => {
+  const { user } = useAuth()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [versionHistory, setVersionHistory] = useState<AssessmentVersionInfo[]>([])
@@ -271,7 +275,7 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
     setError(null)
 
     try {
-      const dataService = new SuitabilityDataService()
+      const dataService = new SuitabilityDataService(supabase)
       
       // Get current assessment data
       const { data: currentAssessment, error: fetchError } = await supabase
@@ -288,7 +292,8 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
       const result = await dataService.createNewVersion(
         clientId,
         currentAssessmentId,
-        reason
+        reason,
+        user?.id || null
       )
 
       if (!result.success || !result.data) {
@@ -341,8 +346,15 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
   }, [clientId, currentAssessmentId, router, toast, onVersionCreated, supabase])
 
   // Check if can create new version
-  const canCreateVersion = currentVersion 
-    ? (currentVersion.is_final || (currentVersion.completion_percentage && currentVersion.completion_percentage >= 100))
+  const normalizedStatus = String(currentVersion?.status || '').toLowerCase()
+  const completionValue =
+    typeof currentVersion?.completion_percentage === 'number' && Number.isFinite(currentVersion.completion_percentage)
+      ? currentVersion.completion_percentage
+      : 0
+
+  // Align "complete enough to version" with the submission threshold (>=80%).
+  const canCreateVersion = currentVersion
+    ? currentVersion.is_final || normalizedStatus === 'submitted' || normalizedStatus === 'completed' || completionValue >= 80
     : false
 
   // Handle button click
@@ -385,7 +397,7 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
           ) : (
             <>
               <Plus className="h-4 w-4 mr-2" />
-              New Version
+              {buttonLabel}
             </>
           )}
         </Button>

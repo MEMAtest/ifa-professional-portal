@@ -1,14 +1,11 @@
 // src/app/layout.tsx
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
 
 // Context providers
 import Providers from './providers'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SmartLayoutWrapper } from '@/components/layout/SmartLayoutWrapper'
-
-const inter = Inter({ subsets: ['latin'] })
 
 // METADATA - Updated for Plannetic
 export const metadata: Metadata = {
@@ -79,7 +76,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="h-full">
-      <body className={`${inter.className} h-full`}>
+      <body className="h-full font-sans">
         <Providers>
           <AuthProvider>
             <SmartLayoutWrapper>

@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { log } from '@/lib/logging/structured';
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,7 @@ export async function GET(
       .limit(1);
 
     if (clientError) {
-      console.error('Monte Carlo results fetch error:', clientError);
+      log.error('Monte Carlo results fetch error', clientError);
       return NextResponse.json(
         { 
           success: false, 
@@ -108,8 +109,8 @@ export async function GET(
     });
 
   } catch (error: unknown) {
-    console.error('Monte Carlo results API error:', error);
-    
+    log.error('Monte Carlo results API error', error);
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
     return NextResponse.json(
@@ -185,7 +186,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      console.error(`Failed to update status for scenario ${cleanScenarioId}:`, error);
+      log.error('Failed to update status for scenario', { scenarioId: cleanScenarioId, error });
       return NextResponse.json(
         {
           success: false,
@@ -209,8 +210,8 @@ export async function PATCH(
     );
 
   } catch (error: unknown) {
-    console.error('Monte Carlo update status API error:', error);
-    
+    log.error('Monte Carlo update status API error', error);
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
     return NextResponse.json(
@@ -281,7 +282,7 @@ export async function POST(
       .single();
 
     if (error) {
-      console.error(`Failed to create results for scenario ${cleanScenarioId}:`, error);
+      log.error('Failed to create results for scenario', { scenarioId: cleanScenarioId, error });
       return NextResponse.json(
         {
           success: false,
@@ -302,8 +303,8 @@ export async function POST(
     );
 
   } catch (error: unknown) {
-    console.error('Monte Carlo create results API error:', error);
-    
+    log.error('Monte Carlo create results API error', error);
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
     return NextResponse.json(
@@ -347,7 +348,7 @@ export async function DELETE(
       .eq('scenario_id', cleanScenarioId);
 
     if (error) {
-      console.error(`Failed to delete results for scenario ${cleanScenarioId}:`, error);
+      log.error('Failed to delete results for scenario', { scenarioId: cleanScenarioId, error });
       return NextResponse.json(
         {
           success: false,
@@ -367,8 +368,8 @@ export async function DELETE(
     );
 
   } catch (error: unknown) {
-    console.error('Monte Carlo delete results API error:', error);
-    
+    log.error('Monte Carlo delete results API error', error);
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
     return NextResponse.json(

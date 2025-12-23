@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { log } from '@/lib/logging/structured'
 
 
 export async function GET(request: NextRequest) {
@@ -19,8 +20,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const firmId = user.user_metadata?.firm_id || '00000000-0000-0000-0000-000000000001'
-    
+    const firmId = user.user_metadata?.firm_id
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     // Get date ranges
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -57,8 +64,8 @@ export async function GET(request: NextRequest) {
       .gte('created_at', last7Days.toISOString())
       .not('client_id', 'is', null)
 
-    const activeClients = activeClientsData 
-      ? new Set(activeClientsData.map(d => d.client_id)).size 
+    const activeClients = activeClientsData
+      ? new Set(activeClientsData.map((d: any) => d.client_id)).size
       : 0
 
     // Get recent activity
@@ -70,10 +77,10 @@ export async function GET(request: NextRequest) {
 
     const recentActivity = {
       documentsCreated: recentDocs?.length || 0,
-      documentsSigned: recentDocs?.filter(d => 
+      documentsSigned: recentDocs?.filter((d: any) =>
         d.signed_at && new Date(d.signed_at) >= last7Days
       ).length || 0,
-      documentsViewed: recentDocs?.filter(d => 
+      documentsViewed: recentDocs?.filter((d: any) =>
         d.last_viewed_at && new Date(d.last_viewed_at) >= last7Days
       ).length || 0
     }
@@ -86,9 +93,9 @@ export async function GET(request: NextRequest) {
       .eq('is_archived', false)
 
     let documentsByCategory: { category: string; count: number }[] = []
-    
+
     if (categoryData) {
-      const categoryCounts = categoryData.reduce((acc, doc) => {
+      const categoryCounts = categoryData.reduce((acc: Record<string, number>, doc: any) => {
         const category = doc.category || doc.type || 'Other'
         acc[category] = (acc[category] || 0) + 1
         return acc
@@ -106,7 +113,7 @@ export async function GET(request: NextRequest) {
       .select('file_size')
       .eq('firm_id', firmId)
 
-    const totalBytes = storageData?.reduce((sum, doc) => sum + (doc.file_size || 0), 0) || 0
+    const totalBytes = storageData?.reduce((sum: number, doc: any) => sum + (doc.file_size || 0), 0) || 0
 
     // Format file size inline
     const formatBytes = (bytes: number): string => {
@@ -134,8 +141,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats)
 
   } catch (error) {
-    console.error('Dashboard stats API error:', error)
-    
+    log.error('Dashboard stats API error', error)
+
     return NextResponse.json(
       { 
         error: 'Failed to fetch dashboard stats',

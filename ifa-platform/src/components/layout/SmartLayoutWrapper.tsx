@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { LoginForm } from '@/components/auth/LoginForm'
+import { NotificationsProvider } from '@/components/notifications/NotificationsProvider'
 
 // Create context to signal that root layout is providing the layout
 export const LayoutContext = createContext(false)
@@ -40,15 +41,17 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   // For authenticated pages, provide persistent layout
   return (
     <LayoutContext.Provider value={true}>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <Sidebar />
-        <main className="ml-64 pt-16">
-          <div className="p-6">
-            {children}
-          </div>
-        </main>
-      </div>
+      <NotificationsProvider>
+        <div className="min-h-screen bg-gray-50">
+          <Header />
+          <Sidebar />
+          <main className="ml-64 pt-16">
+            <div className="p-6">
+              {children}
+            </div>
+          </main>
+        </div>
+      </NotificationsProvider>
     </LayoutContext.Provider>
   )
 }

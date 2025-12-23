@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +14,7 @@ export async function GET(
 ) {
   try {
     const documentId = params.id
-    console.log('📥 Download requested for document:', documentId)
+    log.info('Download requested for document', { documentId })
 
     // Create Supabase client with auth
     const cookieStore = cookies()
@@ -37,7 +38,7 @@ export async function GET(
       .single()
 
     if (error || !document) {
-      console.error('Document not found:', error)
+      log.error('Document not found', error)
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
@@ -46,7 +47,7 @@ export async function GET(
 
     // Option 1: If we have a direct storage URL, redirect with download header
     if (document.storage_path && document.storage_path.startsWith('http')) {
-      console.log('✅ Redirecting to storage URL for download')
+      log.info('Redirecting to storage URL for download', { documentId, storage_path: document.storage_path })
       // Add download parameter to force download
       const url = new URL(document.storage_path)
       url.searchParams.set('download', document.file_name || 'document.pdf')
@@ -55,7 +56,7 @@ export async function GET(
 
     // Option 2: If we have a file_path, download from Supabase storage
     if (document.file_path) {
-      console.log('📥 Downloading from Supabase storage:', document.file_path)
+      log.info('Downloading from Supabase storage', { documentId, file_path: document.file_path })
       const { data: fileData, error: downloadError } = await supabase.storage
         .from('documents')
         .download(document.file_path)
@@ -77,7 +78,7 @@ export async function GET(
 
     // Option 3: Check for base64 PDF in metadata (fallback)
     if (document.metadata?.pdf_base64) {
-      console.log('📄 Using base64 PDF from metadata')
+      log.info('Using base64 PDF from metadata', { documentId })
       const pdfBuffer = Buffer.from(document.metadata.pdf_base64, 'base64')
       
       const headers = new Headers()
@@ -91,10 +92,10 @@ export async function GET(
 
     // Option 4: Generate PDF from HTML content if available
     if (document.html_content || document.metadata?.html_content) {
-      console.log('⚠️ Only HTML content available, PDF generation needed')
+      log.warn('Only HTML content available, PDF generation needed', { documentId })
       // For now, return error suggesting PDF generation
       return NextResponse.json(
-        { 
+        {
           error: 'PDF not available',
           message: 'This document only has HTML content. Please regenerate the PDF.',
           hasHtml: true
@@ -113,9 +114,9 @@ export async function GET(
     )
 
   } catch (error) {
-    console.error('❌ Download error:', error)
+    log.error('Download error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to download document',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

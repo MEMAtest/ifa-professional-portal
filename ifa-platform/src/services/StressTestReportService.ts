@@ -6,14 +6,16 @@
 import { StressTestingEngine } from './StressTestingEngine';
 import { ClientService } from './ClientService';
 import { createClient } from '@/lib/supabase/client';
+import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js';
+import { advisorContextService } from '@/services/AdvisorContextService';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database.types'; // FIX: Correct import path
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { Client } from '@/types/client';
-import type { 
+import type {
   StressTestResults,
   StressScenario,
-  StressTestResult 
+  StressTestResult
 } from '@/types/stress-testing';
 
 // Type aliases for better type safety
@@ -68,7 +70,17 @@ export class StressTestReportService {
 
   constructor() {
     this.clientService = new ClientService();
-    this.supabase = createClient();
+    // Use server-friendly client when running on the server to avoid localStorage issues
+    if (typeof window === 'undefined') {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!url || !key) {
+        throw new Error('Supabase credentials missing for StressTestReportService');
+      }
+      this.supabase = createSupabaseServiceClient<Database>(url, key);
+    } else {
+      this.supabase = createClient();
+    }
   }
 
   /**
@@ -217,6 +229,9 @@ export class StressTestReportService {
     // Calculate executive summary
     const executiveSummary = this.calculateExecutiveSummary(stressTestResults);
 
+    // Get advisor context for dynamic names
+    const advisorContext = await advisorContextService.getReportContext();
+
     return {
       client,
       scenario: typedScenario,
@@ -224,8 +239,8 @@ export class StressTestReportService {
       reportMetadata: {
         generatedAt: new Date().toISOString(),
         reportType: 'Stress Test Analysis',
-        advisorName: 'Professional Advisor', // TODO: Get from user context
-        firmName: 'Financial Advisory Services', // TODO: Get from config
+        advisorName: advisorContext.advisorName,
+        firmName: advisorContext.firmName,
         complianceRef: `ST-${Date.now()}`
       },
       executiveSummary
@@ -660,12 +675,37 @@ export class StressTestReportService {
       throw new Error(`Failed to upload PDF: ${uploadError.message}`);
     }
 
+    // Create document record in documents table with proper typing
+    const { data: docRecord, error: dbError } = await this.supabase
+      .from('documents')
+      .insert({
+        client_id: clientId,
+        name: `${reportType} report`,
+        type: 'stress_test',
+        document_type: 'stress_test',
+        category: 'stress_test',
+        file_name: fileName,
+        file_path: filePath,
+        storage_path: filePath,
+        file_type: 'pdf',
+        mime_type: 'application/pdf',
+        compliance_status: 'approved',
+        is_archived: false,
+        is_template: false,
+        metadata: {
+          reportType,
+          generatedAt: new Date().toISOString()
+        }
+      })
+      .select()
+      .maybeSingle();
+
     // Get download URL
     const { data } = await this.supabase.storage
       .from('documents')
       .createSignedUrl(filePath, 3600);
 
-    const reportId = `report_${Date.now()}`;
+    const reportId = docRecord?.id || `report_${Date.now()}`;
     return {
       reportId,
       downloadUrl: data?.signedUrl || ''

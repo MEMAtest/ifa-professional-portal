@@ -3,21 +3,37 @@ import { createBrowserClient, createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/types/database.types'
 
-// Environment variables with fallbacks
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://maandodhonjolrmcxivo.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const GLOBAL_CLIENT_KEY = '__ifaPlatformSupabaseClient'
 
-// Log warnings if environment variables are missing
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  console.warn('⚠️ NEXT_PUBLIC_SUPABASE_URL not set, using default')
+// Environment variables - MUST be set, no fallbacks
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+// Validate required environment variables
+if (!supabaseUrl) {
+  throw new Error('❌ NEXT_PUBLIC_SUPABASE_URL environment variable is required')
 }
-if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-  console.error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is missing!')
+if (!supabaseAnonKey) {
+  throw new Error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is required')
 }
 
 // ================================================================
 // Unified Client Creation
 // ================================================================
+
+function getOrCreateBrowserClient(options?: Parameters<typeof createBrowserClient<Database>>[2]) {
+  // In SSR/Node contexts, avoid sharing a singleton across requests.
+  if (typeof window === 'undefined') {
+    return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey, options)
+  }
+
+  const existing = (globalThis as Record<string, any>)[GLOBAL_CLIENT_KEY]
+  if (existing) return existing
+
+  const client = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey, options)
+  ;(globalThis as Record<string, any>)[GLOBAL_CLIENT_KEY] = client
+  return client
+}
 
 /**
  * Creates a Supabase client for use in Server Components or Server Actions.
@@ -34,7 +50,7 @@ export async function createServerSupabaseClient() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options)
@@ -55,35 +71,28 @@ export async function createServerSupabaseClient() {
  * Use this for things like real-time subscriptions or client-side mutations.
  */
 export function createBrowserSupabaseClient() {
-  return createBrowserClient<Database>(
-    supabaseUrl,
-    supabaseAnonKey
-  )
+  return getOrCreateBrowserClient()
 }
 
 // ================================================================
 // Legacy Global Client (for non-App Router files or quick fixes)
 // Use sparingly and phase out where possible.
 // ================================================================
-export const supabase = createBrowserClient<Database>(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true
-    },
-    db: {
-      schema: 'public'
-    },
-    global: {
-      headers: {
-        'x-application-name': 'ifa-platform'
-      }
+export const supabase = getOrCreateBrowserClient({
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  },
+  db: {
+    schema: 'public'
+  },
+  global: {
+    headers: {
+      'x-application-name': 'ifa-platform'
     }
   }
-)
+})
 
 // Create admin client for server-side operations (if service role key is available)
 export const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY

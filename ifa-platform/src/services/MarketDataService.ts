@@ -257,7 +257,7 @@ export class MarketDataService {
         return null;
       }
 
-      return data.data as MarketDataCache;
+      return data.data as unknown as MarketDataCache;
 
     } catch (error) {
       console.warn('Error reading cache:', error);
@@ -281,7 +281,7 @@ export class MarketDataService {
         .from('app_cache')
         .upsert({
           key: this.CACHE_KEY,
-          data: cacheEntry,
+          data: cacheEntry as unknown as any,
           updated_at: now.toISOString()
         });
 

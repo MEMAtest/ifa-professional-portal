@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { log } from '@/lib/logging/structured'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('Fetching all CFL assessments for client:', clientId)
+    log.info('Fetching all CFL assessments for client', { clientId })
 
     // Fetch ALL CFL assessments for this client (not just current)
     const { data: assessments, error } = await supabase
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
       .order('assessment_date', { ascending: false }) // Then by date
 
     if (error) {
-      console.error('Error fetching CFL history:', error)
+      log.error('Error fetching CFL history', error)
       return NextResponse.json(
         { error: 'Failed to fetch CFL history', message: error.message },
         { status: 500 }
@@ -169,7 +170,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('CFL history route error:', error)
+    log.error('CFL history route error', error)
     return NextResponse.json(
       { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

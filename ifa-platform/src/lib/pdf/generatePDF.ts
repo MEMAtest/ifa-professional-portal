@@ -1,9 +1,15 @@
 // ================================================================
 // File: src/lib/pdf/generatePDF.ts
-// PDF Generation Engine for reports
+// LEGACY PDF Generation Engine - Now redirects to new PDFGenerator
+//
+// NOTE: This file is kept for backwards compatibility.
+// For new code, use PDFGenerator from '@/lib/pdf/PDFGenerator' instead.
 // ================================================================
 
 import { createClient } from '@/lib/supabase/client'
+
+// Re-export the new PDFGenerator for convenience
+export { PDFGenerator, type PDFReportData } from './PDFGenerator';
 
 export interface PDFGenerationOptions {
   format: 'A4' | 'Letter';

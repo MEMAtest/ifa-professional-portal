@@ -1,5 +1,27 @@
 import { createClient } from "@/lib/supabase/client"
 // src/services/emailService.ts
+
+// Helper to get base URL for server-side fetch calls
+function getBaseUrl(): string {
+  // In browser context
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+
+  // In server context
+  // 1. Production: Use NEXT_PUBLIC_SITE_URL or VERCEL_URL
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`
+  }
+
+  // 2. Development: Use localhost with correct port
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+}
+
 export interface EmailPayload {
   to: string[]
   cc?: string[]
@@ -13,7 +35,8 @@ export interface EmailPayload {
 
 export async function sendReportEmail(payload: EmailPayload): Promise<void> {
   try {
-    const response = await fetch('/api/notifications/send-email', {
+    const baseUrl = getBaseUrl()
+    const response = await fetch(`${baseUrl}/api/notifications/send-email`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -44,9 +67,16 @@ export async function sendReportEmail(payload: EmailPayload): Promise<void> {
 export async function sendNotificationEmail(
   type: 'documentSent' | 'signatureCompleted' | 'reminder',
   recipient: string,
-  data: any
+  data: {
+    clientName?: string
+    documentName?: string
+    documentLink?: string
+    advisorName?: string
+    daysLeft?: number
+  }
 ): Promise<void> {
-  const response = await fetch('/api/notifications/send-email', {
+  const baseUrl = getBaseUrl()
+  const response = await fetch(`${baseUrl}/api/notifications/send-email`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -59,6 +89,7 @@ export async function sendNotificationEmail(
   })
 
   if (!response.ok) {
-    throw new Error('Failed to send notification')
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.message || 'Failed to send notification')
   }
 }

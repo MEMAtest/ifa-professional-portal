@@ -6,46 +6,12 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Helper function to get user context
-async function getCurrentUserContext() {
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      throw new Error('Authentication required')
-    }
-
-    let firmId: string | null = null
-    
-    if (user.user_metadata?.firm_id) {
-      firmId = user.user_metadata.firm_id
-    }
-    
-    if (!firmId && user.user_metadata?.firmId) {
-      firmId = user.user_metadata.firmId
-    }
-    
-    if (!firmId) {
-      console.warn('No firm_id found, using default for development')
-      firmId = '12345678-1234-1234-1234-123456789012'
-    }
-
-    return { user, firmId: firmId as string, userId: user.id }
-  } catch (error) {
-    console.error('getCurrentUserContext error:', error)
-    throw error
-  }
-}
+import { createClient } from '@/lib/supabase/server'
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { log } from '@/lib/logging/structured'
 
 // Calculate analytics from your real database
-async function calculateRealAnalytics(firmId: string, filters?: any) {
+async function calculateRealAnalytics(supabase: any, firmId: string | null, filters?: any) {
   try {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -54,46 +20,51 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
     const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
     // ✅ REAL: Get total documents from your database
-    const { count: totalDocuments } = await supabase
+    let totalDocsQuery = supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
+    if (firmId) totalDocsQuery = totalDocsQuery.eq('firm_id', firmId)
+    const { count: totalDocuments } = await totalDocsQuery
 
     // ✅ REAL: Get documents this month
-    const { count: documentsThisMonth } = await supabase
+    let thisMonthQuery = supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
       .gte('created_at', startOfMonth.toISOString())
+    if (firmId) thisMonthQuery = thisMonthQuery.eq('firm_id', firmId)
+    const { count: documentsThisMonth } = await thisMonthQuery
 
     // ✅ REAL: Get documents last month
-    const { count: documentsLastMonth } = await supabase
+    let lastMonthQuery = supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
       .gte('created_at', startOfLastMonth.toISOString())
       .lte('created_at', endOfLastMonth.toISOString())
+    if (firmId) lastMonthQuery = lastMonthQuery.eq('firm_id', firmId)
+    const { count: documentsLastMonth } = await lastMonthQuery
 
     // ✅ REAL: Get signature requests data
-    const { data: signatureData } = await supabase
+    let signatureQuery = supabase
       .from('signature_requests')
       .select('status')
-      .eq('firm_id', firmId)
+    if (firmId) signatureQuery = signatureQuery.eq('firm_id', firmId)
+    const { data: signatureData } = await signatureQuery
 
-    const pendingSignatures = signatureData?.filter(s => s.status === 'pending').length || 0
-    const completedSignatures = signatureData?.filter(s => s.status === 'completed').length || 0
+    const pendingSignatures = signatureData?.filter((s: any) => s.status === 'pending').length || 0
+    const completedSignatures = signatureData?.filter((s: any) => s.status === 'completed').length || 0
 
     // ✅ REAL: Get compliance data
-    const { data: complianceData } = await supabase
+    let complianceQuery = supabase
       .from('documents')
       .select('compliance_status')
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
+    if (firmId) complianceQuery = complianceQuery.eq('firm_id', firmId)
+    const { data: complianceData } = await complianceQuery
 
-    const complianceBreakdown = complianceData?.reduce((acc: any, doc: any) => {
+  const complianceBreakdown = complianceData?.reduce((acc: any, doc: any) => {
       const status = doc.compliance_status || 'pending'
       acc[status] = (acc[status] || 0) + 1
       return acc
@@ -104,7 +75,8 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
     const complianceScore = Math.round((compliantCount / totalForCompliance) * 100)
 
     // ✅ REAL: Get recent activity from your database
-    const { data: recentActivity } = await supabase
+    // Note: Removed profiles join as it may fail without proper FK relationship
+    let recentActivityQuery = supabase
       .from('documents')
       .select(`
         id,
@@ -113,27 +85,57 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
         updated_at,
         created_by,
         status,
+        type,
         clients(
+          id,
           client_ref,
           personal_details
         )
       `)
-      .eq('firm_id', firmId)
+      .eq('is_archived', false)
       .order('updated_at', { ascending: false })
       .limit(10)
+    if (firmId) recentActivityQuery = recentActivityQuery.eq('firm_id', firmId)
+    const { data: recentActivity, error: activityError } = await recentActivityQuery
 
-    const formattedActivity = (recentActivity || []).map((doc: any) => ({
-      id: doc.id,
-      user_name: 'System User', // You can enhance this with user lookup
-      action: doc.status === 'pending' ? 'uploaded' : 'updated',
-      document_title: doc.name,
-      created_at: doc.updated_at || doc.created_at,
-      document_id: doc.id,
-      type: 'update'
-    }))
+    if (activityError) {
+      log.error('Recent activity query error:', activityError)
+    }
+
+    const formattedActivity = (recentActivity || []).map((doc: any) => {
+      // Get client name if available - try multiple fields
+      const clientDetails = (doc.clients?.personal_details || {}) as any
+      let clientName: string | null = null
+      if (clientDetails.firstName || clientDetails.lastName) {
+        clientName = `${clientDetails.firstName || ''} ${clientDetails.lastName || ''}`.trim()
+      } else if (doc.clients?.client_ref) {
+        clientName = doc.clients.client_ref
+      }
+
+      // Determine action based on status
+      let action = 'updated'
+      if (doc.status === 'pending') action = 'uploaded'
+      else if (doc.status === 'signed' || doc.status === 'completed') action = 'signed'
+      else if (doc.status === 'draft') action = 'created'
+      else if (doc.status === 'active') action = 'activated'
+
+      // Use document type or client name for context
+      const docType = doc.type ? doc.type.replace(/_/g, ' ') : null
+
+      return {
+        id: doc.id,
+        user_name: clientName || docType || 'Document',
+        action: action,
+        document_title: doc.name || 'Untitled Document',
+        client_name: clientName,
+        created_at: doc.updated_at || doc.created_at,
+        document_id: doc.id,
+        type: 'document'
+      }
+    })
 
     // ✅ REAL: Get category performance
-    const { data: categoryData } = await supabase
+    let categoryQuery = supabase
       .from('documents')
       .select(`
         category_id,
@@ -141,8 +143,9 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
         compliance_status,
         created_at
       `)
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
+    if (firmId) categoryQuery = categoryQuery.eq('firm_id', firmId)
+    const { data: categoryData } = await categoryQuery
 
     const categoryPerformance = Object.values(
       (categoryData || []).reduce((acc: any, doc: any) => {
@@ -151,10 +154,8 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
           acc[categoryName] = {
             category_name: categoryName,
             document_count: 0,
-            avg_processing_time: Math.floor(Math.random() * 48) + 12, // Mock for now
             compliance_rate: 0,
-            compliant_docs: 0,
-            trend: 'neutral'
+            compliant_docs: 0
           }
         }
         acc[categoryName].document_count++
@@ -165,17 +166,17 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
       }, {})
     ).map((cat: any) => ({
       ...cat,
-      compliance_rate: Math.round((cat.compliant_docs / cat.document_count) * 100),
-      trend: cat.compliance_rate > 80 ? 'up' : cat.compliance_rate > 60 ? 'neutral' : 'down'
+      compliance_rate: Math.round((cat.compliant_docs / cat.document_count) * 100)
     }))
 
     // ✅ REAL: Get client metrics
-    const { count: totalClients } = await supabase
+    let clientsCountQuery = supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
-      .eq('firm_id', firmId)
+    if (firmId) clientsCountQuery = clientsCountQuery.eq('firm_id', firmId)
+    const { count: totalClients } = await clientsCountQuery
 
-    const { data: topClientsData } = await supabase
+    let topClientsQuery = supabase
       .from('documents')
       .select(`
         client_id,
@@ -185,8 +186,9 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
           contact_info
         )
       `)
-      .eq('firm_id', firmId)
       .eq('is_archived', false)
+    if (firmId) topClientsQuery = topClientsQuery.eq('firm_id', firmId)
+    const { data: topClientsData } = await topClientsQuery
 
     const clientCounts = (topClientsData || []).reduce((acc: any, doc: any) => {
       const clientId = doc.client_id
@@ -206,10 +208,51 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
       .slice(0, 10)
       .map((client: any) => ({
         client_name: getClientDisplayName(client.client_data),
-        document_count: client.document_count,
-        last_activity: new Date().toISOString(), // You can enhance this
-        compliance_score: Math.floor(Math.random() * 20) + 80 // Mock for now
+        document_count: client.document_count
       }))
+
+    // ✅ REAL: Get daily document counts for last 7 days
+    const last7Days: Array<{ date: string; day: string; documents: number }> = []
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now)
+      date.setDate(date.getDate() - i)
+      date.setHours(0, 0, 0, 0)
+      const nextDate = new Date(date)
+      nextDate.setDate(nextDate.getDate() + 1)
+
+      let dailyDocsQuery = supabase
+        .from('documents')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_archived', false)
+        .gte('created_at', date.toISOString())
+        .lt('created_at', nextDate.toISOString())
+      if (firmId) dailyDocsQuery = dailyDocsQuery.eq('firm_id', firmId)
+      const { count: dailyCount } = await dailyDocsQuery
+
+      last7Days.push({
+        date: date.toISOString().split('T')[0],
+        day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()],
+        documents: dailyCount || 0
+      })
+    }
+
+    // ✅ REAL: Get documents this week (last 7 days total)
+    const documentsThisWeek = last7Days.reduce((sum, day) => sum + day.documents, 0)
+
+    // ✅ REAL: Get documents today
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
+    let todayQuery = supabase
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_archived', false)
+      .gte('created_at', today.toISOString())
+    if (firmId) todayQuery = todayQuery.eq('firm_id', firmId)
+    const { count: documentsToday } = await todayQuery
+
+    // ✅ REAL: Count clients with documents (active clients)
+    const uniqueClientIds = new Set((topClientsData || []).map((doc: any) => doc.client_id).filter(Boolean))
+    const activeClients = uniqueClientIds.size
 
     return {
       // Basic metrics from real data
@@ -218,21 +261,21 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
       completedSignatures,
       complianceScore,
       documentsThisMonth: documentsThisMonth || 0,
-      documentsThisWeek: Math.floor((documentsThisMonth || 0) / 4), // Estimate
-      documentsToday: Math.floor((documentsThisMonth || 0) / 30), // Estimate
+      documentsThisWeek,
+      documentsToday: documentsToday || 0,
 
-      // Previous period data for trends
-      documentsLastMonth: documentsLastMonth || 0,
-      lastMonthSignatures: Math.floor(completedSignatures * 0.8), // Estimate
-      lastMonthCompliance: Math.max(0, complianceScore - 5), // Estimate
+	      // Previous period data for trends (real data)
+	      documentsLastMonth: documentsLastMonth || 0,
+	      lastMonthSignatures: 0,
+	      lastMonthCompliance: 0,
 
-      // Advanced metrics (some estimated for now)
-      averageProcessingTime: 24, // You can calculate this from your workflow data
-      clientSatisfactionScore: 85,
-      riskScore: Math.max(0, 100 - ((complianceBreakdown.non_compliant || 0) * 10)),
+	      // Advanced metrics (placeholders until computed from real sources)
+	      averageProcessingTime: 0,
+	      clientSatisfactionScore: 0,
+	      riskScore: 0,
 
-      // Real activity feed
-      recentActivity: formattedActivity,
+	      // Real activity feed
+	      recentActivity: formattedActivity,
 
       // Real compliance breakdown
       complianceBreakdown: {
@@ -249,13 +292,16 @@ async function calculateRealAnalytics(firmId: string, filters?: any) {
       // Real client metrics
       clientMetrics: {
         totalClients: totalClients || 0,
-        activeClients: Math.floor((totalClients || 0) * 0.8),
+        activeClients,
         topClients
-      }
+      },
+
+      // Real daily trends for charts
+      dailyTrends: last7Days
     }
 
   } catch (error) {
-    console.error('Analytics calculation error:', error)
+    log.error('Analytics calculation error:', error)
     throw error
   }
 }
@@ -286,9 +332,20 @@ function calculateTrend(current: number, previous: number) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Verify authentication
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const supabase = await createClient()
+    const firmId = auth.context?.firmId || null
+
     const { searchParams } = new URL(request.url)
-    const { firmId } = await getCurrentUserContext()
-    
+
     // Get filter parameters
     const finalFilters = {
       dateRange: {
@@ -302,9 +359,10 @@ export async function GET(request: NextRequest) {
     }
 
     // ✅ REAL: Calculate analytics from your actual database
-    const realData = await calculateRealAnalytics(firmId, finalFilters)
+    // firmId may be null for single-tenant setups - the function handles this correctly
+    const realData = await calculateRealAnalytics(supabase, firmId, finalFilters)
 
-    // Enhanced analytics processing with real data
+    // Analytics processing with REAL DATA ONLY - no mock data
     const processedAnalytics = {
       // Basic metrics from real data
       totalDocuments: realData.totalDocuments,
@@ -314,17 +372,13 @@ export async function GET(request: NextRequest) {
       documentsThisMonth: realData.documentsThisMonth,
       documentsThisWeek: realData.documentsThisWeek,
       documentsToday: realData.documentsToday,
-
-      // Advanced metrics
-      averageProcessingTime: realData.averageProcessingTime,
-      clientSatisfactionScore: realData.clientSatisfactionScore,
-      riskScore: realData.riskScore,
+      documentsLastMonth: realData.documentsLastMonth,
 
       // Trends calculation with real data
       trends: {
         documents: calculateTrend(realData.documentsThisMonth, realData.documentsLastMonth),
-        signatures: calculateTrend(realData.completedSignatures, realData.lastMonthSignatures),
-        compliance: calculateTrend(realData.complianceScore, realData.lastMonthCompliance),
+        signatures: calculateTrend(realData.completedSignatures, 0),
+        compliance: calculateTrend(realData.complianceScore, 0),
       },
 
       // Real activity feed
@@ -339,44 +393,17 @@ export async function GET(request: NextRequest) {
       // Real client metrics
       clientMetrics: realData.clientMetrics,
 
-      // Time-based analytics (you can enhance these with real data)
-      timeAnalytics: {
-        hourlyDistribution: Array.from({ length: 24 }, (_, hour) => ({
-          hour,
-          count: hour >= 9 && hour <= 17 ? Math.floor(Math.random() * 10) + 2 : Math.floor(Math.random() * 2)
-        })),
-        dailyDistribution: Array.from({ length: 7 }, (_, day) => ({
-          day: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day],
-          count: day < 5 ? Math.floor(Math.random() * 20) + 5 : Math.floor(Math.random() * 5)
-        })),
-        weeklyDistribution: Array.from({ length: 4 }, (_, week) => ({
-          week: `Week ${week + 1}`,
-          count: Math.floor(realData.documentsThisMonth / 4)
-        })),
-        monthlyDistribution: Array.from({ length: 12 }, (_, month) => ({
-          month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month],
-          count: Math.floor(Math.random() * 50) + 20
-        }))
-      },
-
-      // KPIs based on real data
-      kpis: {
-        documentVelocity: Math.floor(realData.documentsThisMonth / 30), // docs per day
-        signatureConversionRate: realData.completedSignatures > 0 ? 
-          Math.round((realData.completedSignatures / (realData.completedSignatures + realData.pendingSignatures)) * 100) : 0,
-        complianceEfficiency: realData.complianceScore,
-        clientEngagement: Math.floor(Math.random() * 25) + 75, // You can calculate this from client interactions
-        errorRate: Math.max(0, 5 - realData.complianceScore / 20) // Inverse relationship with compliance
-      }
+      // Real daily trends for charts
+      dailyTrends: realData.dailyTrends
     }
 
     return NextResponse.json(processedAnalytics)
 
   } catch (error) {
-    console.error('Real analytics error:', error)
-    
+    log.error('Real analytics error:', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to fetch analytics',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -387,12 +414,23 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Verify authentication
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const supabase = await createClient()
+    const firmId = auth.context?.firmId || null
+
     const body = await request.json()
-    const { firmId } = await getCurrentUserContext()
-    
+
     switch (body.action) {
       case 'refresh':
-        const refreshedData = await calculateRealAnalytics(firmId)
+        const refreshedData = await calculateRealAnalytics(supabase, firmId)
         return NextResponse.json({
           success: true,
           data: refreshedData,
@@ -400,7 +438,7 @@ export async function POST(request: NextRequest) {
         })
         
       case 'export':
-        const exportData = await calculateRealAnalytics(firmId)
+        const exportData = await calculateRealAnalytics(supabase, firmId)
         return NextResponse.json({
           success: true,
           export_id: `export_${Date.now()}`,
@@ -417,10 +455,10 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('Analytics POST error:', error)
-    
+    log.error('Analytics POST error:', error)
+
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error'
       },

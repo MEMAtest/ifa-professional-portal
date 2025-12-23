@@ -155,10 +155,16 @@ export default function CalendarPage() {
     }
   }, [])
 
-  // Load events and clients on mount
+  // Initial load - runs once on mount
   useEffect(() => {
     loadData()
-  }, [currentDate])
+  }, [])
+
+  // Handle month navigation
+  const handleMonthChange = async (newDate: Date) => {
+    setCurrentDate(newDate)
+    await loadEvents()
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -206,56 +212,56 @@ export default function CalendarPage() {
 
     if (!error && data) {
       // Format events for calendar display
-      const formattedEvents = data.map(event => {
+      const formattedEvents = data.map((event: any) => {
         try {
           // Calculate duration from start and end times
-          const duration = event.end_date ? 
-            Math.round((new Date(event.end_date).getTime() - new Date(event.start_date).getTime()) / 60000) : 
+          const duration = event.end_date ?
+            Math.round((new Date(event.end_date).getTime() - new Date(event.start_date).getTime()) / 60000) :
             60
           
-          return {
-            id: event.id,
-            title: event.title,
-            description: event.description,
-            date: new Date(event.start_date).toISOString().split('T')[0],
-            time: new Date(event.start_date).toTimeString().slice(0, 5),
-            duration: duration,
-            clientId: event.client_id,
-            clientName: event.clients ? 
-              `${event.clients.personal_details?.firstName || ''} ${event.clients.personal_details?.lastName || ''}`.trim() || 'Unknown Client' : 
-              'Unknown Client',
-            clientRef: event.clients?.client_ref || '',
-            type: event.event_type || 'meeting',
-            location: '',
-            notes: event.description || '',
-            color: event.color,
-            status: 'scheduled',
-            eventType: event.event_type,
-            relatedEntityType: event.related_entity_type,
-            relatedEntityId: event.related_entity_id
-          }
+	          return {
+	            id: event.id,
+	            title: event.title,
+	            description: event.description,
+	            date: new Date(event.start_date).toISOString().split('T')[0],
+	            time: new Date(event.start_date).toTimeString().slice(0, 5),
+	            duration: duration,
+	            clientId: event.client_id || '',
+	            clientName: event.clients ? 
+	              `${(event.clients.personal_details as any)?.firstName || ''} ${(event.clients.personal_details as any)?.lastName || ''}`.trim() || 'Unknown Client' : 
+	              'Unknown Client',
+	            clientRef: event.clients?.client_ref || '',
+	            type: event.event_type || 'meeting',
+	            location: '',
+	            notes: event.description || '',
+	            color: event.color || undefined,
+	            status: 'scheduled',
+	            eventType: event.event_type || undefined,
+	            relatedEntityType: event.related_entity_type || undefined,
+	            relatedEntityId: event.related_entity_id || undefined
+	          }
         } catch (err) {
           console.error('Error formatting event:', err, event)
           // Return a basic version if formatting fails
-          return {
-            id: event.id,
-            title: event.title || 'Untitled Event',
-            description: event.description || '',
-            date: new Date().toISOString().split('T')[0],
-            time: '09:00',
-            duration: 60,
-            clientId: event.client_id,
-            clientName: 'Unknown Client',
-            clientRef: '',
-            type: 'meeting',
-            location: '',
-            notes: event.description || '',
-            color: event.color || '#6B7280',
-            status: 'scheduled',
-            eventType: event.event_type,
-            relatedEntityType: event.related_entity_type,
-            relatedEntityId: event.related_entity_id
-          }
+	          return {
+	            id: event.id,
+	            title: event.title || 'Untitled Event',
+	            description: event.description || '',
+	            date: new Date().toISOString().split('T')[0],
+	            time: '09:00',
+	            duration: 60,
+	            clientId: event.client_id || '',
+	            clientName: 'Unknown Client',
+	            clientRef: '',
+	            type: 'meeting',
+	            location: '',
+	            notes: event.description || '',
+	            color: event.color || '#6B7280',
+	            status: 'scheduled',
+	            eventType: event.event_type || undefined,
+	            relatedEntityType: event.related_entity_type || undefined,
+	            relatedEntityId: event.related_entity_id || undefined
+	          }
         }
       })
       
@@ -265,22 +271,28 @@ export default function CalendarPage() {
     }
   }
 
-  const loadClients = async () => {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('id, client_ref, personal_details')
-      .eq('status', 'active')
+	  const loadClients = async () => {
+	    const { data, error } = await supabase
+	      .from('clients')
+	      .select('id, client_ref, personal_details')
+	      .eq('status', 'active')
 
-    if (!error && data) {
-      // Sort clients by name
-      const sortedClients = data.sort((a, b) => {
-        const aName = `${a.personal_details?.firstName || ''} ${a.personal_details?.lastName || ''}`.trim()
-        const bName = `${b.personal_details?.firstName || ''} ${b.personal_details?.lastName || ''}`.trim()
-        return aName.localeCompare(bName)
-      })
-      setClients(sortedClients)
-    }
-  }
+	    if (!error && data) {
+	      const mappedClients: Client[] = (data as any[]).map((c) => ({
+	        id: c.id,
+	        client_ref: c.client_ref,
+	        personal_details: (c.personal_details as any) || {}
+	      }))
+
+	      // Sort clients by name
+	      const sortedClients = mappedClients.sort((a, b) => {
+	        const aName = `${a.personal_details?.firstName || ''} ${a.personal_details?.lastName || ''}`.trim()
+	        const bName = `${b.personal_details?.firstName || ''} ${b.personal_details?.lastName || ''}`.trim()
+	        return aName.localeCompare(bName)
+	      })
+	      setClients(sortedClients)
+	    }
+	  }
 
   // Get calendar grid
   const getDaysInMonth = (date: Date) => {
@@ -319,15 +331,15 @@ export default function CalendarPage() {
 
   // Navigation
   const goToPreviousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))
+    handleMonthChange(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))
   }
 
   const goToNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))
+    handleMonthChange(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))
   }
 
   const goToToday = () => {
-    setCurrentDate(new Date())
+    handleMonthChange(new Date())
     setSelectedDate(new Date())
   }
 
@@ -727,7 +739,7 @@ export default function CalendarPage() {
                                     );
                                   }
                                   return line.trim() ? (
-                                    <p key={idx} className="italic">"{line.trim()}"</p>
+                                    <p key={idx} className="italic">&quot;{line.trim()}&quot;</p>
                                   ) : null;
                                 })}
                               </div>

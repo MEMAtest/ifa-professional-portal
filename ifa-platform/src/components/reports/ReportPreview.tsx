@@ -121,7 +121,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Enhanced Preview Controls */}
-      <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+      <div className="flex items-center justify-between p-4 border-b bg-gray-50 sticky top-0 z-10">
         <div className="flex items-center space-x-2">
           <Eye className="w-5 h-5 text-gray-600" />
           <span className="font-medium">Report Preview</span>
@@ -214,24 +214,25 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
             </Card>
           </div>
         ) : (
-          <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+          <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-5xl mx-auto">
             <div 
               className="mx-auto bg-white"
               style={{
-                width: '210mm',
+                width: '100%',
+                maxWidth: '900px',
                 minHeight: '297mm',
-                transform: `scale(${zoomLevel / 100})`,
+                transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : 'none',
                 transformOrigin: 'top center',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
               }}
             >
               <iframe
-  srcDoc={previewContent}
-  className="w-full h-full border-0"
-  style={{ minHeight: '297mm' }}
-  title="Report Preview"
-  sandbox="allow-same-origin allow-scripts allow-modals allow-popups"
-/>
+                srcDoc={previewContent}
+                className="w-full h-full border-0"
+                style={{ minHeight: '297mm' }}
+                title="Report Preview"
+                sandbox="allow-same-origin allow-scripts allow-modals allow-popups"
+              />
             </div>
           </div>
         )}

@@ -1,5 +1,19 @@
 /** @type {import('next').NextConfig} */
+function getDevPortFromArgv() {
+  const argv = Array.isArray(process.argv) ? process.argv : []
+  const idx = argv.findIndex((arg) => arg === '-p' || arg === '--port')
+  const value = idx !== -1 ? argv[idx + 1] : undefined
+  return value || process.env.PORT || process.env.NEXT_PORT
+}
+
+const isDev = process.env.NODE_ENV === 'development'
+const devPort = getDevPortFromArgv()
+
 const nextConfig = {
+  // Avoid .next corruption when multiple `next dev` processes run concurrently.
+  // Each port gets an isolated output dir.
+  distDir: isDev && devPort ? `.next-dev-${devPort}` : '.next',
+
   // Images configuration
   images: {
     domains: ['localhost'],
@@ -10,21 +24,29 @@ const nextConfig = {
       },
     ],
   },
-  
+
   // TypeScript configuration
   typescript: {
     ignoreBuildErrors: false,
   },
-  
+
   // ESLint configuration
   eslint: {
     ignoreDuringBuilds: false,
     dirs: ['src'],
   },
-  
+
   // Force all API routes to be dynamic
   experimental: {
     optimizePackageImports: ['lucide-react'],
+    // React-PDF relies on the full React runtime (not the `react-server` export
+    // condition used by Next's RSC bundler). Externalising these packages
+    // prevents Next from bundling them and avoids runtime errors like
+    // `Component is not a constructor` in Route Handlers.
+    serverComponentsExternalPackages: [
+      '@react-pdf/renderer',
+      '@react-pdf/reconciler'
+    ],
     // Prevent build-time API calls
     outputFileTracingExcludes: {
       '*': [
@@ -33,7 +55,7 @@ const nextConfig = {
       ],
     },
   },
-  
+
   // Explicitly inject environment variables
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -43,8 +65,31 @@ const nextConfig = {
   // Security headers
   async headers() {
     return [
+      // Allow document preview routes to be embedded in iframes
       {
-        source: '/(.*)',
+        source: '/api/documents/preview/:path*',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://www.plannetic.com https://plannetic.com",
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=3600',
+          },
+        ],
+      },
+      // Default security headers for all other routes
+      {
+        source: '/((?!api/documents/preview).*)',
         headers: [
           {
             key: 'X-Frame-Options',

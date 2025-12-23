@@ -5,14 +5,9 @@ export const dynamic = 'force-dynamic'
 // ✅ FIXED: Using proper server-side Supabase client
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
-
-// Create Supabase client for server-side operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { createRequestLogger } from '@/lib/logging/structured'
 
 /**
  * GET /api/clients/[id]
@@ -22,33 +17,28 @@ export async function GET(
   request: NextRequest,
   context: { params: { id: string } }
 ) {
+  const logger = createRequestLogger(request)
+
   try {
-    // Enhanced logging to debug the issue
-    console.log('📋 GET /api/clients/[id] - Request received');
-    console.log('Context:', JSON.stringify(context));
-    console.log('Params:', JSON.stringify(context?.params));
-    console.log('ID:', context?.params?.id);
-    
-    // More robust parameter extraction
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const clientId = context?.params?.id;
-    
+    logger.debug('GET /api/clients/[id] - Request received', { clientId })
+
     if (!clientId || clientId === 'undefined' || clientId === 'null') {
-      console.error('❌ No valid client ID provided');
+      logger.warn('No valid client ID provided', { receivedId: clientId })
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Client ID is required',
-          debug: {
-            context: JSON.stringify(context),
-            params: JSON.stringify(context?.params),
-            receivedId: clientId
-          }
-        }, 
+        {
+          success: false,
+          error: 'Client ID is required'
+        },
         { status: 400 }
       );
     }
-
-    console.log(`📋 Fetching client with ID: ${clientId}`);
 
     // Fetch client from database
     const { data: client, error } = await supabase
@@ -59,56 +49,55 @@ export async function GET(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        console.log(`❌ Client not found: ${clientId}`);
+        logger.info('Client not found', { clientId })
         return NextResponse.json(
-          { 
-            success: false, 
+          {
+            success: false,
             error: 'Client not found',
             clientId: clientId
-          }, 
+          },
           { status: 404 }
         );
       }
-      
-      console.error('❌ Database error:', error);
+
+      logger.error('Database error fetching client', error, { clientId })
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'Failed to fetch client',
-          details: error.message 
-        }, 
+          details: error.message
+        },
         { status: 500 }
       );
     }
 
     if (!client) {
-      console.log(`❌ No client data returned for ID: ${clientId}`);
+      logger.info('No client data returned', { clientId })
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'Client not found',
           clientId: clientId
-        }, 
+        },
         { status: 404 }
       );
     }
 
-    console.log(`✅ Found client: ${client.client_ref || clientId}`);
+    logger.info('Client fetched successfully', { clientId, clientRef: client.client_ref })
 
-    // ✅ Return RAW data
     return NextResponse.json({
       success: true,
-      client // RAW database data
+      client
     });
 
   } catch (error) {
-    console.error('❌ Unexpected error in GET /api/clients/[id]:', error);
+    logger.error('Unexpected error in GET /api/clients/[id]', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Internal server error',
         details: error instanceof Error ? error.message : 'Unknown error'
-      }, 
+      },
       { status: 500 }
     );
   }
@@ -122,28 +111,35 @@ export async function PATCH(
   request: NextRequest,
   context: { params: { id: string } }
 ) {
+  const logger = createRequestLogger(request)
+
   try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const clientId = context?.params?.id;
-    
-    console.log(`📋 PATCH /api/clients/${clientId} - Updating client...`);
-    
+    logger.debug('PATCH /api/clients/[id] - Updating client', { clientId })
+
     if (!clientId || clientId === 'undefined' || clientId === 'null') {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Client ID is required' 
-        }, 
+        {
+          success: false,
+          error: 'Client ID is required'
+        },
         { status: 400 }
       );
     }
 
     const updates = await request.json();
-    
+
     // Prepare update data (convert to snake_case for DB)
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString()
     };
-    
+
     // Map camelCase fields to snake_case
     if (updates.personalDetails) updateData.personal_details = updates.personalDetails;
     if (updates.contactInfo) updateData.contact_info = updates.contactInfo;
@@ -152,7 +148,7 @@ export async function PATCH(
     if (updates.riskProfile) updateData.risk_profile = updates.riskProfile;
     if (updates.status) updateData.status = updates.status;
     if (updates.clientRef) updateData.client_ref = updates.clientRef;
-    
+
     const { data: client, error } = await supabase
       .from('clients')
       .update(updateData)
@@ -163,46 +159,45 @@ export async function PATCH(
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Client not found' 
-          }, 
+          {
+            success: false,
+            error: 'Client not found'
+          },
           { status: 404 }
         );
       }
-      
-      console.error('❌ Database error:', error);
+
+      logger.error('Database error updating client', error, { clientId })
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'Failed to update client',
-          details: error.message 
-        }, 
+          details: error.message
+        },
         { status: 500 }
       );
     }
 
-    console.log(`✅ Updated client: ${client.client_ref}`);
-    
+    logger.info('Client updated successfully', { clientId, clientRef: client.client_ref })
+
     // Revalidate the cache
     revalidatePath('/api/clients');
     revalidatePath(`/api/clients/${clientId}`);
     revalidatePath('/clients');
 
-    // ✅ Return RAW data
     return NextResponse.json({
       success: true,
-      client // RAW database data
+      client
     });
 
   } catch (error) {
-    console.error(`❌ PATCH /api/clients/[id] error:`, error);
+    logger.error('PATCH /api/clients/[id] error', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Internal server error',
         details: error instanceof Error ? error.message : 'Unknown error'
-      }, 
+      },
       { status: 500 }
     );
   }
@@ -216,17 +211,24 @@ export async function DELETE(
   request: NextRequest,
   context: { params: { id: string } }
 ) {
+  const logger = createRequestLogger(request)
+
   try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const clientId = context?.params?.id;
-    
-    console.log(`📋 DELETE /api/clients/${clientId} - Deleting client...`);
-    
+    logger.debug('DELETE /api/clients/[id] - Deleting client', { clientId })
+
     if (!clientId || clientId === 'undefined' || clientId === 'null') {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Client ID is required' 
-        }, 
+        {
+          success: false,
+          error: 'Client ID is required'
+        },
         { status: 400 }
       );
     }
@@ -239,27 +241,27 @@ export async function DELETE(
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Client not found' 
-          }, 
+          {
+            success: false,
+            error: 'Client not found'
+          },
           { status: 404 }
         );
       }
-      
-      console.error('❌ Database error:', error);
+
+      logger.error('Database error deleting client', error, { clientId })
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'Failed to delete client',
-          details: error.message 
-        }, 
+          details: error.message
+        },
         { status: 500 }
       );
     }
 
-    console.log(`✅ Deleted client: ${clientId}`);
-    
+    logger.info('Client deleted successfully', { clientId })
+
     // Revalidate the cache
     revalidatePath('/api/clients');
     revalidatePath('/clients');
@@ -270,13 +272,13 @@ export async function DELETE(
     });
 
   } catch (error) {
-    console.error(`❌ DELETE /api/clients/[id] error:`, error);
+    logger.error('DELETE /api/clients/[id] error', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Internal server error',
         details: error instanceof Error ? error.message : 'Unknown error'
-      }, 
+      },
       { status: 500 }
     );
   }

@@ -9,6 +9,7 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { clientService } from '@/services/ClientService';
+import { log } from '@/lib/logging/structured';
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -107,7 +108,7 @@ export async function POST(
       }]);
 
     if (insertError) {
-      console.error('Error logging report generation:', insertError);
+      log.warn('Error logging report generation', { error: insertError });
       // Don't fail the request if logging fails
     }
 
@@ -120,7 +121,7 @@ export async function POST(
       }
     });
   } catch (error) {
-    console.error('API Error:', error);
+    log.error('API Error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -133,7 +134,7 @@ async function fetchClientData(clientId: string) {
   try {
     return await clientService.getClientById(clientId);
   } catch (error) {
-    console.error('Error fetching client:', error);
+    log.error('Error fetching client:', error);
     return null;
   }
 }
@@ -154,9 +155,9 @@ async function fetchProgressData(
   }
 
   const { data, error } = await query;
-  
+
   if (error) {
-    console.error('Error fetching progress:', error);
+    log.error('Error fetching progress:', error);
     return [];
   }
   
@@ -176,7 +177,7 @@ async function fetchHistoryData(
     .limit(100);
 
   if (error) {
-    console.error('Error fetching history:', error);
+    log.error('Error fetching history:', error);
     return [];
   }
   

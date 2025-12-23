@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { log } from '@/lib/logging/structured'
 
 interface Params {
   params: {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       .order('name')
 
     if (error) {
-      console.error('Error fetching templates:', error)
+      log.error('Error fetching templates', error)
       return NextResponse.json(
         { error: 'Failed to fetch templates' },
         { status: 500 }
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       count: templates?.length || 0
     })
   } catch (error) {
-    console.error('Error in templates route:', error)
+    log.error('Error in templates route', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

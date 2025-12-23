@@ -10,7 +10,6 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-import AuthTest from '@/components/AuthTest'
 import { 
   UploadIcon, 
   FileTextIcon, 
@@ -297,7 +296,8 @@ export default function DocumentsPage() {
   const { categories } = useDocumentCategories()
 
   const filteredDocuments = documents.filter((doc: any) => {
-    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const title = (doc.title ?? doc.name ?? '') as string
+    const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (doc.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (doc.client_name || '').toLowerCase().includes(searchQuery.toLowerCase())
     
@@ -366,9 +366,6 @@ export default function DocumentsPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Debug Component - Remove in production */}
-        <AuthTest />
-        
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>

@@ -16,6 +16,7 @@ import {
   Calendar,
   CheckCircle
 } from 'lucide-react'
+import { safeWriteToClipboard } from '@/lib/utils'
 
 interface DocumentViewerModalProps {
   isOpen: boolean
@@ -132,8 +133,8 @@ export default function DocumentViewerModal({
         console.log('Share cancelled or failed')
       }
     } else {
-      await navigator.clipboard.writeText(shareUrl)
-      alert('Link copied to clipboard!')
+      const ok = await safeWriteToClipboard(shareUrl)
+      alert(ok ? 'Link copied to clipboard!' : 'Clipboard not available in this browser')
     }
   }
 

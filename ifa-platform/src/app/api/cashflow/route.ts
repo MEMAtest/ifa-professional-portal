@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from 'next/server';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { checkAuthentication, handleError, validateRequiredFields, createSuccessResponse } from '../utils';
+import { log } from '@/lib/logging/structured';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   try {
     const { user, error: authError } = await checkAuthentication(request);
     if (authError) {
-      console.warn('Authentication warning:', authError);
+      log.warn('Cashflow authentication warning', { error: authError });
       // Continue anyway for now - make this stricter if needed
     }
 

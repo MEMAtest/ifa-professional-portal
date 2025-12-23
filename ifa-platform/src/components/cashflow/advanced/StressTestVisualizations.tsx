@@ -69,7 +69,7 @@ export function StressTestVisualizations({
     
     // Average the impacts
     Object.keys(avgImpacts).forEach(key => {
-      avgImpacts[key] = avgImpacts[key] / results.length;
+      (avgImpacts as Record<string, number>)[key] = (avgImpacts as Record<string, number>)[key] / results.length;
     });
 
     // Create waterfall data

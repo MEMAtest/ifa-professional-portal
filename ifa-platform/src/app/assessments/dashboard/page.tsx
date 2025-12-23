@@ -24,119 +24,97 @@ import {
   Loader2,
   RefreshCw,
   Info,
-  PieChart,
+  PieChart as PieChartIcon,
   Calendar,
   Target,
   Award,
   Brain,
   Calculator,
-  LineChart
+  LineChart as LineChartIcon
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  LineChart,
+  Line,
+  Label
+} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert, AlertDescription } from '@/components/ui/Alert';
+import { getAssessmentResumeUrl, normalizeAssessmentType } from '@/lib/assessments/routing';
 
-// Simple Pie Chart Component
-const SimplePieChart = ({ data, title }: { data: Record<string, number>, title: string }) => {
-  const total = Object.values(data).reduce((sum, val) => sum + val, 0);
-  
-  if (total === 0) {
-    return (
-      <div className="text-center text-gray-500 py-8">
-        <PieChart className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-        <p className="text-sm">No data available</p>
-      </div>
-    );
-  }
+const RISK_COLORS: Record<string, string> = {
+  'Very Low': '#22c55e',
+  'Low': '#3b82f6',
+  'Medium': '#eab308',
+  'High': '#f97316',
+  'Very High': '#ef4444'
+};
 
-  const colors = {
-    'Very Low': '#10b981',
-    'Low': '#3b82f6', 
-    'Medium': '#eab308',
-    'High': '#f97316',
-    'Very High': '#ef4444'
-  };
+const STATUS_COLORS: Record<string, string> = {
+  completed: '#22c55e',
+  inProgress: '#3b82f6',
+  needsReview: '#f59e0b',
+  notStarted: '#94a3b8'
+};
 
-  // Calculate angles for pie slices
-  let currentAngle = -90; // Start at top
-  const slices: Array<{ category: string; percentage: number; startAngle: number; endAngle: number; color: string }> = [];
-  
-  Object.entries(data).forEach(([category, count]) => {
-    if (count > 0) {
-      const percentage = (count / total) * 100;
-      const angle = (count / total) * 360;
-      slices.push({
-        category,
-        percentage,
-        startAngle: currentAngle,
-        endAngle: currentAngle + angle,
-        color: colors[category as keyof typeof colors] || '#6b7280'
-      });
-      currentAngle += angle;
-    }
-  });
+const GRID_COLOR = '#e5e7eb';
 
-  // Create SVG path for each slice
-  const createPath = (startAngle: number, endAngle: number) => {
-    const start = polarToCartesian(100, 100, 80, endAngle);
-    const end = polarToCartesian(100, 100, 80, startAngle);
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-    
-    return [
-      "M", 100, 100,
-      "L", start.x, start.y,
-      "A", 80, 80, 0, largeArcFlag, 0, end.x, end.y,
-      "Z"
-    ].join(" ");
-  };
-
-  const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
-    const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
-    return {
-      x: centerX + (radius * Math.cos(angleInRadians)),
-      y: centerY + (radius * Math.sin(angleInRadians))
-    };
-  };
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || payload.length === 0) return null;
 
   return (
-    <div>
-      <h4 className="text-sm font-medium text-gray-700 mb-4 text-center">{title}</h4>
-      <div className="flex items-center justify-center">
-        <svg width="200" height="200" viewBox="0 0 200 200">
-          {slices.map((slice, index) => (
-            <path
-              key={index}
-              d={createPath(slice.startAngle, slice.endAngle)}
-              fill={slice.color}
-              stroke="white"
-              strokeWidth="2"
-              className="hover:opacity-80 transition-opacity cursor-pointer"
-            >
-              <title>{`${slice.category}: ${slice.percentage.toFixed(1)}%`}</title>
-            </path>
-          ))}
-        </svg>
-      </div>
-      <div className="mt-4 space-y-2">
-        {slices.map((slice, index) => (
-          <div key={index} className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-2">
-              <div 
-                className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: slice.color }}
-              />
-              <span>{slice.category}</span>
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+      {label ? <div className="text-xs font-medium text-gray-900 mb-1">{label}</div> : null}
+      <div className="space-y-1">
+        {payload
+          .filter((p: any) => p && p.value != null && Number(p.value) !== 0)
+          .map((p: any) => (
+            <div key={p.dataKey || p.name} className="flex items-center justify-between gap-4 text-xs">
+              <span className="flex items-center gap-2 text-gray-600">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
+                {p.name}
+              </span>
+              <span className="font-semibold text-gray-900 tabular-nums">{p.value}</span>
             </div>
-            <span className="font-medium">
-              {data[slice.category]} ({slice.percentage.toFixed(1)}%)
-            </span>
-          </div>
-        ))}
+          ))}
       </div>
     </div>
   );
-};
+}
+
+function CenteredTotalLabel({ value, subtitle }: { value: number; subtitle: string }) {
+  return (
+    <Label
+      content={({ viewBox }: any) => {
+        if (!viewBox) return null;
+        const cx = viewBox.cx;
+        const cy = viewBox.cy;
+        return (
+          <g>
+            <text x={cx} y={cy - 2} textAnchor="middle" dominantBaseline="middle" className="fill-gray-900">
+              <tspan className="text-base font-bold tabular-nums">{value}</tspan>
+            </text>
+            <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle" className="fill-gray-500">
+              <tspan className="text-[10px]">{subtitle}</tspan>
+            </text>
+          </g>
+        );
+      }}
+    />
+  );
+}
 
 interface DashboardMetrics {
   clientCoverage: {
@@ -151,6 +129,15 @@ interface DashboardMetrics {
       monte_carlo: number;
       cashflow: number;
     };
+    breakdown?: Array<{
+      key: string;
+      label: string;
+      completed: number;
+      inProgress: number;
+      needsReview: number;
+      notStarted: number;
+      total: number;
+    }>;
   };
   complianceStatus: {
     needReview: number;
@@ -169,6 +156,7 @@ interface DashboardMetrics {
     last30Days: number;
     averagePerMonth: number;
   };
+  activityTrend?: Array<{ weekStart: string; label: string; completed: number }>;
   demographics: {
     gender: {
       male: number;
@@ -215,6 +203,12 @@ interface DashboardMetrics {
       cashflow: number;
     };
     totalAssessments: number;
+    completedTotal: number;
+    inProgressTotal: number;
+    needsReviewTotal: number;
+    notStartedTotal: number;
+    totalPossible: number;
+    completionRate: number;
     averageVersions: number;
     maxVersionReached: number;
   };
@@ -232,16 +226,46 @@ interface DashboardMetrics {
   };
 }
 
+// Interface for incomplete assessments
+interface IncompleteAssessment {
+  id: string;
+  client_id: string;
+  client_name: string;
+  client_ref?: string | null;
+  assessment_type: string;
+  progress_percentage: number;
+  status: string;
+  last_updated: string;
+}
+
 export default function AssessmentDashboard() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [incompleteAssessments, setIncompleteAssessments] = useState<IncompleteAssessment[]>([]);
+  const [incompleteTotalCount, setIncompleteTotalCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   useEffect(() => {
     fetchMetrics();
+    fetchIncompleteAssessments();
   }, []);
+
+  const fetchIncompleteAssessments = async () => {
+    try {
+      const response = await fetch('/api/assessments/incomplete?limit=20');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.assessments) {
+          setIncompleteAssessments(data.assessments);
+          setIncompleteTotalCount(typeof data.count === 'number' ? data.count : data.assessments.length);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching incomplete assessments:', err);
+    }
+  };
 
   const fetchMetrics = async () => {
     try {
@@ -249,18 +273,25 @@ export default function AssessmentDashboard() {
       setError(null);
       
       const response = await fetch('/api/assessments/metrics');
+      const contentType = response.headers.get('content-type') || '';
+      const raw = await response.text();
+      const data = contentType.includes('application/json') ? JSON.parse(raw || '{}') : null;
       
       if (!response.ok) {
-        throw new Error('Failed to fetch metrics');
+        const message =
+          data && (data.message || data.error)
+            ? `${String(data.message || data.error)}${data.step ? ` (step: ${String(data.step)})` : ''}`
+            : raw
+              ? raw.slice(0, 180).replace(/\s+/g, ' ')
+              : 'Failed to fetch metrics';
+        throw new Error(message);
       }
-      
-      const data = await response.json();
       
       if (data.success && data.metrics) {
         setMetrics(data.metrics);
         setLastRefresh(new Date());
       } else {
-        throw new Error(data.error || 'Invalid response format');
+        throw new Error((data && data.error) ? String(data.error) : 'Invalid response format');
       }
     } catch (err) {
       console.error('Error fetching metrics:', err);
@@ -272,6 +303,7 @@ export default function AssessmentDashboard() {
 
   const handleRefresh = () => {
     fetchMetrics();
+    fetchIncompleteAssessments();
   };
 
   const formatCurrency = (value: number) => {
@@ -284,19 +316,19 @@ export default function AssessmentDashboard() {
   };
 
   const getAssessmentIcon = (type: string) => {
-    switch (type) {
+    switch (normalizeAssessmentType(type)) {
       case 'atr': return Shield;
       case 'cfl': return TrendingUp;
       case 'persona': return Users;
       case 'suitability': return FileText;
-      case 'monte_carlo': return LineChart;
+      case 'monte_carlo': return LineChartIcon;
       case 'cashflow': return Calculator;
       default: return FileText;
     }
   };
 
   const getAssessmentName = (type: string) => {
-    switch (type) {
+    switch (normalizeAssessmentType(type)) {
       case 'atr': return 'Attitude to Risk';
       case 'cfl': return 'Capacity for Loss';
       case 'persona': return 'Investor Persona';
@@ -308,7 +340,7 @@ export default function AssessmentDashboard() {
   };
 
   const getAssessmentColor = (type: string) => {
-    switch (type) {
+    switch (normalizeAssessmentType(type)) {
       case 'atr': return 'bg-blue-600';
       case 'cfl': return 'bg-green-600';
       case 'persona': return 'bg-purple-600';
@@ -348,10 +380,19 @@ export default function AssessmentDashboard() {
     );
   }
 
-  // Check if we have demographic data
-  const hasGenderData = metrics.demographics.gender.male > 0 || metrics.demographics.gender.female > 0;
-  const hasAgeData = Object.values(metrics.demographics.ageGroups).some(count => count > 0);
-  const hasFinancialData = metrics.financialInsights.clientsWithFinancialData > 0;
+  // Check if we have demographic/financial data (treat "not specified" as valid data to avoid empty charts)
+  const genderTotal =
+    metrics.demographics.gender.male +
+    metrics.demographics.gender.female +
+    metrics.demographics.gender.other +
+    metrics.demographics.gender.notSpecified;
+  const hasGenderData = genderTotal > 0;
+
+  const hasAgeData = Object.values(metrics.demographics.ageGroups).some((count) => count > 0);
+
+  const hasFinancialData =
+    Object.values(metrics.financialInsights.wealthDistribution).some((count) => count > 0) ||
+    metrics.financialInsights.clientsWithFinancialData > 0;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -376,9 +417,12 @@ export default function AssessmentDashboard() {
         </div>
       </div>
 
-      {/* Key Metrics Grid */}
+      {/* Key Metrics Grid - Clickable Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all"
+          onClick={() => router.push('/clients')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -392,32 +436,44 @@ export default function AssessmentDashboard() {
                 <Users className="h-6 w-6 text-blue-600" />
               </div>
             </div>
+            <p className="text-xs text-blue-600 mt-3 flex items-center">
+              View all clients <ArrowRight className="h-3 w-3 ml-1" />
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg hover:border-green-300 transition-all"
+          onClick={() => router.push('/assessments?status=completed')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Assessments Complete</p>
-                <p className="text-2xl font-bold mt-1">{metrics.assessmentStats.totalAssessments}</p>
+                <p className="text-sm text-gray-600">Assessments Completed</p>
+                <p className="text-2xl font-bold mt-1">{metrics.assessmentStats.completedTotal}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Avg {metrics.assessmentStats.averageVersions} versions
+                  {metrics.assessmentStats.completionRate}% of {metrics.assessmentStats.totalPossible} possible
                 </p>
               </div>
               <div className="bg-green-100 p-3 rounded-lg">
                 <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
             </div>
+            <p className="text-xs text-green-600 mt-3 flex items-center">
+              View assessments <ArrowRight className="h-3 w-3 ml-1" />
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg hover:border-yellow-300 transition-all"
+          onClick={() => router.push('/assessments?status=needs_review')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Reviews Due</p>
-                <p className="text-2xl font-bold mt-1">{metrics.complianceStatus.needReview}</p>
+                <p className="text-2xl font-bold mt-1">{metrics.complianceStatus.needReview + metrics.complianceStatus.overdue}</p>
                 <p className="text-xs text-red-600 mt-1">
                   {metrics.complianceStatus.overdue} overdue
                 </p>
@@ -426,10 +482,16 @@ export default function AssessmentDashboard() {
                 <Clock className="h-6 w-6 text-yellow-600" />
               </div>
             </div>
+            <p className="text-xs text-yellow-600 mt-3 flex items-center">
+              View reviews <ArrowRight className="h-3 w-3 ml-1" />
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg hover:border-purple-300 transition-all"
+          onClick={() => router.push('/assessments')}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -443,61 +505,454 @@ export default function AssessmentDashboard() {
                 <Activity className="h-6 w-6 text-purple-600" />
               </div>
             </div>
+            <p className="text-xs text-purple-600 mt-3 flex items-center">
+              View activity <ArrowRight className="h-3 w-3 ml-1" />
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Client Coverage & Risk Distribution with Pie Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <Card>
+      {/* Quick Actions - Moved to top */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card
+          className="hover:shadow-lg transition-shadow cursor-pointer"
+          onClick={() => router.push('/clients')}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="bg-blue-100 p-3 rounded-lg">
+                  <Users className="h-6 w-6 text-blue-700" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">View All Clients</h3>
+                  <p className="text-sm text-gray-600">Manage assessments</p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="hover:shadow-lg transition-shadow cursor-pointer"
+          onClick={() => router.push('/reports')}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="bg-green-100 p-3 rounded-lg">
+                  <BarChart3 className="h-6 w-6 text-green-700" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Generate Reports</h3>
+                  <p className="text-sm text-gray-600">Compliance & analytics</p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="hover:shadow-lg transition-shadow cursor-pointer"
+          onClick={() => router.push('/documents')}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="bg-purple-100 p-3 rounded-lg">
+                  <FileText className="h-6 w-6 text-purple-700" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Documents</h3>
+                  <p className="text-sm text-gray-600">View generated docs</p>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Assessments to Complete Widget */}
+      {incompleteAssessments.length > 0 && (
+        <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="h-5 w-5 mr-2" />
-              Client Coverage by Assessment Type
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-orange-600" />
+              Assessments to Complete
+              <Badge variant="secondary" className="ml-2">{incompleteTotalCount}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {Object.entries(metrics.clientCoverage.byType).map(([type, count]) => {
-                const Icon = getAssessmentIcon(type);
-                const percentage = metrics.summary.totalClients > 0 
-                  ? Math.round((count / metrics.summary.totalClients) * 100)
-                  : 0;
-                
-                return (
-                  <div key={type}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <Icon className="h-4 w-4 text-gray-600" />
-                        <span className="text-sm font-medium">{getAssessmentName(type)}</span>
+            <div className="space-y-3">
+              {incompleteAssessments
+                .sort((a, b) => b.progress_percentage - a.progress_percentage)
+                .slice(0, 5)
+                .map((assessment) => {
+                  const normalizedType = normalizeAssessmentType(assessment.assessment_type);
+                  const Icon = getAssessmentIcon(normalizedType);
+                  const colorClass = {
+                    'atr': 'text-blue-600 bg-blue-50',
+                    'cfl': 'text-green-600 bg-green-50',
+                    'persona': 'text-purple-600 bg-purple-50',
+                    'suitability': 'text-indigo-600 bg-indigo-50',
+                    'monte_carlo': 'text-orange-600 bg-orange-50',
+                    'cashflow': 'text-teal-600 bg-teal-50'
+                  }[normalizedType] || 'text-gray-600 bg-gray-50';
+
+                  const progressColorClass = {
+                    'atr': 'bg-blue-600',
+                    'cfl': 'bg-green-600',
+                    'persona': 'bg-purple-600',
+                    'suitability': 'bg-indigo-600',
+                    'monte_carlo': 'bg-orange-600',
+                    'cashflow': 'bg-teal-600'
+                  }[normalizedType] || 'bg-gray-600';
+
+                  return (
+                    <div
+                      key={assessment.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${colorClass}`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{assessment.client_name}</p>
+                          <p className="text-xs text-gray-500">{getAssessmentName(normalizedType)}</p>
+                        </div>
                       </div>
-                      <span className="text-sm text-gray-600">{count} clients</span>
+                      <div className="flex items-center gap-4">
+                        <div className="w-32">
+                          <div className="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Progress</span>
+                            <span>{assessment.progress_percentage}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${progressColorClass}`}
+                              style={{ width: `${assessment.progress_percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => router.push(getAssessmentResumeUrl(normalizedType, assessment.client_id))}
+                          className="whitespace-nowrap"
+                        >
+                          Resume
+                        </Button>
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className={`h-2 rounded-full ${getAssessmentColor(type)}`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              {incompleteTotalCount > 5 && (
+                <div className="text-center pt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.push('/assessments/dashboard/incomplete')}
+                    className="text-blue-600"
+                  >
+                    View all {incompleteTotalCount} incomplete assessments
+                    <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+              )}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Coverage + Risk Distribution (drillable charts) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <Target className="h-5 w-5 mr-2" />
+                Assessment Coverage
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/assessments')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {metrics.clientCoverage.breakdown && metrics.clientCoverage.breakdown.length > 0 ? (
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={metrics.clientCoverage.breakdown}
+                    layout="vertical"
+                    margin={{ top: 10, right: 20, left: 70, bottom: 10 }}
+                  >
+                    <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#6b7280' }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="label"
+                      width={130}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#374151' }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                    <Bar
+                      dataKey="completed"
+                      name="Completed"
+                      stackId="a"
+                      fill={STATUS_COLORS.completed}
+                      cursor="pointer"
+                      onClick={(data: any) =>
+                        router.push(`/assessments?type=${encodeURIComponent(data?.payload?.key)}&status=completed`)
+                      }
+                    />
+                    <Bar
+                      dataKey="inProgress"
+                      name="In progress"
+                      stackId="a"
+                      fill={STATUS_COLORS.inProgress}
+                      cursor="pointer"
+                      onClick={(data: any) =>
+                        router.push(`/assessments?type=${encodeURIComponent(data?.payload?.key)}&status=in_progress`)
+                      }
+                    />
+                    <Bar
+                      dataKey="needsReview"
+                      name="Needs review"
+                      stackId="a"
+                      fill={STATUS_COLORS.needsReview}
+                      cursor="pointer"
+                      onClick={(data: any) =>
+                        router.push(`/assessments?type=${encodeURIComponent(data?.payload?.key)}&status=needs_review`)
+                      }
+                    />
+                    <Bar
+                      dataKey="notStarted"
+                      name="Not started"
+                      stackId="a"
+                      fill={STATUS_COLORS.notStarted}
+                      cursor="pointer"
+                      onClick={(data: any) =>
+                        router.push(`/assessments?type=${encodeURIComponent(data?.payload?.key)}&status=not_started`)
+                      }
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                <BarChart3 className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm">No coverage data available</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Shield className="h-5 w-5 mr-2" />
-              Risk Distribution
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <Shield className="h-5 w-5 mr-2" />
+                Risk Distribution
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/risk')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <SimplePieChart 
-              data={metrics.riskDistribution} 
-              title="Client Risk Categories"
-            />
+            {(() => {
+              const riskTotal = Object.values(metrics.riskDistribution).reduce((sum, v) => sum + v, 0);
+              if (riskTotal <= 0) {
+                return (
+                  <div className="text-center text-gray-500 py-8">
+                    <PieChartIcon className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm">No risk data available</p>
+                  </div>
+                );
+              }
+
+              const data = Object.entries(metrics.riskDistribution)
+                .map(([name, value]) => ({ name, value }))
+                .filter((d) => d.value > 0);
+
+              return (
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={data}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={96}
+                        paddingAngle={2}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        onClick={(d: any) => router.push(`/risk?bucket=${encodeURIComponent(d?.name || d?.payload?.name)}`)}
+                      >
+                        {data.map((entry) => (
+                          <Cell key={entry.name} fill={RISK_COLORS[entry.name] || '#6b7280'} />
+                        ))}
+                        <CenteredTotalLabel value={riskTotal} subtitle="clients" />
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Activity + Compliance (drillable charts) */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <Activity className="h-5 w-5 mr-2" />
+                Activity Trend (12 weeks)
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/assessments')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {metrics.activityTrend && metrics.activityTrend.length > 0 ? (
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={metrics.activityTrend} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                    <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#6b7280' }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#6b7280' }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="completed"
+                      name="Completed assessments"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                <LineChartIcon className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm">No activity data available</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <Clock className="h-5 w-5 mr-2" />
+                Review Compliance
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/assessments?status=needs_review')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const total =
+                metrics.complianceStatus.upToDate + metrics.complianceStatus.needReview + metrics.complianceStatus.overdue;
+              if (total <= 0) {
+                return (
+                  <div className="text-center text-gray-500 py-8">
+                    <Clock className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                    <p className="text-sm">No compliance data available</p>
+                  </div>
+                );
+              }
+
+              const data = [
+                { name: 'Up to date', key: 'up_to_date', value: metrics.complianceStatus.upToDate, color: '#22c55e' },
+                { name: 'Needs review', key: 'needs_review', value: metrics.complianceStatus.needReview, color: '#f59e0b' },
+                { name: 'Overdue', key: 'overdue', value: metrics.complianceStatus.overdue, color: '#ef4444' }
+              ].filter((d) => d.value > 0);
+
+              return (
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={data}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={96}
+                        paddingAngle={2}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        onClick={(d: any) => router.push(`/assessments?status=${encodeURIComponent(d?.key || d?.payload?.key)}`)}
+                      >
+                        {data.map((entry) => (
+                          <Cell key={entry.key} fill={entry.color} />
+                        ))}
+                        <CenteredTotalLabel value={total} subtitle="clients" />
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
@@ -506,10 +961,20 @@ export default function AssessmentDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Users className="h-5 w-5 mr-2" />
-              Gender Distribution
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <Users className="h-5 w-5 mr-2" />
+                Gender Distribution
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/clients')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {!hasGenderData ? (
@@ -519,31 +984,56 @@ export default function AssessmentDashboard() {
                 <p className="text-xs mt-1">Data collection in progress</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Male</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium">{metrics.demographics.gender.male}</span>
-                    <span className="text-xs text-gray-500">
-                      ({Math.round((metrics.demographics.gender.male / metrics.summary.totalClients) * 100)}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Female</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium">{metrics.demographics.gender.female}</span>
-                    <span className="text-xs text-gray-500">
-                      ({Math.round((metrics.demographics.gender.female / metrics.summary.totalClients) * 100)}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Not Specified</span>
-                  <span className="text-sm font-medium">
-                    {metrics.demographics.gender.notSpecified + metrics.demographics.gender.other}
-                  </span>
-                </div>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Male', value: metrics.demographics.gender.male, color: '#3b82f6' },
+                        { name: 'Female', value: metrics.demographics.gender.female, color: '#ec4899' },
+                        {
+                          name: 'Other / Not specified',
+                          value: metrics.demographics.gender.other + metrics.demographics.gender.notSpecified,
+                          color: '#94a3b8'
+                        }
+                      ].filter((d) => d.value > 0)}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      onClick={() => router.push('/clients')}
+                      cursor="pointer"
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                    >
+                      {[
+                        { key: 'male', value: metrics.demographics.gender.male, color: '#3b82f6' },
+                        { key: 'female', value: metrics.demographics.gender.female, color: '#ec4899' },
+                        {
+                          key: 'other',
+                          value: metrics.demographics.gender.other + metrics.demographics.gender.notSpecified,
+                          color: '#94a3b8'
+                        }
+                      ]
+                        .filter((d) => d.value > 0)
+                        .map((entry) => (
+                          <Cell key={entry.key} fill={entry.color} />
+                        ))}
+                      <CenteredTotalLabel
+                        value={
+                          metrics.demographics.gender.male +
+                          metrics.demographics.gender.female +
+                          metrics.demographics.gender.other +
+                          metrics.demographics.gender.notSpecified
+                        }
+                        subtitle="clients"
+                      />
+                    </Pie>
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             )}
           </CardContent>
@@ -551,10 +1041,20 @@ export default function AssessmentDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Calendar className="h-5 w-5 mr-2" />
-              Age Distribution
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <Calendar className="h-5 w-5 mr-2" />
+                Age Distribution
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/clients')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {!hasAgeData ? (
@@ -563,36 +1063,63 @@ export default function AssessmentDashboard() {
                 <p className="text-sm">Age data being calculated</p>
               </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  {Object.entries(metrics.demographics.ageGroups).map(([group, count]) => (
-                    count > 0 && (
-                      <div key={group} className="flex items-center justify-between">
-                        <span className="text-sm">{group}</span>
-                        <span className="text-sm font-medium">{count}</span>
-                      </div>
-                    )
-                  ))}
-                </div>
-                {metrics.summary.over60Clients > 0 && (
-                  <div className="mt-4 pt-3 border-t">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Over 60</span>
-                      <Badge variant="outline">{metrics.summary.over60Clients} clients</Badge>
-                    </div>
-                  </div>
-                )}
-              </>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={Object.entries(metrics.demographics.ageGroups)
+                      .map(([group, count]) => ({ group, count }))
+                      .filter((d) => d.count > 0)}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 40 }}
+                  >
+                    <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="group"
+                      interval={0}
+                      angle={-25}
+                      textAnchor="end"
+                      height={50}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 11, fill: '#6b7280' }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#6b7280' }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar
+                      dataKey="count"
+                      name="Clients"
+                      fill="#3b82f6"
+                      radius={[6, 6, 0, 0]}
+                      cursor="pointer"
+                      onClick={() => router.push('/clients')}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <MapPin className="h-5 w-5 mr-2" />
-              Top Locations
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <MapPin className="h-5 w-5 mr-2" />
+                Top Locations
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/clients')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {metrics.demographics.topCities.length === 0 ? (
@@ -601,16 +1128,40 @@ export default function AssessmentDashboard() {
                 <p className="text-sm">Location data not available</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {metrics.demographics.topCities.map((city, index) => (
-                  <div key={city.city} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-500">#{index + 1}</span>
-                      <span className="text-sm">{city.city}</span>
-                    </div>
-                    <span className="text-sm font-medium">{city.count}</span>
-                  </div>
-                ))}
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={metrics.demographics.topCities.map((c) => ({ city: c.city, count: c.count }))}
+                    layout="vertical"
+                    margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                  >
+                    <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#6b7280' }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="city"
+                      width={90}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 12, fill: '#374151' }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar
+                      dataKey="count"
+                      name="Clients"
+                      fill="#10b981"
+                      radius={[0, 6, 6, 0]}
+                      cursor="pointer"
+                      onClick={() => router.push('/clients')}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             )}
           </CardContent>
@@ -621,10 +1172,20 @@ export default function AssessmentDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <DollarSign className="h-5 w-5 mr-2" />
-              Wealth Distribution
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <DollarSign className="h-5 w-5 mr-2" />
+                Wealth Distribution
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/clients/financials')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {!hasFinancialData ? (
@@ -635,25 +1196,42 @@ export default function AssessmentDashboard() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
-                  {Object.entries(metrics.financialInsights.wealthDistribution).map(([bracket, count]) => (
-                    count > 0 && (
-                      <div key={bracket} className="flex items-center justify-between">
-                        <span className="text-sm">{bracket}</span>
-                        <div className="flex items-center space-x-3">
-                          <span className="text-sm font-medium">{count} clients</span>
-                          <div className="w-20">
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-indigo-600 h-2 rounded-full"
-                                style={{ width: `${(count / metrics.summary.totalClients) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  ))}
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={Object.entries(metrics.financialInsights.wealthDistribution)
+                        .map(([bracket, count]) => ({ bracket, count }))
+                        .filter((d) => d.count > 0)}
+                      layout="vertical"
+                      margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                    >
+                      <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        type="number"
+                        allowDecimals={false}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: '#6b7280' }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="bracket"
+                        width={120}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: '#374151' }}
+                      />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar
+                        dataKey="count"
+                        name="Clients"
+                        fill="#6366f1"
+                        radius={[0, 6, 6, 0]}
+                        cursor="pointer"
+                        onClick={() => router.push('/clients/financials')}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
                 {metrics.financialInsights.averageNetWorth > 0 && (
                   <div className="mt-4 pt-3 border-t space-y-2">
@@ -680,10 +1258,20 @@ export default function AssessmentDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <UserCheck className="h-5 w-5 mr-2" />
-              Vulnerable Clients
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center">
+                <UserCheck className="h-5 w-5 mr-2" />
+                Vulnerable Clients
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/compliance?tab=registers&sub=vulnerability')}
+                className="text-blue-600"
+              >
+                View
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="mb-4">
@@ -694,85 +1282,94 @@ export default function AssessmentDashboard() {
                 </Badge>
               </div>
             </div>
-            {metrics.demographics.vulnerableClients.topFactors.length > 0 ? (
-              <div>
-                <p className="text-sm font-medium mb-2">Top Vulnerability Factors</p>
-                <div className="space-y-2">
-                  {metrics.demographics.vulnerableClients.topFactors.map((factor) => (
-                    <div key={factor.factor} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">{factor.factor}</span>
-                      <span className="text-sm font-medium">{factor.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 py-4">
-                <p className="text-sm">No vulnerability factors recorded</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card 
-          className="hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => router.push('/assessments')}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="bg-blue-100 p-3 rounded-lg">
-                  <Users className="h-6 w-6 text-blue-700" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">View All Clients</h3>
-                  <p className="text-sm text-gray-600">Manage assessments</p>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Vulnerable', value: metrics.demographics.vulnerableClients.count, color: '#f97316' },
+                        {
+                          name: 'Not vulnerable',
+                          value: Math.max(0, metrics.summary.totalClients - metrics.demographics.vulnerableClients.count),
+                          color: '#22c55e'
+                        }
+                      ].filter((d) => d.value > 0)}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={45}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      onClick={() => router.push('/compliance?tab=registers&sub=vulnerability')}
+                      cursor="pointer"
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                    >
+                      {[
+                        { key: 'vulnerable', value: metrics.demographics.vulnerableClients.count, color: '#f97316' },
+                        {
+                          key: 'not_vulnerable',
+                          value: Math.max(0, metrics.summary.totalClients - metrics.demographics.vulnerableClients.count),
+                          color: '#22c55e'
+                        }
+                      ]
+                        .filter((d) => d.value > 0)
+                        .map((entry) => (
+                          <Cell key={entry.key} fill={entry.color} />
+                        ))}
+                      <CenteredTotalLabel value={metrics.demographics.vulnerableClients.count} subtitle="vulnerable" />
+                    </Pie>
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-              <ArrowRight className="h-5 w-5 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card 
-          className="hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => router.push('/reports')}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="bg-green-100 p-3 rounded-lg">
-                  <BarChart3 className="h-6 w-6 text-green-700" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Generate Reports</h3>
-                  <p className="text-sm text-gray-600">Compliance & analytics</p>
-                </div>
+              <div className="h-[220px]">
+                {metrics.demographics.vulnerableClients.topFactors.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={metrics.demographics.vulnerableClients.topFactors.map((f) => ({
+                        factor: f.factor,
+                        count: f.count
+                      }))}
+                      layout="vertical"
+                      margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                    >
+                      <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        type="number"
+                        allowDecimals={false}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: '#6b7280' }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="factor"
+                        width={120}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 12, fill: '#374151' }}
+                      />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Bar
+                        dataKey="count"
+                        name="Clients"
+                        fill="#f97316"
+                        radius={[0, 6, 6, 0]}
+                        cursor="pointer"
+                        onClick={() => router.push('/compliance?tab=registers&sub=vulnerability')}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-gray-500 py-10">
+                    <p className="text-sm">No vulnerability factors recorded</p>
+                  </div>
+                )}
               </div>
-              <ArrowRight className="h-5 w-5 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card 
-          className="hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => router.push('/documents')}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="bg-purple-100 p-3 rounded-lg">
-                  <FileText className="h-6 w-6 text-purple-700" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Documents</h3>
-                  <p className="text-sm text-gray-600">View generated docs</p>
-                </div>
-              </div>
-              <ArrowRight className="h-5 w-5 text-gray-400" />
             </div>
           </CardContent>
         </Card>
@@ -789,7 +1386,7 @@ export default function AssessmentDashboard() {
               <Button 
                 variant="link" 
                 className="text-orange-700 underline p-0 h-auto ml-1"
-                onClick={() => router.push('/assessments?filter=overdue')}
+                onClick={() => router.push('/assessments?status=overdue')}
               >
                 View overdue assessments
               </Button>

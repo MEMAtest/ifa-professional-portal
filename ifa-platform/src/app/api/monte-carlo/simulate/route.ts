@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { log } from '@/lib/logging/structured';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { scenario_id, simulation_count = 5000 } = body;
 
-    console.log(`🎲 Starting enhanced Monte Carlo: ${simulation_count} simulations`);
+    log.info('Starting enhanced Monte Carlo', { simulationCount: simulation_count });
 
     // Enhanced scenario with better defaults
     const scenario = {
@@ -30,7 +31,10 @@ export async function POST(request: NextRequest) {
     };
 
     // Run enhanced simulation
-    const results = await runEnhancedMonteCarloSimulation(scenario, simulation_count);
+    const rawResults = await runEnhancedMonteCarloSimulation(scenario, simulation_count);
+
+    // FIX: Sanitize results to prevent NaN/Infinity from being stored in database
+    const results = sanitizeMonteCarloResult(rawResults);
 
     // Save to database
     const { data: savedResult, error } = await supabase
@@ -54,11 +58,11 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Database error:', error);
+      log.error('Monte Carlo database error', error);
       throw error;
     }
 
-    console.log(`✅ Enhanced simulation completed: ${results.success_probability}% success`);
+    log.info('Enhanced simulation completed', { successProbability: results.success_probability });
 
     return NextResponse.json({
       success: true,
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Enhanced simulation failed:', error);
+    log.error('Enhanced simulation failed', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
     return NextResponse.json(
@@ -188,6 +192,48 @@ async function runEnhancedMonteCarloSimulation(scenario: any, simulationCount: n
   };
 }
 
+/**
+ * Sanitize a number to prevent NaN/Infinity from being stored
+ */
+function sanitizeNumber(value: number, fallback: number = 0): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Sanitize Monte Carlo results to ensure all values are finite numbers
+ */
+function sanitizeMonteCarloResult(result: {
+  success_probability: number;
+  average_final_wealth: number;
+  median_final_wealth: number;
+  confidence_intervals: { p10: number; p25: number; p50: number; p75: number; p90: number };
+  shortfall_risk: number;
+  average_shortfall_amount: number;
+  years_to_depletion_p50: number;
+  wealth_volatility: number;
+  maximum_drawdown: number;
+  simulation_duration_ms: number;
+}) {
+  return {
+    success_probability: sanitizeNumber(result.success_probability, 0),
+    average_final_wealth: sanitizeNumber(result.average_final_wealth, 0),
+    median_final_wealth: sanitizeNumber(result.median_final_wealth, 0),
+    confidence_intervals: {
+      p10: sanitizeNumber(result.confidence_intervals.p10, 0),
+      p25: sanitizeNumber(result.confidence_intervals.p25, 0),
+      p50: sanitizeNumber(result.confidence_intervals.p50, 0),
+      p75: sanitizeNumber(result.confidence_intervals.p75, 0),
+      p90: sanitizeNumber(result.confidence_intervals.p90, 0),
+    },
+    shortfall_risk: sanitizeNumber(result.shortfall_risk, 0),
+    average_shortfall_amount: sanitizeNumber(result.average_shortfall_amount, 0),
+    years_to_depletion_p50: sanitizeNumber(result.years_to_depletion_p50, 0),
+    wealth_volatility: sanitizeNumber(result.wealth_volatility, 0),
+    maximum_drawdown: sanitizeNumber(result.maximum_drawdown, 0),
+    simulation_duration_ms: sanitizeNumber(result.simulation_duration_ms, 0),
+  };
+}
+
 // Enhanced helper functions
 function generateNormalRandom(mean: number, stdDev: number): number {
   const u1 = Math.random();
@@ -209,20 +255,38 @@ function selectMarketRegime(regimes: any[]): any {
 }
 
 function calculateVolatility(values: number[]): number {
+  // FIX: Guard against empty array and zero/invalid mean
+  if (values.length === 0) return 0;
+
   const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+
+  // Guard against zero or invalid mean to prevent NaN/Infinity
+  if (!Number.isFinite(mean) || mean === 0) return 0;
+
   const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-  return Math.round((Math.sqrt(variance) / mean) * 100 * 10) / 10;
+  const volatility = (Math.sqrt(variance) / mean) * 100;
+
+  // Sanitize result
+  return Number.isFinite(volatility) ? Math.round(volatility * 10) / 10 : 0;
 }
 
 function calculateMaxDrawdown(values: number[]): number {
+  // FIX: Guard against empty array
+  if (values.length === 0) return 0;
+
   let maxDrawdown = 0;
-  let peak = values[0];
-  
+  let peak = values[0] || 0;
+
   for (const value of values) {
     if (value > peak) peak = value;
-    const drawdown = (peak - value) / peak * 100;
-    maxDrawdown = Math.max(maxDrawdown, drawdown);
+    // FIX: Guard against zero peak to prevent divide-by-zero
+    if (peak > 0) {
+      const drawdown = ((peak - value) / peak) * 100;
+      if (Number.isFinite(drawdown)) {
+        maxDrawdown = Math.max(maxDrawdown, drawdown);
+      }
+    }
   }
-  
-  return Math.round(maxDrawdown * 10) / 10;
+
+  return Number.isFinite(maxDrawdown) ? Math.round(maxDrawdown * 10) / 10 : 0;
 }

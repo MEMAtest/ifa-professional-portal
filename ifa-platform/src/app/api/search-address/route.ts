@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 // ✅ FIXED: Added dynamic export to prevent static generation errors
 
 import { NextRequest, NextResponse } from 'next/server';
+import { log } from '@/lib/logging/structured';
 
 // ✅ CRITICAL FIX: Force this route to be dynamic
 export const dynamic = 'force-dynamic';
@@ -178,7 +179,7 @@ export async function GET(request: NextRequest) {
     const apiSecret = process.env.OS_API_SECRET;
 
     if (!apiKey) {
-      console.error('OS_API_KEY not configured');
+      log.error('OS_API_KEY not configured');
       // Fallback to enhanced mock data
       const mockResults = generateMockAddresses(query);
       return NextResponse.json(
@@ -196,7 +197,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Log API key status for debugging
-    console.log(`OS API Key present: ${!!apiKey}, Length: ${apiKey?.length}, First 4: ${apiKey?.substring(0, 4)}`);
+    log.debug('OS API Key status', {
+      present: !!apiKey,
+      length: apiKey?.length,
+      prefix: apiKey?.substring(0, 4)
+    });
 
     // Use Names API (which works with your API key)
     const osApiUrl = new URL('https://api.os.uk/search/names/v1/find');
@@ -216,8 +221,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error(`OS API Error: ${response.status} ${response.statusText}`);
-      
+      log.error('OS API Error', {
+        status: response.status,
+        statusText: response.statusText
+      });
+
       // Fallback to mock data
       const mockResults = generateMockAddresses(query);
       return NextResponse.json(
@@ -272,8 +280,8 @@ export async function GET(request: NextRequest) {
     );
 
   } catch (error) {
-    console.error('Address search API error:', error);
-    
+    log.error('Address search API error', error);
+
     // Get query for fallback
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('query') || '';

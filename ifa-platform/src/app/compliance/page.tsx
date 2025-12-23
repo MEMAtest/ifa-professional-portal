@@ -1,11 +1,15 @@
 // app/compliance/page.tsx
 // ================================================================
-// ✅ FIXED VERSION - Uses correct database columns
+// Compliance Hub - Main Dashboard with 3 tabs:
+// 1. QA & File Reviews - Four-Eyes Check workflow
+// 2. Registers - Complaints, Breaches, Vulnerability
+// 3. Settings & Rules - Compliance configuration
+// ================================================================
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { 
+import React, { useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react'
+import {
   Shield,
   AlertTriangle,
   CheckCircle,
@@ -18,7 +22,17 @@ import {
   Filter,
   Calendar,
   BarChart3,
-  BookOpen
+  BookOpen,
+  ClipboardCheck,
+  AlertCircle,
+  Settings,
+  Plus,
+  ChevronRight,
+  FileWarning,
+  UserX,
+  Scale,
+  Bell,
+  RefreshCw
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -28,194 +42,281 @@ import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
 
-// Types based on actual database schema
-interface ComplianceMetric {
-  id: string
-  metric_name: string
-  current_value: number
-  target_value: number
-  status: 'compliant' | 'warning' | 'breach'
-  last_checked: string
-  details: string
+// Import sub-components
+import QADashboard from '@/components/compliance/QADashboard'
+import RegistersDashboard from '@/components/compliance/RegistersDashboard'
+import ComplianceSettings from '@/components/compliance/ComplianceSettings'
+import AMLDashboard from '@/components/compliance/AMLDashboard'
+import ConsumerDutyDashboard from '@/components/compliance/ConsumerDutyDashboard'
+
+// Error Boundary Component to catch and handle errors gracefully
+interface ErrorBoundaryProps {
+  children: ReactNode
+  fallback: ReactNode
+  onReset?: () => void
 }
 
-interface AuditEntry {
-  id: string
-  user_id: string
-  client_id?: string
-  action: string
-  resource: string
-  resource_id?: string
-  success: boolean
-  details: any
-  timestamp: string
-  ip_address: string
-  user_agent: string
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
 }
 
-interface Client {
-  id: string
-  client_ref: string
-  personal_details: {
-    firstName: string
-    lastName: string
-    title?: string
+class TabErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false, error: null }
   }
-  contact_info: {
-    email: string
-    phone: string
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Tab Error:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback
+    }
+    return this.props.children
   }
 }
 
-export default function CompliancePage() {
+// Error Fallback UI Component
+function TabErrorFallback({
+  onRetry,
+  tabName
+}: {
+  onRetry: () => void
+  tabName: string
+}) {
+  return (
+    <Card className="border-red-200 bg-red-50">
+      <CardContent className="p-6">
+        <div className="flex items-start space-x-4">
+          <div className="p-3 rounded-full bg-red-100">
+            <AlertTriangle className="h-6 w-6 text-red-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-red-800">
+              Failed to Load {tabName}
+            </h3>
+            <p className="text-red-700 mt-1">
+              Something went wrong while loading this section. This could be due to a network issue or the data not being available.
+            </p>
+            <div className="mt-4 flex items-center space-x-3">
+              <Button onClick={onRetry} variant="outline" className="border-red-300 text-red-700 hover:bg-red-100">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-red-600"
+                onClick={() => window.location.reload()}
+              >
+                Refresh Page
+              </Button>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Types
+interface ComplianceStats {
+  pendingReviews: number
+  overdueReviews: number
+  reviewsThisMonth: number
+  passRate: number
+  openComplaints: number
+  openBreaches: number
+  activeVulnerabilities: number
+  complianceScore: number
+}
+
+type TabType = 'qa-reviews' | 'registers' | 'aml' | 'consumer-duty' | 'settings'
+
+export default function ComplianceHubPage() {
   const supabase = createClient()
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
 
   // State
-  const [metrics, setMetrics] = useState<ComplianceMetric[]>([])
-  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
-  const [clients, setClients] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'audit'>('overview')
+  const [activeTab, setActiveTab] = useState<TabType>('qa-reviews')
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false)
+  const [registersSubTab, setRegistersSubTab] = useState<string>('complaints')
+  const [qaFilter, setQaFilter] = useState<string | undefined>(undefined)
+  const [qaRiskFilter, setQaRiskFilter] = useState<string | undefined>(undefined)
+  const [consumerDutyOutcome, setConsumerDutyOutcome] = useState<string | undefined>(undefined)
+  const [amlFilter, setAmlFilter] = useState<string | undefined>(undefined)
 
-  // Stats
-  const [stats, setStats] = useState({
-    complianceScore: 98,
-    totalClients: 0,
-    reviewsDue: 0,
-    auditEntries: 0,
-    consumerDutyCompliant: true
+  // Check URL params for tab and filters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const tab = urlParams.get('tab')
+    const filter = urlParams.get('filter')
+    const risk = urlParams.get('risk')
+    const sub = urlParams.get('sub')
+    const outcome = urlParams.get('outcome')
+
+    // Set tab based on URL
+    if (tab === 'aml') {
+      setActiveTab('aml')
+      if (filter) setAmlFilter(filter)
+    } else if (tab === 'consumer-duty') {
+      setActiveTab('consumer-duty')
+      if (outcome) setConsumerDutyOutcome(outcome)
+    } else if (tab === 'qa') {
+      setActiveTab('qa-reviews')
+      if (filter) setQaFilter(filter)
+      if (risk) setQaRiskFilter(risk)
+    } else if (tab === 'registers') {
+      setActiveTab('registers')
+      if (sub) setRegistersSubTab(sub)
+    }
+  }, [])
+  const [stats, setStats] = useState<ComplianceStats>({
+    pendingReviews: 0,
+    overdueReviews: 0,
+    reviewsThisMonth: 0,
+    passRate: 0,
+    openComplaints: 0,
+    openBreaches: 0,
+    activeVulnerabilities: 0,
+    complianceScore: 0
   })
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Load stats
+  const loadStats = useCallback(async () => {
+    try {
+      // Fetch file reviews stats
+      const { data: pendingReviews } = await supabase
+        .from('file_reviews')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+
+      const { data: overdueReviews } = await supabase
+        .from('file_reviews')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .lt('due_date', new Date().toISOString())
+
+      const startOfMonth = new Date()
+      startOfMonth.setDate(1)
+      startOfMonth.setHours(0, 0, 0, 0)
+
+      const { count: reviewsThisMonth } = await supabase
+        .from('file_reviews')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', startOfMonth.toISOString())
+
+      const { count: approvedReviews } = await supabase
+        .from('file_reviews')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'approved')
+        .gte('created_at', startOfMonth.toISOString())
+
+      // Fetch complaints stats
+      const { count: openComplaints } = await supabase
+        .from('complaint_register')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['open', 'investigating'])
+
+      // Fetch breaches stats
+      const { count: openBreaches } = await supabase
+        .from('breach_register')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['open', 'investigating'])
+
+      // Fetch vulnerability stats
+      const { count: activeVulnerabilities } = await supabase
+        .from('vulnerability_register')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active')
+
+      // Calculate pass rate
+      const passRate = reviewsThisMonth && reviewsThisMonth > 0
+        ? Math.round((approvedReviews || 0) / reviewsThisMonth * 100)
+        : 0
+
+      // Calculate compliance score (simplified)
+      const complianceScore = calculateComplianceScore({
+        openComplaints: openComplaints || 0,
+        openBreaches: openBreaches || 0,
+        overdueReviews: overdueReviews || 0,
+        passRate
+      })
+
+      setStats({
+        pendingReviews: pendingReviews?.length || 0,
+        overdueReviews: overdueReviews || 0,
+        reviewsThisMonth: reviewsThisMonth || 0,
+        passRate,
+        openComplaints: openComplaints || 0,
+        openBreaches: openBreaches || 0,
+        activeVulnerabilities: activeVulnerabilities || 0,
+        complianceScore
+      })
+    } catch (error) {
+      console.error('Error loading compliance stats:', error)
+      // Set default stats if tables don't exist yet
+      setStats({
+        pendingReviews: 0,
+        overdueReviews: 0,
+        reviewsThisMonth: 0,
+        passRate: 100,
+        openComplaints: 0,
+        openBreaches: 0,
+        activeVulnerabilities: 0,
+        complianceScore: 100
+      })
+    }
+  }, [supabase])
+
+  const calculateComplianceScore = (data: {
+    openComplaints: number
+    openBreaches: number
+    overdueReviews: number
+    passRate: number
+  }): number => {
+    let score = 100
+
+    // Deduct for open complaints (5 points each, max 20)
+    score -= Math.min(data.openComplaints * 5, 20)
+
+    // Deduct for open breaches (10 points each, max 30)
+    score -= Math.min(data.openBreaches * 10, 30)
+
+    // Deduct for overdue reviews (3 points each, max 15)
+    score -= Math.min(data.overdueReviews * 3, 15)
+
+    // Factor in pass rate (max 35 point impact)
+    score -= Math.round((100 - data.passRate) * 0.35)
+
+    return Math.max(0, score)
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await loadStats()
+    toast({
+      title: 'Refreshed',
+      description: 'Compliance data has been updated'
+    })
+    setRefreshing(false)
+  }
 
   useEffect(() => {
     if (user) {
-      loadData()
+      loadStats().finally(() => setLoading(false))
     }
-  }, [user])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      await Promise.all([
-        loadComplianceMetrics(),
-        loadAuditEntries(),
-        loadClients()
-      ])
-    } catch (error) {
-      console.error('Error loading compliance data:', error)
-      createMockData()
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadComplianceMetrics = async () => {
-    // Create mock compliance metrics (no table exists yet)
-    const mockMetrics: ComplianceMetric[] = [
-      {
-        id: '1',
-        metric_name: 'Consumer Duty Compliance',
-        current_value: 98,
-        target_value: 100,
-        status: 'compliant',
-        last_checked: new Date().toISOString(),
-        details: 'All client outcomes monitored and compliant'
-      },
-      {
-        id: '2',
-        metric_name: 'Client Review Currency',
-        current_value: 95,
-        target_value: 100,
-        status: 'warning',
-        last_checked: new Date().toISOString(),
-        details: '2 client reviews overdue'
-      },
-      {
-        id: '3',
-        metric_name: 'Risk Assessment Currency',
-        current_value: 100,
-        target_value: 100,
-        status: 'compliant',
-        last_checked: new Date().toISOString(),
-        details: 'All risk assessments up to date'
-      }
-    ]
-
-    setMetrics(mockMetrics)
-  }
-
-  const loadAuditEntries = async () => {
-    // ✅ FIXED: Use correct column name 'timestamp' instead of 'created_at'
-    const { data: auditData, error } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .order('timestamp', { ascending: false })
-      .limit(50)
-
-    if (error) {
-      console.error('Error loading audit entries:', error)
-      return
-    }
-
-    setAuditEntries(auditData || [])
-  }
-
-  const loadClients = async () => {
-    // ✅ FIXED: Only select existing columns
-    const { data: clientData, error } = await supabase
-      .from('clients')
-      .select('id, client_ref, personal_details, contact_info')
-      .order('personal_details->firstName')
-
-    if (error) {
-      console.error('Error loading clients:', error)
-      return
-    }
-
-    setClients(clientData || [])
-    
-    setStats(prev => ({
-      ...prev,
-      totalClients: (clientData || []).length,
-      auditEntries: auditEntries.length
-    }))
-  }
-
-  const createMockData = () => {
-    // Mock data for demonstration when database calls fail
-    setStats(prev => ({
-      ...prev,
-      totalClients: 25,
-      reviewsDue: 3,
-      auditEntries: 150
-    }))
-  }
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      compliant: 'default',
-      warning: 'secondary',
-      breach: 'destructive'
-    } as const
-
-    return (
-      <Badge variant={variants[status as keyof typeof variants] || 'outline'}>
-        {status.toUpperCase()}
-      </Badge>
-    )
-  }
-
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-UK', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+  }, [user, loadStats])
 
   if (authLoading || loading) {
     return (
@@ -225,73 +326,256 @@ export default function CompliancePage() {
     )
   }
 
+  const tabs = [
+    {
+      key: 'qa-reviews' as TabType,
+      label: 'QA & File Reviews',
+      icon: ClipboardCheck,
+      badge: stats.pendingReviews > 0 ? stats.pendingReviews : undefined,
+      badgeColor: stats.overdueReviews > 0 ? 'destructive' : 'secondary'
+    },
+    {
+      key: 'registers' as TabType,
+      label: 'Registers',
+      icon: BookOpen,
+      badge: stats.openComplaints + stats.openBreaches > 0
+        ? stats.openComplaints + stats.openBreaches
+        : undefined,
+      badgeColor: 'destructive'
+    },
+    {
+      key: 'aml' as TabType,
+      label: 'AML/CTF',
+      icon: Shield,
+      badge: undefined,
+      badgeColor: 'secondary'
+    },
+    {
+      key: 'consumer-duty' as TabType,
+      label: 'Consumer Duty',
+      icon: Scale,
+      badge: undefined,
+      badgeColor: 'secondary'
+    },
+    {
+      key: 'settings' as TabType,
+      label: 'Settings & Rules',
+      icon: Settings
+    }
+  ]
+
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return 'text-green-600'
+    if (score >= 70) return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
+  const getScoreBg = (score: number) => {
+    if (score >= 90) return 'bg-green-100'
+    if (score >= 70) return 'bg-yellow-100'
+    return 'bg-red-100'
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Compliance Dashboard</h1>
-        <p className="text-gray-600">Monitor regulatory compliance and Consumer Duty requirements</p>
+      {/* Header */}
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Compliance Hub</h1>
+          <p className="text-gray-600">
+            Manage QA reviews, compliance registers, and regulatory settings
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-        <Card>
+      {/* Stats Cards - All Clickable */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        {/* Compliance Score - With Breakdown */}
+        <Card
+          className={`${getScoreBg(stats.complianceScore)} cursor-pointer hover:shadow-md transition-shadow relative`}
+          onClick={() => setShowScoreBreakdown(!showScoreBreakdown)}
+        >
           <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-sm text-gray-600">Compliance Score</p>
-                <p className="text-2xl font-bold">{stats.complianceScore}%</p>
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-lg ${getScoreBg(stats.complianceScore)}`}>
+                <Shield className={`h-6 w-6 ${getScoreColor(stats.complianceScore)}`} />
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="text-sm text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold">{stats.totalClients}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-orange-600" />
-              <div>
-                <p className="text-sm text-gray-600">Reviews Due</p>
-                <p className="text-2xl font-bold">{stats.reviewsDue}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <BookOpen className="h-5 w-5 text-purple-600" />
-              <div>
-                <p className="text-sm text-gray-600">Audit Entries</p>
-                <p className="text-2xl font-bold">{stats.auditEntries}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-sm text-gray-600">Consumer Duty</p>
-                <p className="text-lg font-bold">
-                  {stats.consumerDutyCompliant ? 'Compliant' : 'Issues'}
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">Compliance Score</p>
+                  <AlertCircle className="h-4 w-4 text-gray-400" />
+                </div>
+                <p className={`text-2xl font-bold ${getScoreColor(stats.complianceScore)}`}>
+                  {stats.complianceScore}%
                 </p>
               </div>
+            </div>
+            {/* Score Breakdown - Always visible */}
+            <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
+              {stats.openComplaints > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-red-600">Complaints ({stats.openComplaints})</span>
+                  <span className="text-red-600">−{Math.min(stats.openComplaints * 5, 20)} pts</span>
+                </div>
+              )}
+              {stats.openBreaches > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-red-600">Breaches ({stats.openBreaches})</span>
+                  <span className="text-red-600">−{Math.min(stats.openBreaches * 10, 30)} pts</span>
+                </div>
+              )}
+              {stats.overdueReviews > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-yellow-600">Overdue Reviews ({stats.overdueReviews})</span>
+                  <span className="text-yellow-600">−{Math.min(stats.overdueReviews * 3, 15)} pts</span>
+                </div>
+              )}
+              {stats.passRate < 100 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-yellow-600">Pass Rate ({stats.passRate}%)</span>
+                  <span className="text-yellow-600">−{Math.round((100 - stats.passRate) * 0.35)} pts</span>
+                </div>
+              )}
+              {stats.complianceScore === 100 && (
+                <p className="text-xs text-green-600">All clear - no deductions</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pending Reviews - Clickable */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setActiveTab('qa-reviews')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-blue-100">
+                <ClipboardCheck className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Pending Reviews</p>
+                <div className="flex items-center space-x-2">
+                  <p className="text-2xl font-bold">{stats.pendingReviews}</p>
+                  {stats.overdueReviews > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {stats.overdueReviews} overdue
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-blue-600 mt-2">Click to view →</p>
+          </CardContent>
+        </Card>
+
+        {/* Open Issues - Clickable */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => {
+            setActiveTab('registers')
+            setRegistersSubTab('complaints')
+          }}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-orange-100">
+                <AlertTriangle className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Open Issues</p>
+                <div className="flex items-center space-x-2">
+                  <p className="text-2xl font-bold">
+                    {stats.openComplaints + stats.openBreaches}
+                  </p>
+                  <span className="text-xs text-gray-500">
+                    ({stats.openComplaints} complaints, {stats.openBreaches} breaches)
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-orange-600 mt-2">Click to view →</p>
+          </CardContent>
+        </Card>
+
+        {/* Vulnerable Clients - Clickable */}
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => {
+            setActiveTab('registers')
+            setRegistersSubTab('vulnerability')
+          }}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-purple-100">
+                <UserX className="h-6 w-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Vulnerable Clients</p>
+                <p className="text-2xl font-bold">{stats.activeVulnerabilities}</p>
+              </div>
+            </div>
+            <p className="text-xs text-purple-600 mt-2">Click to view →</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Secondary Stats - All Clickable */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setActiveTab('qa-reviews')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <FileText className="h-5 w-5 text-gray-400" />
+                <span className="text-sm text-gray-600">Reviews This Month</span>
+              </div>
+              <span className="text-lg font-semibold">{stats.reviewsThisMonth}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setActiveTab('qa-reviews')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="h-5 w-5 text-gray-400" />
+                <span className="text-sm text-gray-600">Pass Rate</span>
+              </div>
+              <span className={`text-lg font-semibold ${
+                stats.passRate >= 90 ? 'text-green-600' :
+                stats.passRate >= 70 ? 'text-yellow-600' : 'text-red-600'
+              }`}>
+                {stats.passRate}%
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Scale className="h-5 w-5 text-gray-400" />
+                <span className="text-sm text-gray-600">Consumer Duty Status</span>
+              </div>
+              <Badge variant={stats.complianceScore >= 80 ? 'default' : 'destructive'}>
+                {stats.complianceScore >= 80 ? 'Compliant' : 'Action Required'}
+              </Badge>
             </div>
           </CardContent>
         </Card>
@@ -301,26 +585,26 @@ export default function CompliancePage() {
       <div className="mb-6">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
-            {[
-              { key: 'overview', label: 'Overview', icon: BarChart3 },
-              { key: 'audit', label: 'Audit Trail', icon: BookOpen }
-            ].map(({ key, label, icon: Icon }) => (
+            {tabs.map(({ key, label, icon: Icon, badge, badgeColor }) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key as any)}
+                onClick={() => setActiveTab(key)}
                 className={`
-                  flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm
+                  flex items-center space-x-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors
                   ${activeTab === key
                     ? 'border-blue-500 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }
                 `}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-5 w-5" />
                 <span>{label}</span>
-                {key === 'audit' && stats.auditEntries > 0 && (
-                  <Badge variant="secondary" className="text-xs">
-                    {stats.auditEntries}
+                {badge !== undefined && (
+                  <Badge
+                    variant={badgeColor as 'default' | 'secondary' | 'destructive' | 'outline'}
+                    className="ml-2"
+                  >
+                    {badge}
                   </Badge>
                 )}
               </button>
@@ -329,120 +613,49 @@ export default function CompliancePage() {
         </div>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          {/* Compliance Metrics */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Compliance Metrics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {metrics.map((metric) => (
-                  <div key={metric.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <h3 className="font-medium">{metric.metric_name}</h3>
-                      <p className="text-sm text-gray-600 mt-1">{metric.details}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Last checked: {formatDate(metric.last_checked)}
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <p className="text-lg font-bold">
-                          {metric.current_value}%
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Target: {metric.target_value}%
-                        </p>
-                      </div>
-                      {getStatusBadge(metric.status)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Consumer Duty Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Consumer Duty Compliance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 border rounded-lg">
-                  <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                  <h3 className="font-medium">Good Outcomes</h3>
-                  <p className="text-sm text-gray-600">Client outcomes monitored and positive</p>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <Shield className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                  <h3 className="font-medium">Price & Value</h3>
-                  <p className="text-sm text-gray-600">Fair value assessments current</p>
-                </div>
-                <div className="text-center p-4 border rounded-lg">
-                  <Users className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                  <h3 className="font-medium">Consumer Support</h3>
-                  <p className="text-sm text-gray-600">Appropriate support provided</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'audit' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Audit Trail ({auditEntries.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {auditEntries.length === 0 ? (
-              <div className="text-center py-12">
-                <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">No audit entries found</p>
-                <p className="text-gray-400">Audit entries will appear here as you use the system</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {auditEntries.slice(0, 20).map((entry) => (
-                  <div key={entry.id} className="flex items-center space-x-4 p-4 border rounded-lg">
-                    <div className={`p-2 rounded-lg ${
-                      entry.success ? 'bg-green-100' : 'bg-red-100'
-                    }`}>
-                      {entry.success ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <AlertTriangle className="h-5 w-5 text-red-600" />
-                      )}
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium">{entry.action}</h3>
-                        <span className="text-sm text-gray-500">
-                          {formatDate(entry.timestamp)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Resource: {entry.resource}
-                        {entry.resource_id && ` (${entry.resource_id})`}
-                      </p>
-                      {entry.details && typeof entry.details === 'object' && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          {JSON.stringify(entry.details).slice(0, 100)}...
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Tab Content with Error Boundaries */}
+      <div className="mt-6">
+        {activeTab === 'qa-reviews' && (
+          <TabErrorBoundary
+            key="qa-reviews"
+            fallback={<TabErrorFallback tabName="QA & File Reviews" onRetry={() => setActiveTab('qa-reviews')} />}
+          >
+            <QADashboard onStatsChange={loadStats} initialFilter={qaFilter} riskFilter={qaRiskFilter} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'registers' && (
+          <TabErrorBoundary
+            key="registers"
+            fallback={<TabErrorFallback tabName="Registers" onRetry={() => setActiveTab('registers')} />}
+          >
+            <RegistersDashboard onStatsChange={loadStats} initialTab={registersSubTab} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'aml' && (
+          <TabErrorBoundary
+            key="aml"
+            fallback={<TabErrorFallback tabName="AML/CTF" onRetry={() => setActiveTab('aml')} />}
+          >
+            <AMLDashboard onStatsChange={loadStats} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'consumer-duty' && (
+          <TabErrorBoundary
+            key="consumer-duty"
+            fallback={<TabErrorFallback tabName="Consumer Duty" onRetry={() => setActiveTab('consumer-duty')} />}
+          >
+            <ConsumerDutyDashboard onStatsChange={loadStats} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'settings' && (
+          <TabErrorBoundary
+            key="settings"
+            fallback={<TabErrorFallback tabName="Settings & Rules" onRetry={() => setActiveTab('settings')} />}
+          >
+            <ComplianceSettings />
+          </TabErrorBoundary>
+        )}
+      </div>
     </div>
   )
 }

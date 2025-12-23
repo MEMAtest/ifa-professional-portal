@@ -3,13 +3,24 @@
 // Core projection calculation engine with full type safety
 // ================================================================
 
-import type { 
-  CashFlowScenario, 
-  CashFlowProjection, 
-  ProjectionResult, 
+import type {
+  CashFlowScenario,
+  CashFlowProjection,
+  ProjectionResult,
   ProjectionSummary,
-  RiskMetrics 
+  RiskMetrics
 } from '@/types/cashflow';
+
+/**
+ * Safe division helper to prevent divide-by-zero errors
+ * Returns fallback value if denominator is 0, NaN, or Infinity
+ */
+function safeRatio(numerator: number, denominator: number, fallback: number = 0): number {
+  if (!Number.isFinite(denominator) || denominator === 0) return fallback;
+  if (!Number.isFinite(numerator)) return fallback;
+  const result = numerator / denominator;
+  return Number.isFinite(result) ? result : fallback;
+}
 
 export interface YearlyCalculation {
   year: number;
@@ -125,7 +136,9 @@ export class ProjectionEngine {
       const totalAssets = pensionPot + investmentPortfolio + cashSavings;
       const portfolioBalance = investmentPortfolio + cashSavings;
       const realTermsValue = this.deflateValue(totalAssets, scenario.inflationRate, year);
-      const sustainabilityRatio = totalAssets > 0 ? totalIncome / totalExpenses : 0;
+      // FIX: Use safeRatio to prevent divide-by-zero when totalExpenses is 0
+      // Ratio > 1 means income exceeds expenses (sustainable)
+      const sustainabilityRatio = safeRatio(totalIncome, totalExpenses, 1);
 
       projections.push({
         year,
@@ -276,10 +289,19 @@ export class ProjectionEngine {
     const retirementProjections = projections.filter(p => p.pensionIncome > 0);
     if (retirementProjections.length === 0) return 0;
 
-    const avgPortfolioValue = retirementProjections.reduce((sum, p) => sum + p.portfolioBalance, 0) / retirementProjections.length;
-    const avgWithdrawal = retirementProjections.reduce((sum, p) => sum + Math.abs(Math.min(0, p.annualSurplusDeficit)), 0) / retirementProjections.length;
+    // FIX: Use safeRatio to prevent divide-by-zero
+    const avgPortfolioValue = safeRatio(
+      retirementProjections.reduce((sum, p) => sum + p.portfolioBalance, 0),
+      retirementProjections.length,
+      0
+    );
+    const avgWithdrawal = safeRatio(
+      retirementProjections.reduce((sum, p) => sum + Math.abs(Math.min(0, p.annualSurplusDeficit)), 0),
+      retirementProjections.length,
+      0
+    );
 
-    return avgPortfolioValue > 0 ? (avgWithdrawal / avgPortfolioValue) * 100 : 0;
+    return safeRatio(avgWithdrawal, avgPortfolioValue, 0) * 100;
   }
 
   private static calculateAverageReturn(scenario: CashFlowScenario): number {
@@ -319,14 +341,20 @@ export class ProjectionEngine {
       if (finalAssets >= scenario.legacyTarget) achievedGoals++;
     }
 
-    return totalGoals > 0 ? (achievedGoals / totalGoals) * 100 : 100;
+    // FIX: Use safeRatio to prevent divide-by-zero
+    return safeRatio(achievedGoals, totalGoals, 100) * 100;
   }
 
   private static calculateSustainabilityRating(projections: YearlyCalculation[]): "Excellent" | "Good" | "Adequate" | "Poor" | "Critical" {
     const finalProjection = projections[projections.length - 1];
     if (!finalProjection) return "Critical";
 
-    const avgSustainabilityRatio = projections.reduce((sum, p) => sum + p.sustainabilityRatio, 0) / projections.length;
+    // FIX: Use safeRatio to prevent divide-by-zero
+    const avgSustainabilityRatio = safeRatio(
+      projections.reduce((sum, p) => sum + p.sustainabilityRatio, 0),
+      projections.length,
+      0
+    );
     const finalAssets = finalProjection.totalAssets;
 
     if (avgSustainabilityRatio > 1.5 && finalAssets > 0) return "Excellent";
@@ -375,8 +403,9 @@ export class ProjectionEngine {
     // Income replacement
     const currentIncome = scenario.currentIncome || 0;
     const retirementIncome = retirementProjection?.totalIncome || 0;
-    if (currentIncome > 0) {
-      const replacementRatio = (retirementIncome / currentIncome) * 100;
+    // FIX: Use safeRatio to prevent divide-by-zero
+    const replacementRatio = safeRatio(retirementIncome, currentIncome, 0) * 100;
+    if (currentIncome > 0 && Number.isFinite(replacementRatio)) {
       insights.push(`Retirement income replaces ${Math.round(replacementRatio)}% of current income`);
     }
 

@@ -6,12 +6,9 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createClient } from '@/lib/supabase/server'
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { log } from '@/lib/logging/structured'
 
 // ✅ FIXED: Add proper type definitions for metrics
 interface MetricsResponse {
@@ -119,39 +116,8 @@ interface MetricsResponse {
   cache_expires_at: string
 }
 
-// Helper function to get user context
-async function getCurrentUserContext() {
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      throw new Error('Authentication required')
-    }
-
-    let firmId: string | null = null
-    
-    if (user.user_metadata?.firm_id) {
-      firmId = user.user_metadata.firm_id
-    }
-    
-    if (!firmId && user.user_metadata?.firmId) {
-      firmId = user.user_metadata.firmId
-    }
-    
-    if (!firmId) {
-      console.warn('No firm_id found, using default for development')
-      firmId = '12345678-1234-1234-1234-123456789012'
-    }
-
-    return { user, firmId: firmId as string, userId: user.id }
-  } catch (error) {
-    console.error('getCurrentUserContext error:', error)
-    throw error
-  }
-}
-
 // Generate real metrics from your database with proper null safety
-async function generateRealMetrics(firmId: string): Promise<MetricsResponse> {
+async function generateRealMetrics(supabase: any, firmId: string): Promise<MetricsResponse> {
   try {
     const now = new Date()
     const thisMonth = now.getMonth()
@@ -478,25 +444,42 @@ async function generateRealMetrics(firmId: string): Promise<MetricsResponse> {
       cache_expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString()
     }
   } catch (error) {
-    console.error('Real metrics generation error:', error)
+    log.error('Real metrics generation error', error)
     throw error
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
+    // Verify authentication
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const supabase = await createClient()
+    const firmId = auth.context?.firmId
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
-    const { firmId } = await getCurrentUserContext()
-    
+
     // Get query parameters for filtering
     const includeDetails = searchParams.get('include_details') !== 'false'
     const timeRange = searchParams.get('time_range') || '30d'
     const categories = searchParams.getAll('categories')
     const dateFrom = searchParams.get('date_from')
     const dateTo = searchParams.get('date_to')
-    
+
     // ✅ FIXED: Generate metrics from your actual database
-    let metrics = await generateRealMetrics(firmId)
+    let metrics = await generateRealMetrics(supabase, firmId)
     
     // Apply filters if specified
     if (categories.length > 0) {
@@ -553,8 +536,8 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Real metrics API error:', error)
-    
+    log.error('Real metrics API error', error)
+
     return NextResponse.json(
       { 
         error: 'Failed to fetch metrics',
@@ -567,14 +550,31 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Verify authentication
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const supabase = await createClient()
+    const firmId = auth.context?.firmId
+    if (!firmId) {
+      return NextResponse.json(
+        { success: false, error: 'Firm ID not configured. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
-    const { firmId } = await getCurrentUserContext()
-    
+
     // Handle different metric operations
     switch (body.action) {
       case 'refresh':
         // Force refresh metrics from database
-        const refreshedMetrics = await generateRealMetrics(firmId)
+        const refreshedMetrics = await generateRealMetrics(supabase, firmId)
         return NextResponse.json({
           success: true,
           metrics: refreshedMetrics,
@@ -583,7 +583,7 @@ export async function POST(request: NextRequest) {
         
       case 'export':
         // Export real metrics data
-        const exportData = await generateRealMetrics(firmId)
+        const exportData = await generateRealMetrics(supabase, firmId)
         const exportId = `export_${Date.now()}`
         
         return NextResponse.json({
@@ -613,8 +613,8 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('Real metrics POST error:', error)
-    
+    log.error('Real metrics POST error', error)
+
     return NextResponse.json(
       { 
         error: 'Failed to process metrics request',

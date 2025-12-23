@@ -12,7 +12,7 @@ export default function AuthTest() {
 
   useEffect(() => {
     // Create client with proper typing
-    const supabase = createClient() as SupabaseClient<Database>
+    const supabase = createClient() as any
     
     // Guard clause if client creation fails
     if (!supabase) {
@@ -37,7 +37,7 @@ export default function AuthTest() {
     getUser()
 
     // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setUser(session?.user ?? null)
       setError(null)
     })
@@ -48,7 +48,7 @@ export default function AuthTest() {
   const handleSignIn = async () => {
     try {
       setError(null)
-      const supabase = createClient() as SupabaseClient<Database>
+      const supabase = createClient() as any
       
       if (!supabase) {
         throw new Error('Failed to initialize Supabase client')
@@ -71,7 +71,7 @@ export default function AuthTest() {
   const handleSignOut = async () => {
     try {
       setError(null)
-      const supabase = createClient() as SupabaseClient<Database>
+      const supabase = createClient() as any
       
       if (!supabase) {
         throw new Error('Failed to initialize Supabase client')

@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { log } from '@/lib/logging/structured'
 
 
 // ===================================================================
@@ -78,8 +79,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get firm_id from user metadata or use default for testing
-    const firmId = user.user_metadata?.firm_id || '00000000-0000-0000-0000-000000000001'
+    // Get firm_id from user metadata - NO hardcoded fallback for security
+    const firmId = user.user_metadata?.firm_id
+    if (!firmId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Firm ID not configured',
+          message: 'Your account is not associated with a firm. Please contact support.'
+        },
+        { status: 403 }
+      )
+    }
     
     // Parse query parameters
     const { searchParams } = new URL(request.url)
@@ -145,7 +156,7 @@ export async function GET(request: NextRequest) {
       .eq('is_archived', false)
 
     const documentsByType = Object.entries(
-      (typeBreakdown || []).reduce((acc: Record<string, number>, doc) => {
+      (typeBreakdown || []).reduce((acc: Record<string, number>, doc: any) => {
         const type = doc.type || 'Unknown'
         acc[type] = (acc[type] || 0) + 1
         return acc
@@ -173,11 +184,11 @@ export async function GET(request: NextRequest) {
       .eq('is_archived', false)
 
     const documentsByCategory = Object.entries(
-      (categoryData || []).reduce((acc: Record<string, any>, doc) => {
+      (categoryData || []).reduce((acc: Record<string, { total: number; compliant: number }>, doc: any) => {
         // FIX: Access the property from the doc object, not the array
         const categoryRecord = doc.document_categories as any
         const category = categoryRecord?.name || doc.category || 'Uncategorized'
-        
+
         if (!acc[category]) {
           acc[category] = { total: 0, compliant: 0 }
         }
@@ -187,11 +198,14 @@ export async function GET(request: NextRequest) {
         }
         return acc
       }, {})
-    ).map(([category, data]) => ({
-      category,
-      count: (data as any).total,
-      compliance_rate: Math.round(((data as any).compliant / (data as any).total) * 100)
-    })).sort((a, b) => b.count - a.count)
+    ).map(([category, data]) => {
+      const categoryData = data as { total: number; compliant: number }
+      return {
+        category,
+        count: categoryData.total,
+        compliance_rate: Math.round((categoryData.compliant / categoryData.total) * 100)
+      }
+    }).sort((a, b) => b.count - a.count)
 
     // ===================================================================
     // 4. RECENT ACTIVITY (Last 20 activities)
@@ -214,11 +228,11 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false })
       .limit(20)
 
-    const recentActivity = (recentDocs || []).map(doc => {
+    const recentActivity = (recentDocs || []).map((doc: any) => {
       // Determine the most recent action
       let action = 'created'
       let timestamp = doc.created_at
-      
+
       if (doc.signed_at && new Date(doc.signed_at) > new Date(timestamp)) {
         action = 'signed'
         timestamp = doc.signed_at
@@ -238,7 +252,7 @@ export async function GET(request: NextRequest) {
         timestamp,
         status: doc.signature_status || 'active'
       }
-    }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    }).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
     // ===================================================================
     // 5. PERFORMANCE METRICS
@@ -265,7 +279,7 @@ export async function GET(request: NextRequest) {
       .eq('firm_id', firmId)
       .eq('is_archived', false)
 
-    const storageUsed = (storageData || []).reduce((total, doc) => {
+    const storageUsed = (storageData || []).reduce((total: number, doc: any) => {
       return total + (doc.file_size || 0)
     }, 0)
 
@@ -322,8 +336,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(dashboardStats)
 
   } catch (error) {
-    console.error('Dashboard stats API error:', error)
-    
+    log.error('Dashboard stats API error', error)
+
     return NextResponse.json(
       { 
         error: 'Failed to fetch dashboard statistics',

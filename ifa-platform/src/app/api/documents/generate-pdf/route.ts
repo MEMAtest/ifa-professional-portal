@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured'
 
 // ✅ FIXED: Removed Supabase dependency and created standalone implementation
 
@@ -57,8 +58,11 @@ async function generatePDF(request: PDFGenerationRequest): Promise<PDFGeneration
     // Generate unique file ID
     const fileId = `pdf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
-    // Mock file URLs (in production, these would be real file storage URLs)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // File URLs - requires NEXT_PUBLIC_APP_URL to be set
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (!baseUrl) {
+      throw new Error('NEXT_PUBLIC_APP_URL environment variable is required for PDF generation')
+    }
     const pdfUrl = `${baseUrl}/api/documents/files/${fileId}.pdf`
     const downloadUrl = `${baseUrl}/api/documents/download/${fileId}`
     
@@ -158,8 +162,9 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('PDF API GET error:', error)
-    
+    const logger = createRequestLogger(request)
+    logger.error('PDF API GET failed', error)
+
     return NextResponse.json(
       {
         success: false,
@@ -235,13 +240,19 @@ export async function POST(request: NextRequest) {
     }
     
     // Log generation for audit trail
-    console.log(`PDF generated: ${result.file_id}, Template: ${body.template}, Processing time: ${result.processing_time_ms}ms`)
-    
+    const logger = createRequestLogger(request)
+    logger.info('PDF generated', {
+      fileId: result.file_id,
+      template: body.template,
+      processingTimeMs: result.processing_time_ms
+    })
+
     return NextResponse.json(result)
-    
+
   } catch (error) {
-    console.error('PDF generation error:', error)
-    
+    const logger = createRequestLogger(request)
+    logger.error('PDF generation failed', error, { template: 'unknown' })
+
     return NextResponse.json(
       {
         success: false,
@@ -327,8 +338,9 @@ export async function PUT(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('Template validation error:', error)
-    
+    const logger = createRequestLogger(request)
+    logger.error('Template validation failed', error)
+
     return NextResponse.json(
       {
         success: false,

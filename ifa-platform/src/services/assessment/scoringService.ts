@@ -1,13 +1,24 @@
 import { createClient } from "@/lib/supabase/client"
 // src/services/assessment/scoringService.ts - Complete assessment scoring
-import { 
-  RiskProfile, 
-  VulnerabilityAssessment, 
-  FinancialProfile, 
+import {
+  RiskProfile,
+  VulnerabilityAssessment,
+  FinancialProfile,
   KnowledgeExperience,
   SuitabilityAssessment,
-  ConsumerDutyOutcome 
+  ConsumerDutyOutcome
 } from '@/types'
+
+/**
+ * Safe division helper to prevent divide-by-zero errors
+ * Returns fallback value if denominator is 0, NaN, or Infinity
+ */
+function safeRatio(numerator: number, denominator: number, fallback: number = 0): number {
+  if (!Number.isFinite(denominator) || denominator === 0) return fallback;
+  if (!Number.isFinite(numerator)) return fallback;
+  const result = numerator / denominator;
+  return Number.isFinite(result) ? result : fallback;
+}
 
 export class AssessmentScoringService {
   /**
@@ -24,9 +35,14 @@ export class AssessmentScoringService {
       : 0
 
     // Adjust capacity for loss based on emergency fund
+    // FIX: Use else-if to prevent double penalty (was applying both -1 AND -0.5 for <3 months)
     let adjustedCFL = capacityForLoss
-    if (emergencyMonths < 3) adjustedCFL = Math.max(1, adjustedCFL - 1)
-    if (emergencyMonths < 6) adjustedCFL = Math.max(1, adjustedCFL - 0.5)
+    if (emergencyMonths < 3) {
+      adjustedCFL = Math.max(1, adjustedCFL - 1)
+    } else if (emergencyMonths < 6) {
+      adjustedCFL = Math.max(1, adjustedCFL - 0.5)
+    }
+    // No penalty if >= 6 months emergency fund
 
     // Calculate final risk profile (conservative approach - take lower of ATR/CFL)
     const finalRiskProfile = Math.min(attitudeToRisk, Math.floor(adjustedCFL))
@@ -111,7 +127,13 @@ export class AssessmentScoringService {
     score -= (100 - knowledgeScore) * 0.2
 
     // Financial capacity (25% weight)
-    const affordabilityRatio = financialProfile.investmentAmount / financialProfile.netWorth
+    // FIX: Use safeRatio to prevent divide-by-zero when netWorth is 0
+    // Fallback to 1 (100%) if no net worth - flags for review as high concentration
+    const affordabilityRatio = safeRatio(
+      financialProfile.investmentAmount,
+      financialProfile.netWorth,
+      1 // Assume 100% concentration if no net worth data
+    )
     if (affordabilityRatio > 0.8) score -= 25
     else if (affordabilityRatio > 0.6) score -= 15
     else if (affordabilityRatio > 0.4) score -= 10

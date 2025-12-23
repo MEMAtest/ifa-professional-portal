@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { enhancedDocumentService } from '@/services/EnhancedDocumentGenerationService'
+import { log } from '@/lib/logging/structured'
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
       metadata: result.metadata
     })
   } catch (error) {
-    console.error('Error in generate-combined:', error)
+    log.error('Error in generate-combined', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

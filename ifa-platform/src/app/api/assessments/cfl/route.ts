@@ -1,83 +1,67 @@
 // =====================================================
 // FILE: src/app/api/assessments/cfl/route.ts
-// COMPLETE VERSION - WITH PROPER VERSION INCREMENTING
+// Refactor: use shared auth + service client (no server-side auth.getUser fallbacks)
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
-// Force dynamic rendering to prevent build-time errors
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { isUUID } from '@/lib/utils'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { logger, getErrorMessage } from '@/lib/errors'
+
 export const dynamic = 'force-dynamic'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-// Helper function to get user context
-async function getCurrentUserContext() {
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    
-    if (error || !user) {
-      console.log('No authenticated user found, using development fallback')
-      return {
-        user: null,
-        firmId: '12345678-1234-1234-1234-123456789012',
-        userId: null
-      }
-    }
-
-    const firmId = user.user_metadata?.firm_id || 
-                   user.user_metadata?.firmId || 
-                   '12345678-1234-1234-1234-123456789012'
-
-    return { user, firmId, userId: user.id }
-  } catch (error) {
-    console.error('getCurrentUserContext error:', error)
-    return {
-      user: null,
-      firmId: '12345678-1234-1234-1234-123456789012',
-      userId: null
-    }
-  }
-}
 
 // GET method to fetch CFL scores for a client
 export async function GET(request: NextRequest) {
   try {
-    console.log('CFL GET request received')
-    
+    logger.debug('CFL GET request received')
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
-    
-    console.log('Client ID from request:', clientId)
-    
+
+    logger.debug('CFL GET client ID', { clientId })
+
     if (!clientId) {
-      console.error('No client ID provided in CFL GET request')
+      logger.warn('No client ID provided in CFL GET request')
       return NextResponse.json(
-        { 
+        {
           error: 'Client ID is required',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
 
-    // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(clientId)) {
-      console.error('Invalid client ID format:', clientId)
+    if (!isUUID(clientId)) {
+      logger.warn('Invalid client ID format in CFL GET', { clientId })
       return NextResponse.json(
-        { 
+        {
           error: 'Invalid client ID format',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
 
-    console.log('Fetching CFL data from database for client:', clientId)
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return auth.response || NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
+    }
+
+    const ctx = auth.context!
+    const supabase = getSupabaseServiceClient()
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx,
+      select: 'id,firm_id,advisor_id'
+    })
+    if (!access.ok) return access.response
+
+    logger.debug('Fetching CFL data from database', { clientId })
 
     // Fetch current CFL assessment data from database
     const { data: cflData, error } = await supabase
@@ -109,12 +93,12 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (error) {
-      console.error('CFL database fetch error:', error)
+      logger.error('CFL database fetch error', error, { clientId })
       return NextResponse.json(
-        { 
+        {
           error: 'Failed to fetch CFL data',
           message: error.message,
-          success: false 
+          success: false
         },
         { status: 500 }
       )
@@ -126,7 +110,7 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('client_id', clientId)
 
-    console.log('CFL data fetched successfully:', cflData ? 'Found' : 'Not found')
+    logger.debug('CFL data fetched successfully', { clientId, found: !!cflData })
 
     // Return successful response
     return NextResponse.json({
@@ -139,12 +123,12 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('CFL GET route error:', error)
+    logger.error('CFL GET route error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
+        message: getErrorMessage(error),
+        success: false
       },
       { status: 500 }
     )
@@ -154,13 +138,19 @@ export async function GET(request: NextRequest) {
 // POST method for creating new CFL assessments with PROPER VERSION INCREMENTING
 export async function POST(request: NextRequest) {
   try {
-    console.log('CFL POST request received')
-    
-    const { firmId, userId } = await getCurrentUserContext()
-    
+    logger.debug('CFL POST request received')
+
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return auth.response || NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
+    }
+    const ctx = auth.context!
+    const userId = ctx.userId || null
+    const supabase = getSupabaseServiceClient()
+
     const body = await request.json()
-    console.log('CFL POST body received:', { ...body, answers: body.answers ? 'PRESENT' : 'MISSING' })
-    
+    logger.debug('CFL POST body received', { clientId: body.clientId, hasAnswers: !!body.answers })
+
     const {
       clientId,
       answers,
@@ -179,33 +169,41 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!clientId) {
-      console.error('No client ID provided in CFL POST request')
+      logger.warn('No client ID provided in CFL POST request')
       return NextResponse.json(
-        { 
+        {
           error: 'Client ID is required',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
 
-    if (!totalScore || !capacityCategory || !capacityLevel) {
-      console.error('Missing required CFL assessment data')
+    if (totalScore === undefined || totalScore === null || !capacityCategory || capacityLevel === undefined || capacityLevel === null) {
+      logger.warn('Missing required CFL assessment data', { clientId })
       return NextResponse.json(
-        { 
+        {
           error: 'Missing required assessment data: totalScore, capacityCategory, and capacityLevel are required',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx,
+      select: 'id,firm_id,advisor_id'
+    })
+    if (!access.ok) return access.response
 
     // Validate score and level ranges
     if (typeof totalScore !== 'number' || totalScore < 0 || totalScore > 100) {
       return NextResponse.json(
-        { 
+        {
           error: 'Total score must be a number between 0 and 100',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
@@ -213,9 +211,9 @@ export async function POST(request: NextRequest) {
 
     if (typeof capacityLevel !== 'number' || capacityLevel < 1 || capacityLevel > 10) {
       return NextResponse.json(
-        { 
+        {
           error: 'Capacity level must be a number between 1 and 10',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
@@ -224,9 +222,9 @@ export async function POST(request: NextRequest) {
     // Validate percentage values
     if (maxLossPercentage !== undefined && (typeof maxLossPercentage !== 'number' || maxLossPercentage < 0 || maxLossPercentage > 100)) {
       return NextResponse.json(
-        { 
+        {
           error: 'Max loss percentage must be a number between 0 and 100',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
@@ -234,17 +232,17 @@ export async function POST(request: NextRequest) {
 
     if (confidenceLevel !== undefined && (typeof confidenceLevel !== 'number' || confidenceLevel < 0 || confidenceLevel > 100)) {
       return NextResponse.json(
-        { 
+        {
           error: 'Confidence level must be a number between 0 and 100',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
 
     // START TRANSACTION - Get the latest version number for this client
-    console.log('Getting latest CFL version for client:', clientId)
-    
+    logger.debug('Getting latest CFL version', { clientId })
+
     const { data: latestAssessment, error: versionError } = await supabase
       .from('cfl_assessments')
       .select('version')
@@ -255,12 +253,12 @@ export async function POST(request: NextRequest) {
 
     if (versionError && versionError.code !== 'PGRST116') {
       // PGRST116 means no rows found, which is fine for first assessment
-      console.error('Error fetching latest version:', versionError)
+      logger.error('Error fetching latest CFL version', versionError, { clientId })
       return NextResponse.json(
-        { 
+        {
           error: 'Failed to fetch version information',
           message: versionError.message,
-          success: false 
+          success: false
         },
         { status: 500 }
       )
@@ -269,16 +267,16 @@ export async function POST(request: NextRequest) {
     // Calculate new version number
     const currentMaxVersion = latestAssessment?.version || 0
     const newVersion = currentMaxVersion + 1
-    
-    console.log(`Creating CFL assessment version ${newVersion} for client ${clientId}`)
+
+    logger.info('Creating CFL assessment', { clientId, version: newVersion })
 
     // Mark all previous assessments as not current
     if (currentMaxVersion > 0) {
-      console.log('Marking previous CFL assessments as not current')
-      
+      logger.debug('Marking previous CFL assessments as not current', { clientId })
+
       const { error: updateError } = await supabase
         .from('cfl_assessments')
-        .update({ 
+        .update({
           is_current: false,
           updated_at: new Date().toISOString()
         })
@@ -286,7 +284,7 @@ export async function POST(request: NextRequest) {
         .eq('is_current', true)
 
       if (updateError) {
-        console.error('Error updating previous CFL assessments:', updateError)
+        logger.warn('Error updating previous CFL assessments', { clientId, error: getErrorMessage(updateError) })
         // Don't fail the request, but log the error
       }
     }
@@ -319,23 +317,23 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('CFL creation error:', error)
+      logger.error('CFL creation error', error, { clientId })
       return NextResponse.json(
-        { 
+        {
           error: 'Failed to create CFL assessment',
           message: error.message,
-          success: false 
+          success: false
         },
         { status: 500 }
       )
     }
 
-    console.log(`CFL assessment created successfully with ID: ${data.id}, Version: ${newVersion}`)
+    logger.info('CFL assessment created successfully', { assessmentId: data.id, version: newVersion, clientId })
 
     // Update client risk profile
     try {
-      console.log('Updating client risk profile with CFL data')
-      
+      logger.debug('Updating client risk profile with CFL data', { clientId })
+
       const { error: clientUpdateError } = await supabase
         .from('clients')
         .update({
@@ -350,13 +348,13 @@ export async function POST(request: NextRequest) {
         .eq('id', clientId)
 
       if (clientUpdateError) {
-        console.error('Error updating client risk profile:', clientUpdateError)
+        logger.warn('Error updating client risk profile', { clientId, error: getErrorMessage(clientUpdateError) })
         // Don't fail the request if profile update fails
       } else {
-        console.log('Client risk profile updated successfully')
+        logger.debug('Client risk profile updated', { clientId })
       }
     } catch (profileError) {
-      console.error('Exception updating client risk profile:', profileError)
+      logger.warn('Exception updating client risk profile', { clientId, error: getErrorMessage(profileError) })
       // Don't fail the request if profile update fails
     }
 
@@ -372,12 +370,12 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('CFL POST route error:', error)
+    logger.error('CFL POST route error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
+        message: getErrorMessage(error),
+        success: false
       },
       { status: 500 }
     )
@@ -387,10 +385,16 @@ export async function POST(request: NextRequest) {
 // PUT method for updating existing CFL assessments
 export async function PUT(request: NextRequest) {
   try {
-    console.log('CFL PUT request received')
-    
-    const { userId } = await getCurrentUserContext()
-    
+    logger.debug('CFL PUT request received')
+
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return auth.response || NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
+    }
+    const ctx = auth.context!
+    const userId = ctx.userId || null
+    const supabase = getSupabaseServiceClient()
+
     const body = await request.json()
     const {
       assessmentId,
@@ -410,17 +414,39 @@ export async function PUT(request: NextRequest) {
     } = body
 
     if (!assessmentId) {
-      console.error('No assessment ID provided in CFL PUT request')
+      logger.warn('No assessment ID provided in CFL PUT request')
       return NextResponse.json(
-        { 
+        {
           error: 'Assessment ID is required for updates',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
 
-    console.log('Updating CFL assessment:', assessmentId)
+    logger.debug('Updating CFL assessment', { assessmentId })
+
+    const resolvedClientId =
+      clientId ||
+      (
+        await supabase
+          .from('cfl_assessments')
+          .select('client_id')
+          .eq('id', assessmentId)
+          .maybeSingle()
+      ).data?.client_id
+
+    if (!resolvedClientId) {
+      return NextResponse.json({ error: 'Client not found', success: false }, { status: 404 })
+    }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId: String(resolvedClientId),
+      ctx,
+      select: 'id,firm_id,advisor_id'
+    })
+    if (!access.ok) return access.response
 
     // Update existing assessment
     const { data, error } = await supabase
@@ -446,21 +472,21 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('CFL update error:', error)
+      logger.error('CFL update error', error, { assessmentId })
       return NextResponse.json(
-        { 
+        {
           error: 'Failed to update CFL assessment',
           message: error.message,
-          success: false 
+          success: false
         },
         { status: 500 }
       )
     }
 
-    console.log('CFL assessment updated successfully')
+    logger.info('CFL assessment updated successfully', { assessmentId })
 
     // Update client risk profile if clientId provided
-    if (clientId && capacityLevel && capacityCategory) {
+    if (resolvedClientId && capacityLevel && capacityCategory) {
       try {
         await supabase
           .from('clients')
@@ -471,9 +497,9 @@ export async function PUT(request: NextRequest) {
             'riskProfile.lastAssessmentId': assessmentId,
             updated_at: new Date().toISOString()
           })
-          .eq('id', clientId)
+          .eq('id', resolvedClientId)
       } catch (profileError) {
-        console.error('Error updating client profile during PUT:', profileError)
+        logger.warn('Error updating client profile during PUT', { clientId: resolvedClientId, error: getErrorMessage(profileError) })
       }
     }
 
@@ -486,12 +512,12 @@ export async function PUT(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('CFL PUT route error:', error)
+    logger.error('CFL PUT route error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
+        message: getErrorMessage(error),
+        success: false
       },
       { status: 500 }
     )
@@ -501,22 +527,47 @@ export async function PUT(request: NextRequest) {
 // DELETE method for removing CFL assessments
 export async function DELETE(request: NextRequest) {
   try {
-    console.log('CFL DELETE request received')
-    
+    logger.debug('CFL DELETE request received')
+
     const { searchParams } = new URL(request.url)
     const assessmentId = searchParams.get('assessmentId')
-    
+
     if (!assessmentId) {
       return NextResponse.json(
-        { 
+        {
           error: 'Assessment ID is required for deletion',
-          success: false 
+          success: false
         },
         { status: 400 }
       )
     }
 
-    console.log('Deleting CFL assessment:', assessmentId)
+    logger.debug('Deleting CFL assessment', { assessmentId })
+
+    const auth = await getAuthContext(request)
+    if (!auth.success) {
+      return auth.response || NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
+    }
+    const ctx = auth.context!
+    const supabase = getSupabaseServiceClient()
+
+    const { data: row } = await supabase
+      .from('cfl_assessments')
+      .select('client_id')
+      .eq('id', assessmentId)
+      .maybeSingle()
+
+    if (!row?.client_id) {
+      return NextResponse.json({ error: 'Assessment not found', success: false }, { status: 404 })
+    }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId: String(row.client_id),
+      ctx,
+      select: 'id,firm_id,advisor_id'
+    })
+    if (!access.ok) return access.response
 
     // Delete assessment
     const { error } = await supabase
@@ -525,18 +576,18 @@ export async function DELETE(request: NextRequest) {
       .eq('id', assessmentId)
 
     if (error) {
-      console.error('CFL deletion error:', error)
+      logger.error('CFL deletion error', error, { assessmentId })
       return NextResponse.json(
-        { 
+        {
           error: 'Failed to delete CFL assessment',
           message: error.message,
-          success: false 
+          success: false
         },
         { status: 500 }
       )
     }
 
-    console.log('CFL assessment deleted successfully')
+    logger.info('CFL assessment deleted successfully', { assessmentId })
 
     return NextResponse.json({
       success: true,
@@ -546,12 +597,12 @@ export async function DELETE(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('CFL DELETE route error:', error)
+    logger.error('CFL DELETE route error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
+        message: getErrorMessage(error),
+        success: false
       },
       { status: 500 }
     )

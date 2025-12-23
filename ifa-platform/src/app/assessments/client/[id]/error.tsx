@@ -159,13 +159,7 @@ export default function AssessmentClientError({
             {/* Support Information */}
             <div className="mt-6 pt-6 border-t border-gray-200">
               <p className="text-xs text-gray-500 text-center">
-                If this problem persists, please contact support at{' '}
-                <a 
-                  href="mailto:support@example.com" 
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  support@example.com
-                </a>
+                If this problem persists, please contact your administrator or support team.
               </p>
               {error.digest && (
                 <p className="text-xs text-gray-400 text-center mt-2">

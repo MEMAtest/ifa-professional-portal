@@ -120,9 +120,10 @@ export default function CashFlowPage() {
   useEffect(() => {
     if (!selectedClient) return;
 
-    const handleScenarioSave = async (event: CustomEvent) => {
-      const { scenario, isNew } = event.detail;
-      
+    const handleScenarioSave = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { scenario, isNew } = customEvent.detail;
+
       if (isNew && scenario.id !== trackingState.lastTrackedScenarioId) {
         await trackCashFlowProgress(scenario);
         setTrackingState({
@@ -132,10 +133,10 @@ export default function CashFlowPage() {
       }
     };
 
-    window.addEventListener('cashflow:scenarioSaved' as any, handleScenarioSave as EventListener);
-    
+    window.addEventListener('cashflow:scenarioSaved', handleScenarioSave as EventListener);
+
     return () => {
-      window.removeEventListener('cashflow:scenarioSaved' as any, handleScenarioSave as EventListener);
+      window.removeEventListener('cashflow:scenarioSaved', handleScenarioSave as EventListener);
     };
   }, [selectedClient, trackingState.lastTrackedScenarioId]);
 
@@ -219,7 +220,7 @@ export default function CashFlowPage() {
     try {
       setTrackingState({ isTracking: true, lastTrackedScenarioId: scenario.id });
       
-      const { count } = await supabase
+      const { count } = await (supabase as any)
         .from('cashflow_scenarios')
         .select('*', { count: 'exact', head: true })
         .eq('client_id', selectedClient.id);
@@ -623,7 +624,7 @@ export default function CashFlowPage() {
                   <div className="flex-1">
                     <h4 className="font-medium text-blue-900">Risk Profile Applied</h4>
                     <p className="text-sm text-blue-800 mt-1">
-                      Scenarios are using the client's {dashboardData.currentAssessment.riskProfile.overall} risk profile
+                      Scenarios are using the client&apos;s {dashboardData.currentAssessment.riskProfile.overall} risk profile
                       with a risk score of {dashboardData.currentAssessment.riskProfile.attitudeToRisk}/10
                     </p>
                   </div>

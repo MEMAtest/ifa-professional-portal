@@ -64,7 +64,7 @@ export function useAutoSave<T extends Record<string, any>>(
 
         if (id) {
           // Update existing record
-          const { error } = await supabase  // ✅ Now supabase is defined
+          const { error } = await (supabase as any)  // ✅ Now supabase is defined
             .from(tableName)
             .update(saveData)
             .eq(idField, id);

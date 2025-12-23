@@ -65,23 +65,25 @@ export const useSuitabilityProgress = ({
   
   const calculateOverallProgress = useCallback(() => {
     const progress: SectionProgress = {}
-    let totalSections = 0
-    let completedSections = 0
-    
+    let totalRequiredFields = 0
+    let completedRequiredFields = 0
+
     sections.forEach(section => {
       const sectionData = calculateSectionProgress(section)
       progress[section.id] = sectionData
-      
-      totalSections++
-      if (sectionData.percentage === 100) {
-        completedSections++
-      }
+
+      // Accumulate total required fields across all sections
+      totalRequiredFields += sectionData.total
+      completedRequiredFields += sectionData.completed
     })
-    
+
     setSectionProgress(progress)
-    const overall = Math.round((completedSections / totalSections) * 100)
+    // Calculate overall based on total fields, not sections
+    const overall = totalRequiredFields > 0
+      ? Math.round((completedRequiredFields / totalRequiredFields) * 100)
+      : 0
     setOverallProgress(overall)
-    
+
     return overall
   }, [sections, calculateSectionProgress])
   

@@ -4,14 +4,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-)
 
 interface AuthDebugState {
   user: User | null
@@ -22,6 +16,7 @@ interface AuthDebugState {
 }
 
 export function AuthDebugPanel() {
+  const supabase = createClient() as any
   const [authState, setAuthState] = useState<AuthDebugState>({
     user: null,
     session: null,

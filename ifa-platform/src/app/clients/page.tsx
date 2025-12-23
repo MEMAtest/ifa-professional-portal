@@ -14,6 +14,8 @@ import ClientCard from '@/components/clients/ClientCard';
 import { ClientDetails } from '@/components/clients/ClientDetails';
 import SearchBar from '@/components/clients/SearchBar';
 import FilterPanel from '@/components/clients/FilterPanel';
+import { AddCommunicationModal } from '@/components/clients/AddCommunicationModal';
+import { ScheduleReviewModal } from '@/components/clients/ScheduleReviewModal';
 import { clientService } from '@/services/ClientService';
 import { getVulnerabilityStatus, isValidClientStatus } from '@/types/client'; // ✅ Import validation functions
 import type {
@@ -43,6 +45,13 @@ export default function ClientsPage() {
   // View states
   const [view, setView] = useState<'list' | 'details'>('list');
   const [showFilters, setShowFilters] = useState(false);
+
+  // Modal states
+  const [showCommunicationModal, setShowCommunicationModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+
+  // Advisors for filter
+  const [advisors, setAdvisors] = useState<Array<{ id: string; name: string }>>([]);
 
   // ✅ FIXED: Check for success message from URL params with null safety
   useEffect(() => {
@@ -110,6 +119,19 @@ export default function ClientsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load advisors for filter
+  const loadAdvisors = async () => {
+    try {
+      const response = await fetch('/api/advisors');
+      if (response.ok) {
+        const data = await response.json();
+        setAdvisors(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading advisors:', error);
     }
   };
 
@@ -205,8 +227,8 @@ export default function ClientsPage() {
 
   // Client action handlers
   const handleViewClient = (client: Client) => {
-    setSelectedClient(client);
-    setView('details');
+    // Navigate to the full client detail page for a consistent experience
+    router.push(`/clients/${client.id}`);
   };
 
   const handleEditClient = (client: Client) => {
@@ -244,22 +266,33 @@ export default function ClientsPage() {
   };
 
   const handleAddCommunication = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Communication logging will be available soon'
-    });
+    if (selectedClient) {
+      setShowCommunicationModal(true);
+    } else {
+      toast({
+        title: 'No Client Selected',
+        description: 'Please select a client first',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleScheduleReview = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Review scheduling will be available soon'
-    });
+    if (selectedClient) {
+      setShowReviewModal(true);
+    } else {
+      toast({
+        title: 'No Client Selected',
+        description: 'Please select a client first',
+        variant: 'destructive'
+      });
+    }
   };
 
   useEffect(() => {
     if (user) {
       loadClients();
+      loadAdvisors(); // Load advisors on mount
     }
   }, [user, filters, currentPage]);
 
@@ -400,7 +433,7 @@ export default function ClientsPage() {
             filters={filters}
             onChange={handleFiltersChange}
             onClear={handleClearFilters}
-            advisors={[]} // TODO: Load actual advisors
+            advisors={advisors}
           />
         )}
       </div>
@@ -490,6 +523,32 @@ export default function ClientsPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Communication Modal */}
+      {selectedClient && (
+        <AddCommunicationModal
+          isOpen={showCommunicationModal}
+          onClose={() => setShowCommunicationModal(false)}
+          clientId={selectedClient.id}
+          clientName={`${selectedClient.personalDetails?.firstName || ''} ${selectedClient.personalDetails?.lastName || ''}`.trim() || 'Client'}
+          onSuccess={() => {
+            // Optionally refresh data after adding communication
+          }}
+        />
+      )}
+
+      {/* Review Modal */}
+      {selectedClient && (
+        <ScheduleReviewModal
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          clientId={selectedClient.id}
+          clientName={`${selectedClient.personalDetails?.firstName || ''} ${selectedClient.personalDetails?.lastName || ''}`.trim() || 'Client'}
+          onSuccess={() => {
+            // Optionally refresh data after scheduling review
+          }}
+        />
       )}
     </div>
   );

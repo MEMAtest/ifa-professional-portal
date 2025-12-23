@@ -4,7 +4,7 @@
 import type { CashFlowProjection, CashFlowScenario } from '@/types/cashflow';
 import { createClient } from '@/lib/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
+import type { Database } from '@/types/database.types';
 
 export interface ChartConfig {
   type: 'line' | 'bar' | 'doughnut' | 'area' | 'radar';
@@ -32,8 +32,7 @@ export class EnhancedChartService {
   private chartCache = new Map<string, ChartImageResult>();
 
   constructor() {
-    // FIXED: Proper initialization with type assertion
-    this.supabase = createClient() as SupabaseClient<Database>;
+    this.supabase = createClient();
   }
 
   public static getInstance(): EnhancedChartService {

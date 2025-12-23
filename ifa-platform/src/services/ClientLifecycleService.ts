@@ -1,6 +1,7 @@
 // src/services/ClientLifecycleService.ts
 
 import { createClient } from '@/lib/supabase/client';
+import { safeUUID } from '@/lib/utils';
 import type { Client } from '@/types/client';
 
 export class ClientLifecycleService {
@@ -45,7 +46,11 @@ export class ClientLifecycleService {
 
       if (!client) return;
 
-      const age = client.personal_details?.age || 45;
+      const personalDetails = (client.personal_details as any) || {}
+      const financialProfile = (client.financial_profile as any) || {}
+      const riskProfile = (client.risk_profile as any) || {}
+
+      const age = personalDetails.age || 45;
       const retirementAge = 67;
       const yearsToRetirement = Math.max(retirementAge - age, 1);
 
@@ -68,12 +73,12 @@ export class ClientLifecycleService {
         life_expectancy: 85,
         
         // Financial position (from client profile or defaults)
-        current_savings: client.financial_profile?.liquidAssets || 0,
-        pension_value: client.financial_profile?.pensionValue || 0,
-        investment_value: client.financial_profile?.investmentValue || 0,
-        current_income: client.financial_profile?.annualIncome || 50000,
-        current_expenses: client.financial_profile?.monthlyExpenses 
-          ? client.financial_profile.monthlyExpenses * 12 
+        current_savings: financialProfile.liquidAssets || 0,
+        pension_value: financialProfile.pensionValue || 0,
+        investment_value: financialProfile.investmentValue || 0,
+        current_income: financialProfile.annualIncome || 50000,
+        current_expenses: financialProfile.monthlyExpenses 
+          ? financialProfile.monthlyExpenses * 12 
           : 40000,
         
         // State pension
@@ -81,7 +86,7 @@ export class ClientLifecycleService {
         state_pension_amount: 11502, // 2024/25 full state pension
         
         // Risk profile
-        risk_score: client.risk_profile?.attitudeToRisk || 5,
+        risk_score: riskProfile.attitudeToRisk || 5,
         vulnerability_adjustments: {},
         assumption_basis: 'Initial projection based on current market conditions and client profile',
         alternative_allocation: 0.0,
@@ -112,12 +117,22 @@ export class ClientLifecycleService {
       const reviewDate = new Date();
       reviewDate.setMonth(reviewDate.getMonth() + 3);
 
+      const {
+        data: { user }
+      } = await supabase.auth.getUser()
+
+      if (!user?.id) {
+        console.warn('Skipping initial review schedule: no authenticated user')
+        return
+      }
+
       const review = {
         client_id: clientId,
         review_type: 'initial_review',
         due_date: reviewDate.toISOString().split('T')[0],
         status: 'scheduled',
         review_summary: 'Initial client review after onboarding',
+        created_by: user.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -211,10 +226,12 @@ export class ClientLifecycleService {
       await supabase
         .from('activity_log')
         .insert({
+          id: safeUUID(),
           client_id: clientId,
           action,
-          details,
-          created_at: new Date().toISOString()
+          type: action,
+          date: new Date().toISOString(),
+          metadata: { details }
         });
     } catch (error) {
       console.error('Error logging activity:', error);
@@ -263,13 +280,23 @@ export class ClientLifecycleService {
     const nextYear = new Date();
     nextYear.setFullYear(nextYear.getFullYear() + 1);
 
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user?.id) {
+      console.warn('Skipping annual review schedule: no authenticated user')
+      return
+    }
+
     await supabase
       .from('client_reviews')
       .insert({
         client_id: clientId,
         review_type: 'annual_review',
         due_date: nextYear.toISOString().split('T')[0],
-        status: 'scheduled'
+        status: 'scheduled',
+        created_by: user.id
       });
   }
 }

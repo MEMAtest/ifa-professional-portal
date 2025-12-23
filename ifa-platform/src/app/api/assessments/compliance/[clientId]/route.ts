@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database.types';
+import { log } from '@/lib/logging/structured';
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -68,7 +69,7 @@ export async function GET(
       .eq('client_id', clientId);
 
     if (error) {
-      console.error('Error fetching progress:', error);
+      log.error('Error fetching progress', error);
       return NextResponse.json(
         { error: 'Failed to fetch assessment progress' },
         { status: 500 }
@@ -193,7 +194,7 @@ export async function GET(
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('API Error:', error);
+    log.error('API Error', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -247,7 +248,7 @@ export async function POST(
       .insert(historyData);
 
     if (error) {
-      console.error('Error logging resolution:', error);
+      log.error('Error logging resolution', error);
       return NextResponse.json(
         { error: 'Failed to log resolution' },
         { status: 500 }
@@ -265,7 +266,7 @@ export async function POST(
       }
     });
   } catch (error) {
-    console.error('API Error:', error);
+    log.error('API Error', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -320,7 +321,7 @@ export async function PATCH(
       .insert(historyData);
 
     if (error) {
-      console.error('Error updating settings:', error);
+      log.error('Error updating settings', error);
       return NextResponse.json(
         { error: 'Failed to update settings' },
         { status: 500 }
@@ -343,7 +344,7 @@ export async function PATCH(
       .eq('id', clientId);
 
     if (clientError) {
-      console.error('Error updating client settings:', clientError);
+      log.error('Error updating client settings', clientError);
       // Don't fail the request if client update fails
     }
 
@@ -357,7 +358,7 @@ export async function PATCH(
       }
     });
   } catch (error) {
-    console.error('API Error:', error);
+    log.error('API Error', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -417,7 +418,7 @@ export async function DELETE(
       .insert(historyData);
 
     if (error) {
-      console.error('Error logging clear action:', error);
+      log.error('Error logging clear action', error);
       return NextResponse.json(
         { error: 'Failed to clear alerts' },
         { status: 500 }
@@ -431,7 +432,7 @@ export async function DELETE(
       clearedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error('API Error:', error);
+    log.error('API Error', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

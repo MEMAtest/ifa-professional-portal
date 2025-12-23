@@ -23,6 +23,7 @@ import {
   Printer,
   Mail
 } from 'lucide-react'
+import { safeWriteToClipboard } from '@/lib/utils'
 
 // Type definitions
 interface DocumentData {
@@ -148,8 +149,8 @@ export default function DocumentViewerPage() {
       }
     } else {
       // Fallback - copy to clipboard
-      await navigator.clipboard.writeText(shareUrl)
-      alert('Link copied to clipboard!')
+      const ok = await safeWriteToClipboard(shareUrl)
+      alert(ok ? 'Link copied to clipboard!' : 'Clipboard not available in this browser')
     }
   }
 

@@ -502,10 +502,25 @@ export enum AssessmentType {
   CASH_FLOW = 'cash_flow'
 }
 
-// Assessment status enum
-export enum AssessmentStatus {
-  NOT_STARTED = 'not_started',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  ARCHIVED = 'archived'
-}
+// Re-export status types from centralized location
+// This maintains backward compatibility while consolidating status definitions
+export type {
+  AssessmentStatus,
+  SaveStatus,
+  ProgressStatus
+} from './assessment-status'
+
+export {
+  VALID_TRANSITIONS,
+  isValidTransition,
+  getNextValidStatuses,
+  isEditable,
+  isTerminal,
+  isSubmitted,
+  getStatusLabel,
+  getStatusColor,
+  normalizeLegacyStatus,
+  isAssessmentStatus,
+  isSaveStatus,
+  isProgressStatus
+} from './assessment-status'

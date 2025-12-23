@@ -144,6 +144,7 @@ function getEmptyFormData(): ClientFormData {
       firstName: '',
       lastName: '',
       dateOfBirth: '',
+      gender: 'prefer_not_to_say',
       nationality: 'British',
       maritalStatus: 'single',
       dependents: 0,
@@ -637,11 +638,28 @@ export default function ClientForm({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+            <select
+              value={formData.personalDetails.gender || 'prefer_not_to_say'}
+              onChange={(e) => updatePersonalDetails({
+                gender: e.target.value as PersonalDetails['gender']
+              })}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="prefer_not_to_say">Prefer not to say</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="non_binary">Non-binary</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Marital Status</label>
             <select
               value={formData.personalDetails.maritalStatus}
-              onChange={(e) => updatePersonalDetails({ 
-                maritalStatus: e.target.value as PersonalDetails['maritalStatus'] 
+              onChange={(e) => updatePersonalDetails({
+                maritalStatus: e.target.value as PersonalDetails['maritalStatus']
               })}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
@@ -653,7 +671,9 @@ export default function ClientForm({
               <option value="other">Other</option>
             </select>
           </div>
-          
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Number of Dependents</label>
             <input
@@ -665,15 +685,13 @@ export default function ClientForm({
               placeholder="0"
             />
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Employment Status</label>
             <select
               value={formData.personalDetails.employmentStatus}
-              onChange={(e) => updatePersonalDetails({ 
-                employmentStatus: e.target.value as PersonalDetails['employmentStatus'] 
+              onChange={(e) => updatePersonalDetails({
+                employmentStatus: e.target.value as PersonalDetails['employmentStatus']
               })}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
@@ -685,17 +703,17 @@ export default function ClientForm({
               <option value="other">Other</option>
             </select>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
-            <input
-              type="text"
-              value={formData.personalDetails.occupation}
-              onChange={(e) => updatePersonalDetails({ occupation: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Current job title"
-            />
-          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
+          <input
+            type="text"
+            value={formData.personalDetails.occupation}
+            onChange={(e) => updatePersonalDetails({ occupation: e.target.value })}
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Current job title"
+          />
         </div>
       </CardContent>
     </Card>

@@ -1,6 +1,7 @@
 // src/app/api/utils.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server'; // Use your existing supabase client
+import { log } from '@/lib/logging/structured';
 
 /**
  * Standard API response interface
@@ -68,8 +69,8 @@ export async function checkAuthenticationFromCookies(request: NextRequest) {
  * Handle API errors with NextResponse
  */
 export function handleError(error: any, message: string) {
-  console.error(`${message}:`, error);
-  
+  log.error(message, error);
+
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   const statusCode = error?.status || 500;
   
@@ -112,8 +113,8 @@ export function createErrorResponse(error: string, status: number = 400) {
  * Handle API errors with consistent formatting
  */
 export function handleApiError(error: unknown) {
-  console.error('API Error:', error)
-  
+  log.error('API Error', error)
+
   if (error instanceof Error) {
     return createErrorResponse(error.message, 500)
   }
@@ -214,20 +215,76 @@ export function isRateLimited(
 }
 
 /**
- * CORS headers for API responses
+ * Get allowed origins for CORS
+ * In production, this should be restricted to your domain(s)
  */
-export function addCorsHeaders(response: Response): Response {
+function getAllowedOrigins(): string[] {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  const origins = [
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ]
+
+  if (appUrl) {
+    origins.push(appUrl)
+    // Also allow www subdomain if applicable
+    if (appUrl.includes('://') && !appUrl.includes('localhost')) {
+      const url = new URL(appUrl)
+      if (!url.hostname.startsWith('www.')) {
+        origins.push(`${url.protocol}//www.${url.hostname}${url.port ? ':' + url.port : ''}`)
+      }
+    }
+  }
+
+  return origins
+}
+
+/**
+ * CORS headers for API responses
+ * Uses allowlist instead of wildcard for security
+ */
+export function addCorsHeaders(response: Response, requestOrigin?: string | null): Response {
   const headers = new Headers(response.headers)
-  
-  headers.set('Access-Control-Allow-Origin', '*')
+  const allowedOrigins = getAllowedOrigins()
+
+  // Only set Access-Control-Allow-Origin if the request origin is in our allowlist
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    headers.set('Access-Control-Allow-Origin', requestOrigin)
+  } else if (process.env.NODE_ENV === 'development') {
+    // In development, be more permissive
+    headers.set('Access-Control-Allow-Origin', requestOrigin || 'http://localhost:3000')
+  }
+
   headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  
+  headers.set('Access-Control-Allow-Credentials', 'true')
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers
   })
+}
+
+/**
+ * Create CORS preflight response
+ */
+export function createCorsPreflightResponse(requestOrigin?: string | null): Response {
+  const allowedOrigins = getAllowedOrigins()
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400'
+  }
+
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    headers['Access-Control-Allow-Origin'] = requestOrigin
+  } else if (process.env.NODE_ENV === 'development') {
+    headers['Access-Control-Allow-Origin'] = requestOrigin || 'http://localhost:3000'
+  }
+
+  return new Response(null, { status: 204, headers })
 }
 
 /**
@@ -239,7 +296,7 @@ export function logApiRequest(
   body?: any,
   userId?: string
 ): void {
-  console.log(`[API] ${method} ${url}`, {
+  log.debug(`[API] ${method} ${url}`, {
     timestamp: new Date().toISOString(),
     userId,
     ...(body && { body })
