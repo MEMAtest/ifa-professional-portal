@@ -1,4 +1,4 @@
-import type { Database } from '@/types/database.types'
+import type { DbRow } from '@/types/db'
 import type { ReportContext } from '@/services/AdvisorContextService'
 import type { PulledPlatformData, SuitabilityFormData } from '@/types/suitability'
 import type { SuitabilityReportData, SuitabilityReportFacts } from './types'
@@ -32,8 +32,8 @@ import {
   splitLines
 } from './utils'
 
-type ClientRow = Database['public']['Tables']['clients']['Row']
-type PersonaRow = Database['public']['Tables']['persona_assessments']['Row']
+type ClientRow = DbRow<'clients'>
+type PersonaRow = DbRow<'persona_assessments'>
 
 function addMissing(
   target: SuitabilityReportData['dataQuality'],

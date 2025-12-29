@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { SuitabilityDataService } from '@/services/suitability/SuitabilityDataService'
 import { createClient } from '@/lib/supabase/client'  // Use your browser client
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 import { useAuth } from '@/hooks/useAuth'
 
 // =====================================================

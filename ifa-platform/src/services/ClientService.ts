@@ -4,6 +4,7 @@
 // ===================================================================
 
 import { createClient } from '@/lib/supabase/client'
+import { normalizeIsoCountryCode } from '@/lib/isoCountries'
 import type { 
   Client, 
   ClientFormData, 
@@ -151,8 +152,31 @@ export class ClientService {
 
   async updateClient(id: string, updates: Partial<ClientFormData>): Promise<Client> {
     try {
+      if (typeof window !== 'undefined') {
+        const response = await fetch(`${this.baseUrl}/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify(updates)
+        })
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}))
+          const message = body?.error || body?.message || `Failed to update client (${response.status})`
+          throw new Error(message)
+        }
+
+        const payload = await response.json()
+        if (!payload?.client) {
+          throw new Error('Client update succeeded but returned no data')
+        }
+
+        return this.transformDbClient(payload.client)
+      }
+
       const dbUpdates = this.transformToDbFormat(updates, true)
-      
       const { data, error } = await this.supabase
         .from('clients')
         .update({
@@ -165,19 +189,7 @@ export class ClientService {
 
       if (error) throw error
 
-      const client = this.transformDbClient(data)
-
-      // Try to update workflow but don't fail if table doesn't exist
-      try {
-        await this.updateClientWorkflow(id, {
-          last_updated: new Date().toISOString(),
-          updated_fields: Object.keys(updates)
-        })
-      } catch (workflowError) {
-        console.warn('Could not update client workflow:', workflowError)
-      }
-
-      return client
+      return this.transformDbClient(data)
     } catch (error) {
       console.error('Error updating client:', error)
       throw error
@@ -599,8 +611,9 @@ export class ClientService {
         .insert({
           client_id: clientId,
           workflow_type: workflowType,
-          workflow_status: 'in_progress',
-          workflow_data: workflowData,
+          status: 'in_progress',
+          metadata: workflowData,
+          started_at: new Date().toISOString(),
           created_at: new Date().toISOString()
         })
 
@@ -618,12 +631,12 @@ export class ClientService {
       const { error } = await this.supabase
         .from('client_workflows')
         .update({
-          workflow_status: 'updated',
-          workflow_data: updates,
+          status: 'updated',
+          metadata: updates,
           updated_at: new Date().toISOString()
         })
         .eq('client_id', clientId)
-        .eq('workflow_status', 'in_progress')
+        .eq('status', 'in_progress')
 
       if (error) {
         console.warn('Workflow update failed (table may not exist):', error.message)
@@ -654,7 +667,7 @@ export class ClientService {
         firstName: legacy.firstName || legacy.first_name || '',
         lastName: legacy.lastName || legacy.last_name || '',
         dateOfBirth: legacy.dateOfBirth || legacy.date_of_birth || '',
-        nationality: legacy.nationality || 'UK',
+        nationality: normalizeIsoCountryCode(legacy.nationality),
         maritalStatus: this.mapMaritalStatus(legacy.maritalStatus || legacy.marital_status),
         dependents: Number(legacy.dependents) || 0,
         employmentStatus: this.mapEmploymentStatus(legacy.employmentStatus || legacy.employment_status),
@@ -770,11 +783,16 @@ export class ClientService {
         lastName: dbClient.personal_details?.lastName || dbClient.personal_details?.last_name || '',
         dateOfBirth: dbClient.personal_details?.dateOfBirth || dbClient.personal_details?.date_of_birth || '',
         gender: dbClient.personal_details?.gender || '',
-        nationality: dbClient.personal_details?.nationality || 'UK',
+        nationality: normalizeIsoCountryCode(dbClient.personal_details?.nationality),
         maritalStatus: dbClient.personal_details?.maritalStatus || 'single',
         dependents: dbClient.personal_details?.dependents || 0,
         employmentStatus: dbClient.personal_details?.employmentStatus || 'employed',
-        occupation: dbClient.personal_details?.occupation || ''
+        occupation: dbClient.personal_details?.occupation || '',
+        retirementAge:
+          dbClient.personal_details?.retirementAge ??
+          dbClient.personal_details?.retirement_age ??
+          dbClient.personal_details?.target_retirement_age ??
+          undefined
       },
       contactInfo: {
         email: dbClient.contact_info?.email || '',

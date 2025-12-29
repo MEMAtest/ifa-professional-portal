@@ -9,8 +9,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { 
-  Play, 
+import {
+  Play,
   Download,
   TrendingUp,
   TrendingDown,
@@ -25,7 +25,8 @@ import {
   XCircle,
   HelpCircle,
   Calculator,
-  BookOpen
+  BookOpen,
+  RefreshCw
 } from 'lucide-react';
 import {
   LineChart as RechartsLineChart,
@@ -56,65 +57,16 @@ import {
   PresetScenarios,
   SafeWithdrawalCalculator
 } from './MonteCarloHelpers';
-
-// Types
-interface ClientDetails {
-  name: string;
-  age: number;
-  netWorth: number;
-  email?: string;
-  notes?: string;
-}
-
-interface SimulationInputs {
-  initialPortfolio: number;
-  timeHorizon: number;
-  annualWithdrawal: number;
-  riskScore: number;
-  inflationRate: number;
-  simulationCount: number;
-}
-
-type SimulationParameters = Omit<SimulationInputs, 'simulationCount'> & {
-  simulationCount?: number;
-};
-
-interface SimulationResults {
-  successRate: number;
-  averageFinalWealth: number;
-  medianFinalWealth: number;
-  percentiles: {
-    p10: number;
-    p25: number;
-    p50: number;
-    p75: number;
-    p90: number;
-  };
-  failureRisk: number;
-  maxDrawdown: number;
-  yearlyData: YearlyProjection[];
-  executionTime: number;
-  simulationCount?: number;                    // ← ADD THIS LINE
-  confidenceIntervals?: {                      // ← ADD THIS BLOCK
-    p10: number;
-    p25: number;
-    p50: number;
-    p75: number;
-    p90: number;
-  };
-  shortfallRisk?: number;                      // ← ADD THIS LINE
-  volatility?: number;                         // ← ADD THIS LINE
-}
-
-interface YearlyProjection {
-  year: number;
-  p10: number;
-  p25: number;
-  p50: number;
-  p75: number;
-  p90: number;
-  expectedWithdrawal: number;
-}
+import { ResultsInterpretationGuide } from './ResultsInterpretationGuide';
+import { ResultsNarrative } from './ResultsNarrative';
+import { runMonteCarloSimulation } from '@/components/monte-carlo/nuclear/simulation';
+import { formatCurrency, formatPercent, getRiskAllocation } from '@/components/monte-carlo/nuclear/utils';
+import type {
+  ClientDetails,
+  SimulationInputs,
+  SimulationParameters,
+  SimulationResults
+} from '@/components/monte-carlo/nuclear/types';
 
 // Props interface
 interface NuclearMonteCarloProps {
@@ -199,40 +151,6 @@ export default function NuclearMonteCarlo({
     }
   }, [inputs.initialPortfolio]);
 
-  // Helper functions
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatPercent = (value: number) => {
-    return `${value.toFixed(1)}%`;
-  };
-
-  // Get risk-based allocation
-  const getRiskAllocation = (riskScore: number) => {
-    const clampedScore = Math.max(1, Math.min(10, riskScore));
-    return {
-      equity: 0.1 + (clampedScore - 1) * 0.08,
-      bonds: 0.8 - (clampedScore - 1) * 0.07,
-      cash: 0.1
-    };
-  };
-
-  // Simple random generator
-  const random = () => Math.random();
-  
-  const normalRandom = (mean: number, stdDev: number) => {
-    let u1 = random();
-    let u2 = random();
-    let z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    return mean + z0 * stdDev;
-  };
-
   // Apply preset scenario
   const applyPreset = (params: SimulationParameters) => {
     setInputs({
@@ -263,168 +181,28 @@ export default function NuclearMonteCarlo({
     const startTime = Date.now();
 
     try {
-      const allocation = getRiskAllocation(inputs.riskScore);
-      const inflationRate = inputs.inflationRate / 100;
-      
-      // Asset parameters
-      const assetParams = {
-        equity: { return: 0.08, volatility: 0.16 },
-        bonds: { return: 0.04, volatility: 0.05 },
-        cash: { return: 0.02, volatility: 0.01 }
-      };
-
-      // Run simulations
-      const simResults: { yearlyWealths: number[]; maxDrawdown: number }[] = [];
-      const finalWealths: number[] = [];
-      let successCount = 0;
-
-      // Process in chunks for progress updates
-      const chunkSize = 100;
-      
-      console.log('Starting simulation with:', {
-        simulationCount: inputs.simulationCount,
-        initialPortfolio: inputs.initialPortfolio,
-        timeHorizon: inputs.timeHorizon,
-        annualWithdrawal: inputs.annualWithdrawal,
-        withdrawalRate: withdrawalRate.toFixed(2) + '%',
-        expectedReturn: expectedReturn.toFixed(2) + '%'
-      });
-      
-      for (let i = 0; i < inputs.simulationCount; i++) {
-        let wealth = inputs.initialPortfolio;
-        let yearlyWealths = [wealth];
-        let failed = false;
-        let peakWealth = wealth;
-        let maxDrawdown = 0;
-
-        // Simulate each year
-        for (let year = 1; year <= inputs.timeHorizon; year++) {
-          // Calculate portfolio return
-          const equityReturn = normalRandom(assetParams.equity.return, assetParams.equity.volatility);
-          const bondsReturn = normalRandom(assetParams.bonds.return, assetParams.bonds.volatility);
-          const cashReturn = assetParams.cash.return;
-          
-          const portfolioReturn = 
-            allocation.equity * equityReturn +
-            allocation.bonds * bondsReturn +
-            allocation.cash * cashReturn;
-
-          // Apply return
-          wealth = wealth * (1 + portfolioReturn);
-          
-          // Apply withdrawal (adjusted for inflation)
-          const adjustedWithdrawal = inputs.annualWithdrawal * Math.pow(1 + inflationRate, year - 1);
-          wealth -= adjustedWithdrawal;
-
-          // Track peak and drawdown
-          if (wealth > peakWealth) peakWealth = wealth;
-          const drawdown = (peakWealth - wealth) / peakWealth;
-          if (drawdown > maxDrawdown) maxDrawdown = drawdown;
-
-          yearlyWealths.push(wealth);
-
-          // Check failure
-          if (wealth <= 0) {
-            failed = true;
-            break;
-          }
-        }
-
-        if (!failed && wealth > 0) {
-          successCount++;
-        }
-        
-        // Store final wealth (0 if failed)
-        finalWealths.push(wealth > 0 ? wealth : 0);
-        simResults.push({ yearlyWealths, maxDrawdown });
-
-        // Update progress
-        if (i % chunkSize === 0 || i === inputs.simulationCount - 1) {
-          const currentProgress = Math.round(((i + 1) / inputs.simulationCount) * 100);
+      const simulationResults = await runMonteCarloSimulation({
+        inputs,
+        onProgress: (currentProgress) => {
           setProgress(currentProgress);
-          // Allow UI to update
-          await new Promise(resolve => setTimeout(resolve, 10));
         }
-      }
-      
-      // Ensure progress reaches 100%
-      setProgress(100);
-      
-      // Calculate statistics
-      console.log('Simulation complete:', {
-        successCount,
-        totalSimulations: inputs.simulationCount,
-        successRate: (successCount / inputs.simulationCount) * 100,
-        finalWealthsLength: finalWealths.length
       });
-      
-      finalWealths.sort((a, b) => a - b);
-      
-      const successRate = inputs.simulationCount > 0 
-        ? (successCount / inputs.simulationCount) * 100 
-        : 0;
-      const averageFinalWealth = finalWealths.length > 0
-        ? finalWealths.reduce((sum, w) => sum + w, 0) / finalWealths.length
-        : 0;
-      const medianFinalWealth = finalWealths.length > 0
-        ? finalWealths[Math.floor(finalWealths.length / 2)]
-        : 0;
-      
-      // Percentiles
-      const getPercentile = (p: number) => {
-        const index = Math.floor((finalWealths.length - 1) * p / 100);
-        return finalWealths[index];
-      };
 
-      // Generate yearly projections
-      const yearlyData: YearlyProjection[] = [];
-      for (let year = 0; year <= inputs.timeHorizon; year++) {
-        const yearWealths = simResults
-          .map(r => r.yearlyWealths[year] || 0)
-          .filter(w => w > 0)
-          .sort((a, b) => a - b);
-
-        if (yearWealths.length > 0) {
-          yearlyData.push({
-            year,
-            p10: yearWealths[Math.floor(yearWealths.length * 0.1)],
-            p25: yearWealths[Math.floor(yearWealths.length * 0.25)],
-            p50: yearWealths[Math.floor(yearWealths.length * 0.5)],
-            p75: yearWealths[Math.floor(yearWealths.length * 0.75)],
-            p90: yearWealths[Math.floor(yearWealths.length * 0.9)],
-            expectedWithdrawal: inputs.annualWithdrawal * Math.pow(1 + inflationRate, year)
-          });
-        }
-      }
-
-      const maxDrawdown = Math.max(...simResults.map(r => r.maxDrawdown));
-
-      const results: SimulationResults = {
-        successRate,
-        averageFinalWealth,
-        medianFinalWealth,
-        percentiles: {
-          p10: getPercentile(10),
-          p25: getPercentile(25),
-          p50: getPercentile(50),
-          p75: getPercentile(75),
-          p90: getPercentile(90)
-        },
-        failureRisk: 100 - successRate,
-        maxDrawdown: maxDrawdown * 100,
-        yearlyData,
-        executionTime: (Date.now() - startTime) / 1000
-      };
-
-      setResults(results);
+      setResults(simulationResults);
       setProgress(100);
       setShowReport(true);
       setPersistResults(true);
 
-      // Show success message with context
-      const message = successRate >= 75 
-        ? "Excellent! High probability of success" 
-        : successRate >= 50 
+      const successRate = simulationResults.successRate;
+      const averageFinalWealth = simulationResults.averageFinalWealth;
+      const medianFinalWealth = simulationResults.medianFinalWealth;
+      const percentiles = simulationResults.percentiles;
+      const maxDrawdown = simulationResults.maxDrawdown;
+      const yearlyData = simulationResults.yearlyData;
+
+      const message = successRate >= 75
+        ? "Excellent! High probability of success"
+        : successRate >= 50
         ? "Moderate success rate - consider adjustments"
         : "Low success rate - review your parameters";
 
@@ -433,10 +211,8 @@ export default function NuclearMonteCarlo({
         description: `${successRate.toFixed(1)}% success rate. ${message}`,
       });
 
-      // Save to database if clientId provided
       if (clientId) {
         try {
-          // Create scenario record
           const { data: scenario, error: scenarioError } = await supabase
             .from('monte_carlo_scenarios')
             .insert({
@@ -453,26 +229,27 @@ export default function NuclearMonteCarlo({
 
           if (scenarioError) throw scenarioError;
 
-          // Save results
           const { error: resultsError } = await supabase
             .from('monte_carlo_results')
             .insert({
               scenario_id: scenario.id,
+              client_id: clientId,
+              scenario_name: scenario.scenario_name,
               simulation_count: inputs.simulationCount,
               success_probability: successRate,
               average_final_wealth: averageFinalWealth,
               median_final_wealth: medianFinalWealth,
               confidence_intervals: {
-                p10: getPercentile(10),
-                p25: getPercentile(25),
-                p50: getPercentile(50),
-                p75: getPercentile(75),
-                p90: getPercentile(90)
+                p10: percentiles.p10,
+                p25: percentiles.p25,
+                p50: percentiles.p50,
+                p75: percentiles.p75,
+                p90: percentiles.p90
               },
               shortfall_risk: 100 - successRate,
               average_shortfall_amount: 0,
               wealth_volatility: 15,
-              maximum_drawdown: maxDrawdown * 100,
+              maximum_drawdown: maxDrawdown,
               simulation_duration_ms: (Date.now() - startTime),
               calculation_status: 'completed'
             });
@@ -493,32 +270,23 @@ export default function NuclearMonteCarlo({
         }
       }
 
-      // Call completion callback if provided
       if (onComplete) {
-        // Pass the full results object with the correct structure
         onComplete({
           successRate,
           averageFinalWealth,
           medianFinalWealth,
-          percentiles: {
-            p10: getPercentile(10),
-            p25: getPercentile(25),
-            p50: getPercentile(50),
-            p75: getPercentile(75),
-            p90: getPercentile(90)
-          },
+          percentiles,
           failureRisk: 100 - successRate,
-          maxDrawdown: maxDrawdown * 100,
+          maxDrawdown: maxDrawdown,
           yearlyData,
-          executionTime: results.executionTime,
-          // Additional fields for compatibility
+          executionTime: simulationResults.executionTime,
           simulationCount: inputs.simulationCount,
           confidenceIntervals: {
-            p10: getPercentile(10),
-            p25: getPercentile(25),
-            p50: getPercentile(50),
-            p75: getPercentile(75),
-            p90: getPercentile(90)
+            p10: percentiles.p10,
+            p25: percentiles.p25,
+            p50: percentiles.p50,
+            p75: percentiles.p75,
+            p90: percentiles.p90
           },
           shortfallRisk: 100 - successRate,
           volatility: 15
@@ -537,12 +305,105 @@ export default function NuclearMonteCarlo({
     }
   };
 
-  // Generate PDF report (placeholder)
-  const generateReport = () => {
-    toast({
-      title: "Report Generated",
-      description: "Report generation will be implemented",
-    });
+  // State for report generation
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  // Generate PDF report
+  const generateReport = async () => {
+    if (!results) {
+      toast({
+        title: "No Results",
+        description: "Run a simulation first to generate a report",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsGeneratingReport(true);
+
+    try {
+      // Build simulation result object for the API
+      const simulationResult = {
+        clientId: clientId || 'standalone',
+        clientName: clientDetails.name || 'Client',
+        simulationCount: inputs.simulationCount,
+        successProbability: results.successRate,
+        medianFinalWealth: results.medianFinalWealth,
+        p10FinalWealth: results.percentiles?.p10 || 0,
+        p90FinalWealth: results.percentiles?.p90 || 0,
+        maxDrawdown: results.maxDrawdown,
+        initialWealth: inputs.initialPortfolio,
+        withdrawalAmount: inputs.annualWithdrawal,
+        withdrawalRate: (inputs.annualWithdrawal / inputs.initialPortfolio) * 100,
+        timeHorizon: inputs.timeHorizon,
+        expectedReturn: 6,
+        volatility: 15,
+        inflationRate: inputs.inflationRate,
+        runDate: new Date().toISOString()
+      };
+
+      const response = await fetch('/api/documents/generate-monte-carlo-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          simulationResult,
+          options: {
+            includeExecutiveSummary: true,
+            includeRiskAnalysis: true,
+            includeCashFlowWaterfall: true,
+            includeDeepDiveAnalysis: true,
+            includeNextSteps: true
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate report');
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Download the PDF
+        if (result.downloadUrl) {
+          window.open(result.downloadUrl, '_blank');
+        } else if (result.inlinePdf) {
+          // Create blob from base64 and trigger download
+          const byteCharacters = atob(result.inlinePdf);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `monte-carlo-report-${Date.now()}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+
+        toast({
+          title: "Report Generated",
+          description: "Your Monte Carlo report has been downloaded",
+        });
+      } else {
+        throw new Error(result.error || 'Report generation failed');
+      }
+    } catch (error) {
+      console.error('Report generation error:', error);
+      toast({
+        title: "Report Failed",
+        description: error instanceof Error ? error.message : "Failed to generate report",
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   return (
@@ -813,14 +674,24 @@ export default function NuclearMonteCarlo({
             </Button>
             
             {results && (
-              <Button 
+              <Button
                 onClick={generateReport}
                 variant="outline"
                 size="lg"
                 className="flex items-center gap-2"
+                disabled={isGeneratingReport}
               >
-                <FileText className="h-5 w-5" />
-                Generate Report
+                {isGeneratingReport ? (
+                  <>
+                    <RefreshCw className="h-5 w-5 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-5 w-5" />
+                    Generate Report
+                  </>
+                )}
               </Button>
             )}
           </div>
@@ -841,9 +712,13 @@ export default function NuclearMonteCarlo({
         </CardContent>
       </Card>
 
-      {/* Quick Tips - Show when helpers enabled */}
-      {showHelpers && !results && (
-        <MonteCarloQuickTips />
+      {/* Quick Tips - Show when helpers enabled (contextual for pre/post simulation) */}
+      {showHelpers && (
+        !results ? (
+          <MonteCarloQuickTips />
+        ) : (
+          <ResultsInterpretationGuide results={results} inputs={inputs} />
+        )
       )}
 
       {/* Results Section */}
@@ -920,15 +795,25 @@ export default function NuclearMonteCarlo({
             </CardContent>
           </Card>
 
+          {/* Results Narrative - Plain English story */}
+          <ResultsNarrative
+            results={results}
+            inputs={inputs}
+            clientName={clientDetails.name || clientName}
+          />
+
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Success/Failure Pie Chart */}
             <Card>
               <CardHeader>
                 <CardTitle>Success vs Failure Rate</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Percentage of simulations where your client's portfolio lasted the full projection period
+                </p>
               </CardHeader>
               <CardContent>
-                <div className="h-64">
+                <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -937,18 +822,23 @@ export default function NuclearMonteCarlo({
                           { name: 'Failure', value: results.failureRisk, fill: COLORS.danger }
                         ]}
                         cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
+                        cy="45%"
+                        innerRadius={50}
+                        outerRadius={75}
                         paddingAngle={5}
                         dataKey="value"
+                        label={({ name, value }) => `${name}: ${value.toFixed(1)}%`}
+                        labelLine={true}
                       >
-                        {[0, 1].map((index) => (
-                          <Cell key={`cell-${index}`} />
-                        ))}
+                        <Cell key="cell-success" fill={COLORS.success} />
+                        <Cell key="cell-failure" fill={COLORS.danger} />
                       </Pie>
                       <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
-                      <Legend />
+                      <Legend
+                        verticalAlign="bottom"
+                        height={36}
+                        formatter={(value, entry: any) => `${value}: ${entry.payload?.value?.toFixed(1)}%`}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -959,6 +849,9 @@ export default function NuclearMonteCarlo({
             <Card>
               <CardHeader>
                 <CardTitle>Final Wealth Distribution</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Range of possible portfolio values at the end of your client's planning horizon (percentiles)
+                </p>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
@@ -990,6 +883,9 @@ export default function NuclearMonteCarlo({
           <Card>
             <CardHeader>
               <CardTitle>Wealth Projection Over Time</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                How your client's portfolio value may evolve year by year across different scenarios
+              </p>
             </CardHeader>
             <CardContent>
               <div className="h-96">
@@ -1019,6 +915,9 @@ export default function NuclearMonteCarlo({
           <Card>
             <CardHeader>
               <CardTitle>Detailed Percentile Analysis</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Statistical breakdown showing best-case, worst-case, and median outcomes for your client's portfolio
+              </p>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">

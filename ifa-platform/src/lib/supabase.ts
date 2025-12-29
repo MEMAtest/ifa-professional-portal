@@ -1,7 +1,7 @@
 // src/lib/supabase.ts
 import { createBrowserClient, createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 
 const GLOBAL_CLIENT_KEY = '__ifaPlatformSupabaseClient'
 

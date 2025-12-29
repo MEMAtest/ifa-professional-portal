@@ -3,14 +3,13 @@
 // ===================================================================
 import { createClient } from '@/lib/supabase/client'
 import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
+import type { Database, DbInsert, DbRow, DbUpdate } from '@/types/db'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Type aliases for database tables
-type Tables = Database['public']['Tables']
-type DocumentTemplateRow = Tables['document_templates']['Row']
-type DocumentTemplateInsert = Tables['document_templates']['Insert']
-type DocumentTemplateUpdate = Tables['document_templates']['Update']
+type DocumentTemplateRow = DbRow<'document_templates'>;
+type DocumentTemplateInsert = DbInsert<'document_templates'>;
+type DocumentTemplateUpdate = DbUpdate<'document_templates'>;
 
 // Use existing types or define them
 export type DocumentType = string

@@ -48,6 +48,8 @@ import RegistersDashboard from '@/components/compliance/RegistersDashboard'
 import ComplianceSettings from '@/components/compliance/ComplianceSettings'
 import AMLDashboard from '@/components/compliance/AMLDashboard'
 import ConsumerDutyDashboard from '@/components/compliance/ConsumerDutyDashboard'
+import ProdServicesDashboard from '@/components/compliance/ProdServicesDashboard'
+import { ProdServicesClientPanel } from '@/components/compliance/ProdServicesClientPanel'
 
 // Error Boundary Component to catch and handle errors gracefully
 interface ErrorBoundaryProps {
@@ -137,7 +139,7 @@ interface ComplianceStats {
   complianceScore: number
 }
 
-type TabType = 'qa-reviews' | 'registers' | 'aml' | 'consumer-duty' | 'settings'
+type TabType = 'qa-reviews' | 'registers' | 'aml' | 'consumer-duty' | 'prod-services' | 'settings'
 
 export default function ComplianceHubPage() {
   const supabase = createClient()
@@ -177,6 +179,8 @@ export default function ComplianceHubPage() {
     } else if (tab === 'registers') {
       setActiveTab('registers')
       if (sub) setRegistersSubTab(sub)
+    } else if (tab === 'prod-services') {
+      setActiveTab('prod-services')
     }
   }, [])
   const [stats, setStats] = useState<ComplianceStats>({
@@ -354,6 +358,13 @@ export default function ComplianceHubPage() {
       key: 'consumer-duty' as TabType,
       label: 'Consumer Duty',
       icon: Scale,
+      badge: undefined,
+      badgeColor: 'secondary'
+    },
+    {
+      key: 'prod-services' as TabType,
+      label: 'PROD & Services',
+      icon: FileText,
       badge: undefined,
       badgeColor: 'secondary'
     },
@@ -645,6 +656,17 @@ export default function ComplianceHubPage() {
             fallback={<TabErrorFallback tabName="Consumer Duty" onRetry={() => setActiveTab('consumer-duty')} />}
           >
             <ConsumerDutyDashboard onStatsChange={loadStats} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'prod-services' && (
+          <TabErrorBoundary
+            key="prod-services"
+            fallback={<TabErrorFallback tabName="PROD & Services" onRetry={() => setActiveTab('prod-services')} />}
+          >
+            <div className="space-y-6">
+              <ProdServicesDashboard />
+              <ProdServicesClientPanel />
+            </div>
           </TabErrorBoundary>
         )}
         {activeTab === 'settings' && (

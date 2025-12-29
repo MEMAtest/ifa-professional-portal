@@ -7,95 +7,38 @@ import { createClient } from '@/lib/supabase/client'
 import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DocumentTemplateService } from './documentTemplateService'
-import type { Database } from '@/types/database.types' // Fixed import path
-import jsPDF from 'jspdf'
+import type { Database } from '@/types/db' // Fixed import path
+import { aggregateAssessmentData } from './document-generation/summary'
+import { getDefaultHtmlTemplate, mapAssessmentToVariables } from './document-generation/assessment-templates'
+import {
+  generateFileName,
+  generateSimplePDF,
+  getDocumentCategory,
+  getDocumentType
+} from './document-generation/document-utils'
+import { populateTemplate } from './document-generation/template-utils'
+import type {
+  AssessmentData,
+  BatchGenerationParams,
+  CombinedReportData,
+  DocumentGenerationResult,
+  DocumentSaveParams,
+  GenerateCombinedReportParams,
+  GenerateFromAssessmentParams,
+  LinkAssessmentParams
+} from './document-generation/types'
+export type {
+  AssessmentData,
+  BatchGenerationParams,
+  CombinedReportData,
+  DocumentGenerationResult,
+  GenerateCombinedReportParams,
+  GenerateFromAssessmentParams
+} from './document-generation/types'
 
 // ================================================================
 // TYPE DEFINITIONS
 // ================================================================
-
-export interface AssessmentData {
-  type: 'suitability' | 'atr' | 'cfl' | 'vulnerability'
-  id: string
-  data: Record<string, any>
-  completedAt: string
-}
-
-export interface GenerateFromAssessmentParams {
-  assessmentType: string
-  assessmentId: string
-  clientId: string
-  templateId?: string
-  includeWarnings?: boolean
-  missingFieldsReport?: Array<{
-    sectionId: string
-    sectionName: string
-    missingFields: Array<{
-      fieldId: string
-      fieldName: string
-      required: boolean
-    }>
-  }>
-  reportOptions?: {
-    showIncompleteWarning?: boolean
-    allowPartialGeneration?: boolean
-    highlightMissingData?: boolean
-    includeCompletionStatus?: boolean
-    reportType?: 'clientLetter' | 'advisorReport' | 'executiveSummary' | 'fullReport' | 'complianceReport'
-  }
-}
-
-export interface GenerateCombinedReportParams {
-  clientId: string
-  assessmentIds: string[]
-  templateId?: string
-  reportType?: 'annual_review' | 'comprehensive' | 'executive_summary'
-}
-
-export interface BatchGenerationParams {
-  clientIds: string[]
-  documentTypes: string[]
-  options?: {
-    skipIfExists?: boolean
-    sendForSignature?: boolean
-  }
-}
-
-export interface DocumentGenerationResult {
-  success: boolean
-  documentId?: string
-  documentUrl?: string
-  error?: string
-  metadata?: Record<string, any>
-}
-
-export interface CombinedReportData {
-  client: Record<string, any>
-  assessments: AssessmentData[]
-  generatedAt: string
-  reportType: string
-}
-
-interface DocumentSaveParams {
-  clientId: string
-  fileName: string
-  content: string | Blob
-  fileType: string
-  metadata: Record<string, any>
-  assessmentVersion?: number
-  assessmentId?: string
-  documentType?: string
-  category?: string
-  assessmentType?: string
-}
-
-interface LinkAssessmentParams {
-  assessment_type: string
-  assessment_id: string
-  document_id: string
-  template_used: string
-  variables_used: Record<string, any>
-}
 
 // ================================================================
 // ENHANCED DOCUMENT GENERATION SERVICE
@@ -204,7 +147,7 @@ export class EnhancedDocumentGenerationService {
       }
 
       // 4. Map assessment data to template variables
-      const variables = this.mapAssessmentToVariables(
+      const variables = mapAssessmentToVariables(
         params.assessmentType,
         assessmentData,
         clientData
@@ -218,13 +161,13 @@ export class EnhancedDocumentGenerationService {
       }
 
       // 5. Generate document content
-      const htmlContent = this.populateTemplate(template.content, variables)
+      const htmlContent = populateTemplate(template.content, variables)
 
       // 6. Convert to PDF format
-      const pdfContent = this.generateSimplePDF(htmlContent, clientData, assessmentData.version_number)
+      const pdfContent = generateSimplePDF(htmlContent, clientData, assessmentData.version_number)
 
       // 7. Generate unique filename with timestamp and version
-      const fileName = this.generateFileName(
+      const fileName = generateFileName(
         params.assessmentType,
         clientData.personal_details?.firstName || 'Client',
         clientData.personal_details?.lastName || '',
@@ -233,8 +176,8 @@ export class EnhancedDocumentGenerationService {
       )
 
       // 8. Determine document type and category based on report type
-      const documentType = this.getDocumentType(params.reportOptions?.reportType)
-      const category = this.getDocumentCategory(params.assessmentType, params.reportOptions?.reportType)
+      const documentType = getDocumentType(params.reportOptions?.reportType)
+      const category = getDocumentCategory(params.assessmentType, params.reportOptions?.reportType)
 
       // 9. Save document - NOTE: NOT passing assessmentId to avoid foreign key constraint
       const document = await this.saveDocument({
@@ -346,20 +289,20 @@ export class EnhancedDocumentGenerationService {
       }
 
       // 4. Aggregate data from all assessments
-      const aggregatedData = this.aggregateAssessmentData(
+      const aggregatedData = aggregateAssessmentData(
         assessments,
         clientData,
         params.reportType || 'annual_review'
       )
 
       // 5. Generate HTML content
-      const htmlContent = this.populateTemplate(template.content, aggregatedData)
+      const htmlContent = populateTemplate(template.content, aggregatedData)
 
       // 6. Convert to PDF
-      const pdfContent = this.generateSimplePDF(htmlContent, clientData, 0)
+      const pdfContent = generateSimplePDF(htmlContent, clientData, 0)
 
       // 7. Save document with unique filename
-      const fileName = this.generateFileName(
+      const fileName = generateFileName(
         'combined_report',
         clientData.personal_details?.firstName || 'Client',
         clientData.personal_details?.lastName || ''
@@ -498,58 +441,6 @@ export class EnhancedDocumentGenerationService {
   // HELPER METHODS
   // ================================================================
 
-  private getDocumentType(reportType?: string): string {
-    const typeMap: Record<string, string> = {
-      clientLetter: 'Client Letter',
-      advisorReport: 'Advisor Report',
-      executiveSummary: 'Executive Summary',
-      fullReport: 'Full Assessment Report',
-      complianceReport: 'FCA Compliance Report'
-    }
-    return typeMap[reportType || ''] || 'Assessment Report'
-  }
-
-  private getDocumentCategory(assessmentType: string, reportType?: string): string {
-    if (reportType === 'complianceReport') return 'Compliance'
-    if (reportType === 'clientLetter') return 'Client Communications'
-    if (reportType === 'advisorReport') return 'Internal Documents'
-    
-    const categoryMap: Record<string, string> = {
-      suitability: 'Suitability',
-      atr: 'Risk Assessment',
-      cfl: 'Capacity for Loss',
-      vulnerability: 'Vulnerability'
-    }
-    
-    return categoryMap[assessmentType] || 'Reports'
-  }
-
-  private generateSimplePDF(htmlContent: string, clientData: any, version: number): Blob {
-    const clientName = `${clientData.personal_details?.firstName || ''} ${clientData.personal_details?.lastName || ''}`.trim() || 'Client'
-    const currentDate = new Date().toLocaleDateString('en-GB')
-
-    const textContent = htmlContent
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 3000)
-
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-    doc.setFontSize(14)
-    doc.text('Financial Assessment Report', 40, 60)
-    doc.setFontSize(12)
-    doc.text(`Client: ${clientName}`, 40, 80)
-    doc.text(`Version: ${version || 1}`, 40, 100)
-    doc.text(`Generated: ${currentDate}`, 40, 120)
-    doc.text('Content Preview:', 40, 150)
-    doc.setFontSize(11)
-    doc.text(textContent || 'Content unavailable', 40, 170, { maxWidth: 520 })
-    const arrayBuffer = doc.output('arraybuffer')
-    return new Blob([arrayBuffer], { type: 'application/pdf' })
-  }
-
   private async fetchAssessmentData(type: string, id: string): Promise<Record<string, any>> {
     if (!this.supabase) {
       throw new Error("Cannot perform action: Supabase client is not available.")
@@ -620,225 +511,10 @@ export class EnhancedDocumentGenerationService {
       // Fallback to template service defaults
       const defaults = this.templateService.getDefaultTemplates()
       const found = defaults.find((t: any) => t.documentType === `${assessmentType}_report`)
-      return found || this.getDefaultHtmlTemplate(assessmentType)
+      return found || getDefaultHtmlTemplate(assessmentType)
     }
 
     return data
-  }
-
-  private getDefaultHtmlTemplate(assessmentType: string): Record<string, any> {
-    return {
-      id: `default_${assessmentType}`,
-      name: `Default ${assessmentType} Template`,
-      content: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>{{CLIENT_NAME}} - ${assessmentType.toUpperCase()} Assessment Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .header { border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-            .section { margin-bottom: 20px; }
-            .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Financial Suitability Assessment Report</h1>
-            <p><strong>Client:</strong> {{CLIENT_NAME}}</p>
-            <p><strong>Date:</strong> {{ASSESSMENT_DATE}}</p>
-            <p><strong>Version:</strong> {{VERSION_NUMBER}}</p>
-          </div>
-          <div class="content">
-            {{CONTENT}}
-          </div>
-          <div class="footer">
-            <p>This document is confidential and proprietary.</p>
-            <p>Generated by Financial Advisory Platform</p>
-          </div>
-        </body>
-        </html>
-      `
-    }
-  }
-
-  private mapAssessmentToVariables(
-    type: string,
-    assessment: Record<string, any>,
-    client: any
-  ): Record<string, any> {
-    const baseVariables = {
-      CLIENT_NAME: (assessment.personal_circumstances?.client_name as string) ||
-        `${client.personal_details?.firstName || ''} ${client.personal_details?.lastName || ''}`.trim() ||
-        'Client',
-      CLIENT_EMAIL: client.contact_details?.email || '',
-      ASSESSMENT_DATE: new Date().toLocaleDateString('en-GB'),
-      ADVISOR_NAME: 'Professional Advisor',
-      VERSION_NUMBER: assessment.version_number || 1,
-      IS_FINAL: assessment.is_final || false,
-      IS_DRAFT: assessment.is_draft || true,
-      FIRM_NAME: 'Financial Advisory Services',
-      FIRM_ADDRESS: '123 Financial Street, London, UK',
-      FIRM_FCA_NUMBER: 'FCA123456'
-    }
-
-    // Add type-specific variables
-    const typeSpecificVariables = this.getTypeSpecificVariables(type, assessment, client)
-
-    return {
-      ...baseVariables,
-      ...typeSpecificVariables,
-      CONTENT: this.generateFormattedContent(type, assessment, client)
-    }
-  }
-
-  private generateFormattedContent(type: string, assessment: Record<string, any>, client: any): string {
-    // Generate properly formatted content based on assessment type
-    let content = '<div class="assessment-content">'
-    
-    if (type === 'suitability') {
-      const personal = assessment.personal_circumstances || {}
-      const objectives = assessment.investment_objectives || {}
-      const risk = assessment.risk_assessment || {}
-      const recommendation = assessment.recommendations || {}
-      const financial = assessment.financial_situation || {}
-
-      content += `
-        <div class="section">
-          <h2>Client Snapshot</h2>
-          <p>Name: ${personal.client_name || 'Not provided'}</p>
-          <p>Age: ${personal.age || ''}</p>
-          <p>Employment Status: ${personal.employment_status || ''}</p>
-        </div>
-        <div class="section">
-          <h2>Investment Objectives</h2>
-          <p>Primary Objective: ${objectives.primary_objective || 'Not specified'}</p>
-          <p>Investment Amount: £${objectives.investment_amount || 0}</p>
-          <p>Time Horizon: ${objectives.time_horizon || 'Not specified'}</p>
-          <p>Income Requirement: ${objectives.income_requirements || 'Not specified'}</p>
-        </div>
-        <div class="section">
-          <h2>Risk Assessment</h2>
-          <p>Risk Profile: ${risk.attitude_to_risk || 'Moderate'}</p>
-          <p>Capacity for Loss: ${risk.capacity_for_loss || 'Medium'}</p>
-          <p>Max Acceptable Loss: ${risk.max_acceptable_loss || ''}%</p>
-        </div>
-        <div class="section">
-          <h2>Financial Snapshot</h2>
-          <p>Annual Income: £${financial.annual_income || 0}</p>
-          <p>Monthly Expenditure: £${financial.monthly_expenditure || 0}</p>
-          <p>Liquid Assets: £${financial.liquid_assets || 0}</p>
-        </div>
-        <div class="section">
-          <h2>Recommendations</h2>
-          <p>Recommended Portfolio: ${recommendation.recommended_portfolio || 'Balanced'}</p>
-          <p>Rationale: ${recommendation.recommendation_rationale || 'Based on your objectives and risk profile.'}</p>
-          <p>Next Review: ${recommendation.next_review_date || 'Not set'}</p>
-        </div>
-      `
-    }
-    
-    content += '</div>'
-    return content
-  }
-
-  private getTypeSpecificVariables(
-    type: string, 
-    assessment: Record<string, any>, 
-    client: any
-  ): Record<string, any> {
-    switch (type) {
-      case 'atr':
-        return {
-          ATR_SCORE: assessment.total_score || 0,
-          RISK_CATEGORY: assessment.risk_category || 'Not assessed',
-          RISK_LEVEL: assessment.risk_level || 'Medium'
-        }
-
-      case 'cfl':
-        return {
-          CFL_SCORE: assessment.total_score || 0,
-          CAPACITY_CATEGORY: assessment.capacity_category || 'Not assessed',
-          MAX_LOSS_PERCENTAGE: assessment.max_loss_percentage || 0
-        }
-
-      case 'vulnerability':
-        return {
-          VULNERABILITY_STATUS: assessment.is_vulnerable ? 'Vulnerable' : 'Not Vulnerable',
-          VULNERABILITY_FACTORS: assessment.vulnerability_factors || []
-        }
-
-      case 'suitability':
-        return {
-          RISK_PROFILE: assessment.risk_assessment?.attitude_to_risk || 'Moderate',
-          RISK_CAPACITY: assessment.risk_assessment?.capacity_for_loss || 'Medium',
-          INVESTMENT_AMOUNT: assessment.investment_objectives?.investment_amount || 0,
-          TIME_HORIZON: assessment.investment_objectives?.time_horizon || 'Not specified',
-          PRIMARY_OBJECTIVE: assessment.investment_objectives?.primary_objective || 'Not specified',
-          RECOMMENDED_PORTFOLIO: assessment.recommendations?.recommended_portfolio || 'Not specified',
-          RECOMMENDATION_RATIONALE: assessment.recommendations?.recommendation_rationale || 'See detailed rationale in report.',
-          NEXT_REVIEW_DATE: assessment.recommendations?.next_review_date || '',
-          COMPLETION_PERCENTAGE: assessment.completion_percentage || 0,
-          CONTACT_EMAIL: assessment.contact_details?.email || '',
-          CONTACT_PHONE: assessment.contact_details?.phone || ''
-        }
-
-      default:
-        return {}
-    }
-  }
-
-  private populateTemplate(template: string, variables: Record<string, any>): string {
-    let content = template
-
-    // Simple variable replacement
-    Object.entries(variables).forEach(([key, value]) => {
-      const regex = new RegExp(`{{${key}}}`, 'g')
-      const safeValue = value !== null && value !== undefined ? String(value) : ''
-      content = content.replace(regex, safeValue)
-    })
-
-    // Handle conditional blocks
-    content = this.processConditionals(content, variables)
-
-    // Handle loops
-    content = this.processLoops(content, variables)
-
-    return content
-  }
-
-  private processConditionals(content: string, variables: Record<string, any>): string {
-    const ifRegex = /{{#if\s+(\w+)}}([\s\S]*?){{\/if}}/g
-    
-    return content.replace(ifRegex, (match, varName, innerContent) => {
-      if (variables[varName]) {
-        return innerContent
-      }
-      return ''
-    })
-  }
-
-  private processLoops(content: string, variables: Record<string, any>): string {
-    const eachRegex = /{{#each\s+(\w+)}}([\s\S]*?){{\/each}}/g
-    
-    return content.replace(eachRegex, (match, varName, innerContent) => {
-      const items = variables[varName]
-      if (Array.isArray(items)) {
-        return items.map(item => {
-          let itemContent = innerContent
-          if (typeof item === 'object' && item !== null) {
-            Object.entries(item).forEach(([key, value]) => {
-              const regex = new RegExp(`{{this\\.${key}}}`, 'g')
-              itemContent = itemContent.replace(regex, String(value))
-            })
-          } else {
-            itemContent = itemContent.replace(/{{this}}/g, String(item))
-          }
-          return itemContent
-        }).join('')
-      }
-      return ''
-    })
   }
 
   private async saveDocument(params: DocumentSaveParams): Promise<any> {
@@ -975,22 +651,6 @@ export class EnhancedDocumentGenerationService {
       console.error('Error in saveDocument:', error)
       throw error
     }
-  }
-
-  private generateFileName(
-    type: string, 
-    firstName: string, 
-    lastName: string,
-    version?: number,
-    reportType?: string
-  ): string {
-    const timestamp = Date.now()
-    const date = new Date().toISOString().split('T')[0]
-    const clientName = `${firstName}_${lastName}`.replace(/[^a-zA-Z0-9_]/g, '').substring(0, 50)
-    const versionString = version ? `_v${version}` : ''
-    const reportTypeString = reportType ? `_${reportType}` : ''
-    
-    return `${type}${reportTypeString}_${clientName}${versionString}_${date}_${timestamp}.pdf`
   }
 
   private async linkAssessmentToDocument(params: LinkAssessmentParams): Promise<void> {
@@ -1131,162 +791,6 @@ export class EnhancedDocumentGenerationService {
     return assessments
   }
 
-  private aggregateAssessmentData(
-    assessments: AssessmentData[],
-    client: any,
-    reportType: string
-  ): Record<string, any> {
-    const atr = assessments.find(a => a.type === 'atr')
-    const cfl = assessments.find(a => a.type === 'cfl')
-    const suitability = assessments.find(a => a.type === 'suitability')
-
-    const baseData = {
-      CLIENT_NAME: `${client.personal_details?.firstName || ''} ${client.personal_details?.lastName || ''}`.trim() || 'Client',
-      REVIEW_DATE: new Date().toLocaleDateString('en-GB'),
-      ADVISOR_NAME: 'Professional Advisor',
-      EXECUTIVE_SUMMARY: this.generateExecutiveSummary(assessments, client)
-    }
-
-    return {
-      ...baseData,
-      ATR_SCORE: atr?.data.total_score || 'Not assessed',
-      ATR_CATEGORY: atr?.data.risk_category || 'Not assessed',
-      ATR_DATE: atr ? new Date(atr.completedAt).toLocaleDateString('en-GB') : 'N/A',
-      CFL_SCORE: cfl?.data.total_score || 'Not assessed',
-      MAX_LOSS: cfl?.data.max_loss_percentage || 0,
-      CFL_DATE: cfl ? new Date(cfl.completedAt).toLocaleDateString('en-GB') : 'N/A',
-      SUITABILITY_VERSION: suitability?.data.version_number || 'N/A',
-      SUITABILITY_STATUS: suitability?.data.is_final ? 'Final' : 'Draft',
-      ASSESSMENT_HISTORY: this.buildAssessmentHistory(assessments),
-      KEY_CHANGES: this.identifyKeyChanges(assessments, client),
-      RECOMMENDATIONS: this.buildRecommendations(assessments, client),
-      NEXT_STEPS: this.buildNextSteps(assessments, client)
-    }
-  }
-
-  private generateExecutiveSummary(assessments: AssessmentData[], client: any): string {
-    const hasAllAssessments = assessments.length >= 3
-    const riskAligned = this.checkRiskAlignment(assessments)
-    const clientName = client.personal_details?.firstName || 'the client'
-    
-    return `This annual review summarizes the current financial position and risk profile for ${clientName}. ${hasAllAssessments ? 'All required assessments have been completed.' : 'Some assessments are pending completion.'} ${riskAligned ? 'Risk profiles are well-aligned across assessments.' : 'There are some discrepancies in risk assessments that require attention.'}`
-  }
-
-  private checkRiskAlignment(assessments: AssessmentData[]): boolean {
-    const atr = assessments.find(a => a.type === 'atr')
-    const cfl = assessments.find(a => a.type === 'cfl')
-    
-    if (!atr || !cfl) return true
-    
-    const atrLevel = atr.data.risk_level || 3
-    const cflLevel = cfl.data.capacity_level || 3
-    
-    return Math.abs(atrLevel - cflLevel) <= 1
-  }
-
-  private buildAssessmentHistory(assessments: AssessmentData[]): any[] {
-    return assessments
-      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
-      .map(assessment => ({
-        date: new Date(assessment.completedAt).toLocaleDateString('en-GB'),
-        type: assessment.type.toUpperCase(),
-        summary: this.getAssessmentSummary(assessment)
-      }))
-  }
-
-  private getAssessmentSummary(assessment: AssessmentData): string {
-    switch (assessment.type) {
-      case 'atr':
-        return `Risk score: ${assessment.data.total_score || 0}/100, Category: ${assessment.data.risk_category || 'Not assessed'}`
-      case 'cfl':
-        return `Capacity score: ${assessment.data.total_score || 0}/100, Max loss: ${assessment.data.max_loss_percentage || 0}%`
-      case 'suitability':
-        const version = assessment.data.version_number || 1
-        const objective = assessment.data.objectives?.primary_objective || 'investment'
-        return `Suitability confirmed for ${objective} (Version ${version})`
-      case 'vulnerability':
-        return assessment.data.is_vulnerable ? 'Vulnerability factors identified' : 'No vulnerabilities identified'
-      default:
-        return 'Assessment completed'
-    }
-  }
-
-  private identifyKeyChanges(assessments: AssessmentData[], client: any): string[] {
-    const changes: string[] = []
-    
-    const recentAssessments = assessments.filter(a => {
-      const daysSince = (Date.now() - new Date(a.completedAt).getTime()) / (1000 * 60 * 60 * 24)
-      return daysSince < 90
-    })
-    
-    if (recentAssessments.length > 0) {
-      changes.push(`${recentAssessments.length} assessment(s) updated in the last 90 days`)
-    }
-    
-    const atr = assessments.find(a => a.type === 'atr')
-    if (atr && atr.data.risk_level !== client.risk_profile?.risk_level) {
-      changes.push('Risk profile has been updated')
-    }
-    
-    if (client.vulnerability_assessment?.is_vulnerable) {
-      changes.push('Client vulnerability factors require ongoing monitoring')
-    }
-    
-    return changes.length > 0 ? changes : ['No significant changes since last review']
-  }
-
-  private buildRecommendations(assessments: AssessmentData[], client: any): any[] {
-    const recommendations: any[] = []
-    
-    const atr = assessments.find(a => a.type === 'atr')
-    const cfl = assessments.find(a => a.type === 'cfl')
-    
-    if (atr && cfl) {
-      const riskAligned = Math.abs((atr.data.risk_level || 3) - (cfl.data.capacity_level || 3)) <= 1
-      if (!riskAligned) {
-        recommendations.push({
-          category: 'Risk Alignment',
-          recommendation: 'Review and align risk tolerance with capacity for loss'
-        })
-      }
-    }
-    
-    const missingTypes = ['atr', 'cfl', 'suitability', 'vulnerability']
-      .filter(type => !assessments.find(a => a.type === type))
-    
-    if (missingTypes.length > 0) {
-      recommendations.push({
-        category: 'Assessment Completion',
-        recommendation: `Complete missing assessments: ${missingTypes.join(', ')}`
-      })
-    }
-    
-    recommendations.push({
-      category: 'Ongoing Monitoring',
-      recommendation: 'Schedule quarterly portfolio reviews and annual assessment updates'
-    })
-    
-    return recommendations
-  }
-
-  private buildNextSteps(assessments: AssessmentData[], client: any): string[] {
-    const steps: string[] = []
-    
-    const hasAtr = assessments.find(a => a.type === 'atr')
-    const hasCfl = assessments.find(a => a.type === 'cfl')
-    const hasSuitability = assessments.find(a => a.type === 'suitability')
-    
-    if (!hasAtr) steps.push('Complete Attitude to Risk (ATR) assessment')
-    if (!hasCfl) steps.push('Complete Capacity for Loss (CFL) assessment')
-    if (!hasSuitability) steps.push('Complete Suitability assessment')
-    
-    steps.push('Review and approve recommendations with client')
-    steps.push('Implement agreed investment strategy')
-    steps.push('Schedule next review date')
-    
-    return steps
-  }
-
   private async documentExists(clientId: string, documentType: string): Promise<boolean> {
     if (!this.supabase) {
       throw new Error("Cannot perform action: Supabase client is not available.")
@@ -1348,7 +852,7 @@ export class EnhancedDocumentGenerationService {
       .eq('is_active', true)
       .maybeSingle()
 
-    return data || this.getDefaultHtmlTemplate('combined')
+    return data || getDefaultHtmlTemplate('combined')
   }
 }
 

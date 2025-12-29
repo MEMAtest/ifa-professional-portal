@@ -19,7 +19,6 @@ import {
   Info,
   ExternalLink
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -75,7 +74,6 @@ interface PlatformData {
 }
 
 export default function PlatformJustification({ clientId, firmId, onSaved }: Props) {
-  const supabase = createClient()
   const { toast } = useToast()
 
   const [loading, setLoading] = useState(true)
@@ -91,19 +89,22 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
     }
   })
 
+  const isValidFirmId = (value?: string | null) => {
+    if (!value) return false
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  }
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const { data: existing, error } = await supabase
-        .from('client_services')
-        .select('platform_selected, platform_justification')
-        .eq('client_id', clientId)
-        .single()
+      const response = await fetch(`/api/clients/${clientId}/services`)
+      const result = await response.json()
+      const record = result.success ? result.data : null
 
-      if (existing && !error) {
+      if (record) {
         setData({
-          platform_selected: existing.platform_selected || '',
-          platform_justification: existing.platform_justification || {
+          platform_selected: record.platform_selected || '',
+          platform_justification: record.platform_justification || {
             reasons: [],
             additional_notes: '',
             comparison_performed: false,
@@ -116,7 +117,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
     } finally {
       setLoading(false)
     }
-  }, [supabase, clientId])
+  }, [clientId])
 
   useEffect(() => {
     loadData()
@@ -164,36 +165,24 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
 
     setSaving(true)
     try {
-      // Check if record exists
-      const { data: existing } = await supabase
-        .from('client_services')
-        .select('id')
-        .eq('client_id', clientId)
-        .single()
+      const resolvedFirmId = isValidFirmId(firmId) ? firmId : null
+      const payload = {
+        client_id: clientId,
+        firm_id: resolvedFirmId,
+        platform_selected: data.platform_selected,
+        platform_justification: data.platform_justification
+      }
 
-      if (existing) {
-        const { error } = await supabase
-          .from('client_services')
-          .update({
-            platform_selected: data.platform_selected,
-            platform_justification: data.platform_justification
-          })
-          .eq('client_id', clientId)
+      const response = await fetch(`/api/clients/${clientId}/services`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
 
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('client_services')
-          .insert({
-            client_id: clientId,
-            firm_id: firmId || null,
-            platform_selected: data.platform_selected,
-            platform_justification: data.platform_justification,
-            services_selected: [],
-            target_market_checks: {}
-          })
+      const result = await response.json()
 
-        if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save')
       }
 
       toast({
@@ -202,6 +191,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
       })
 
       onSaved?.()
+      loadData()
     } catch (error) {
       console.error('Error saving:', error)
       toast({
@@ -250,7 +240,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
         </CardHeader>
         <CardContent>
           <select
-            value={data.platform_selected}
+            value={data.platform_selected ?? ''}
             onChange={(e) => setData({ ...data, platform_selected: e.target.value })}
             className="w-full border rounded-lg p-3 text-sm"
           >
@@ -339,7 +329,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={data.platform_justification.comparison_performed}
+                  checked={data.platform_justification.comparison_performed ?? false}
                   onChange={(e) => setData({
                     ...data,
                     platform_justification: {
@@ -389,7 +379,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
             </CardHeader>
             <CardContent>
               <textarea
-                value={data.platform_justification.additional_notes}
+                value={data.platform_justification.additional_notes ?? ''}
                 onChange={(e) => setData({
                   ...data,
                   platform_justification: {

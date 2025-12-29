@@ -3,7 +3,7 @@
 // ================================================================
 
 'use client'
-import { createContext } from 'react'
+import { createContext, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { Header } from './Header'
@@ -22,8 +22,10 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   const { user, loading } = useAuth()
   const pathname = usePathname()
   
-  // Define pages that don't need layout
-  const isPublicPage = pathname === '/login' || pathname === '/'
+  // Define pages that don't need layout (public/client-facing pages)
+  const isPublicPage = pathname === '/login' ||
+                       pathname === '/' ||
+                       pathname.startsWith('/client/')
   
   if (loading) {
     return (
@@ -39,14 +41,18 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   }
   
   // For authenticated pages, provide persistent layout
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
+  const closeSidebar = () => setIsSidebarOpen(false)
+
   return (
     <LayoutContext.Provider value={true}>
       <NotificationsProvider>
         <div className="min-h-screen bg-gray-50">
-          <Header />
-          <Sidebar />
-          <main className="ml-64 pt-16">
-            <div className="p-6">
+          <Header onToggleSidebar={toggleSidebar} />
+          <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
+          <main className="pt-16 lg:ml-64">
+            <div className="p-4 sm:p-6">
               {children}
             </div>
           </main>

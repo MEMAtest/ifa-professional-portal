@@ -1,10 +1,10 @@
-import type { Database } from '@/types/database.types'
+import type { DbRow, DbUpdate } from '@/types/db'
 import type { ReportContext } from '@/services/AdvisorContextService'
 import type { SuitabilityFormData } from '@/types/suitability'
 
-type SuitabilityAssessmentRow = Database['public']['Tables']['suitability_assessments']['Row']
-type SuitabilityAssessmentUpdate = Database['public']['Tables']['suitability_assessments']['Update']
-type ClientRow = Database['public']['Tables']['clients']['Row']
+type SuitabilityAssessmentRow = DbRow<'suitability_assessments'>
+type SuitabilityAssessmentUpdate = DbUpdate<'suitability_assessments'>
+type ClientRow = DbRow<'clients'>
 
 type JsonObject = Record<string, any>
 

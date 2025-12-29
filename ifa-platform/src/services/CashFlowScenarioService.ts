@@ -238,6 +238,17 @@ export class CashFlowScenarioService {
     const supabase = createClient(); // Create client for this method
     
     try {
+      const resolvedClientAge = Number(scenarioData.client_age ?? 45);
+      const resolvedRetirementAge = this.getSafeRetirementAge(
+        resolvedClientAge,
+        Number(scenarioData.retirement_age)
+      );
+      const resolvedLifeExpectancy = this.getSafeLifeExpectancy(
+        resolvedClientAge,
+        resolvedRetirementAge,
+        Number(scenarioData.life_expectancy)
+      );
+
       // Get current user's firm_id
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -268,9 +279,6 @@ export class CashFlowScenarioService {
         real_equity_return: scenarioData.real_equity_return || 5.0,
         real_bond_return: scenarioData.real_bond_return || 2.0,
         real_cash_return: scenarioData.real_cash_return || 0.5,
-        client_age: scenarioData.client_age || 45,
-        retirement_age: scenarioData.retirement_age || 67,
-        life_expectancy: scenarioData.life_expectancy || 85,
         current_savings: scenarioData.current_savings || 0,
         pension_value: scenarioData.pension_value || 0,
         investment_value: scenarioData.investment_value || 0,
@@ -286,7 +294,10 @@ export class CashFlowScenarioService {
         bond_allocation: (scenarioData as any).bond_allocation || 30,
         cash_allocation: (scenarioData as any).cash_allocation || 10,
         alternative_allocation: (scenarioData as any).alternative_allocation || 0,
-        ...scenarioData
+        ...scenarioData,
+        client_age: resolvedClientAge,
+        retirement_age: resolvedRetirementAge,
+        life_expectancy: resolvedLifeExpectancy
       };
 
       const { data, error } = await supabase
@@ -296,6 +307,23 @@ export class CashFlowScenarioService {
         .single();
 
       if (error) throw error;
+
+      // Save activity to activity_log for Activity Timeline
+      try {
+        await supabase
+          .from('activity_log')
+          .insert({
+            client_id: clientId,
+            action: `Cash flow scenario created: ${data.scenario_name}`,
+            type: 'cashflow',
+            user_name: null,
+            date: new Date().toISOString()
+          });
+      } catch (activityError) {
+        console.warn('Failed to save cash flow activity:', activityError);
+        // Don't fail the request if activity logging fails
+      }
+
       return data;
     } catch (error) {
       console.error('Error creating scenario:', error);
@@ -352,6 +380,9 @@ export class CashFlowScenarioService {
         clientName = `Client ${client.client_ref || clientId.slice(0, 8)}`;
       }
 
+      const retirementAge = this.getSafeRetirementAge(clientAge, 67);
+      const lifeExpectancy = this.getSafeLifeExpectancy(clientAge, retirementAge, 85);
+
       // Create default scenario
       return await this.createBasicScenario(clientId, {
         scenario_name: `${clientName} - Base Case Projection`,
@@ -362,8 +393,8 @@ export class CashFlowScenarioService {
         real_bond_return: 2.0,
         real_cash_return: 0.5,
         client_age: clientAge,
-        retirement_age: 67,
-        life_expectancy: 85,
+        retirement_age: retirementAge,
+        life_expectancy: lifeExpectancy,
         current_savings: 0,
         pension_value: 0,
         investment_value: 0,
@@ -379,6 +410,22 @@ export class CashFlowScenarioService {
       console.error('Error ensuring client scenario:', error);
       throw new Error('Failed to create default scenario');
     }
+  }
+
+  private static getSafeRetirementAge(clientAge: number, retirementAge?: number): number {
+    const base = Number.isFinite(retirementAge) ? Number(retirementAge) : 67;
+    if (!Number.isFinite(clientAge)) return base;
+    return Math.max(base, Math.round(clientAge) + 1);
+  }
+
+  private static getSafeLifeExpectancy(
+    clientAge: number,
+    retirementAge: number,
+    lifeExpectancy?: number
+  ): number {
+    const base = Number.isFinite(lifeExpectancy) ? Number(lifeExpectancy) : 85;
+    const min = Math.max(clientAge + 5, retirementAge + 5);
+    return Math.max(base, min);
   }
 
   /**

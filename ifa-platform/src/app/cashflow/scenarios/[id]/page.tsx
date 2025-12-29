@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { ProjectionChart } from '@/components/cashflow/ProjectionChart';
 import { AssumptionEditor } from '@/components/cashflow/AssumptionEditor';
+import { SustainabilityGauge } from '@/components/cashflow/SustainabilityGauge';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { clientService } from '@/services/ClientService';
@@ -64,6 +65,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
   const [isCalculating, setIsCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [realTermsEnabled, setRealTermsEnabled] = useState(false);
   
   // ✅ PRESERVED: Report generation state
   const [showReportModal, setShowReportModal] = useState(false);
@@ -184,6 +186,62 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     return `${rate.toFixed(1)}%`;
   };
 
+  const summary = projectionResult?.summary;
+  const finalProjection = projectionResult?.projections?.[projectionResult.projections.length - 1];
+  const finalPortfolioValue = realTermsEnabled
+    ? finalProjection?.realTermsValue ?? summary?.finalPortfolioValue ?? 0
+    : summary?.finalPortfolioValue ?? 0;
+
+  const assetSplit = useMemo(() => {
+    const investments = client?.financialProfile?.existingInvestments || [];
+    const isaTotal = investments
+      .filter((investment) => investment.type === 'isa')
+      .reduce((sum, investment) => sum + (investment.currentValue || 0), 0);
+    const giaTotal = investments
+      .filter((investment) => investment.type === 'general_investment')
+      .reduce((sum, investment) => sum + (investment.currentValue || 0), 0);
+    const investmentTotal = isaTotal + giaTotal;
+
+    if (investmentTotal <= 0) return null;
+
+    return {
+      isaRatio: isaTotal / investmentTotal,
+      giaRatio: giaTotal / investmentTotal
+    };
+  }, [client?.financialProfile?.existingInvestments]);
+
+  const milestones = useMemo(() => {
+    if (!scenario) return [];
+
+    const eventList: Array<{ year: number; label: string; color?: string }> = [];
+    const addEvent = (age: number | undefined, label: string, color?: string) => {
+      if (!age || age < scenario.clientAge) return;
+      const year = age - scenario.clientAge + 1;
+      if (year < 1 || year > scenario.projectionYears) return;
+      eventList.push({ year, label, color });
+    };
+
+    addEvent(scenario.retirementAge, 'Retirement', '#2563eb');
+    addEvent(scenario.statePensionAge, 'State Pension', '#16a34a');
+
+    if (scenario.mortgageBalance > 0 && scenario.mortgagePayment > 0) {
+      const yearsToPayoff = Math.ceil(scenario.mortgageBalance / scenario.mortgagePayment);
+      addEvent(scenario.clientAge + yearsToPayoff, 'Mortgage Paid Off', '#f59e0b');
+    }
+
+    const capitalEvents = (scenario.vulnerabilityAdjustments as any)?.capitalExpenditures
+      || (scenario.vulnerabilityAdjustments as any)?.capitalEvents;
+    if (Array.isArray(capitalEvents)) {
+      capitalEvents.forEach((event: any) => {
+        if (event?.age && event?.label) {
+          addEvent(event.age, event.label, '#dc2626');
+        }
+      });
+    }
+
+    return eventList;
+  }, [scenario]);
+
   // ✅ PRESERVED: Loading and error states
   if (isLoading) {
     return (
@@ -214,8 +272,6 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
       </div>
     );
   }
-
-  const summary = projectionResult?.summary;
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -288,9 +344,11 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
               <div className="flex items-center space-x-2">
                 <DollarSign className="w-5 h-5 text-green-600" />
                 <div>
-                  <p className="text-sm text-gray-600">Final Portfolio Value</p>
+                  <p className="text-sm text-gray-600">
+                    Final Portfolio Value{realTermsEnabled ? ' (Real Terms)' : ''}
+                  </p>
                   <p className="text-lg font-semibold">
-                    {formatCurrency(summary.finalPortfolioValue)}
+                    {formatCurrency(finalPortfolioValue)}
                   </p>
                 </div>
               </div>
@@ -331,17 +389,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
                 <Calendar className="w-5 h-5 text-orange-600" />
                 <div>
                   <p className="text-sm text-gray-600">Sustainability</p>
-                  <Badge 
-                    className={
-                      summary.sustainabilityRating === 'Excellent' ? 'bg-green-100 text-green-800' :
-                      summary.sustainabilityRating === 'Good' ? 'bg-green-100 text-green-700' :
-                      summary.sustainabilityRating === 'Adequate' ? 'bg-yellow-100 text-yellow-800' :
-                      summary.sustainabilityRating === 'Poor' ? 'bg-orange-100 text-orange-800' :
-                      'bg-red-100 text-red-800'
-                    }
-                  >
-                    {summary.sustainabilityRating}
-                  </Badge>
+                  <SustainabilityGauge rating={summary.sustainabilityRating} size="sm" />
                 </div>
               </div>
             </CardContent>
@@ -372,8 +420,8 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
 
         {/* ✅ PRESERVED: All existing tabs content */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <Card className="xl:col-span-2">
               <CardHeader>
                 <CardTitle>Portfolio Growth Projection</CardTitle>
               </CardHeader>
@@ -382,6 +430,10 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
                   <ProjectionChart 
                     projections={projectionResult.projections}
                     height={400}
+                    realTermsEnabled={realTermsEnabled}
+                    onRealTermsToggle={setRealTermsEnabled}
+                    milestones={milestones}
+                    assetSplit={assetSplit || undefined}
                   />
                 ) : (
                   <div className="h-64 flex items-center justify-center">
@@ -393,25 +445,53 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Key Insights</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {summary?.keyInsights ? (
-                  <div className="space-y-3">
-                    {summary.keyInsights.map((insight, index) => (
-                      <div key={index} className="flex items-start space-x-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
-                        <p className="text-sm text-gray-700">{insight}</p>
-                      </div>
-                    ))}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Key Insights</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {summary?.keyInsights ? (
+                    <div className="space-y-3">
+                      {summary.keyInsights.map((insight, index) => (
+                        <div key={index} className="flex items-start space-x-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
+                          <p className="text-sm text-gray-700">{insight}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500">No insights available</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Assumptions At a Glance</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Inflation</span>
+                    <span className="font-semibold">
+                      {scenario.scenarioType === 'high_inflation'
+                        ? `${formatPercentage(scenario.inflationRate)} (first 10y)`
+                        : formatPercentage(scenario.inflationRate)}
+                    </span>
                   </div>
-                ) : (
-                  <p className="text-gray-500">No insights available</p>
-                )}
-              </CardContent>
-            </Card>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Expected Real Growth</span>
+                    <span className="font-semibold">
+                      {formatPercentage(summary?.averageAnnualReturn || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Charges (assumed)</span>
+                    <span className="font-semibold">0.75%</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 

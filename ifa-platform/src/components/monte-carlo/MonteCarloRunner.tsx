@@ -3,19 +3,26 @@
 import { useState } from 'react';
 
 interface MonteCarloRunnerProps {
-  scenarioId?: string;
+  scenarioId: string;  // Required - must be a valid scenario ID from the database
   simulationCount?: number;
 }
 
-export function MonteCarloRunner({ 
-  scenarioId = 'test-scenario', 
-  simulationCount = 5000 
+export function MonteCarloRunner({
+  scenarioId,
+  simulationCount = 5000
 }: MonteCarloRunnerProps) {
+  // All hooks must be called unconditionally before any early returns
   const [results, setResults] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
+
+  // Validate scenarioId is provided (after hooks)
+  if (!scenarioId) {
+    console.error('MonteCarloRunner: scenarioId is required');
+    return null;
+  }
 
   const runSimulation = async () => {
     setIsRunning(true);
@@ -25,12 +32,7 @@ export function MonteCarloRunner({
     setStatusMessage('Initializing simulation...');
 
     try {
-      // Use Web Worker if available
-      if (typeof Worker !== 'undefined' && simulationCount >= 1000) {
-        await runWithWebWorker();
-      } else {
-        await runWithFetch();
-      }
+      await runWithFetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Simulation failed');
     } finally {

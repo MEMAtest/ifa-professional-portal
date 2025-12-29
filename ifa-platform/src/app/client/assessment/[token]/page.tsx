@@ -32,21 +32,22 @@ interface AssessmentInfo {
 export default function AssessmentLandingPage({
   params
 }: {
-  params: Promise<{ token: string }>
+  params: { token: string }
 }) {
   const router = useRouter()
-  const [token, setToken] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const [assessment, setAssessment] = useState<AssessmentInfo | null>(null)
 
+  // Get token directly from params (Next.js 14 pattern)
+  const token = params.token
+
   useEffect(() => {
-    params.then(p => {
-      setToken(p.token)
-      validateToken(p.token)
-    })
-  }, [params])
+    if (token) {
+      validateToken(token)
+    }
+  }, [token])
 
   const validateToken = async (tokenValue: string) => {
     try {

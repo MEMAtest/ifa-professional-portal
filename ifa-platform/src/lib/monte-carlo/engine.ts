@@ -20,9 +20,17 @@ interface SimulationInput {
   inflationRate?: number;
   simulationCount?: number;
   assetAllocation?: AssetAllocation;
+  returnAssumptions?: ReturnAssumptions;
 }
 
 interface AssetAllocation {
+  equity: number;
+  bonds: number;
+  cash: number;
+  alternatives?: number;
+}
+
+interface ReturnAssumptions {
   equity: number;
   bonds: number;
   cash: number;
@@ -175,7 +183,7 @@ export class MonteCarloEngine {
     input: SimulationInput,
     allocation: AssetAllocation
   ): SimulationResult {
-    const { initialWealth, timeHorizon, withdrawalAmount, inflationRate = 0.025 } = input;
+    const { initialWealth, timeHorizon, withdrawalAmount, inflationRate = 0.025, returnAssumptions } = input;
     
     let wealth = initialWealth;
     let maxDrawdown = 0;
@@ -188,7 +196,7 @@ export class MonteCarloEngine {
     
     for (let year = 1; year <= timeHorizon; year++) {
       // Generate correlated returns for each asset class
-      const returns = this.generateCorrelatedReturns(allocation);
+      const returns = this.generateCorrelatedReturns(allocation, returnAssumptions);
       
       // Calculate portfolio return
       const portfolioReturn = this.calculatePortfolioReturn(allocation, returns);
@@ -242,7 +250,10 @@ export class MonteCarloEngine {
   /**
    * Generate correlated returns for asset classes
    */
-  private generateCorrelatedReturns(allocation: AssetAllocation): Record<string, number> {
+  private generateCorrelatedReturns(
+    allocation: AssetAllocation,
+    returnAssumptions?: ReturnAssumptions
+  ): Record<string, number> {
     const assetClasses = Object.keys(ASSET_CLASSES);
     const returns: Record<string, number> = {};
     
@@ -250,8 +261,9 @@ export class MonteCarloEngine {
     const independentReturns: Record<string, number> = {};
     for (const asset of assetClasses) {
       const assetData = ASSET_CLASSES[asset as keyof typeof ASSET_CLASSES];
+      const expectedReturn = returnAssumptions?.[asset as keyof ReturnAssumptions] ?? assetData.expectedReturn;
       independentReturns[asset] = this.rng.normalRandom(
-        assetData.expectedReturn,
+        expectedReturn,
         assetData.volatility
       );
     }
@@ -453,4 +465,4 @@ export async function runQuickSimulation(
   });
 }
 
-export type { SimulationInput, SimulationResult, MonteCarloResults, AssetAllocation };
+export type { SimulationInput, SimulationResult, MonteCarloResults, AssetAllocation, ReturnAssumptions };

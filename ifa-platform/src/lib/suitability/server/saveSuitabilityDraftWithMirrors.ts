@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 import type { SuitabilityFormData } from '@/types/suitability'
 
 import { saveSuitabilityDraft } from './saveSuitabilityDraft'

@@ -2,7 +2,7 @@
 // Unified Communication Hub - consolidates Messages, Calls, Calendar, and Inbox
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   MessageSquare,
@@ -10,12 +10,10 @@ import {
   Calendar,
   Mail,
   Clock,
-  Users,
   Plus,
   Send,
   PhoneCall,
   Search,
-  Filter,
   RefreshCw,
   PhoneIncoming,
   PhoneOutgoing,
@@ -23,12 +21,7 @@ import {
   ChevronRight,
   X,
   Save,
-  Video,
-  Coffee,
-  FileText,
-  AlertTriangle,
-  CheckCircle,
-  Star
+  CheckCircle
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -36,72 +29,14 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
-
-// Types
-type TabType = 'overview' | 'messages' | 'calls' | 'calendar' | 'follow-ups'
-
-interface CommunicationItem {
-  id: string
-  client_id: string | null
-  client_name: string
-  client_ref: string
-  communication_type: string
-  subject: string
-  summary: string
-  communication_date: string
-  direction: string
-  contact_method: string
-  requires_followup: boolean
-  followup_date?: string | null
-  followup_completed: boolean
-  created_at: string | null
-}
-
-interface CalendarEvent {
-  id: string
-  title: string
-  date: string
-  time: string
-  clientName: string
-  clientId: string
-  type: string
-  duration: number
-  notes: string
-  color?: string
-  eventType?: string
-}
-
-interface Client {
-  id: string
-  client_ref: string
-  personal_details: {
-    firstName: string
-    lastName: string
-    title?: string
-  }
-  contact_info: {
-    email: string
-    phone: string
-  }
-}
-
-interface Stats {
-  totalCommunications: number
-  messages: number
-  calls: number
-  upcomingMeetings: number
-  followUpsNeeded: number
-  todayItems: number
-}
-
-// Meeting types configuration
-const meetingTypes = [
-  { value: 'initial_consultation', label: 'Initial Consultation', icon: Users, color: 'bg-blue-500', hex: '#3B82F6' },
-  { value: 'review_meeting', label: 'Review Meeting', icon: FileText, color: 'bg-green-500', hex: '#10B981' },
-  { value: 'phone_call', label: 'Phone Call', icon: Phone, color: 'bg-yellow-500', hex: '#F59E0B' },
-  { value: 'video_call', label: 'Video Call', icon: Video, color: 'bg-purple-500', hex: '#8B5CF6' },
-  { value: 'coffee_meeting', label: 'Coffee Meeting', icon: Coffee, color: 'bg-orange-500', hex: '#F97316' }
-]
+import { meetingTypes } from '@/components/communication/constants'
+import { getDaysInMonth, getEventsForDate } from '@/lib/communication/calendar'
+import { formatRelativeDate } from '@/lib/communication/formatters'
+import { getCommunicationIcon } from '@/lib/communication/ui'
+import type { CommunicationDirectionFilter, CommunicationTypeFilter } from '@/lib/communication/filters'
+import type { TabType } from '@/components/communication/types'
+import { useCommunicationHubData } from '@/components/communication/hooks/useCommunicationHubData'
+import { useCommunicationFilters } from '@/components/communication/hooks/useCommunicationFilters'
 
 export default function CommunicationHubPage() {
   const supabase = createClient()
@@ -109,39 +44,40 @@ export default function CommunicationHubPage() {
   const { toast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const isMountedRef = useRef(true)
-
   // Tab state - read from URL or default to overview
   const initialTab = (searchParams.get('tab') as TabType) || 'overview'
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
 
-  // Data state
-  const [communications, setCommunications] = useState<CommunicationItem[]>([])
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
-  const [clients, setClients] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState<Stats>({
-    totalCommunications: 0,
-    messages: 0,
-    calls: 0,
-    upcomingMeetings: 0,
-    followUpsNeeded: 0,
-    todayItems: 0
-  })
+  const {
+    communications,
+    calendarEvents,
+    clients,
+    loading,
+    stats,
+    currentDate,
+    selectedDate,
+    setSelectedDate,
+    handleMonthChange,
+    refresh
+  } = useCommunicationHubData({ supabase, userId: user?.id })
 
-  // Filter state
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'call' | 'email'>('all')
-  const [filterDirection, setFilterDirection] = useState<'all' | 'inbound' | 'outbound'>('all')
+  const {
+    searchTerm,
+    setSearchTerm,
+    filterType,
+    setFilterType,
+    filterDirection,
+    setFilterDirection,
+    filteredCommunications,
+    followUps,
+    messages,
+    calls
+  } = useCommunicationFilters(communications)
 
   // Modal states
   const [showNewMessageModal, setShowNewMessageModal] = useState(false)
   const [showNewCallModal, setShowNewCallModal] = useState(false)
   const [showNewMeetingModal, setShowNewMeetingModal] = useState(false)
-
-  // Calendar state
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
   // Form states
   const [newMessage, setNewMessage] = useState({
@@ -178,273 +114,6 @@ export default function CommunicationHubPage() {
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab)
     router.push(`/communication?tab=${tab}`, { scroll: false })
-  }
-
-  // Stable toast ref to avoid dependency issues
-  const toastRef = useRef(toast)
-  toastRef.current = toast
-
-  // Load all data - no dependencies to prevent infinite loops
-  const loadData = useCallback(async (signal?: AbortSignal) => {
-    try {
-      setLoading(true)
-
-      // Load communications
-      const { data: communicationData, error: commError } = await supabase
-        .from('client_communications')
-        .select(`
-          *,
-          clients!inner(
-            id,
-            client_ref,
-            personal_details,
-            contact_info
-          )
-        `)
-        .in('communication_type', ['call', 'email'])
-        .abortSignal(signal)
-        .order('communication_date', { ascending: false })
-        .limit(200)
-
-      if (signal?.aborted || !isMountedRef.current) return
-      if (commError) throw commError
-
-      const items: CommunicationItem[] = (communicationData || []).map((comm: any) => {
-        const personalDetails = (comm.clients?.personal_details || {}) as Record<string, string>
-        return {
-          id: comm.id,
-          client_id: comm.client_id,
-          client_name: `${personalDetails.firstName || ''} ${personalDetails.lastName || ''}`.trim() || 'Unknown Client',
-          client_ref: comm.clients?.client_ref || '',
-          communication_type: comm.communication_type,
-          subject: comm.subject || (comm.communication_type === 'call' ? 'Phone Call' : 'Email'),
-          summary: comm.summary || '',
-          communication_date: comm.communication_date,
-          direction: comm.direction || 'outbound',
-          contact_method: comm.contact_method || comm.communication_type,
-          requires_followup: comm.requires_followup || false,
-          followup_date: comm.followup_date,
-          followup_completed: comm.followup_completed || false,
-          created_at: comm.created_at
-        }
-      })
-
-      // Load clients
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('id, client_ref, personal_details, contact_info')
-        .abortSignal(signal)
-        .order('personal_details->firstName')
-
-      if (signal?.aborted || !isMountedRef.current) return
-      if (clientError) throw clientError
-
-      // Calculate stats
-      const today = new Date().toDateString()
-      const calls = items.filter(c => c.communication_type === 'call')
-      const emails = items.filter(c => c.communication_type === 'email')
-      const followUps = items.filter(c => c.requires_followup && !c.followup_completed)
-      const todayItems = items.filter(c =>
-        new Date(c.communication_date).toDateString() === today
-      )
-
-      if (!isMountedRef.current) return
-
-      // Batch state updates
-      setCommunications(items)
-      setClients((clientData || []) as Client[])
-      setStats(prev => ({
-        ...prev,
-        totalCommunications: items.length,
-        calls: calls.length,
-        messages: emails.length,
-        followUpsNeeded: followUps.length,
-        todayItems: todayItems.length
-      }))
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') return
-      if (!isMountedRef.current) return
-      console.error('Error loading data:', error)
-      toastRef.current({
-        title: 'Error',
-        description: 'Failed to load communication data',
-        variant: 'destructive'
-      })
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false)
-      }
-    }
-  }, [supabase]) // Only supabase as dependency
-
-  // Load calendar events
-  const loadCalendarEventsForMonth = async (monthDate: Date) => {
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (!currentUser || !isMountedRef.current) return
-
-    const startDate = new Date(monthDate.getFullYear(), monthDate.getMonth(), -7)
-    const endDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 2, 7)
-
-    const { data, error } = await supabase
-      .from('calendar_events')
-      .select(`
-        *,
-        clients!calendar_events_client_id_fkey (
-          id,
-          client_ref,
-          personal_details
-        )
-      `)
-      .eq('user_id', currentUser.id)
-      .gte('start_date', startDate.toISOString())
-      .lte('start_date', endDate.toISOString())
-      .order('start_date', { ascending: true })
-
-    if (!isMountedRef.current) return
-    if (error) {
-      console.error('Error loading calendar events:', error)
-      return
-    }
-
-    const events: CalendarEvent[] = (data || []).map((event: any) => {
-      const duration = event.end_date ?
-        Math.round((new Date(event.end_date).getTime() - new Date(event.start_date).getTime()) / 60000) :
-        60
-
-      return {
-        id: event.id,
-        title: event.title,
-        date: new Date(event.start_date).toISOString().split('T')[0],
-        time: new Date(event.start_date).toTimeString().slice(0, 5),
-        duration,
-        clientId: event.client_id || '',
-        clientName: event.clients ?
-          `${(event.clients.personal_details as Record<string, string>)?.firstName || ''} ${(event.clients.personal_details as Record<string, string>)?.lastName || ''}`.trim() || 'Unknown Client' :
-          'Unknown Client',
-        type: event.event_type || 'meeting',
-        notes: event.description || '',
-        color: event.color || '#6B7280',
-        eventType: event.event_type || undefined
-      }
-    })
-
-    if (!isMountedRef.current) return
-
-    // Calculate upcoming meetings
-    const now = new Date()
-    const upcoming = events.filter(e => new Date(`${e.date}T${e.time}`) >= now)
-
-    setCalendarEvents(events)
-    setStats(prev => ({ ...prev, upcomingMeetings: upcoming.length }))
-  }
-
-  // Single effect for initial data load
-  useEffect(() => {
-    if (!user) return
-
-    isMountedRef.current = true
-
-    const doLoad = async () => {
-      await loadData()
-      await loadCalendarEventsForMonth(currentDate)
-    }
-
-    doLoad()
-
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [user]) // Only depends on user - runs once when user is available
-
-  // Handle month navigation - separate from initial load
-  const handleMonthChange = async (newDate: Date) => {
-    setCurrentDate(newDate)
-    await loadCalendarEventsForMonth(newDate)
-  }
-
-  // Helper functions
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffHours = diffMs / (1000 * 60 * 60)
-
-    if (diffHours < 1) {
-      return `${Math.round(diffMs / (1000 * 60))}m ago`
-    } else if (diffHours < 24) {
-      return `${Math.round(diffHours)}h ago`
-    } else if (diffHours < 48) {
-      return 'Yesterday'
-    } else {
-      return date.toLocaleDateString('en-UK', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      })
-    }
-  }
-
-  const getCommunicationIcon = (type: string, direction: string) => {
-    if (type === 'call') {
-      return direction === 'inbound' ? PhoneIncoming : PhoneOutgoing
-    }
-    return Mail
-  }
-
-  // Filtered communications
-  const filteredCommunications = communications.filter(comm => {
-    const matchesSearch = searchTerm === '' ||
-      comm.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comm.client_ref.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comm.subject.toLowerCase().includes(searchTerm.toLowerCase())
-
-    const matchesType = filterType === 'all' || comm.communication_type === filterType
-    const matchesDirection = filterDirection === 'all' || comm.direction === filterDirection
-
-    return matchesSearch && matchesType && matchesDirection
-  })
-
-  // Get follow-ups
-  const followUps = communications.filter(c => c.requires_followup && !c.followup_completed)
-
-  // Get messages only
-  const messages = communications.filter(c => c.communication_type === 'email')
-
-  // Get calls only
-  const calls = communications.filter(c => c.communication_type === 'call')
-
-  // Calendar helpers
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear()
-    const month = date.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const daysInMonth = lastDay.getDate()
-    const startingDayOfWeek = firstDay.getDay()
-
-    type CalendarDay = { date: Date; isCurrentMonth: boolean }
-    const days: CalendarDay[] = []
-
-    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-      const prevDate = new Date(year, month, -i)
-      days.push({ date: prevDate, isCurrentMonth: false })
-    }
-
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push({ date: new Date(year, month, i), isCurrentMonth: true })
-    }
-
-    const remainingDays = 42 - days.length
-    for (let i = 1; i <= remainingDays; i++) {
-      days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false })
-    }
-
-    return days
-  }
-
-  const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return calendarEvents.filter(e => e.date === dateStr)
   }
 
   // Handle form submissions
@@ -484,7 +153,7 @@ export default function CommunicationHubPage() {
       toast({ title: 'Success', description: 'Message sent successfully' })
       setShowNewMessageModal(false)
       setNewMessage({ client_id: '', subject: '', summary: '', contact_method: 'email', requires_followup: false, followup_date: '' })
-      loadData()
+      refresh()
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' })
     }
@@ -532,7 +201,7 @@ export default function CommunicationHubPage() {
         requires_followup: false,
         followup_date: ''
       })
-      loadData()
+      refresh()
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to log call', variant: 'destructive' })
     }
@@ -584,7 +253,7 @@ export default function CommunicationHubPage() {
         duration: 60,
         notes: ''
       })
-      loadData()
+      refresh()
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to schedule meeting', variant: 'destructive' })
     }
@@ -771,7 +440,7 @@ export default function CommunicationHubPage() {
                 </div>
                 <select
                   value={filterType}
-                  onChange={(e) => setFilterType(e.target.value as 'all' | 'call' | 'email')}
+                  onChange={(e) => setFilterType(e.target.value as CommunicationTypeFilter)}
                   className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">All Types</option>
@@ -780,14 +449,14 @@ export default function CommunicationHubPage() {
                 </select>
                 <select
                   value={filterDirection}
-                  onChange={(e) => setFilterDirection(e.target.value as 'all' | 'inbound' | 'outbound')}
+                  onChange={(e) => setFilterDirection(e.target.value as CommunicationDirectionFilter)}
                   className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">All Directions</option>
                   <option value="inbound">Inbound</option>
                   <option value="outbound">Outbound</option>
                 </select>
-                <Button variant="outline" size="sm" onClick={() => loadData()}>
+                <Button variant="outline" size="sm" onClick={() => refresh()}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh
                 </Button>
@@ -840,7 +509,7 @@ export default function CommunicationHubPage() {
                                 {comm.direction === 'inbound' ? 'IN' : 'OUT'}
                               </Badge>
                             </div>
-                            <span className="text-sm text-gray-500">{formatDate(comm.communication_date)}</span>
+                            <span className="text-sm text-gray-500">{formatRelativeDate(comm.communication_date)}</span>
                           </div>
 
                           {comm.subject && (
@@ -898,7 +567,7 @@ export default function CommunicationHubPage() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <h3 className="font-medium">{msg.client_name}</h3>
-                        <span className="text-sm text-gray-500">{formatDate(msg.communication_date)}</span>
+                        <span className="text-sm text-gray-500">{formatRelativeDate(msg.communication_date)}</span>
                       </div>
                       <p className="text-sm font-medium text-gray-700">{msg.subject}</p>
                       {msg.summary && (
@@ -952,7 +621,7 @@ export default function CommunicationHubPage() {
                             <h3 className="font-medium">{call.client_name}</h3>
                             <Badge variant="outline">{call.direction.toUpperCase()}</Badge>
                           </div>
-                          <span className="text-sm text-gray-500">{formatDate(call.communication_date)}</span>
+                          <span className="text-sm text-gray-500">{formatRelativeDate(call.communication_date)}</span>
                         </div>
                         {call.summary && (
                           <p className="text-sm text-gray-600 mt-1">{call.summary}</p>
@@ -1003,7 +672,7 @@ export default function CommunicationHubPage() {
                 </div>
                 <div className="grid grid-cols-7 border-t border-l">
                   {getDaysInMonth(currentDate).map((day, index) => {
-                    const dayEvents = getEventsForDate(day.date)
+                    const dayEvents = getEventsForDate(day.date, calendarEvents)
                     const isToday = day.date.toDateString() === new Date().toDateString()
                     const isSelected = selectedDate?.toDateString() === day.date.toDateString()
 
@@ -1063,11 +732,11 @@ export default function CommunicationHubPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {selectedDate && getEventsForDate(selectedDate).length === 0 ? (
+                {selectedDate && getEventsForDate(selectedDate, calendarEvents).length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No events</p>
                 ) : (
                   <div className="space-y-3">
-                    {selectedDate && getEventsForDate(selectedDate).map(event => (
+                    {selectedDate && getEventsForDate(selectedDate, calendarEvents).map(event => (
                       <div key={event.id} className="border rounded-lg p-3">
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: event.color }} />
@@ -1114,7 +783,7 @@ export default function CommunicationHubPage() {
                           <div className="flex items-center space-x-2">
                             {item.followup_date && (
                               <span className="text-sm text-orange-600">
-                                Due: {formatDate(item.followup_date)}
+                                Due: {formatRelativeDate(item.followup_date)}
                               </span>
                             )}
                             <Badge variant="outline" className="text-orange-600 border-orange-300">

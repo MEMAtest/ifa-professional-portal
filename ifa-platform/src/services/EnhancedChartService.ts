@@ -4,7 +4,7 @@
 import type { CashFlowProjection, CashFlowScenario } from '@/types/cashflow';
 import { createClient } from '@/lib/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database.types';
+import type { Database } from '@/types/db';
 
 export interface ChartConfig {
   type: 'line' | 'bar' | 'doughnut' | 'area' | 'radar';
@@ -49,7 +49,7 @@ export class EnhancedChartService {
     projections: CashFlowProjection[],
     config: ChartConfig = {
       type: 'line',
-      title: 'Portfolio Growth Over Time',
+      title: 'Portfolio Breakdown Over Time',
       width: 800,
       height: 400,
       theme: 'light',
@@ -228,7 +228,31 @@ export class EnhancedChartService {
     const chartY = 60;
     const chartWidth = width - 120;
     const chartHeight = height - 120;
-    
+    const hasData = projections && projections.length > 0;
+
+    const maxValue = hasData ? (() => {
+      if (type === 'income_expense') {
+        return Math.max(
+          ...projections.map((p) => Math.max(p.totalIncome || 0, p.totalExpenses || 0)),
+          1
+        );
+      }
+      if (type === 'portfolio') {
+        return Math.max(
+          ...projections.map((p) => (p.pensionPotValue || 0) + (p.investmentPortfolio || 0) + (p.cashSavings || 0)),
+          1
+        );
+      }
+      return Math.max(...projections.map((p) => p.totalAssets || 0), 1);
+    })() : 0;
+
+    const formatValue = (value: number): string => {
+      if (!Number.isFinite(value)) return 'GBP 0';
+      if (value >= 1_000_000) return `GBP ${(value / 1_000_000).toFixed(1)}m`;
+      if (value >= 1_000) return `GBP ${(value / 1_000).toFixed(0)}k`;
+      return `GBP ${Math.round(value)}`;
+    };
+
     // Grid
     svg += `<g stroke="${gridColor}" stroke-width="0.5">`;
     for (let i = 0; i <= 10; i++) {
@@ -236,33 +260,77 @@ export class EnhancedChartService {
       svg += `<line x1="${chartX}" y1="${y}" x2="${chartX + chartWidth}" y2="${y}"/>`;
     }
     svg += `</g>`;
+
+    if (hasData) {
+      const yLabelSteps = 4;
+      for (let i = 0; i <= yLabelSteps; i++) {
+        const value = maxValue * (1 - i / yLabelSteps);
+        const y = chartY + (chartHeight * i / yLabelSteps);
+        svg += `<text x="${chartX - 10}" y="${y + 4}" text-anchor="end" fill="${textColor}" font-size="11">${formatValue(value)}</text>`;
+      }
+
+      const labelIndices = Array.from(new Set([0, Math.floor((projections.length - 1) / 2), projections.length - 1]));
+      labelIndices.forEach((index) => {
+        const projection = projections[index];
+        const x = chartX + (chartWidth * index / Math.max(1, projections.length - 1));
+        svg += `<text x="${x}" y="${chartY + chartHeight + 20}" text-anchor="middle" fill="${textColor}" font-size="11">Year ${projection.projectionYear + 1}</text>`;
+      });
+    }
     
     // Data points
-    if (projections && projections.length > 0) {
-      const maxValue = Math.max(...projections.map(p => p.totalAssets || 0));
-      const points = projections.map((p, i) => {
-        const x = chartX + (chartWidth * i / (projections.length - 1));
-        const y = chartY + chartHeight - (chartHeight * (p.totalAssets || 0) / maxValue);
-        return `${x},${y}`;
-      }).join(' ');
-      
-      // Line chart
+    if (hasData) {
+      const xPoints = projections.map((_, i) => chartX + (chartWidth * i / Math.max(1, projections.length - 1)));
+      const toY = (value: number) => chartY + chartHeight - (chartHeight * value / maxValue);
+
       if (type === 'portfolio') {
-        svg += `<polyline points="${points}" fill="none" stroke="#3b82f6" stroke-width="2"/>`;
+        const pensionSeries = projections.map((p) => p.pensionPotValue || 0);
+        const investmentSeries = projections.map((p) => p.investmentPortfolio || 0);
+        const cashSeries = projections.map((p) => p.cashSavings || 0);
+
+        const pensionTop = pensionSeries;
+        const pensionBottom = pensionSeries.map(() => 0);
+        const investmentTop = pensionSeries.map((pension, i) => pension + investmentSeries[i]);
+        const investmentBottom = pensionSeries;
+        const cashTop = investmentTop.map((value, i) => value + cashSeries[i]);
+        const cashBottom = investmentTop;
+
+        const buildAreaPath = (topValues: number[], bottomValues: number[]) => {
+          let path = `M ${xPoints[0]} ${toY(topValues[0])}`;
+          for (let i = 1; i < xPoints.length; i++) {
+            path += ` L ${xPoints[i]} ${toY(topValues[i])}`;
+          }
+          for (let i = xPoints.length - 1; i >= 0; i--) {
+            path += ` L ${xPoints[i]} ${toY(bottomValues[i])}`;
+          }
+          return `${path} Z`;
+        };
+
+        svg += `<path d="${buildAreaPath(pensionTop, pensionBottom)}" fill="#7c3aed" fill-opacity="0.5" stroke="#7c3aed" stroke-width="1"/>`;
+        svg += `<path d="${buildAreaPath(investmentTop, investmentBottom)}" fill="#2563eb" fill-opacity="0.45" stroke="#2563eb" stroke-width="1"/>`;
+        svg += `<path d="${buildAreaPath(cashTop, cashBottom)}" fill="#f59e0b" fill-opacity="0.4" stroke="#f59e0b" stroke-width="1"/>`;
+
+        const legendItems = [
+          { label: 'Pensions', color: '#7c3aed' },
+          { label: 'Investments', color: '#2563eb' },
+          { label: 'Cash', color: '#f59e0b' }
+        ];
+        legendItems.forEach((item, index) => {
+          const lx = chartX + chartWidth - 110;
+          const ly = chartY + 16 + index * 18;
+          svg += `<rect x="${lx}" y="${ly - 10}" width="10" height="10" fill="${item.color}"/>`;
+          svg += `<text x="${lx + 14}" y="${ly - 1}" fill="${textColor}" font-size="11">${item.label}</text>`;
+        });
       }
-      
-      // Bar chart
+
       if (type === 'income_expense') {
         projections.forEach((p, i) => {
           const x = chartX + (chartWidth * i / projections.length);
-          const barWidth = chartWidth / projections.length * 0.8;
+          const barWidth = chartWidth / projections.length * 0.85;
           
-          // Income bar
           const incomeHeight = (chartHeight * (p.totalIncome || 0) / maxValue);
-          svg += `<rect x="${x}" y="${chartY + chartHeight - incomeHeight}" width="${barWidth/2}" height="${incomeHeight}" fill="#10b981"/>`;
-          
-          // Expense bar
           const expenseHeight = (chartHeight * (p.totalExpenses || 0) / maxValue);
+          
+          svg += `<rect x="${x}" y="${chartY + chartHeight - incomeHeight}" width="${barWidth/2}" height="${incomeHeight}" fill="#10b981"/>`;
           svg += `<rect x="${x + barWidth/2}" y="${chartY + chartHeight - expenseHeight}" width="${barWidth/2}" height="${expenseHeight}" fill="#ef4444"/>`;
         });
       }
@@ -330,19 +398,64 @@ export class EnhancedChartService {
     svg += `<rect width="${width}" height="${height}" fill="${bgColor}"/>`;
     svg += `<text x="${width/2}" y="30" text-anchor="middle" fill="${textColor}" font-size="18" font-weight="bold">${title}</text>`;
     
-    // Radar implementation would go here
-    // This is a simplified version
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.min(width, height) / 3;
-    
-    // Draw axes
-    for (let i = 0; i < 5; i++) {
-      const angle = (i * 72 - 90) * Math.PI / 180;
+
+    const metricLabels = [
+      { key: 'shortfallRisk', label: 'Shortfall' },
+      { key: 'longevityRisk', label: 'Longevity' },
+      { key: 'inflationRisk', label: 'Inflation' },
+      { key: 'sequenceRisk', label: 'Sequence' }
+    ];
+
+    const toScore = (value: any): number => {
+      if (typeof value === 'number') return Math.min(1, Math.max(0, value));
+      switch (String(value).toLowerCase()) {
+        case 'high':
+          return 0.9;
+        case 'medium':
+          return 0.6;
+        case 'low':
+          return 0.3;
+        default:
+          return 0.5;
+      }
+    };
+
+    const axisCount = metricLabels.length;
+
+    [0.33, 0.66, 1].forEach((scale) => {
+      let ringPath = '';
+      for (let i = 0; i < axisCount; i++) {
+        const angle = (i * 2 * Math.PI) / axisCount - Math.PI / 2;
+        const x = centerX + radius * scale * Math.cos(angle);
+        const y = centerY + radius * scale * Math.sin(angle);
+        ringPath += `${i === 0 ? 'M' : 'L'} ${x} ${y} `;
+      }
+      ringPath += 'Z';
+      svg += `<path d="${ringPath}" fill="none" stroke="${textColor}" stroke-width="0.5" opacity="0.4"/>`;
+    });
+
+    metricLabels.forEach((metric, index) => {
+      const angle = (index * 2 * Math.PI) / axisCount - Math.PI / 2;
       const x = centerX + radius * Math.cos(angle);
       const y = centerY + radius * Math.sin(angle);
       svg += `<line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="${textColor}" stroke-width="1"/>`;
-    }
+      svg += `<text x="${centerX + (radius + 14) * Math.cos(angle)}" y="${centerY + (radius + 14) * Math.sin(angle)}" text-anchor="middle" fill="${textColor}" font-size="11">${metric.label}</text>`;
+    });
+
+    let polygonPath = '';
+    metricLabels.forEach((metric, index) => {
+      const score = toScore(riskMetrics?.[metric.key]);
+      const angle = (index * 2 * Math.PI) / axisCount - Math.PI / 2;
+      const x = centerX + radius * score * Math.cos(angle);
+      const y = centerY + radius * score * Math.sin(angle);
+      polygonPath += `${index === 0 ? 'M' : 'L'} ${x} ${y} `;
+    });
+    polygonPath += 'Z';
+
+    svg += `<path d="${polygonPath}" fill="#3b82f6" fill-opacity="0.35" stroke="#2563eb" stroke-width="2"/>`;
     
     svg += `</svg>`;
     return svg;

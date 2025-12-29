@@ -21,7 +21,6 @@ import {
   Shuffle,
   Target
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -137,7 +136,6 @@ interface DecumulationData {
 }
 
 export default function DecumulationStrategy({ clientId, firmId, onSaved }: Props) {
-  const supabase = createClient()
   const { toast } = useToast()
 
   const [loading, setLoading] = useState(true)
@@ -158,20 +156,23 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
     additional_notes: ''
   })
 
+  const isValidFirmId = (value?: string | null) => {
+    if (!value) return false
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  }
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const { data: existing, error } = await supabase
-        .from('client_services')
-        .select('decumulation_strategy, decumulation_justification, sustainability_assessment')
-        .eq('client_id', clientId)
-        .single()
+      const response = await fetch(`/api/clients/${clientId}/services`)
+      const result = await response.json()
+      const record = result.success ? result.data : null
 
-      if (existing && !error) {
-        const sustainability = existing.sustainability_assessment || {}
+      if (record) {
+        const sustainability = record.sustainability_assessment || {}
         setData({
-          strategy: existing.decumulation_strategy as DecumulationStrategy,
-          justification: existing.decumulation_justification || '',
+          strategy: record.decumulation_strategy as DecumulationStrategy,
+          justification: record.decumulation_justification || '',
           sustainability: {
             withdrawal_rate: sustainability.withdrawal_rate || null,
             time_horizon: sustainability.time_horizon || null,
@@ -189,7 +190,7 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
     } finally {
       setLoading(false)
     }
-  }, [supabase, clientId])
+  }, [clientId])
 
   useEffect(() => {
     loadData()
@@ -207,14 +208,9 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
 
     setSaving(true)
     try {
-      // Check if record exists
-      const { data: existing } = await supabase
-        .from('client_services')
-        .select('id')
-        .eq('client_id', clientId)
-        .single()
-
       const payload = {
+        client_id: clientId,
+        firm_id: isValidFirmId(firmId) ? firmId : null,
         decumulation_strategy: data.strategy,
         decumulation_justification: data.justification,
         sustainability_assessment: {
@@ -223,25 +219,16 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
         }
       }
 
-      if (existing) {
-        const { error } = await supabase
-          .from('client_services')
-          .update(payload)
-          .eq('client_id', clientId)
+      const response = await fetch(`/api/clients/${clientId}/services`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
 
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('client_services')
-          .insert({
-            client_id: clientId,
-            firm_id: firmId || null,
-            services_selected: [],
-            target_market_checks: {},
-            ...payload
-          })
+      const result = await response.json()
 
-        if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save')
       }
 
       toast({
@@ -250,6 +237,7 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
       })
 
       onSaved?.()
+      loadData()
     } catch (error) {
       console.error('Error saving:', error)
       toast({

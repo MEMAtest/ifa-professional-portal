@@ -57,15 +57,34 @@ const AddressSearchField: React.FC<AddressSearchFieldProps> = ({
       }
 
       const data = await response.json();
-      
-      if (data.success && data.addresses) {
-        setSuggestions(data.addresses);
+
+      // Handle API response format: { results: [...], source: 'os_api' }
+      if (data.results && data.results.length > 0) {
+        // Map API results to Address format
+        const addresses: Address[] = data.results.map((r: {
+          displayName: string;
+          fullAddress?: string;
+          postcode: string;
+          town?: string;
+          type?: string;
+        }) => ({
+          line1: r.displayName || r.fullAddress?.split(',')[0] || '',
+          line2: '',
+          city: r.town || '',
+          county: '',
+          postcode: r.postcode || '',
+          country: 'United Kingdom'
+        }));
+        setSuggestions(addresses);
         setShowSuggestions(true);
       } else {
         setSuggestions([]);
         setShowSuggestions(false);
         if (data.error) {
           setError(data.error);
+        } else if (data.message) {
+          // API returns message when using fallback/mock data
+          setError(data.message);
         }
       }
     } catch (error) {

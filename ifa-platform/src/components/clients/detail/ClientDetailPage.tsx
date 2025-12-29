@@ -17,14 +17,11 @@ import { useClientIntegration } from '@/lib/hooks/useClientIntegration'
 import { useClientDetailsData } from '@/hooks/useClientDetailsData'
 
 import ActivityTab from '@/components/clients/ActivityTab'
-import ServiceSelection from '@/components/clients/ServiceSelection'
-import PlatformJustification from '@/components/clients/PlatformJustification'
-import DecumulationStrategy from '@/components/clients/DecumulationStrategy'
 import DocumentGenerationHub from '@/components/documents/DocumentGenerationHub'
-import CashFlowDashboard from '@/components/cashflow/CashFlowDashboard'
 import { LogCommunicationModal } from '@/components/communications/LogCommunicationModal'
 import { ScheduleReviewModal } from '@/components/reviews/ScheduleReviewModal'
 import { EditReviewModal } from '@/components/reviews/EditReviewModal'
+import ShareAssessmentModal from '@/components/assessments/ShareAssessmentModal'
 
 import { ClientDetailHeader } from '@/components/clients/detail/ClientDetailHeader'
 import { ClientCompletionOverviewCard } from '@/components/clients/detail/ClientCompletionOverviewCard'
@@ -36,8 +33,9 @@ import { ClientFinancialTab } from '@/components/clients/detail/tabs/ClientFinan
 import { ClientRiskTab } from '@/components/clients/detail/tabs/ClientRiskTab'
 import { ClientCommunicationsTab } from '@/components/clients/detail/tabs/ClientCommunicationsTab'
 import { ClientReviewsTab } from '@/components/clients/detail/tabs/ClientReviewsTab'
+import { ClientAssessmentsTab } from '@/components/clients/detail/tabs/ClientAssessmentsTab'
 
-import { AlertCircle, Calculator, Download, FileText, TrendingUp } from 'lucide-react'
+import { AlertCircle, Download, FileText, TrendingUp } from 'lucide-react'
 
 export function ClientDetailPage(props: { clientId: string }) {
   const { clientId } = props
@@ -59,9 +57,31 @@ export function ClientDetailPage(props: { clientId: string }) {
   const [showEditReviewModal, setShowEditReviewModal] = useState(false)
   const [selectedReview, setSelectedReview] = useState<any>(null)
   const [showShareAssessmentModal, setShowShareAssessmentModal] = useState(false)
+  const [completedAssessments, setCompletedAssessments] = useState<{
+    atr?: boolean
+    cfl?: boolean
+    investorPersona?: boolean
+  }>({})
 
   const { communications, reviews, loading: dataLoading, error: dataError, refresh: refreshData } =
     useClientDetailsData(client)
+
+  // Fetch completed assessments for header badges
+  useEffect(() => {
+    if (!clientId) return
+    fetch(`/api/clients/${clientId}/assessments`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.completedAssessments) {
+          setCompletedAssessments({
+            atr: data.completedAssessments.atr?.completed,
+            cfl: data.completedAssessments.cfl?.completed,
+            investorPersona: data.completedAssessments.investorPersona?.completed
+          })
+        }
+      })
+      .catch(() => {})
+  }, [clientId])
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -107,11 +127,6 @@ export function ClientDetailPage(props: { clientId: string }) {
     router.push(`/assessments/suitability?clientId=${client.id}`)
   }
 
-  const handleCreateScenario = () => {
-    if (!client) return
-    router.push(`/cashflow?clientId=${client.id}&action=new`)
-  }
-
   const handleGenerateDocument = async (templateType: string) => {
     if (!client) return
 
@@ -152,13 +167,6 @@ export function ClientDetailPage(props: { clientId: string }) {
       disabled: dashboardData?.currentAssessment !== null
     },
     {
-      icon: Calculator,
-      label: 'Create Scenario',
-      description: 'Build cash flow projection',
-      action: handleCreateScenario,
-      variant: 'outline'
-    },
-    {
       icon: Download,
       label: 'Generate Report',
       description: 'Create client report',
@@ -185,7 +193,6 @@ export function ClientDetailPage(props: { clientId: string }) {
       client.contactInfo?.email,
       client.financialProfile?.annualIncome,
       integrationStatus.hasAssessment,
-      integrationStatus.hasScenario,
       integrationStatus.hasDocuments
     ]
 
@@ -231,7 +238,7 @@ export function ClientDetailPage(props: { clientId: string }) {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      <ClientDetailHeader client={client} onBack={handleBack} onEdit={handleEdit} onDelete={handleDelete} />
+      <ClientDetailHeader client={client} onBack={handleBack} onEdit={handleEdit} onDelete={handleDelete} completedAssessments={completedAssessments} />
 
       <ClientCompletionOverviewCard completionPercentage={completionPercentage} integrationStatus={integrationStatus as any} />
 
@@ -257,8 +264,7 @@ export function ClientDetailPage(props: { clientId: string }) {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="risk">Risk Profile</TabsTrigger>
-          <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
-          <TabsTrigger value="services">Services & PROD</TabsTrigger>
+          <TabsTrigger value="assessments">Client Questionnaires</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="communications">Communications</TabsTrigger>
           <TabsTrigger value="reviews">Reviews</TabsTrigger>
@@ -285,52 +291,20 @@ export function ClientDetailPage(props: { clientId: string }) {
             setShowVulnerabilityWizard={setShowVulnerabilityWizard}
             showConsumerDutyWizard={showConsumerDutyWizard}
             setShowConsumerDutyWizard={setShowConsumerDutyWizard}
-            showShareAssessmentModal={showShareAssessmentModal}
-            setShowShareAssessmentModal={setShowShareAssessmentModal}
           />
         </TabsContent>
 
-        <TabsContent value="services">
-          <div className="space-y-6">
-            <ServiceSelection
-              clientId={client.id}
-              firmId={client.firmId || undefined}
-              onSaved={() => {
-                toast({ title: 'Services Updated', description: 'Service selection has been saved' })
-                refresh()
-              }}
-            />
-
-            <div className="border-t pt-6">
-              <PlatformJustification
-                clientId={client.id}
-                firmId={client.firmId || undefined}
-                onSaved={() => {
-                  toast({ title: 'Platform Updated', description: 'Platform justification has been saved' })
-                  refresh()
-                }}
-              />
-            </div>
-
-            <div className="border-t pt-6">
-              <DecumulationStrategy
-                clientId={client.id}
-                firmId={client.firmId || undefined}
-                onSaved={() => {
-                  toast({ title: 'Strategy Updated', description: 'Decumulation strategy has been saved' })
-                  refresh()
-                }}
-              />
-            </div>
-          </div>
+        <TabsContent value="assessments">
+          <ClientAssessmentsTab
+            clientId={client.id}
+            clientName={clientName}
+            clientEmail={clientEmail}
+            onSendAssessment={() => setShowShareAssessmentModal(true)}
+          />
         </TabsContent>
 
         <TabsContent value="documents">
           <DocumentGenerationHub clientId={client.id} clientName={clientName} clientEmail={clientEmail} />
-        </TabsContent>
-
-        <TabsContent value="cashflow">
-          <CashFlowDashboard clientId={client.id} />
         </TabsContent>
 
         <TabsContent value="communications">
@@ -404,6 +378,24 @@ export function ClientDetailPage(props: { clientId: string }) {
             refreshData?.()
             setShowEditReviewModal(false)
             setSelectedReview(null)
+          }}
+        />
+      )}
+
+      {/* Share Assessment Modal */}
+      {showShareAssessmentModal && client && (
+        <ShareAssessmentModal
+          isOpen={showShareAssessmentModal}
+          onClose={() => setShowShareAssessmentModal(false)}
+          clientId={client.id}
+          clientName={clientName}
+          clientEmail={clientEmail}
+          onShareCreated={(share) => {
+            toast({
+              title: 'Assessment Sent',
+              description: `Assessment link sent to ${share.clientEmail}`
+            })
+            setShowShareAssessmentModal(false)
           }}
         />
       )}

@@ -16,10 +16,10 @@ import {
   Legend,
   ResponsiveContainer,
   Area,
-  AreaChart
+  AreaChart,
+  ReferenceLine
 } from 'recharts';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
 import type { CashFlowProjection } from '@/types/cashflow';
 
@@ -27,6 +27,10 @@ interface ProjectionChartProps {
   projections: CashFlowProjection[];
   height?: number;
   showControls?: boolean;
+  realTermsEnabled?: boolean;
+  onRealTermsToggle?: (enabled: boolean) => void;
+  milestones?: Array<{ year: number; label: string; color?: string }>;
+  assetSplit?: { isaRatio: number; giaRatio: number };
 }
 
 interface ChartDataPoint {
@@ -40,6 +44,9 @@ interface ChartDataPoint {
   realTermsValue: number;
   pensionPot: number;
   investments: number;
+  isa: number;
+  gia: number;
+  otherInvestments: number;
   cash: number;
 }
 
@@ -49,11 +56,17 @@ type ChartType = 'line' | 'area';
 export const ProjectionChart: React.FC<ProjectionChartProps> = ({
   projections,
   height = 400,
-  showControls = true
+  showControls = true,
+  realTermsEnabled,
+  onRealTermsToggle,
+  milestones = [],
+  assetSplit
 }) => {
-  const [viewMode, setViewMode] = useState<ViewMode>('portfolio');
-  const [chartType, setChartType] = useState<ChartType>('line');
-  const [showRealTerms, setShowRealTerms] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('asset_breakdown');
+  const [chartType, setChartType] = useState<ChartType>('area');
+  const [internalRealTerms, setInternalRealTerms] = useState(false);
+  const showRealTerms = realTermsEnabled ?? internalRealTerms;
+  const hasInvestmentSplit = (assetSplit?.isaRatio || 0) + (assetSplit?.giaRatio || 0) > 0;
 
   // Transform projections into chart data
   const chartData = useMemo<ChartDataPoint[]>(() => {
@@ -67,19 +80,31 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
       annualFlow: projection.annualSurplusDeficit,
       realTermsValue: projection.realTermsValue || projection.totalAssets,
       pensionPot: projection.pensionPotValue,
-      investments: projection.investmentPortfolio,
+      isa: hasInvestmentSplit ? projection.investmentPortfolio * (assetSplit?.isaRatio || 0) : 0,
+      gia: hasInvestmentSplit ? projection.investmentPortfolio * (assetSplit?.giaRatio || 0) : 0,
+      otherInvestments: hasInvestmentSplit
+        ? Math.max(0, projection.investmentPortfolio - (projection.investmentPortfolio * ((assetSplit?.isaRatio || 0) + (assetSplit?.giaRatio || 0))))
+        : 0,
+      investments: hasInvestmentSplit
+        ? Math.max(0, projection.investmentPortfolio - (projection.investmentPortfolio * ((assetSplit?.isaRatio || 0) + (assetSplit?.giaRatio || 0))))
+        : projection.investmentPortfolio,
       cash: projection.cashSavings
     }));
-  }, [projections]);
+  }, [projections, assetSplit, hasInvestmentSplit]);
+
+  const hasOtherInvestments = useMemo(
+    () => hasInvestmentSplit && chartData.some((point) => point.otherInvestments > 0),
+    [chartData, hasInvestmentSplit]
+  );
 
   // Format currency for tooltips using existing utils
-  const formatCurrency = (value: number): string => {
+  const formatCurrency = (value: number, compact: boolean = false): string => {
     return new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-      notation: value >= 1000000 ? 'compact' : 'standard'
+      notation: compact ? 'compact' : 'standard'
     }).format(value);
   };
 
@@ -138,10 +163,29 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
                 <span className="text-sm text-gray-600">Pension Pot:</span>
                 <span className="font-medium">{formatCurrency(data.pensionPot)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Investments:</span>
-                <span className="font-medium">{formatCurrency(data.investments)}</span>
-              </div>
+              {hasInvestmentSplit ? (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">ISA:</span>
+                    <span className="font-medium">{formatCurrency(data.isa)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">GIA:</span>
+                    <span className="font-medium">{formatCurrency(data.gia)}</span>
+                  </div>
+                  {data.otherInvestments > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Other Investments:</span>
+                      <span className="font-medium">{formatCurrency(data.otherInvestments)}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Investments:</span>
+                  <span className="font-medium">{formatCurrency(data.investments)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Cash:</span>
                 <span className="font-medium">{formatCurrency(data.cash)}</span>
@@ -164,7 +208,7 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               dataKey: 'totalAssets', 
               stroke: '#2563eb', 
               strokeWidth: 3,
-              name: 'Total Assets'
+              name: showRealTerms ? 'Total Assets (Nominal)' : 'Total Assets'
             },
             { 
               dataKey: 'portfolioBalance', 
@@ -177,7 +221,7 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               stroke: '#7c3aed',
               strokeWidth: 2,
               strokeDasharray: '5 5',
-              name: 'Real Terms Value'
+              name: 'Total Assets (Real Terms)'
             }] : [])
           ]
         };
@@ -207,14 +251,35 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               dataKey: 'pensionPot', 
               stroke: '#7c3aed', 
               strokeWidth: 2,
-              name: 'Pension Pot'
+              name: 'Pensions'
             },
-            { 
-              dataKey: 'investments', 
-              stroke: '#059669', 
-              strokeWidth: 2,
-              name: 'Investments'
-            },
+            ...(hasInvestmentSplit ? [
+              { 
+                dataKey: 'isa', 
+                stroke: '#2563eb', 
+                strokeWidth: 2,
+                name: 'ISA'
+              },
+              { 
+                dataKey: 'gia', 
+                stroke: '#059669', 
+                strokeWidth: 2,
+                name: 'GIA'
+              },
+              ...(hasOtherInvestments ? [{
+                dataKey: 'otherInvestments',
+                stroke: '#0ea5e9',
+                strokeWidth: 2,
+                name: 'Other Investments'
+              }] : [])
+            ] : [
+              { 
+                dataKey: 'investments', 
+                stroke: '#059669', 
+                strokeWidth: 2,
+                name: 'Investments'
+              }
+            ]),
             { 
               dataKey: 'cash', 
               stroke: '#d97706', 
@@ -253,11 +318,12 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
   const stats = useMemo(() => {
     if (chartData.length === 0) return null;
 
-    const finalValue = chartData[chartData.length - 1]?.totalAssets || 0;
-    const initialValue = chartData[0]?.totalAssets || 0;
+    const valueKey = (showRealTerms ? 'realTermsValue' : 'totalAssets') as keyof ChartDataPoint;
+    const finalValue = chartData[chartData.length - 1]?.[valueKey] || 0;
+    const initialValue = chartData[0]?.[valueKey] || 0;
     const growth = ((finalValue - initialValue) / initialValue) * 100;
-    const peakValue = Math.max(...chartData.map(d => d.totalAssets));
-    const minValue = Math.min(...chartData.map(d => d.totalAssets));
+    const peakValue = Math.max(...chartData.map(d => d[valueKey] as number));
+    const minValue = Math.min(...chartData.map(d => d[valueKey] as number));
 
     return {
       finalValue,
@@ -267,7 +333,7 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
       minValue,
       totalYears: chartData.length
     };
-  }, [chartData]);
+  }, [chartData, showRealTerms]);
 
   if (!projections || projections.length === 0) {
     return (
@@ -288,7 +354,7 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               {[
                 { key: 'portfolio', label: 'Portfolio', icon: DollarSign },
                 { key: 'income_expense', label: 'Cash Flow', icon: TrendingUp },
-                { key: 'asset_breakdown', label: 'Assets', icon: Calendar },
+                { key: 'asset_breakdown', label: 'Asset Breakdown', icon: Calendar },
                 { key: 'real_terms', label: 'Real Terms', icon: TrendingDown }
               ].map(({ key, label, icon: Icon }) => (
                 <Button
@@ -323,16 +389,20 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               Area
             </Button>
             
-            {viewMode === 'portfolio' && (
-              <Button
-                size="sm"
-                variant={showRealTerms ? "default" : "outline"}
-                onClick={() => setShowRealTerms(!showRealTerms)}
-                className="text-xs"
-              >
-                Real Terms
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant={showRealTerms ? "default" : "outline"}
+              onClick={() => {
+                const next = !showRealTerms;
+                if (realTermsEnabled === undefined) {
+                  setInternalRealTerms(next);
+                }
+                onRealTermsToggle?.(next);
+              }}
+              className="text-xs"
+            >
+              Real Terms
+            </Button>
           </div>
         </div>
       )}
@@ -341,7 +411,9 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <p className="text-sm text-gray-600">Final Value</p>
+            <p className="text-sm text-gray-600">
+              Final Value{showRealTerms ? ' (Real Terms)' : ''}
+            </p>
             <p className="font-semibold">{formatCurrency(stats.finalValue)}</p>
           </div>
           <div className="text-center">
@@ -375,10 +447,24 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               <YAxis 
                 stroke="#666"
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => formatCurrency(value)}
+                tickFormatter={(value) => formatCurrency(value, true)}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
+              {milestones.map((milestone) => (
+                <ReferenceLine
+                  key={`${milestone.label}-${milestone.year}`}
+                  x={milestone.year}
+                  stroke={milestone.color || '#94a3b8'}
+                  strokeDasharray="3 3"
+                  label={{
+                    value: milestone.label,
+                    position: 'top',
+                    fill: milestone.color || '#64748b',
+                    fontSize: 11
+                  }}
+                />
+              ))}
               
               {chartConfig.lines.map((line) => (
                 <Line
@@ -405,10 +491,24 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
               <YAxis 
                 stroke="#666"
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => formatCurrency(value)}
+                tickFormatter={(value) => formatCurrency(value, true)}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
+              {milestones.map((milestone) => (
+                <ReferenceLine
+                  key={`${milestone.label}-${milestone.year}`}
+                  x={milestone.year}
+                  stroke={milestone.color || '#94a3b8'}
+                  strokeDasharray="3 3"
+                  label={{
+                    value: milestone.label,
+                    position: 'top',
+                    fill: milestone.color || '#64748b',
+                    fontSize: 11
+                  }}
+                />
+              ))}
               
               {chartConfig.lines.map((line, index) => (
                 <Area

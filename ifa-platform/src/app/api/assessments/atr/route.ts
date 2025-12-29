@@ -10,6 +10,7 @@ import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { isUUID } from '@/lib/utils'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { logger, getErrorMessage } from '@/lib/errors'
+import { notifyATRCompleted } from '@/lib/notifications/notificationService'
 
 export const dynamic = 'force-dynamic'
 
@@ -294,6 +295,38 @@ export async function POST(request: NextRequest) {
 
     logger.info('ATR assessment created successfully', { assessmentId: data.id, version: newVersion, clientId })
 
+    // Log activity for ATR completion
+    try {
+      await supabase
+        .from('activity_log')
+        .insert({
+          id: crypto.randomUUID(),
+          client_id: clientId,
+          action: `ATR assessment completed (Score: ${totalScore}, Level: ${riskLevel})`,
+          type: 'atr_completed',
+          date: new Date().toISOString()
+        })
+    } catch (activityError) {
+      logger.warn('Failed to log ATR completion activity', { clientId, error: getErrorMessage(activityError) })
+    }
+
+    // Send bell notification
+    if (userId) {
+      try {
+        // Fetch client name for notification
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('personal_details')
+          .eq('id', clientId)
+          .single()
+        const personalDetails = clientData?.personal_details as Record<string, unknown> | null
+        const clientName = (personalDetails?.firstName || personalDetails?.first_name || 'Client') as string
+        await notifyATRCompleted(userId, clientId, clientName, data.id, totalScore)
+      } catch (notifyError) {
+        logger.warn('Failed to send ATR notification', { clientId, error: notifyError instanceof Error ? notifyError.message : String(notifyError) })
+      }
+    }
+
     // Update client risk profile
     try {
       logger.debug('Updating client risk profile', { clientId })
@@ -439,6 +472,21 @@ export async function PUT(request: NextRequest) {
     }
 
     logger.info('ATR assessment updated successfully', { assessmentId })
+
+    // Log activity for ATR update
+    try {
+      await supabase
+        .from('activity_log')
+        .insert({
+          id: crypto.randomUUID(),
+          client_id: resolvedClientId,
+          action: 'Risk profile updated',
+          type: 'atr_updated',
+          date: new Date().toISOString()
+        })
+    } catch (activityError) {
+      logger.warn('Failed to log ATR update activity', { clientId: resolvedClientId, error: getErrorMessage(activityError) })
+    }
 
     // Update client risk profile if clientId provided
     if (resolvedClientId && riskLevel && riskCategory) {

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     // Query advisors/profiles
     let query = supabase
       .from('profiles')
-      .select('id, first_name, last_name, email, role, firm_id')
+      .select('id, first_name, last_name, role, firm_id')
       .in('role', ['advisor', 'admin', 'senior_advisor'])
       .order('first_name')
 
@@ -55,8 +55,8 @@ export async function GET(request: NextRequest) {
     // Format response
     const formattedAdvisors = (advisors || []).map((advisor: any) => ({
       id: advisor.id,
-      name: `${advisor.first_name || ''} ${advisor.last_name || ''}`.trim() || advisor.email,
-      email: advisor.email,
+      name: `${advisor.first_name || ''} ${advisor.last_name || ''}`.trim() || advisor.id,
+      email: null,
       role: advisor.role
     }))
 

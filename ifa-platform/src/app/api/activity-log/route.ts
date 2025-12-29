@@ -8,13 +8,33 @@ import { log } from '@/lib/logging/structured'
 
 interface AggregatedActivity {
   id: string
-  client_id: string
+  client_id: string | null
   action: string
   type: string
   date: string
   user_name: string | null
   clientName: string
   clientRef: string | null
+}
+
+interface MonteCarloRow {
+  id: string
+  client_id: string | null
+  scenario_id: string | null
+  scenario_name: string | null
+  created_at: string | null
+}
+
+interface CashFlowScenarioRow {
+  id: string
+  client_id: string | null
+  scenario_name: string | null
+}
+
+interface ClientRow {
+  id: string
+  personal_details?: Record<string, any> | null
+  client_ref?: string | null
 }
 
 // GET - Fetch activity log for a client OR recent activities for dashboard
@@ -206,36 +226,94 @@ export async function GET(request: NextRequest) {
       }
 
       // 6. Fetch recent Monte Carlo simulations
-      const { data: monteCarloData } = await supabase
+      const { data: monteCarloData, error: mcError } = await supabase
         .from('monte_carlo_results')
         .select(`
           id,
           client_id,
+          scenario_id,
           scenario_name,
-          created_at,
-          client:clients(
-            id,
-            personal_details,
-            client_ref
-          )
+          created_at
         `)
         .order('created_at', { ascending: false })
         .limit(20);
 
-      if (monteCarloData) {
-        monteCarloData.forEach((mc: any) => {
-          allActivities.push({
-            id: `mc-${mc.id}`,
-            client_id: mc.client_id,
-            action: `Monte Carlo simulation: ${mc.scenario_name || 'Analysis completed'}`,
-            type: 'monte_carlo',
-            date: mc.created_at,
-            user_name: null,
-            clientName: mc.client
-              ? `${mc.client.personal_details?.firstName || ''} ${mc.client.personal_details?.lastName || ''}`.trim()
-              : 'Unknown Client',
-            clientRef: mc.client?.client_ref || null
-          })
+      if (mcError) {
+        console.error('Error fetching Monte Carlo data:', mcError);
+      }
+
+      if (monteCarloData && monteCarloData.length > 0) {
+        const monteCarloRows = monteCarloData as MonteCarloRow[];
+        // Get unique scenario IDs to fetch client info
+        const scenarioIds = [
+          ...new Set(monteCarloRows.map((mc) => mc.scenario_id).filter((id): id is string => Boolean(id)))
+        ];
+
+        // Fetch scenario -> client mapping
+        const { data: scenarioData } = await supabase
+          .from('cash_flow_scenarios')
+          .select('id, client_id, scenario_name')
+          .in('id', scenarioIds);
+
+        const scenarioMap = new Map<string, CashFlowScenarioRow>(
+          (scenarioData || []).map((s: CashFlowScenarioRow) => [s.id, s])
+        );
+
+        // Get all client IDs (direct + via scenario)
+        const clientIds = new Set<string>();
+        monteCarloRows.forEach((mc) => {
+          if (mc.client_id) clientIds.add(mc.client_id);
+          const scenario = mc.scenario_id ? scenarioMap.get(mc.scenario_id) : undefined;
+          if (scenario?.client_id) clientIds.add(scenario.client_id);
+        });
+
+        // Fetch client names (only if we have client IDs)
+        let clientMap = new Map<string, ClientRow>();
+        if (clientIds.size > 0) {
+          const { data: clientsData } = await supabase
+            .from('clients')
+            .select('id, personal_details, client_ref')
+            .in('id', Array.from(clientIds));
+          clientMap = new Map(
+            (clientsData || []).map((c: ClientRow) => [c.id, c])
+          );
+        }
+
+        monteCarloRows.forEach((mc) => {
+          // Try direct client_id first, then fall back to scenario's client_id
+          const scenario = mc.scenario_id ? scenarioMap.get(mc.scenario_id) : undefined;
+          const clientId = mc.client_id || scenario?.client_id || null;
+          const client = clientId ? clientMap.get(clientId) : null;
+
+          // Include ALL Monte Carlo activities
+          // If client is resolved, show client name; otherwise show as "Projection Analysis"
+          if (client) {
+            const firstName = client.personal_details?.firstName || client.personal_details?.first_name || '';
+            const lastName = client.personal_details?.lastName || client.personal_details?.last_name || '';
+            const clientName = `${firstName} ${lastName}`.trim();
+            allActivities.push({
+              id: `mc-${mc.id}`,
+              client_id: clientId,
+              action: `Monte Carlo simulation: ${mc.scenario_name || scenario?.scenario_name || 'Analysis completed'}`,
+              type: 'monte_carlo',
+              date: mc.created_at || new Date().toISOString(),
+              user_name: null,
+              clientName: clientName || 'Projection Analysis',
+              clientRef: client?.client_ref ?? null
+            })
+          } else {
+            // No client linked - show as system-level activity
+            allActivities.push({
+              id: `mc-${mc.id}`,
+              client_id: null,
+              action: `Monte Carlo simulation: ${mc.scenario_name || scenario?.scenario_name || 'Analysis completed'}`,
+              type: 'monte_carlo',
+              date: mc.created_at || new Date().toISOString(),
+              user_name: null,
+              clientName: 'Projection Analysis',
+              clientRef: null
+            })
+          }
         })
       }
 

@@ -1,5 +1,5 @@
 'use client'
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
@@ -32,12 +32,16 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     return <LoginForm />
   }
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
+  const closeSidebar = () => setIsSidebarOpen(false)
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-      <Sidebar />
-      <main className="ml-64 pt-16">
-        <div className="p-6">
+      <Header onToggleSidebar={toggleSidebar} />
+      <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
+      <main className="pt-16 lg:ml-64">
+        <div className="p-4 sm:p-6">
           {children}
         </div>
       </main>

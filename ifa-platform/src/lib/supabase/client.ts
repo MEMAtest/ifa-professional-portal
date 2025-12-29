@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 
 const GLOBAL_CLIENT_KEY = '__ifaPlatformSupabaseClient'
 

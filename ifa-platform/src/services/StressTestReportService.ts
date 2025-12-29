@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js';
 import { advisorContextService } from '@/services/AdvisorContextService';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database.types'; // FIX: Correct import path
+import type { Database, DbInsert } from '@/types/db';
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { Client } from '@/types/client';
 import type {
@@ -19,9 +19,8 @@ import type {
 } from '@/types/stress-testing';
 
 // Type aliases for better type safety
-type Tables = Database['public']['Tables']
-type StressTestResultInsert = Tables['stress_test_results']['Insert']
-type ComplianceEvidenceInsert = Tables['compliance_evidence']['Insert']
+type StressTestResultInsert = DbInsert<'stress_test_results'>;
+type ComplianceEvidenceInsert = DbInsert<'compliance_evidence'>;
 
 // Interfaces for stress test reporting
 export interface StressTestReportOptions {

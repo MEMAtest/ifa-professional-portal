@@ -1,12 +1,12 @@
 'use client'
 
 import React from 'react'
-import { AlertCircle, Mail, MapPin, Phone, Shield, User } from 'lucide-react'
+import { AlertCircle, Mail, MapPin, Phone, Smartphone, Target, User } from 'lucide-react'
 
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import type { ExtendedClientProfile } from '@/services/integratedClientService'
-import { calculateAge, formatDate, getRiskLevelColor, getRiskLevelName } from '@/lib/utils'
+import { calculateAge, formatDate } from '@/lib/utils'
 
 export function ClientOverviewTab(props: { client: ExtendedClientProfile }) {
   const { client } = props
@@ -85,39 +85,29 @@ export function ClientOverviewTab(props: { client: ExtendedClientProfile }) {
             <Mail className="h-4 w-4 text-gray-400" />
             <span className="text-sm">{client.contactInfo?.email || 'No email provided'}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Phone className="h-4 w-4 text-gray-400" />
-            <span className="text-sm">{client.contactInfo?.phone || 'No phone provided'}</span>
-          </div>
+          {client.contactInfo?.phone && (
+            <div className="flex items-center gap-3">
+              <Phone className="h-4 w-4 text-gray-400" />
+              <span className="text-sm">{client.contactInfo.phone}</span>
+              <span className="text-xs text-gray-400">(Home)</span>
+            </div>
+          )}
+          {client.contactInfo?.mobile && (
+            <div className="flex items-center gap-3">
+              <Smartphone className="h-4 w-4 text-gray-400" />
+              <span className="text-sm">{client.contactInfo.mobile}</span>
+              <span className="text-xs text-gray-400">(Mobile)</span>
+            </div>
+          )}
+          {!client.contactInfo?.phone && !client.contactInfo?.mobile && (
+            <div className="flex items-center gap-3">
+              <Phone className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-400">No phone provided</span>
+            </div>
+          )}
           <div className="flex items-start gap-3">
             <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
             <span className="text-sm">{address}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Risk Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Risk Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Risk Tolerance</span>
-            <Badge className={getRiskLevelColor(getRiskLevelName(client.riskProfile?.attitudeToRisk || 5))}>
-              {getRiskLevelName(client.riskProfile?.attitudeToRisk || 5)}
-            </Badge>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Risk Capacity</span>
-            <span className="font-medium">{client.riskProfile?.riskCapacity || 'Not assessed'}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Knowledge & Experience</span>
-            <span className="font-medium">{client.riskProfile?.knowledgeExperience || 'Not assessed'}</span>
           </div>
         </CardContent>
       </Card>
@@ -144,6 +134,38 @@ export function ClientOverviewTab(props: { client: ExtendedClientProfile }) {
                 {client.vulnerabilityAssessment?.reviewDate ? formatDate(client.vulnerabilityAssessment.reviewDate) : 'Never'}
               </span>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Objectives & Goals */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Objectives & Goals
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">Investment Timeframe</span>
+            <span className="font-medium capitalize">
+              {client.financialProfile?.investmentTimeframe?.replace(/_/g, ' ') || 'Not set'}
+            </span>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-2">Investment Objectives</p>
+            {client.financialProfile?.investmentObjectives && client.financialProfile.investmentObjectives.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {client.financialProfile.investmentObjectives.map((objective: string, index: number) => (
+                  <Badge key={index} variant="outline" className="text-xs capitalize">
+                    {objective.replace(/_/g, ' ')}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">No objectives set</span>
+            )}
           </div>
         </CardContent>
       </Card>

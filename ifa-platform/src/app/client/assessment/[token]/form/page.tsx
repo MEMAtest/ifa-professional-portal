@@ -301,10 +301,9 @@ interface AssessmentInfo {
 export default function AssessmentFormPage({
   params
 }: {
-  params: Promise<{ token: string }>
+  params: { token: string }
 }) {
   const router = useRouter()
-  const [token, setToken] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -312,12 +311,14 @@ export default function AssessmentFormPage({
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [responses, setResponses] = useState<Record<string, any>>({})
 
+  // Get token directly from params (Next.js 14 pattern)
+  const token = params.token
+
   useEffect(() => {
-    params.then(p => {
-      setToken(p.token)
-      validateAndLoad(p.token)
-    })
-  }, [params])
+    if (token) {
+      validateAndLoad(token)
+    }
+  }, [token])
 
   const validateAndLoad = async (tokenValue: string) => {
     try {

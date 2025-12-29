@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import { normalizeIsoCountryCode } from '@/lib/isoCountries';
 // ===================================================================
 // src/services/migration/ClientMigrationService.ts - PRODUCTION READY - Complete File
 // ===================================================================
@@ -152,7 +153,7 @@ export class ClientMigrationService {
         firstName: legacyData.first_name || '',
         lastName: legacyData.last_name || '',
         dateOfBirth: legacyData.date_of_birth || '',
-        nationality: legacyData.nationality || 'British',
+        nationality: normalizeIsoCountryCode(legacyData.nationality),
         maritalStatus: this.mapMaritalStatus(legacyData.marital_status),
         dependents: legacyData.dependents || 0,
         employmentStatus: this.mapEmploymentStatus(legacyData.employment_status),

@@ -231,10 +231,43 @@ export function getErrorDetails(error: unknown): Record<string, unknown> {
     }
   }
   if (error instanceof Error) {
+    // Check for Supabase PostgrestError which extends Error but has extra fields
+    const supabaseError = error as unknown as Record<string, unknown>;
+    if ('code' in error && 'details' in error) {
+      return {
+        name: error.name,
+        message: error.message,
+        code: supabaseError.code,
+        details: supabaseError.details,
+        hint: supabaseError.hint,
+        stack: error.stack,
+      }
+    }
     return {
       name: error.name,
       message: error.message,
       stack: error.stack,
+    }
+  }
+  // Handle plain objects (like Supabase error responses that aren't Error instances)
+  if (typeof error === 'object' && error !== null) {
+    const obj = error as Record<string, unknown>;
+    // Check for Supabase-style error objects
+    if ('code' in obj || 'message' in obj) {
+      return {
+        code: obj.code,
+        message: obj.message,
+        details: obj.details,
+        hint: obj.hint,
+      }
+    }
+    // Return the object as-is for other plain objects
+    try {
+      // Attempt to serialize - if it fails, fall back to String
+      JSON.stringify(obj);
+      return obj;
+    } catch {
+      return { error: String(error) }
     }
   }
   return { error: String(error) }

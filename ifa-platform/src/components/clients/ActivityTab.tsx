@@ -7,6 +7,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import {
   Activity,
   FileText,
@@ -257,7 +258,30 @@ export default function ActivityTab({ clientId, clientName }: Props) {
         })
       })
 
-      // 8. Load communications
+      // 8. Load profile updates (activity log)
+      const profileUpdates = await safeQuery('activity_log', () =>
+        supabase
+          .from('activity_log')
+          .select('id, action, type, date, user_name, metadata')
+          .eq('client_id', clientId)
+          .eq('type', 'profile_update')
+          .order('date', { ascending: false })
+      )
+
+      profileUpdates.forEach((entry: any) => {
+        allActivities.push({
+          id: `activity-${entry.id}`,
+          type: 'profile_update',
+          title: 'Profile Updated',
+          description: entry.action || 'Client profile updated',
+          timestamp: entry.date || new Date().toISOString(),
+          status: 'completed',
+          user: entry.user_name || undefined,
+          metadata: entry.metadata || {}
+        })
+      })
+
+      // 9. Load communications
       const communications = await safeQuery('communications', () =>
         supabase
           .from('communications')
@@ -713,6 +737,46 @@ export default function ActivityTab({ clientId, clientName }: Props) {
                 {filteredActivities.map((activity, index) => {
                   const Icon = getActivityIcon(activity.type)
                   const colorClass = getActivityColor(activity.type, activity.status)
+                  const isProfileUpdate = activity.type === 'profile_update'
+                  const activityContent = (
+                    <div className={`p-4 rounded-lg border ${
+                      activity.priority === 'high' ? 'border-red-200 bg-red-50' :
+                      activity.status === 'pending' ? 'border-yellow-200 bg-yellow-50' :
+                      'border-gray-200 bg-white'
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium">{activity.title}</h4>
+                            {activity.status && (
+                              <Badge
+                                variant={
+                                  activity.status === 'completed' ? 'default' :
+                                  activity.status === 'failed' ? 'destructive' : 'secondary'
+                                }
+                                className="text-xs"
+                              >
+                                {activity.status}
+                              </Badge>
+                            )}
+                            {activity.priority === 'high' && (
+                              <Badge variant="destructive" className="text-xs">High Priority</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
+                          {isProfileUpdate && (
+                            <p className="text-xs text-blue-600 mt-2">View client profile</p>
+                          )}
+                        </div>
+                        <div className="text-right ml-4">
+                          <p className="text-xs text-gray-500">{formatTimestamp(activity.timestamp)}</p>
+                          {activity.user && (
+                            <p className="text-xs text-gray-400 mt-1">{activity.user}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
 
                   return (
                     <div key={activity.id} className="relative pl-12">
@@ -722,40 +786,13 @@ export default function ActivityTab({ clientId, clientName }: Props) {
                       </div>
 
                       {/* Content */}
-                      <div className={`p-4 rounded-lg border ${
-                        activity.priority === 'high' ? 'border-red-200 bg-red-50' :
-                        activity.status === 'pending' ? 'border-yellow-200 bg-yellow-50' :
-                        'border-gray-200 bg-white'
-                      }`}>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-medium">{activity.title}</h4>
-                              {activity.status && (
-                                <Badge
-                                  variant={
-                                    activity.status === 'completed' ? 'default' :
-                                    activity.status === 'failed' ? 'destructive' : 'secondary'
-                                  }
-                                  className="text-xs"
-                                >
-                                  {activity.status}
-                                </Badge>
-                              )}
-                              {activity.priority === 'high' && (
-                                <Badge variant="destructive" className="text-xs">High Priority</Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
-                          </div>
-                          <div className="text-right ml-4">
-                            <p className="text-xs text-gray-500">{formatTimestamp(activity.timestamp)}</p>
-                            {activity.user && (
-                              <p className="text-xs text-gray-400 mt-1">{activity.user}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      {isProfileUpdate ? (
+                        <Link href={`/clients/${clientId}/edit`} className="block hover:shadow-sm transition-shadow">
+                          {activityContent}
+                        </Link>
+                      ) : (
+                        activityContent
+                      )}
                     </div>
                   )
                 })}

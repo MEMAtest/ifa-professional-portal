@@ -44,6 +44,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
   const realtimeFailuresRef = useRef<{ count: number; lastAt: number }>({ count: 0, lastAt: 0 })
   const hasLoadedOnceRef = useRef(false)
   const realtimeTeardownStartedRef = useRef(false)
+  const backfillTriggeredRef = useRef(false)
 
   const getAuthHeaders = useCallback(async (): Promise<HeadersInit | undefined> => {
     return getSupabaseAuthHeaders(supabase)
@@ -159,6 +160,31 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       setLoading(false)
     }
   }, [user?.id, limit, getAuthHeaders])
+
+  useEffect(() => {
+    if (!user?.id || backfillTriggeredRef.current) return
+    backfillTriggeredRef.current = true
+
+    const runBackfill = async () => {
+      try {
+        const headers = await getAuthHeaders()
+        await fetch('/api/notifications/backfill-profile-updates', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(headers || {})
+          },
+          body: JSON.stringify({ days: 2 })
+        })
+        await fetchNotifications()
+      } catch (err) {
+        console.warn('Notification backfill skipped:', err)
+      }
+    }
+
+    void runBackfill()
+  }, [user?.id, getAuthHeaders, fetchNotifications])
 
   const startPolling = useCallback(() => {
     if (pollIntervalMs <= 0) return

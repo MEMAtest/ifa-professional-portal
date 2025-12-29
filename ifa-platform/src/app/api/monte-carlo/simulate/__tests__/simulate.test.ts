@@ -10,10 +10,14 @@ describe('Monte Carlo Simulate API', () => {
   let POST: typeof import('../route').POST
   let mockFrom: ReturnType<typeof vi.fn>
   let mockSingle: ReturnType<typeof vi.fn>
+  let mockScenarioSingle: ReturnType<typeof vi.fn>
+  let mockResultsSingle: ReturnType<typeof vi.fn>
 
   beforeAll(async () => {
     mockFrom = vi.fn()
     mockSingle = vi.fn()
+    mockScenarioSingle = vi.fn()
+    mockResultsSingle = vi.fn()
 
     // Mock Supabase
     vi.doMock('@supabase/supabase-js', () => ({
@@ -39,14 +43,52 @@ describe('Monte Carlo Simulate API', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    // Setup default mock chain
-    const chain = {
+    const scenarioChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: mockScenarioSingle
+    }
+
+    const resultsChain = {
       insert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
-      single: mockSingle
+      single: mockResultsSingle
     }
-    mockFrom.mockReturnValue(chain)
-    mockSingle.mockResolvedValue({
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'cash_flow_scenarios') {
+        return scenarioChain
+      }
+      if (table === 'monte_carlo_results') {
+        return resultsChain
+      }
+      return resultsChain
+    })
+
+    mockScenarioSingle.mockResolvedValue({
+      data: {
+        id: 'test-scenario',
+        current_savings: 50000,
+        investment_value: 200000,
+        pension_pot_value: 150000,
+        projection_years: 30,
+        inflation_rate: 2.5,
+        retirement_income_target: 40000,
+        state_pension_amount: 11500,
+        other_income: 0,
+        risk_score: 5,
+        equity_allocation: 60,
+        bond_allocation: 30,
+        cash_allocation: 10,
+        alternative_allocation: 0,
+        real_equity_return: 3.5,
+        real_bond_return: 1.5,
+        real_cash_return: 0.0
+      },
+      error: null
+    })
+
+    mockResultsSingle.mockResolvedValue({
       data: {
         id: 'result-123',
         scenario_id: 'test-scenario',
@@ -190,11 +232,12 @@ describe('Monte Carlo Simulate API', () => {
       await POST(request)
 
       // Verify database insert was called
+      expect(mockFrom).toHaveBeenCalledWith('cash_flow_scenarios')
       expect(mockFrom).toHaveBeenCalledWith('monte_carlo_results')
     })
 
     it('should return 500 on database error', async () => {
-      mockSingle.mockResolvedValueOnce({
+      mockResultsSingle.mockResolvedValueOnce({
         data: null,
         error: { code: 'DB_ERROR', message: 'Connection failed' }
       })
@@ -223,9 +266,8 @@ describe('Monte Carlo Simulate API', () => {
       const response = await POST(request)
       const data = await response.json()
 
-      // Should still work with default scenario
-      expect(response.status).toBe(200)
-      expect(data.success).toBe(true)
+      expect(response.status).toBe(400)
+      expect(data.success).toBe(false)
     })
 
     it('should return non-negative wealth values', async () => {

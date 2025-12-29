@@ -19,13 +19,13 @@ async function findTestData() {
 
     // Try to find cashflow scenarios
     const { data: scenarios, error: scenarioError } = await supabase
-      .from('cashflow_scenarios')
+      .from('cash_flow_scenarios')
       .select('id, scenario_name, client_id, scenario_type, created_at')
       .order('created_at', { ascending: false })
       .limit(5);
 
     if (scenarioError) {
-      console.log('⚠️  Error querying cashflow_scenarios:', scenarioError.message);
+      console.log('⚠️  Error querying cash_flow_scenarios:', scenarioError.message);
 
       // Try alternative table names
       console.log('🔄 Trying alternative table names...');

@@ -239,13 +239,6 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
     }
   }, [activeTab, scenario, templateType, reportOptions]);
 
-  // Load history data when switching to history tab
-  useEffect(() => {
-    if (activeTab === 'history' && scenario) {
-      loadHistoryData();
-    }
-  }, [activeTab, scenario]);
-
   const loadPreviewData = async () => {
     if (!scenario) return;
     
@@ -266,7 +259,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
     }
   };
 
-  const loadHistoryData = async () => {
+  const loadHistoryData = useCallback(async () => {
     if (!scenario) return;
     
     setHistoryLoading(true);
@@ -281,7 +274,14 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, [scenario]);
+
+  // Load history data when switching to history tab
+  useEffect(() => {
+    if (activeTab === 'history' && scenario) {
+      loadHistoryData();
+    }
+  }, [activeTab, scenario, loadHistoryData]);
 
   // Handle report generation with comprehensive error handling
   const handleGenerateReport = useCallback(async () => {
@@ -324,10 +324,14 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
           message: 'Report generated successfully!'
         });
 
-        // Auto-close modal after successful generation
-        setTimeout(() => {
-          onClose();
-        }, 2000);
+        await loadHistoryData();
+
+        if (activeTab !== 'history') {
+          // Auto-close modal after successful generation
+          setTimeout(() => {
+            onClose();
+          }, 2000);
+        }
       } else {
         throw new Error(result.error || 'Report generation failed');
       }
@@ -342,7 +346,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
     } finally {
       setIsGenerating(false);
     }
-  }, [scenario, templateType, reportOptions, onReportGenerated, onClose]);
+  }, [scenario, templateType, reportOptions, onReportGenerated, onClose, activeTab, loadHistoryData]);
 
   // Toggle section handlers
   const toggleSection = useCallback((sectionId: string) => {
@@ -391,26 +395,27 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
   if (!isOpen || !scenario) return null;
 
   return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    <div
+      className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="report-modal-title"
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden min-h-0">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
           <div>
-            <h2 id="report-modal-title" className="text-2xl font-bold text-gray-900">
+            <h2 id="report-modal-title" className="text-xl font-bold text-gray-900">
               Generate Report
             </h2>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 text-sm mt-0.5">
               Customize your cash flow report for {scenario.scenarioName}
             </p>
           </div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
             aria-label="Close"
           >
@@ -420,7 +425,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
 
         {/* Progress Indicator */}
         {currentProgress && (
-          <div className="px-6 py-4 bg-blue-50 border-b">
+          <div className="px-6 py-3 bg-blue-50 border-b flex-shrink-0">
             <div className="flex items-center gap-3 mb-2">
               {currentProgress.stage === 'error' ? (
                 <AlertTriangle className="w-5 h-5 text-red-500" />
@@ -454,23 +459,23 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
         )}
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-3 p-1">
-            <TabsTrigger value="options" className="flex items-center gap-2">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col min-h-0">
+          <TabsList className="grid w-full grid-cols-3 p-1 mx-6 mt-2 max-w-md flex-shrink-0">
+            <TabsTrigger value="options" className="flex items-center gap-2 text-sm">
               <Settings className="w-4 h-4" />
               Options
             </TabsTrigger>
-            <TabsTrigger value="preview" className="flex items-center gap-2">
+            <TabsTrigger value="preview" className="flex items-center gap-2 text-sm">
               <Eye className="w-4 h-4" />
               Preview
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
+            <TabsTrigger value="history" className="flex items-center gap-2 text-sm">
               <History className="w-4 h-4" />
               History
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             <TabsContent value="options" className="p-6 space-y-6">
               {/* Template Selection */}
               <Card>
@@ -876,7 +881,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
         </Tabs>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 flex-shrink-0">
           <div className="text-sm text-gray-600">
             Report will include {Object.values(reportOptions).filter(v => v === true).length} sections
           </div>

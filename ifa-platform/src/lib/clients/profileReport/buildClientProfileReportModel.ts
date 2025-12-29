@@ -1,8 +1,8 @@
-import type { Database } from '@/types/database.types'
+import type { DbRow } from '@/types/db'
 import type { ClientProfileReportData } from './types'
 import { calculateReconciledRisk } from '@/lib/assessments/riskReconciliation'
 
-type ClientRow = Database['public']['Tables']['clients']['Row']
+type ClientRow = DbRow<'clients'>
 
 function safeFileToken(value: string): string {
   const trimmed = value.trim()
@@ -79,10 +79,10 @@ export function buildClientProfileReportModel(params: {
     advisorName?: string
   }
   reportDateISO?: string
-  suitability?: Database['public']['Tables']['suitability_assessments']['Row'] | null
-  atr?: Database['public']['Tables']['atr_assessments']['Row'] | null
-  cfl?: Database['public']['Tables']['cfl_assessments']['Row'] | null
-  persona?: Database['public']['Tables']['persona_assessments']['Row'] | null
+  suitability?: DbRow<'suitability_assessments'> | null
+  atr?: DbRow<'atr_assessments'> | null
+  cfl?: DbRow<'cfl_assessments'> | null
+  persona?: DbRow<'persona_assessments'> | null
 }): ClientProfileReportData {
   const reportDateISO = params.reportDateISO || new Date().toISOString()
 

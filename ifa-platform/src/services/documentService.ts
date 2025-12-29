@@ -2,17 +2,16 @@
 // FIXED: Uses the correct client-side Supabase helper and types.
 
 import { createClient } from '@/lib/supabase/client'
-import type { Database } from '@/types/database.types'
+import type { Database, DbInsert, DbRow, DbUpdate } from '@/types/db'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Type aliases for better readability
-type Tables = Database['public']['Tables']
-type DocumentRow = Tables['documents']['Row']
-type DocumentInsert = Tables['documents']['Insert']
-type DocumentUpdate = Tables['documents']['Update']
-type CategoryRow = Tables['document_categories']['Row']
-type SignatureRequestRow = Tables['signature_requests']['Row']
-type SignatureRequestInsert = Tables['signature_requests']['Insert']
+type DocumentRow = DbRow<'documents'>;
+type DocumentInsert = DbInsert<'documents'>;
+type DocumentUpdate = DbUpdate<'documents'>;
+type CategoryRow = DbRow<'document_categories'>;
+type SignatureRequestRow = DbRow<'signature_requests'>;
+type SignatureRequestInsert = DbInsert<'signature_requests'>;
 
 // Don't extend DocumentRow directly to avoid conflicts
 // Create a clean interface that represents what we actually work with

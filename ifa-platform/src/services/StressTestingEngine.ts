@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 // ================================================================
 
 import type { CashFlowScenario } from '@/types/cashflow';
+import { createMonteCarloEngine, type SimulationInput } from '@/lib/monte-carlo/engine';
 import type { 
   StressScenario, 
   PersonalCrisisParameters, 
@@ -347,21 +348,14 @@ export class StressTestingEngine {
     switch (stressTest.type) {
       case 'market_crash':
         // Apply market crash parameters
-        stressedScenario.realEquityReturn = Math.max(
-          baseScenario.realEquityReturn + ((params.equity_decline ?? 0) / 100),
-          -50 // Floor at -50%
-        );
-        stressedScenario.realBondReturn = Math.max(
-          baseScenario.realBondReturn + ((params.bond_decline ?? 0) / 100),
-          -20
-        );
+        this.applyMarketShock(stressedScenario, params.equity_decline ?? 0, params.bond_decline ?? 0);
         break;
 
       case 'inflation_shock':
         // Apply inflation shock with real return erosion
         stressedScenario.inflationRate = baseScenario.inflationRate + (params.inflation_increase ?? 0);
-        stressedScenario.realEquityReturn -= (params.real_return_erosion ?? 0);
-        stressedScenario.realBondReturn -= (params.real_return_erosion ?? 0);
+        stressedScenario.realEquityReturn += (params.real_return_erosion ?? 0);
+        stressedScenario.realBondReturn += (params.real_return_erosion ?? 0);
         const expenseMultiplier = params.expense_multiplier ?? 1;
         stressedScenario.currentExpenses = (stressedScenario.currentExpenses ?? 0) * expenseMultiplier;
         break;
@@ -382,8 +376,8 @@ export class StressTestingEngine {
         const additionalYears = params.additional_years ?? 0;
         stressedScenario.projectionYears += additionalYears;
         stressedScenario.lifeExpectancy += additionalYears;
-        const careCostMonthly = (params.care_cost_annual ?? 0) / 12;
-        stressedScenario.currentExpenses = (stressedScenario.currentExpenses ?? 0) + careCostMonthly;
+        const careCostAnnual = params.care_cost_annual ?? 0;
+        stressedScenario.currentExpenses = (stressedScenario.currentExpenses ?? 0) + careCostAnnual;
         break;
 
       case 'personal_crisis':
@@ -393,21 +387,21 @@ export class StressTestingEngine {
 
       case 'recession':
         // Apply recession parameters
-        stressedScenario.realEquityReturn += (params.equity_decline ?? 0) / 100;
+        this.applyMarketShock(stressedScenario, params.equity_decline ?? 0, 0);
         const spendingDecline = params.consumer_spending_decline ?? 0;
         stressedScenario.currentIncome = (stressedScenario.currentIncome ?? 0) * (1 - spendingDecline / 100);
         break;
 
       case 'geopolitical':
         // Handle geopolitical uncertainty
-        stressedScenario.realEquityReturn += (params.equity_decline ?? 0) / 100;
+        this.applyMarketShock(stressedScenario, params.equity_decline ?? 0, 0);
         stressedScenario.inflationRate += params.inflation_increase ?? 0;
         break;
 
       case 'currency_crisis':
         // Apply currency crisis effects
         stressedScenario.inflationRate += params.import_inflation ?? 0;
-        stressedScenario.realEquityReturn += (params.domestic_equity_decline ?? 0) / 100;
+        this.applyMarketShock(stressedScenario, params.domestic_equity_decline ?? 0, 0);
         break;
 
       case 'commodity':
@@ -420,7 +414,7 @@ export class StressTestingEngine {
       case 'sector':
         // Apply sector-specific stress
         const growthDecline = params.growth_stocks_decline ?? 0;
-        stressedScenario.realEquityReturn += growthDecline / 200; // Assume 50% growth allocation
+        this.applyMarketShock(stressedScenario, growthDecline * 0.5, 0);
         break;
 
       default:
@@ -463,13 +457,12 @@ export class StressTestingEngine {
         scenario.currentIncome = (scenario.currentIncome ?? 0) * (1 + incomeReduction / 100);
         
         // Add healthcare costs
-        const emergencyExpenseMonthly = (crisisParams.emergency_expense ?? 0) / 12;
         const healthcareMultiplier = 1 + (crisisParams.healthcare_cost_increase ?? 0) / 100;
-        scenario.currentExpenses = ((scenario.currentExpenses ?? 0) + emergencyExpenseMonthly) * healthcareMultiplier;
+        scenario.currentExpenses = ((scenario.currentExpenses ?? 0) + (crisisParams.emergency_expense ?? 0)) * healthcareMultiplier;
         
         // Add ongoing care costs
         if (crisisParams.care_costs_annual) {
-          scenario.currentExpenses = (scenario.currentExpenses ?? 0) + (crisisParams.care_costs_annual / 12);
+          scenario.currentExpenses = (scenario.currentExpenses ?? 0) + crisisParams.care_costs_annual;
         }
         break;
 
@@ -496,14 +489,35 @@ export class StressTestingEngine {
         scenario.pensionValue = (scenario.pensionValue ?? 0) * (1 - pensionReduction / 100);
         
         // Add healthcare bridge costs until state pension age
-        const yearsToBridge = Math.max(0, (scenario.statePensionAge ?? 67) - (scenario.clientAge ?? 50));
-        const bridgeCostMonthly = (crisisParams.healthcare_bridge_cost ?? 0) / 12;
-        scenario.currentExpenses = (scenario.currentExpenses ?? 0) + bridgeCostMonthly;
+        const bridgeCostAnnual = crisisParams.healthcare_bridge_cost ?? 0;
+        scenario.currentExpenses = (scenario.currentExpenses ?? 0) + bridgeCostAnnual;
         
         // Increase sequence risk for early retirement
         scenario.realEquityReturn *= 0.9; // Additional 10% reduction for sequence risk
         break;
     }
+  }
+
+  private static applyMarketShock(
+    scenario: CashFlowScenario,
+    equityShockPercent: number,
+    bondShockPercent: number
+  ): void {
+    const equityWeight = (scenario.equityAllocation || 0) / 100;
+    const bondWeight = (scenario.bondAllocation || 0) / 100;
+    const cashWeight = (scenario.cashAllocation || 0) / 100;
+    const totalWeight = equityWeight + bondWeight + cashWeight;
+    const normalizedEquity = totalWeight > 0 ? equityWeight / totalWeight : 0.6;
+    const normalizedBond = totalWeight > 0 ? bondWeight / totalWeight : 0.3;
+    const normalizedCash = totalWeight > 0 ? cashWeight / totalWeight : 0.1;
+
+    const weightedShock = (normalizedEquity * equityShockPercent) + (normalizedBond * bondShockPercent);
+    const shockMultiplier = 1 + (weightedShock / 100);
+
+    scenario.investmentValue = (scenario.investmentValue ?? 0) * shockMultiplier;
+    scenario.currentSavings = (scenario.currentSavings ?? 0) * (1 + (normalizedCash * equityShockPercent) / 100);
+    scenario.pensionValue = (scenario.pensionValue ?? 0) * shockMultiplier;
+    scenario.pensionPotValue = (scenario.pensionPotValue ?? 0) * shockMultiplier;
   }
 
   /**
@@ -541,42 +555,90 @@ export class StressTestingEngine {
     scenario: CashFlowScenario,
     iterations: number
   ): Promise<MonteCarloResults> {
-    // This would integrate with your existing Monte Carlo engine
-    // For now, providing a realistic simulation based on parameters
-    
-    const simulations: MonteCarloSimulation[] = Array.from({ length: iterations }, (_, index) => {
-      // Simulate random returns based on scenario parameters
-      const randomFactor = this.generateRandomReturn();
-      const portfolioReturn = scenario.realEquityReturn * 0.6 + scenario.realBondReturn * 0.4;
-      const initialValue = (scenario.currentSavings ?? 0) + (scenario.investmentValue ?? 0);
-      const projectedValue = initialValue * Math.pow(1 + portfolioReturn + randomFactor, 20);
-      
-      return {
-        simulationId: index,
-        finalPortfolioValue: projectedValue,
-        shortfallYears: projectedValue < 0 ? [15, 16, 17] : [],
-        success: projectedValue > initialValue,
-        maxDrawdown: Math.min(0, (projectedValue - initialValue) / initialValue)
-      };
-    });
+    const simulationInput = this.buildSimulationInput(scenario, iterations);
+    const engine = createMonteCarloEngine();
+    const results = await engine.runSimulation(simulationInput);
+
+    const simulations: MonteCarloSimulation[] = results.simulations.map((simulation, index) => ({
+      simulationId: index,
+      finalPortfolioValue: simulation.finalWealth,
+      shortfallYears: simulation.yearlyWealth
+        .map((value, yearIndex) => (value <= 0 ? yearIndex + 1 : null))
+        .filter((year): year is number => year !== null),
+      success: simulation.success,
+      maxDrawdown: simulation.maxDrawdown
+    }));
 
     const values = simulations.map(s => s.finalPortfolioValue).sort((a, b) => a - b);
-    const successCount = simulations.filter(s => s.success).length;
 
     return {
       simulations,
       confidenceIntervals: {
-        percentile10: values[Math.floor(iterations * 0.1)],
-        percentile25: values[Math.floor(iterations * 0.25)],
-        percentile50: values[Math.floor(iterations * 0.5)],
-        percentile75: values[Math.floor(iterations * 0.75)],
-        percentile90: values[Math.floor(iterations * 0.9)]
+        percentile10: results.confidenceIntervals.p10,
+        percentile25: results.confidenceIntervals.p25,
+        percentile50: results.confidenceIntervals.p50,
+        percentile75: results.confidenceIntervals.p75,
+        percentile90: results.confidenceIntervals.p90
       },
-      successProbability: (successCount / iterations) * 100,
-      averageOutcome: values.reduce((sum, val) => sum + val, 0) / iterations,
+      successProbability: results.successProbability,
+      averageOutcome: results.averageFinalWealth,
       standardDeviation: this.calculateStandardDeviation(values),
-      maxDrawdown: Math.min(...simulations.map(s => s.maxDrawdown || 0))
+      maxDrawdown: results.maxDrawdown
     };
+  }
+
+  private static buildSimulationInput(
+    scenario: CashFlowScenario,
+    iterations: number
+  ): SimulationInput {
+    const initialWealth =
+      (scenario.currentSavings ?? 0) +
+      (scenario.investmentValue ?? 0) +
+      (scenario.pensionPotValue ?? scenario.pensionValue ?? 0);
+    const timeHorizon = scenario.projectionYears ?? 30;
+    const inflationRate = (scenario.inflationRate ?? 2.5) / 100;
+    const retirementTarget = scenario.retirementIncomeTarget || scenario.currentExpenses || 0;
+    const guaranteedIncome = (scenario.statePensionAmount ?? 0) + (scenario.otherIncome ?? 0);
+    const withdrawalAmount = Math.max(0, retirementTarget - guaranteedIncome);
+    const riskScore = scenario.riskScore ?? 5;
+
+    const rawAllocations = [
+      (scenario.equityAllocation ?? 0) / 100,
+      (scenario.bondAllocation ?? 0) / 100,
+      (scenario.cashAllocation ?? 0) / 100,
+      (scenario.alternativeAllocation ?? 0) / 100
+    ];
+    const [equity, bonds, cash, alternatives] = this.normalizeAllocation(rawAllocations);
+    const nominalEquity = ((scenario.realEquityReturn ?? 0) + (scenario.inflationRate ?? 0)) / 100;
+    const nominalBond = ((scenario.realBondReturn ?? 0) + (scenario.inflationRate ?? 0)) / 100;
+    const nominalCash = ((scenario.realCashReturn ?? 0) + (scenario.inflationRate ?? 0)) / 100;
+
+    return {
+      initialWealth,
+      timeHorizon,
+      withdrawalAmount,
+      riskScore,
+      inflationRate,
+      simulationCount: iterations,
+      assetAllocation: {
+        equity,
+        bonds,
+        cash,
+        alternatives: alternatives > 0 ? alternatives : undefined
+      },
+      returnAssumptions: {
+        equity: nominalEquity,
+        bonds: nominalBond,
+        cash: nominalCash,
+        alternatives: nominalEquity
+      }
+    };
+  }
+
+  private static normalizeAllocation(values: number[]): number[] {
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (total <= 0) return [0.6, 0.3, 0.1, 0];
+    return values.map((value) => value / total);
   }
 
   /**

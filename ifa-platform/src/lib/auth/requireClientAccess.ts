@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 import { canAccessClient, ROLES, type AuthContext } from '@/lib/auth/apiAuth'
 
 type RequireClientAccessArgs = {

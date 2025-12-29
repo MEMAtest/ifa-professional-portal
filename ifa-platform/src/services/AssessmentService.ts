@@ -253,7 +253,7 @@ export class AssessmentService {
    */
   static async getScenarioCount(
     clientId: string,
-    tableName: 'monte_carlo_scenarios' | 'cashflow_scenarios'
+    tableName: 'monte_carlo_scenarios' | 'cash_flow_scenarios'
   ): Promise<number> {
     const supabase = createClient(); // Create client for this method
     
@@ -397,7 +397,7 @@ export async function trackCashFlowCompletion(
 ): Promise<void> {
   const scenarioCount = await AssessmentService.getScenarioCount(
     clientId,
-    'cashflow_scenarios'
+    'cash_flow_scenarios'
   );
   
   await AssessmentService.updateProgress(clientId, {

@@ -1,9 +1,9 @@
-import type { Database } from '@/types/database.types'
+import type { DbRow } from '@/types/db'
 
 import type { SuitabilityInvestorPersona } from '../types'
 import { asTrimmedString, pickFirstString, safeArray } from '../utils'
 
-type PersonaRow = Database['public']['Tables']['persona_assessments']['Row']
+type PersonaRow = DbRow<'persona_assessments'>
 
 export function buildInvestorPersona(persona?: PersonaRow | null): SuitabilityInvestorPersona | undefined {
   if (!persona?.client_id) return undefined
@@ -17,4 +17,3 @@ export function buildInvestorPersona(persona?: PersonaRow | null): SuitabilityIn
     assessedAtISO: pickFirstString(persona.assessment_date, persona.created_at)
   }
 }
-

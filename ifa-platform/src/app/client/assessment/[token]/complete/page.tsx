@@ -21,14 +21,17 @@ interface AssessmentInfo {
 export default function AssessmentCompletePage({
   params
 }: {
-  params: Promise<{ token: string }>
+  params: { token: string }
 }) {
   const [assessment, setAssessment] = useState<AssessmentInfo | null>(null)
 
+  // Get token directly from params (Next.js 14 pattern)
+  const token = params.token
+
   useEffect(() => {
-    params.then(p => {
+    if (token) {
       // Try to get assessment info (even though completed)
-      fetch(`/api/assessments/share/${p.token}`)
+      fetch(`/api/assessments/share/${token}`)
         .then(res => res.json())
         .then(data => {
           if (data.assessment) {
@@ -38,8 +41,8 @@ export default function AssessmentCompletePage({
         .catch(() => {
           // Ignore errors - show generic completion message
         })
-    })
-  }, [params])
+    }
+  }, [token])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100 flex items-center justify-center p-4">

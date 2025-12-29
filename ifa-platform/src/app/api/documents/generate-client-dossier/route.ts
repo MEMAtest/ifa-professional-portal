@@ -5,7 +5,7 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-import type { Database } from '@/types/database.types'
+import type { Database, DbRow } from '@/types/db'
 import { getAuthContext, canAccessClient, ROLES } from '@/lib/auth/apiAuth'
 import { advisorContextService } from '@/services/AdvisorContextService'
 import { buildClientDossierReportModel } from '@/lib/assessments/clientDossier/buildClientDossierReportModel'
@@ -29,7 +29,7 @@ function getSupabaseServiceClient() {
 
 async function resolveFirmId(
   supabase: ReturnType<typeof getSupabaseServiceClient>,
-  client: Database['public']['Tables']['clients']['Row'],
+  client: DbRow<'clients'>,
   ctx: { firmId?: string | null }
 ): Promise<string | null> {
   if (client?.firm_id) return String(client.firm_id)
@@ -58,7 +58,7 @@ type ClientAssessmentTable =
   | 'persona_assessments'
 
 type ClientAssessmentRow<TTable extends ClientAssessmentTable> =
-  Database['public']['Tables'][TTable]['Row']
+  DbRow<TTable>
 
 async function fetchLatestByClientId<TTable extends ClientAssessmentTable>(
   supabase: ReturnType<typeof getSupabaseServiceClient>,

@@ -14,7 +14,6 @@ export function ClientCompletionOverviewCard(props: {
 
   const items: Array<{ label: string; ready: boolean }> = [
     { label: 'Assessment', ready: integrationStatus.hasAssessment },
-    { label: 'Scenario', ready: integrationStatus.hasScenario },
     { label: 'Documents', ready: integrationStatus.hasDocuments },
     { label: 'Analysis', ready: integrationStatus.hasMonteCarlo }
   ]
@@ -59,4 +58,3 @@ export function ClientCompletionOverviewCard(props: {
     </Card>
   )
 }
-

@@ -402,7 +402,10 @@ export const ScenarioTypeSchema = z.enum([
   'base',
   'optimistic',
   'pessimistic',
-  'stress'
+  'stress',
+  'early_retirement',
+  'high_inflation',
+  'capacity_for_loss'
 ]);
 
 /**

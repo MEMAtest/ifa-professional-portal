@@ -20,13 +20,15 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
-  Info
+  Info,
+  Settings
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import { DEFAULT_PROD_SERVICES, ProdServiceDefinition } from '@/lib/prod/serviceCatalog'
 
 interface Props {
   clientId: string
@@ -46,74 +48,36 @@ interface ServiceOption {
   }[]
 }
 
-const SERVICES: ServiceOption[] = [
-  {
-    id: 'retirement_planning',
-    label: 'Retirement Planning',
-    icon: Calculator,
-    description: 'Pension advice, drawdown, annuity, retirement income planning',
-    targetMarketChecks: [
-      { id: 'age_appropriate', label: 'Age-appropriate for retirement planning', description: 'Client is within reasonable retirement planning age range' },
-      { id: 'pension_assets', label: 'Has pension assets or accumulation phase', description: 'Client has existing pension or capacity to contribute' },
-      { id: 'understands_risks', label: 'Understands retirement income risks', description: 'Client understands longevity, inflation, and market risks' }
-    ]
-  },
-  {
-    id: 'investment_management',
-    label: 'Investment Management',
-    icon: TrendingUp,
-    description: 'Portfolio management, fund selection, investment strategy',
-    targetMarketChecks: [
-      { id: 'min_investment', label: 'Meets minimum investment threshold', description: 'Client has minimum investable assets for service tier' },
-      { id: 'investment_horizon', label: 'Appropriate investment horizon', description: 'Client has suitable time horizon for investment strategy' },
-      { id: 'risk_capacity', label: 'Risk capacity assessed', description: 'Capacity for loss has been assessed and documented' }
-    ]
-  },
-  {
-    id: 'protection',
-    label: 'Protection',
-    icon: Shield,
-    description: 'Life insurance, critical illness, income protection',
-    targetMarketChecks: [
-      { id: 'protection_need', label: 'Identified protection need', description: 'Gap analysis shows protection requirements' },
-      { id: 'health_disclosure', label: 'Health disclosure understood', description: 'Client understands importance of accurate health disclosure' },
-      { id: 'affordability', label: 'Premiums affordable', description: 'Protection premiums fit within client budget' }
-    ]
-  },
-  {
-    id: 'mortgage_advice',
-    label: 'Mortgage Advice',
-    icon: Home,
-    description: 'Residential, buy-to-let, remortgage advice',
-    targetMarketChecks: [
-      { id: 'property_purpose', label: 'Property purpose confirmed', description: 'Residential vs investment purpose clarified' },
-      { id: 'affordability_assessed', label: 'Affordability assessed', description: 'Income and expenditure reviewed for mortgage affordability' },
-      { id: 'deposit_source', label: 'Deposit source verified', description: 'Source of deposit funds has been verified' }
-    ]
-  },
-  {
-    id: 'estate_planning',
-    label: 'Estate Planning',
-    icon: FileText,
-    description: 'IHT planning, trusts, will planning',
-    targetMarketChecks: [
-      { id: 'estate_value', label: 'Estate value warrants planning', description: 'Estate size makes IHT planning relevant' },
-      { id: 'succession_wishes', label: 'Succession wishes discussed', description: 'Client has expressed wishes for asset distribution' },
-      { id: 'legal_referral', label: 'Legal referral where appropriate', description: 'Will/trust matters referred to qualified solicitor' }
-    ]
-  },
-  {
-    id: 'tax_planning',
-    label: 'Tax Planning',
-    icon: Calculator,
-    description: 'Tax-efficient investing, ISA, CGT planning',
-    targetMarketChecks: [
-      { id: 'tax_status', label: 'Tax status confirmed', description: 'Client tax residency and status confirmed' },
-      { id: 'allowances_reviewed', label: 'Tax allowances reviewed', description: 'Annual allowances and thresholds considered' },
-      { id: 'accountant_liaison', label: 'Accountant liaison where needed', description: 'Complex tax matters coordinated with accountant' }
-    ]
-  }
-]
+const SERVICE_ICON_MAP: Record<string, React.ElementType> = {
+  retirement_planning: Calculator,
+  investment_management: TrendingUp,
+  protection: Shield,
+  mortgage_advice: Home,
+  estate_planning: FileText,
+  tax_planning: Calculator
+}
+
+const normalizeTargetMarketChecks = (checks: any): ServiceOption['targetMarketChecks'] => {
+  if (!Array.isArray(checks)) return []
+  return checks.map((check, index) => {
+    if (typeof check === 'string') {
+      return { id: `check_${index}`, label: check, description: check }
+    }
+    return {
+      id: check.id || `check_${index}`,
+      label: check.label || check.description || 'Target market check',
+      description: check.description || check.label || ''
+    }
+  })
+}
+
+const toServiceOption = (service: ProdServiceDefinition): ServiceOption => ({
+  id: service.id,
+  label: service.label || (service as any).name || 'Service',
+  icon: SERVICE_ICON_MAP[service.id] || Briefcase,
+  description: service.description || '',
+  targetMarketChecks: normalizeTargetMarketChecks((service as any).targetMarketChecks || service.targetMarketChecks)
+})
 
 interface ClientServices {
   id?: string
@@ -124,15 +88,28 @@ interface ClientServices {
   platform_justification: Record<string, unknown>
   decumulation_strategy: string | null
   decumulation_justification: string
+  sustainability_assessment?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
 }
 
 export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
   const supabase = createClient()
   const { toast } = useToast()
 
+  const isValidFirmId = (value?: string | null) => {
+    if (!value) return false
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  }
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [expandedService, setExpandedService] = useState<string | null>(null)
+  const [serviceCatalog, setServiceCatalog] = useState<ServiceOption[]>(
+    DEFAULT_PROD_SERVICES.map(toServiceOption)
+  )
+  const [serviceCatalogSource, setServiceCatalogSource] = useState<'default' | 'firm' | 'fallback'>('default')
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
 
   const [data, setData] = useState<ClientServices>({
     services_selected: [],
@@ -147,34 +124,82 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const { data: existing, error } = await supabase
-        .from('client_services')
-        .select('*')
-        .eq('client_id', clientId)
-        .single()
+      // Use API route to bypass RLS issues
+      const response = await fetch(`/api/clients/${clientId}/services`)
+      const result = await response.json()
 
-      if (existing && !error) {
+      if (result.success && result.data) {
+        const record = result.data
         setData({
-          id: existing.id,
-          services_selected: existing.services_selected || [],
-          target_market_checks: existing.target_market_checks || {},
-          suitability_justification: existing.suitability_justification || '',
-          platform_selected: existing.platform_selected || '',
-          platform_justification: existing.platform_justification || {},
-          decumulation_strategy: existing.decumulation_strategy,
-          decumulation_justification: existing.decumulation_justification || ''
+          id: record.id,
+          services_selected: record.services_selected || [],
+          target_market_checks: record.target_market_checks || {},
+          suitability_justification: record.suitability_justification || '',
+          platform_selected: record.platform_selected || '',
+          platform_justification: record.platform_justification || {},
+          decumulation_strategy: record.decumulation_strategy,
+          decumulation_justification: record.decumulation_justification || '',
+          sustainability_assessment: record.sustainability_assessment || {},
+          created_at: record.created_at,
+          updated_at: record.updated_at
         })
+        setLastSavedAt(record.updated_at || record.created_at || null)
+      } else {
+        setLastSavedAt(null)
       }
     } catch (error) {
       console.error('Error loading services:', error)
     } finally {
       setLoading(false)
     }
-  }, [supabase, clientId])
+  }, [clientId])
+
+  const loadFirmServices = useCallback(async () => {
+    if (!isValidFirmId(firmId)) {
+      setServiceCatalogSource('default')
+      setServiceCatalog(DEFAULT_PROD_SERVICES.map(toServiceOption))
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('firms')
+        .select('settings')
+        .eq('id', firmId)
+        .maybeSingle()
+
+      if (error || !data?.settings) {
+        setServiceCatalogSource('default')
+        setServiceCatalog(DEFAULT_PROD_SERVICES.map(toServiceOption))
+        return
+      }
+
+      const settings = data.settings as any
+      const services = (settings.services_prod?.services || []) as ProdServiceDefinition[]
+      const normalized = services.filter((service) => service && service.active !== false)
+
+      if (normalized.length > 0) {
+        setServiceCatalog(normalized.map(toServiceOption))
+        setServiceCatalogSource('firm')
+        return
+      }
+
+      if (settings.services_prod) {
+        setServiceCatalog(DEFAULT_PROD_SERVICES.map(toServiceOption))
+        setServiceCatalogSource('fallback')
+        return
+      }
+    } catch (error) {
+      console.warn('Failed to load firm services:', error)
+      setServiceCatalogSource('default')
+      setServiceCatalog(DEFAULT_PROD_SERVICES.map(toServiceOption))
+    }
+  }, [supabase, firmId])
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+    loadFirmServices()
+  }, [loadData, loadFirmServices])
 
   const toggleService = (serviceId: string) => {
     const isSelected = data.services_selected.includes(serviceId)
@@ -211,7 +236,7 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
   }
 
   const getServiceCompleteness = (serviceId: string): { complete: number; total: number } => {
-    const service = SERVICES.find(s => s.id === serviceId)
+    const service = serviceCatalog.find(s => s.id === serviceId)
     if (!service) return { complete: 0, total: 0 }
 
     const checks = data.target_market_checks[serviceId] || {}
@@ -222,9 +247,10 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
   const handleSave = async () => {
     setSaving(true)
     try {
+      const resolvedFirmId = isValidFirmId(firmId) ? firmId : null
       const payload = {
         client_id: clientId,
-        firm_id: firmId || null,
+        firm_id: resolvedFirmId,
         services_selected: data.services_selected,
         target_market_checks: data.target_market_checks,
         suitability_justification: data.suitability_justification,
@@ -234,19 +260,34 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
         decumulation_justification: data.decumulation_justification
       }
 
-      if (data.id) {
-        const { error } = await supabase
-          .from('client_services')
-          .update(payload)
-          .eq('id', data.id)
+      // Use API route to bypass RLS issues
+      const response = await fetch(`/api/clients/${clientId}/services`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
 
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('client_services')
-          .insert(payload)
+      const result = await response.json()
 
-        if (error) throw error
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save')
+      }
+
+      if (result.data) {
+        setData({
+          id: result.data.id,
+          services_selected: result.data.services_selected || [],
+          target_market_checks: result.data.target_market_checks || {},
+          suitability_justification: result.data.suitability_justification || '',
+          platform_selected: result.data.platform_selected || '',
+          platform_justification: result.data.platform_justification || {},
+          decumulation_strategy: result.data.decumulation_strategy,
+          decumulation_justification: result.data.decumulation_justification || '',
+          sustainability_assessment: result.data.sustainability_assessment || {},
+          created_at: result.data.created_at,
+          updated_at: result.data.updated_at
+        })
+        setLastSavedAt(result.data.updated_at || result.data.created_at || null)
       }
 
       toast({
@@ -294,11 +335,39 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
           <p className="text-sm text-gray-500 mt-1">
             Select services and verify target market suitability (PROD compliance)
           </p>
+          <div className="mt-2">
+            <Badge variant="secondary">
+              {serviceCatalogSource === 'firm'
+                ? 'Firm catalog'
+                : serviceCatalogSource === 'fallback'
+                  ? 'Firm catalog empty - using default'
+                  : 'Default catalog'}
+            </Badge>
+          </div>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+        <div className="flex items-center gap-4">
+          <a
+            href="/settings?tab=services"
+            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+          >
+            Manage firm services &amp; PROD
+          </a>
+          <span className="text-xs text-gray-500">
+            {lastSavedAt
+              ? `Last saved ${new Date(lastSavedAt).toLocaleString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}`
+              : 'Not saved yet'}
+          </span>
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="h-4 w-4 mr-2" />
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
       </div>
 
       {/* PROD Compliance Alert */}
@@ -320,7 +389,27 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
           <CardTitle className="text-base">Selected Services ({data.services_selected.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {SERVICES.map((service) => {
+          {serviceCatalog.length === 0 ? (
+            <div className="text-center py-8 space-y-4">
+              <div className="text-gray-400">
+                <Briefcase className="h-12 w-12 mx-auto" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">No Firm Services Configured</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Configure your firm's services and PROD requirements to enable target market checks.
+                </p>
+              </div>
+              <a
+                href="/settings?tab=services"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Configure Firm Services
+              </a>
+            </div>
+          ) : (
+            serviceCatalog.map((service) => {
             const Icon = service.icon
             const isSelected = data.services_selected.includes(service.id)
             const isExpanded = expandedService === service.id
@@ -417,7 +506,8 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
                 )}
               </div>
             )
-          })}
+          })
+          )}
         </CardContent>
       </Card>
 

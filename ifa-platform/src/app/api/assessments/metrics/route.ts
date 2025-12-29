@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
+import type { Database, DbTableKey } from '@/types/db'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { normalizeAssessmentType } from '@/lib/assessments/routing'
@@ -469,7 +469,7 @@ export async function GET(request: NextRequest) {
     step = 'compliance_status'
     const clientCompliance: Record<string, { overdue: boolean; due: boolean }> = {}
 
-    const complianceTables: Array<{ table: keyof Database['public']['Tables']; dateField: string }> = [
+    const complianceTables: Array<{ table: DbTableKey; dateField: string }> = [
       { table: 'atr_assessments', dateField: 'assessment_date' },
       { table: 'cfl_assessments', dateField: 'assessment_date' },
       { table: 'persona_assessments', dateField: 'assessment_date' },
@@ -651,7 +651,7 @@ export async function GET(request: NextRequest) {
 
     // ===== ASSESSMENT COUNTS (for stats cards) =====
     step = 'assessment_counts'
-    const countCurrent = async (table: keyof Database['public']['Tables']) => {
+    const countCurrent = async (table: DbTableKey) => {
       let q = supabase
         .from(table as any)
         .select(`id`, { count: 'exact', head: true })

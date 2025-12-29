@@ -1,6 +1,7 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { Activity, TrendingUp, Wallet, Scale, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 
 interface FinancialHealthScoreProps {
@@ -65,6 +66,12 @@ export function FinancialHealthScore({
   const overallScore = calculateOverallScore({ savingsRate, liquidityRatio, wealthRatio, debtToIncomeRatio })
   const grade = getOverallGrade(overallScore)
 
+  // Calculate individual scores for tooltip display
+  const savingsScore = Math.min(100, (savingsRate / 30) * 100)
+  const liquidityScore = Math.min(100, (liquidityRatio / 12) * 100)
+  const wealthScore = Math.min(100, (wealthRatio / 10) * 100)
+  const debtScore = Math.max(0, 100 - (debtToIncomeRatio / 3) * 100)
+
   const metrics = [
     {
       label: 'Savings Rate',
@@ -118,9 +125,43 @@ export function FinancialHealthScore({
               <CardDescription>Key financial wellness indicators</CardDescription>
             </div>
           </div>
-          <div className="text-center">
-            <div className={`text-4xl font-bold ${grade.color}`}>{grade.grade}</div>
-            <div className={`text-xs font-medium ${grade.color}`}>{grade.label}</div>
+          <div className="flex items-start gap-1">
+            <div className="text-center">
+              <div className={`text-4xl font-bold ${grade.color}`}>{grade.grade}</div>
+              <div className={`text-xs font-medium ${grade.color}`}>{grade.label}</div>
+            </div>
+            <Tooltip
+              content={
+                <div className="space-y-2 text-xs min-w-[200px]">
+                  <p className="font-semibold border-b pb-1">Score Breakdown</p>
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span>Savings Rate (30%)</span>
+                      <span className="font-medium">{Math.round(savingsScore)}/100</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Liquidity (30%)</span>
+                      <span className="font-medium">{Math.round(liquidityScore)}/100</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Wealth Ratio (25%)</span>
+                      <span className="font-medium">{Math.round(wealthScore)}/100</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Debt-to-Income (15%)</span>
+                      <span className="font-medium">{Math.round(debtScore)}/100</span>
+                    </div>
+                  </div>
+                  <div className="border-t pt-1 flex justify-between font-semibold">
+                    <span>Overall Score</span>
+                    <span>{overallScore}/100</span>
+                  </div>
+                </div>
+              }
+              position="left"
+            >
+              <Info className="h-4 w-4 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
+            </Tooltip>
           </div>
         </div>
       </CardHeader>

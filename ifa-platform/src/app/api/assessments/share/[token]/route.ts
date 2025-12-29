@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, getErrorMessage } from '@/lib/errors'
 import { createAuditLogger, getClientIP, getUserAgent } from '@/lib/audit'
+import { notifyAssessmentCompleted } from '@/lib/notifications/notificationService'
 
 export const dynamic = 'force-dynamic'
 
@@ -289,6 +290,38 @@ export async function POST(
       })
     } catch (emailError) {
       logger.warn('Failed to send completion email', { error: getErrorMessage(emailError) })
+    }
+
+    // Create in-app notification for advisor (high priority)
+    try {
+      await notifyAssessmentCompleted(
+        share.advisor_id,
+        share.client_id,
+        share.client_name || 'Client',
+        share.id,
+        ASSESSMENT_LABELS[share.assessment_type] || share.assessment_type,
+        share.firm_id
+      )
+      logger.info('Assessment completion notification created', { shareId: share.id, advisorId: share.advisor_id })
+    } catch (notifyError) {
+      logger.warn('Failed to create completion notification', { error: getErrorMessage(notifyError) })
+    }
+
+    // Log to activity_log for dashboard timeline
+    try {
+      await supabase
+        .from('activity_log')
+        .insert({
+          id: crypto.randomUUID(),
+          client_id: share.client_id,
+          action: `${ASSESSMENT_LABELS[share.assessment_type] || share.assessment_type} completed by client`,
+          type: 'assessment_completed',
+          user_name: share.client_name || 'Client',
+          date: new Date().toISOString()
+        })
+      logger.info('Activity log entry created', { shareId: share.id, clientId: share.client_id })
+    } catch (activityError) {
+      logger.warn('Failed to create activity log entry', { error: getErrorMessage(activityError) })
     }
 
     return NextResponse.json({

@@ -3,21 +3,26 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { 
+import {
   Settings,
   User,
-  Bell,
   Shield,
-  Palette,
+  Briefcase,
   Save,
   Eye,
-  EyeOff
+  EyeOff,
+  Users
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { useToast } from '@/hooks/use-toast'
+import { useSearchParams } from 'next/navigation'
+import { InvestorPersonaLibrary } from '@/components/settings/InvestorPersonaLibrary'
+import { ProdServicesPanel } from '@/components/settings/prod/ProdServicesPanel'
+import { useFirmContext } from '@/components/settings/hooks/useFirmContext'
+import { useProdServicesSettings } from '@/components/settings/hooks/useProdServicesSettings'
 
 // Types based on actual database schema
 interface UserProfile {
@@ -44,16 +49,58 @@ interface UserProfile {
   updated_at?: string
 }
 
+
 export default function SettingsPage() {
   const supabase = createClient()
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
+  const searchParams = useSearchParams()
 
   // State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'personas'>('profile')
   const [showPassword, setShowPassword] = useState(false)
+  const firmContext = useFirmContext({
+    supabase,
+    userId: user?.id,
+    userFirmId: user?.firmId
+  })
+
+  const {
+    firmServices,
+    prodDetails,
+    servicesStep,
+    servicesSaveStatus,
+    prodVersions,
+    prodReviewTask,
+    latestProdDocument,
+    customCheckInputs,
+    prodSummary,
+    setServicesStep,
+    loadFirmSettings,
+    handleSaveFirmServices,
+    handleOpenStoredProdDocument,
+    addService,
+    updateService,
+    removeService,
+    applyServiceTemplate,
+    addTargetMarketCheck,
+    removeTargetMarketCheck,
+    handleCustomCheckInputChange,
+    handleAddCustomCheck,
+    updateProdDetails,
+    toggleDistributionChannel,
+    restoreProdVersion,
+    handleCopyProdSummary
+  } = useProdServicesSettings({
+    supabase,
+    userId: user?.id,
+    toast,
+    setSaving,
+    resolveFirmId: firmContext.resolveFirmId,
+    resolveFirmIdFromAuth: firmContext.resolveFirmIdFromAuth
+  })
 
   // Profile state based on actual schema
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -93,10 +140,20 @@ export default function SettingsPage() {
     }
   }, [user])
 
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab === 'services') {
+      setActiveTab('services')
+    } else if (tab === 'personas') {
+      setActiveTab('personas')
+    }
+  }, [searchParams])
+
   const loadSettings = async () => {
     try {
       setLoading(true)
-      await loadUserProfile()
+      const resolvedFirmId = await loadUserProfile()
+      await loadFirmSettings(resolvedFirmId)
     } catch (error) {
       console.error('Error loading settings:', error)
       createMockData()
@@ -105,24 +162,26 @@ export default function SettingsPage() {
     }
   }
 
-  const loadUserProfile = async () => {
-    if (!user?.id) return
+  const loadUserProfile = async (): Promise<string | null> => {
+    if (!user?.id) return null
 
     // ✅ FIXED: Use actual profiles table schema
     const { data: profileData, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error loading user profile:', error)
       // Create default profile if none exists
       createDefaultProfile()
-      return
+      return firmContext.resolveFirmId(user?.firmId || null)
     }
 
     if (profileData) {
+      const profileFirmId = (profileData as any).firm_id || null
+      const resolvedFirmId = firmContext.resolveFirmId(profileFirmId)
       setUserProfile(prev => ({
         ...prev,
         ...(profileData as any),
@@ -132,7 +191,10 @@ export default function SettingsPage() {
           ...((profileData as any).preferences || {})
         }
       }))
+      firmContext.setFirmId(resolvedFirmId)
+      return resolvedFirmId
     }
+    return firmContext.resolveFirmId(null)
   }
 
   const createDefaultProfile = () => {
@@ -281,10 +343,38 @@ export default function SettingsPage() {
           <Card>
             <CardContent className="p-0">
               <nav className="space-y-1">
+                {/* Personal Settings */}
+                <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Personal Settings
+                </div>
                 {[
                   { key: 'profile', label: 'Profile', icon: User },
                   { key: 'preferences', label: 'Preferences', icon: Settings },
                   { key: 'security', label: 'Security', icon: Shield }
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key as any)}
+                    className={`
+                      w-full flex items-center space-x-3 px-4 py-3 text-left text-sm font-medium
+                      ${activeTab === key
+                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                        : 'text-gray-700 hover:bg-gray-50'
+                      }
+                    `}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+
+                {/* Firm Configuration */}
+                <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50 mt-2">
+                  Firm Configuration
+                </div>
+                {[
+                  { key: 'services', label: 'Services & PROD', icon: Briefcase },
+                  { key: 'personas', label: 'Investor Personas', icon: Users }
                 ].map(({ key, label, icon: Icon }) => (
                   <button
                     key={key}
@@ -597,6 +687,40 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {activeTab === 'services' && (
+            <ProdServicesPanel
+              servicesStep={servicesStep}
+              onStepChange={setServicesStep}
+              prodDetails={prodDetails}
+              onUpdateProdDetails={updateProdDetails}
+              onToggleDistributionChannel={toggleDistributionChannel}
+              firmServices={firmServices}
+              onAddService={addService}
+              onUpdateService={updateService}
+              onRemoveService={removeService}
+              onApplyServiceTemplate={applyServiceTemplate}
+              onAddTargetMarketCheck={addTargetMarketCheck}
+              onRemoveTargetMarketCheck={removeTargetMarketCheck}
+              customCheckInputs={customCheckInputs}
+              onCustomCheckInputChange={handleCustomCheckInputChange}
+              onAddCustomCheck={handleAddCustomCheck}
+              prodSummary={prodSummary}
+              servicesSaveStatus={servicesSaveStatus}
+              saving={saving}
+              onSave={handleSaveFirmServices}
+              onOpenStoredDocument={handleOpenStoredProdDocument}
+              onCopySummary={handleCopyProdSummary}
+              prodReviewTask={prodReviewTask}
+              prodVersions={prodVersions}
+              onRestoreVersion={restoreProdVersion}
+              latestProdDocument={latestProdDocument}
+            />
+          )}
+
+          {activeTab === 'personas' && (
+            <InvestorPersonaLibrary />
           )}
         </div>
       </div>

@@ -90,6 +90,9 @@ export function InsurancePolicies({
           <div className="text-center py-8 text-gray-500">
             <Shield className="h-12 w-12 mx-auto mb-3 text-gray-300" />
             <p>No insurance policies recorded</p>
+            <p className="text-xs text-gray-400 mt-1">
+              This data is populated when the client completes a suitability assessment
+            </p>
             {onAddPolicy && (
               <Button variant="outline" size="sm" className="mt-3" onClick={onAddPolicy}>
                 <Plus className="h-4 w-4 mr-1" />

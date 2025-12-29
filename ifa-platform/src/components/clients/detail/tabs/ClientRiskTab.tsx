@@ -2,14 +2,13 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, CheckCircle, Scale, Send, Shield } from 'lucide-react'
+import { AlertCircle, CheckCircle, Scale, Shield } from 'lucide-react'
 
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import ConsumerDutyWizard from '@/components/compliance/ConsumerDutyWizard'
 import VulnerabilityWizard from '@/components/compliance/VulnerabilityWizard'
-import ShareAssessmentModal from '@/components/assessments/ShareAssessmentModal'
 import type { ClientDashboardData, ExtendedClientProfile } from '@/services/integratedClientService'
 import { formatDate } from '@/lib/utils'
 
@@ -28,8 +27,6 @@ export function ClientRiskTab(props: {
   setShowVulnerabilityWizard: BooleanState
   showConsumerDutyWizard: boolean
   setShowConsumerDutyWizard: BooleanState
-  showShareAssessmentModal: boolean
-  setShowShareAssessmentModal: BooleanState
 }) {
   const {
     client,
@@ -42,8 +39,6 @@ export function ClientRiskTab(props: {
     setShowVulnerabilityWizard,
     showConsumerDutyWizard,
     setShowConsumerDutyWizard,
-    showShareAssessmentModal,
-    setShowShareAssessmentModal
   } = props
 
   const router = useRouter()
@@ -246,59 +241,6 @@ export function ClientRiskTab(props: {
         </CardContent>
       </Card>
 
-      {/* Send Assessment to Client */}
-      <Card className="mt-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Send className="h-5 w-5" />
-              Send Assessment to Client
-            </CardTitle>
-            <Button onClick={() => setShowShareAssessmentModal(true)}>
-              <Send className="h-4 w-4 mr-2" />
-              Send Assessment
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-600 mb-4">
-            Send a secure link to your client to complete ATR (Attitude to Risk), CFL (Capacity for Loss), or Investor
-            Persona questionnaires. Results are automatically saved to their profile.
-          </p>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm font-medium text-blue-900">ATR</p>
-              <p className="text-xs text-blue-700">Attitude to Risk</p>
-            </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <p className="text-sm font-medium text-green-900">CFL</p>
-              <p className="text-xs text-green-700">Capacity for Loss</p>
-            </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <p className="text-sm font-medium text-purple-900">Investor Persona</p>
-              <p className="text-xs text-purple-700">Investment Personality</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Share Assessment Modal */}
-      {showShareAssessmentModal && client && (
-        <ShareAssessmentModal
-          isOpen={showShareAssessmentModal}
-          onClose={() => setShowShareAssessmentModal(false)}
-          clientId={client.id}
-          clientName={clientName}
-          clientEmail={client.contactInfo?.email}
-          onShareCreated={(share) => {
-            toast({
-              title: 'Assessment Sent',
-              description: `Assessment link sent to ${share.clientEmail}`
-            })
-          }}
-        />
-      )}
-
       {/* Compliance Review History - shows QA reviews for this client */}
       <Card className="mt-6">
         <CardHeader>
@@ -319,4 +261,3 @@ export function ClientRiskTab(props: {
     </>
   )
 }
-

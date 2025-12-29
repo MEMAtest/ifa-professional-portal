@@ -21,7 +21,7 @@ const mockClient: Client = {
     firstName: 'John',
     lastName: 'Smith',
     dateOfBirth: '1980-05-15',
-    nationality: 'UK',
+    nationality: 'GB',
     maritalStatus: 'married',
     dependents: 2,
     employmentStatus: 'employed',

@@ -1,6 +1,6 @@
-import type { Database } from '@/types/database.types'
+import type { DbRow } from '@/types/db'
 
-export type ClientRow = Database['public']['Tables']['clients']['Row']
+export type ClientRow = DbRow<'clients'>
 
 export type ClientProfileReportData = {
   client: {

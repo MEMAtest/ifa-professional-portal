@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 // ChartJSNodeCanvas removed - requires native 'canvas' module
 // Charts are generated client-side or omitted from server PDFs
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 import { getAuthContext, canAccessClient, ROLES } from '@/lib/auth/apiAuth'
 import { advisorContextService } from '@/services/AdvisorContextService'
 import { mapSuitabilityAssessmentRowToFormData } from '@/lib/suitability/mappers'

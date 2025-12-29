@@ -4,8 +4,8 @@ export const dynamic = 'force-dynamic'
 // src/app/api/assessments/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database.types'; // <-- ADD THIS IMPORT
-import type { TablesInsert } from '@/types/database.types'; // <-- ADD THIS IMPORT
+import type { Database } from '@/types/db'; // <-- ADD THIS IMPORT
+import type { TablesInsert } from '@/types/db'; // <-- ADD THIS IMPORT
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { log } from '@/lib/logging/structured'
 

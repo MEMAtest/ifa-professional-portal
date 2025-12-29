@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
+import { notifyProfileUpdated } from '@/lib/notifications/notificationService'
 
 /**
  * GET /api/clients/[id]
@@ -135,6 +137,16 @@ export async function PATCH(
 
     const updates = await request.json();
 
+    const { data: previousClient, error: previousError } = await supabase
+      .from('clients')
+      .select('personal_details, status')
+      .eq('id', clientId)
+      .maybeSingle()
+
+    if (previousError) {
+      logger.warn('Unable to fetch existing client for comparison', { clientId, error: previousError.message })
+    }
+
     // Prepare update data (convert to snake_case for DB)
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString()
@@ -179,6 +191,101 @@ export async function PATCH(
     }
 
     logger.info('Client updated successfully', { clientId, clientRef: client.client_ref })
+
+    const formatName = (details: any | null | undefined): string => {
+      if (!details) return ''
+      const first = details.firstName || details.first_name || ''
+      const last = details.lastName || details.last_name || ''
+      return `${first} ${last}`.trim()
+    }
+
+    const formatStatus = (status?: string | null): string => {
+      if (!status) return 'Unknown'
+      return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    }
+
+    const previousName = formatName(previousClient?.personal_details)
+    const updatedName = formatName(client.personal_details)
+    const previousStatus = previousClient?.status || null
+    const updatedStatus = client.status || null
+
+    const activityEntries: Array<{
+      id: string
+      client_id: string
+      action: string
+      type: string
+      date: string
+      user_name?: string | null
+      metadata?: Record<string, any>
+    }> = []
+    const nowIso = new Date().toISOString()
+    const userName = (user?.user_metadata as any)?.full_name || user?.email || null
+
+    if (previousName && updatedName && previousName !== updatedName) {
+      activityEntries.push({
+        id: crypto.randomUUID(),
+        client_id: clientId,
+        action: `Client name updated from ${previousName} to ${updatedName}`,
+        type: 'profile_update',
+        user_name: userName,
+        date: nowIso,
+        metadata: {
+          field: 'name',
+          previous_name: previousName,
+          updated_name: updatedName
+        }
+      })
+    }
+
+    if (previousStatus && updatedStatus && previousStatus !== updatedStatus) {
+      activityEntries.push({
+        id: crypto.randomUUID(),
+        client_id: clientId,
+        action: `Client status updated from ${formatStatus(previousStatus)} to ${formatStatus(updatedStatus)}`,
+        type: 'profile_update',
+        user_name: userName,
+        date: nowIso,
+        metadata: {
+          field: 'status',
+          previous_status: previousStatus,
+          updated_status: updatedStatus
+        }
+      })
+    }
+
+    if (activityEntries.length === 0) {
+      activityEntries.push({
+        id: crypto.randomUUID(),
+        client_id: clientId,
+        action: 'Profile updated',
+        type: 'profile_update',
+        user_name: userName,
+        date: nowIso
+      })
+    }
+
+    try {
+      const supabaseService = getSupabaseServiceClient()
+      const { error: activityError } = await supabaseService
+        .from('activity_log')
+        .insert(activityEntries)
+      if (activityError) {
+        logger.warn('Failed to log profile update activity', { clientId, error: activityError.message })
+      }
+    } catch (activityError) {
+      // Don't fail the request if activity logging fails
+      logger.warn('Failed to log profile update activity', { clientId, error: activityError })
+    }
+
+    // Send bell notification
+    try {
+      const clientName = updatedName || client.personal_details?.firstName || client.personal_details?.first_name || 'Client'
+      logger.info('Creating profile update notification', { userId: user.id, clientId, clientName })
+      await notifyProfileUpdated(user.id, clientId, clientName)
+      logger.info('Profile update notification created successfully')
+    } catch (notifyError) {
+      logger.error('Failed to send profile update notification', { clientId, error: notifyError })
+    }
 
     // Revalidate the cache
     revalidatePath('/api/clients');

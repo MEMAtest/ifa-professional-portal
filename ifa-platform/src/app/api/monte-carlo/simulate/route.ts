@@ -4,6 +4,9 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { log } from '@/lib/logging/structured';
+import { createMonteCarloEngine } from '@/lib/monte-carlo/engine';
+import { getAuthContext } from '@/lib/auth/apiAuth';
+import { notifyMonteCarloCompleted } from '@/lib/notifications/notificationService';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,36 +14,89 @@ const supabase = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  // Get auth context for notifications
+  const auth = await getAuthContext(request);
+  const userId = auth.context?.userId;
+
   try {
     const body = await request.json();
-    const { scenario_id, simulation_count = 5000 } = body;
+    const { scenario_id, simulation_count = 5000, seed } = body;
 
     log.info('Starting enhanced Monte Carlo', { simulationCount: simulation_count });
 
-    // Enhanced scenario with better defaults
-    const scenario = {
-      id: scenario_id || 'enhanced-scenario',
-      client_id: 'test-client',
-      scenario_name: 'Enhanced Monte Carlo Scenario',
-      projection_years: 30,
-      inflation_rate: 2.5,
-      real_equity_return: 5.0,
-      real_bond_return: 2.0,
-      real_cash_return: 0.5,
-      risk_score: 5
+    if (!scenario_id) {
+      return NextResponse.json(
+        { success: false, error: 'scenario_id is required' },
+        { status: 400 }
+      );
+    }
+
+    // Try to find scenario in cash_flow_scenarios first
+    let scenario: any = null;
+    let scenarioError: any = null;
+
+    const { data: cashFlowScenario, error: cashFlowError } = await supabase
+      .from('cash_flow_scenarios')
+      .select('*')
+      .eq('id', scenario_id)
+      .single();
+
+    if (cashFlowScenario) {
+      scenario = cashFlowScenario;
+      log.info('Found scenario in cash_flow_scenarios', { scenario_id, client_id: scenario.client_id });
+    } else {
+      // If not found, try monte_carlo_scenarios table
+      const { data: mcScenario, error: mcError } = await supabase
+        .from('monte_carlo_scenarios')
+        .select('*')
+        .eq('id', scenario_id)
+        .single();
+
+      if (mcScenario) {
+        scenario = mcScenario;
+        log.info('Found scenario in monte_carlo_scenarios', { scenario_id, client_id: scenario.client_id });
+      } else {
+        scenarioError = mcError || cashFlowError;
+      }
+    }
+
+    if (!scenario) {
+      log.error('Monte Carlo scenario not found in any table', { scenario_id, error: scenarioError });
+      return NextResponse.json(
+        { success: false, error: 'Scenario not found' },
+        { status: 404 }
+      );
+    }
+
+    const input = buildSimulationInput(scenario, simulation_count);
+    const engine = createMonteCarloEngine();
+    if (Number.isFinite(seed)) {
+      engine.setSeed(Number(seed));
+    }
+    const rawResults = await engine.runSimulation(input);
+    const enrichedResults = {
+      success_probability: rawResults.successProbability,
+      average_final_wealth: rawResults.averageFinalWealth,
+      median_final_wealth: rawResults.medianFinalWealth,
+      confidence_intervals: rawResults.confidenceIntervals,
+      shortfall_risk: rawResults.shortfallRisk,
+      average_shortfall_amount: rawResults.averageShortfall,
+      years_to_depletion_p50: calculateMedianDepletionYear(rawResults.simulations),
+      wealth_volatility: rawResults.volatility,
+      maximum_drawdown: rawResults.maxDrawdown,
+      simulation_duration_ms: rawResults.executionTime
     };
 
-    // Run enhanced simulation
-    const rawResults = await runEnhancedMonteCarloSimulation(scenario, simulation_count);
-
     // FIX: Sanitize results to prevent NaN/Infinity from being stored in database
-    const results = sanitizeMonteCarloResult(rawResults);
+    const results = sanitizeMonteCarloResult(enrichedResults);
 
-    // Save to database
+    // Save to database - include client_id from scenario for activity tracking
     const { data: savedResult, error } = await supabase
       .from('monte_carlo_results')
       .insert({
         scenario_id: scenario.id,
+        client_id: scenario.client_id, // FIX: Include client_id for activity timeline
+        scenario_name: scenario.scenario_name || 'Analysis completed', // FIX: Include scenario_name
         simulation_count: simulation_count,
         success_probability: results.success_probability,
         average_final_wealth: results.average_final_wealth,
@@ -64,10 +120,27 @@ export async function POST(request: NextRequest) {
 
     log.info('Enhanced simulation completed', { successProbability: results.success_probability });
 
+    // Send bell notification
+    if (userId && scenario.client_id && savedResult) {
+      try {
+        // Fetch client name for notification
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('personal_details')
+          .eq('id', scenario.client_id)
+          .single();
+        const personalDetails = clientData?.personal_details as Record<string, unknown> | null;
+        const clientName = (personalDetails?.firstName || personalDetails?.first_name || 'Client') as string;
+        await notifyMonteCarloCompleted(userId, scenario.client_id, clientName, savedResult.id);
+      } catch (notifyError) {
+        log.warn('Failed to send Monte Carlo notification', { error: notifyError instanceof Error ? notifyError.message : String(notifyError) });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: results,
-      message: `Enhanced Monte Carlo completed: ${simulation_count} simulations`
+      message: `Monte Carlo completed: ${simulation_count} simulations`
     });
 
   } catch (error) {
@@ -78,118 +151,11 @@ export async function POST(request: NextRequest) {
       { 
         success: false, 
         error: errorMessage,
-        message: 'Enhanced Monte Carlo simulation failed'
+        message: 'Monte Carlo simulation failed'
       },
       { status: 500 }
     );
   }
-}
-
-// Enhanced Monte Carlo with better math and features
-async function runEnhancedMonteCarloSimulation(scenario: any, simulationCount: number) {
-  const startTime = Date.now();
-  
-  let successfulRuns = 0;
-  let totalDepletionYears = 0;
-  let depletionCount = 0;
-  let totalShortfallAmount = 0;
-  
-  const finalWealths: number[] = [];
-  const initialWealth = 500000;
-  const withdrawalRate = 0.04;
-  
-  // Enhanced parameters
-  const marketRegimes = [
-    { name: 'normal', probability: 0.80, multiplier: 1.0 },
-    { name: 'bull', probability: 0.10, multiplier: 1.3 },
-    { name: 'bear', probability: 0.10, multiplier: 0.7 }
-  ];
-  
-  for (let run = 0; run < simulationCount; run++) {
-    let wealth = initialWealth;
-    let minWealth = wealth;
-    let maxWealth = wealth;
-    let depletionYear: number | null = null;
-    
-    for (let year = 0; year < scenario.projection_years; year++) {
-      // Select market regime
-      const regime = selectMarketRegime(marketRegimes);
-      
-      // Generate correlated returns with regime adjustment
-      const baseEquityReturn = generateNormalRandom(scenario.real_equity_return, 15) / 100;
-      const baseBondReturn = generateNormalRandom(scenario.real_bond_return, 5) / 100;
-      const baseCashReturn = generateNormalRandom(scenario.real_cash_return, 1) / 100;
-      
-      // Apply market regime
-      const equityReturn = baseEquityReturn * regime.multiplier;
-      const bondReturn = baseBondReturn * regime.multiplier;
-      const cashReturn = baseCashReturn;
-      
-      // Dynamic allocation based on risk score and age
-      const ageAdjustment = Math.max(0.1, 1 - (year * 0.01)); // Reduce equity over time
-      const baseEquityAllocation = Math.min(0.9, Math.max(0.1, (scenario.risk_score - 1) * 0.1));
-      const equityAllocation = baseEquityAllocation * ageAdjustment;
-      const bondAllocation = Math.min(0.8, 1 - equityAllocation - 0.1);
-      const cashAllocation = 1 - equityAllocation - bondAllocation;
-      
-      // Calculate portfolio return
-      const portfolioReturn = 
-        equityAllocation * equityReturn + 
-        bondAllocation * bondReturn + 
-        cashAllocation * cashReturn;
-      
-      // Apply return
-      wealth *= (1 + portfolioReturn);
-      
-      // Calculate inflation-adjusted withdrawal
-      const inflationMultiplier = Math.pow(1 + scenario.inflation_rate/100, year);
-      const withdrawal = initialWealth * withdrawalRate * inflationMultiplier;
-      wealth -= withdrawal;
-      
-      // Track wealth statistics
-      minWealth = Math.min(minWealth, wealth);
-      maxWealth = Math.max(maxWealth, wealth);
-      
-      // Check for depletion
-      if (wealth <= 0 && depletionYear === null) {
-        depletionYear = year + 1;
-        totalDepletionYears += depletionYear;
-        depletionCount++;
-        totalShortfallAmount += Math.abs(wealth);
-        break;
-      }
-    }
-    
-    finalWealths.push(Math.max(0, wealth));
-    if (wealth > 0) successfulRuns++;
-  }
-  
-  // Enhanced analysis
-  finalWealths.sort((a, b) => a - b);
-  const successProbability = (successfulRuns / simulationCount) * 100;
-  const averageWealth = finalWealths.reduce((sum, w) => sum + w, 0) / finalWealths.length;
-  const medianWealth = finalWealths[Math.floor(finalWealths.length / 2)];
-  
-  const executionTime = Date.now() - startTime;
-  
-  return {
-    success_probability: Math.round(successProbability * 10) / 10,
-    average_final_wealth: Math.round(averageWealth),
-    median_final_wealth: Math.round(medianWealth),
-    confidence_intervals: {
-      p10: Math.round(finalWealths[Math.floor(finalWealths.length * 0.1)]),
-      p25: Math.round(finalWealths[Math.floor(finalWealths.length * 0.25)]),
-      p50: Math.round(medianWealth),
-      p75: Math.round(finalWealths[Math.floor(finalWealths.length * 0.75)]),
-      p90: Math.round(finalWealths[Math.floor(finalWealths.length * 0.9)])
-    },
-    shortfall_risk: Math.round((100 - successProbability) * 10) / 10,
-    average_shortfall_amount: depletionCount > 0 ? Math.round(totalShortfallAmount / depletionCount) : 0,
-    years_to_depletion_p50: depletionCount > 0 ? Math.round(totalDepletionYears / depletionCount) : 0,
-    wealth_volatility: calculateVolatility(finalWealths),
-    maximum_drawdown: calculateMaxDrawdown(finalWealths),
-    simulation_duration_ms: executionTime
-  };
 }
 
 /**
@@ -289,4 +255,73 @@ function calculateMaxDrawdown(values: number[]): number {
   }
 
   return Number.isFinite(maxDrawdown) ? Math.round(maxDrawdown * 10) / 10 : 0;
+}
+
+function normalizeAllocation(values: number[]): number[] {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return [0.6, 0.3, 0.1, 0];
+  return values.map((value) => value / total);
+}
+
+function buildSimulationInput(scenario: any, simulationCount: number) {
+  const initialWealth =
+    (scenario.current_savings ?? 0) +
+    (scenario.investment_value ?? 0) +
+    (scenario.pension_pot_value ?? scenario.pension_value ?? 0);
+  const timeHorizon = scenario.projection_years ?? 30;
+  const inflationRate = (scenario.inflation_rate ?? 2.5) / 100;
+  const retirementTarget = scenario.retirement_income_target || scenario.current_expenses || 0;
+  const guaranteedIncome = (scenario.state_pension_amount ?? 0) + (scenario.other_income ?? 0);
+  const withdrawalAmount = Math.max(0, retirementTarget - guaranteedIncome);
+  const riskScore = scenario.risk_score ?? 5;
+
+  const rawAllocations = [
+    (scenario.equity_allocation ?? 0) / 100,
+    (scenario.bond_allocation ?? 0) / 100,
+    (scenario.cash_allocation ?? 0) / 100,
+    (scenario.alternative_allocation ?? 0) / 100
+  ];
+  const [equity, bonds, cash, alternatives] = normalizeAllocation(rawAllocations);
+  const inflationPercent = scenario.inflation_rate ?? 2.5;
+  const realEquity = scenario.real_equity_return ?? 0;
+  const realBond = scenario.real_bond_return ?? 0;
+  const realCash = scenario.real_cash_return ?? 0;
+  const nominalEquity = (realEquity + inflationPercent) / 100;
+  const nominalBond = (realBond + inflationPercent) / 100;
+  const nominalCash = (realCash + inflationPercent) / 100;
+
+  return {
+    initialWealth,
+    timeHorizon,
+    withdrawalAmount,
+    riskScore,
+    inflationRate,
+    simulationCount,
+    assetAllocation: {
+      equity,
+      bonds,
+      cash,
+      alternatives: alternatives > 0 ? alternatives : undefined
+    },
+    returnAssumptions: {
+      equity: nominalEquity,
+      bonds: nominalBond,
+      cash: nominalCash,
+      alternatives: nominalEquity
+    }
+  };
+}
+
+function calculateMedianDepletionYear(simulations: Array<{ yearlyWealth: number[] }>): number {
+  const depletionYears = simulations
+    .map((sim) => sim.yearlyWealth.findIndex((value) => value <= 0))
+    .filter((yearIndex) => yearIndex >= 0)
+    .map((yearIndex) => yearIndex + 1)
+    .sort((a, b) => a - b);
+
+  if (depletionYears.length === 0) return 0;
+  const mid = Math.floor(depletionYears.length / 2);
+  return depletionYears.length % 2 === 0
+    ? Math.round((depletionYears[mid - 1] + depletionYears[mid]) / 2)
+    : depletionYears[mid];
 }

@@ -368,6 +368,42 @@ export const PresetScenarios: React.FC<{ onSelect: (params: SimulationParameters
         inflationRate: 2.5
       },
       targetUser: "Younger retirees"
+    },
+    {
+      name: "Early Retirement",
+      description: "Extended timeline for those retiring in their 50s",
+      params: {
+        initialPortfolio: 1200000,
+        timeHorizon: 40,
+        annualWithdrawal: 40000,
+        riskScore: 6,
+        inflationRate: 2.5
+      },
+      targetUser: "Early retirees (50-55) with long runway"
+    },
+    {
+      name: "Legacy Builder",
+      description: "Lower withdrawals to preserve capital for heirs",
+      params: {
+        initialPortfolio: 800000,
+        timeHorizon: 25,
+        annualWithdrawal: 25000,
+        riskScore: 4,
+        inflationRate: 2.5
+      },
+      targetUser: "Those prioritizing inheritance"
+    },
+    {
+      name: "Income Maximiser",
+      description: "Higher spending, lifestyle over legacy",
+      params: {
+        initialPortfolio: 600000,
+        timeHorizon: 20,
+        annualWithdrawal: 36000,
+        riskScore: 6,
+        inflationRate: 3
+      },
+      targetUser: "Lifestyle-focused retirees"
     }
   ];
 
@@ -375,21 +411,27 @@ export const PresetScenarios: React.FC<{ onSelect: (params: SimulationParameters
     <Card>
       <CardContent className="p-4">
         <h3 className="font-semibold mb-3">Quick Start Scenarios</h3>
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {presets.map((preset, index) => (
-            <div key={index} className="p-3 border rounded-lg hover:border-blue-300 transition-colors">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h4 className="font-medium">{preset.name}</h4>
-                  <p className="text-sm text-gray-600">{preset.description}</p>
+            <div key={index} className="p-3 border rounded-lg hover:border-blue-300 hover:bg-blue-50/50 transition-all cursor-pointer group">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-gray-900">{preset.name}</h4>
+                  <p className="text-sm text-gray-600 line-clamp-1">{preset.description}</p>
                   <p className="text-xs text-gray-500 mt-1">Best for: {preset.targetUser}</p>
+                  <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
+                    <span className="bg-gray-100 px-2 py-0.5 rounded">£{(preset.params.initialPortfolio / 1000).toFixed(0)}K</span>
+                    <span className="bg-gray-100 px-2 py-0.5 rounded">{preset.params.timeHorizon}yr</span>
+                    <span className="bg-gray-100 px-2 py-0.5 rounded">Risk {preset.params.riskScore}</span>
+                  </div>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => onSelect(preset.params)}
+                  className="flex-shrink-0 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-colors"
                 >
-                  Use This
+                  Use
                 </Button>
               </div>
             </div>

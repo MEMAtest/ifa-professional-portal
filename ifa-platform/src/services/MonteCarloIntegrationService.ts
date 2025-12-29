@@ -1,10 +1,7 @@
-import { createClient } from "@/lib/supabase/client"
 // ================================================================
 // src/services/MonteCarloIntegrationService.ts
 // Integrates Monte Carlo simulations with cash flow projections
 // ================================================================
-
-import { MonteCarloRunner } from '@/components/monte-carlo/MonteCarloRunner';
 import type { CashFlowScenario, ProjectionResult } from '@/types/cashflow';
 
 export interface MonteCarloResultEnhanced {
@@ -40,31 +37,23 @@ export class MonteCarloIntegrationService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scenarioId: scenario.id,
-          runs,
-          parameters: {
-            returnVolatility: {
-              equity: 0.15,  // 15% standard deviation
-              bonds: 0.05,   // 5% standard deviation
-              cash: 0.01     // 1% standard deviation
-            },
-            inflationVolatility: 0.02,
-            sequenceRiskWindow: 5  // First 5 years critical
-          }
+          scenario_id: scenario.id,
+          simulation_count: runs
         })
       });
 
-      const result = await response.json();
+      const payload = await response.json();
+      const result = payload?.data || {};
       
       // Process results into enhanced format
       return {
         successProbability: result.success_probability || 75,
         confidenceIntervals: {
-          p10: result.percentile_10 || [],
-          p25: result.percentile_25 || [],
-          p50: result.median_values || [],
-          p75: result.percentile_75 || [],
-          p90: result.percentile_90 || []
+          p10: result.confidence_intervals?.p10 ? [result.confidence_intervals.p10] : [],
+          p25: result.confidence_intervals?.p25 ? [result.confidence_intervals.p25] : [],
+          p50: result.confidence_intervals?.p50 ? [result.confidence_intervals.p50] : [],
+          p75: result.confidence_intervals?.p75 ? [result.confidence_intervals.p75] : [],
+          p90: result.confidence_intervals?.p90 ? [result.confidence_intervals.p90] : []
         },
         failureScenarios: this.analyzeFailures(result),
         recommendations: this.generateRecommendations(result, scenario)

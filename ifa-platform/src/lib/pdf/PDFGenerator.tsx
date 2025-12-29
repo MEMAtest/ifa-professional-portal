@@ -311,6 +311,34 @@ export interface PDFReportData {
   recommendations?: string[];
 }
 
+export interface ProdServicesReportData {
+  reportDate: string;
+  firmName: string;
+  firmFcaNumber?: string;
+  firmAddress?: string;
+  advisorName?: string;
+  summary: string;
+  version?: number;
+  reviewDueDate?: string;
+  reviewStatus?: string;
+  governanceOwner?: string;
+  oversightBody?: string;
+  reviewFrequency?: string;
+  monitoringCadence?: string;
+  escalationProcess?: string;
+  targetMarketDefinition?: string;
+  distributionChannels?: string[];
+  vulnerabilityApproach?: string;
+  fairValueAssessment?: string;
+  services: Array<{
+    name: string;
+    description?: string;
+    targetMarketChecks: string[];
+    prodNotes?: string;
+    active?: boolean;
+  }>;
+}
+
 export interface PDFGenerationOptions {
   format?: 'A4' | 'Letter';
   orientation?: 'portrait' | 'landscape';
@@ -826,6 +854,174 @@ export const ATRReportDocument = ({ data }: { data: PDFReportData }) => {
 };
 
 // ================================================================
+// PROD & SERVICES REPORT DOCUMENT
+// ================================================================
+
+export const ProdServicesReportDocument = ({ data }: { data: ProdServicesReportData }) => {
+  const {
+    firmName,
+    reportDate,
+    firmFcaNumber,
+    firmAddress,
+    advisorName,
+    summary,
+    version,
+    reviewDueDate,
+    reviewStatus,
+    governanceOwner,
+    oversightBody,
+    reviewFrequency,
+    monitoringCadence,
+    escalationProcess,
+    targetMarketDefinition,
+    distributionChannels,
+    vulnerabilityApproach,
+    fairValueAssessment,
+    services
+  } = data;
+
+  const activeServices = services.filter((service) => service.active !== false);
+
+  return (
+    <Document>
+      <Page size="A4" style={baseStyles.page}>
+        <View style={baseStyles.header}>
+          <Text style={baseStyles.title}>PROD & Services Policy</Text>
+          <Text style={baseStyles.subtitle}>{firmName}</Text>
+
+          <View style={baseStyles.headerInfo}>
+            <View style={baseStyles.headerColumn}>
+              <Text style={baseStyles.label}>Report Date</Text>
+              <Text style={baseStyles.value}>{reportDate}</Text>
+            </View>
+            <View style={baseStyles.headerColumn}>
+              <Text style={baseStyles.label}>FCA Number</Text>
+              <Text style={baseStyles.value}>{firmFcaNumber || 'Not specified'}</Text>
+            </View>
+            <View style={baseStyles.headerColumn}>
+              <Text style={baseStyles.label}>Prepared By</Text>
+              <Text style={baseStyles.value}>{advisorName || 'Firm Compliance'}</Text>
+            </View>
+          </View>
+
+          {firmAddress && (
+            <View style={{ marginTop: 10 }}>
+              <Text style={baseStyles.label}>Firm Address</Text>
+              <Text style={baseStyles.value}>{firmAddress}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={baseStyles.section}>
+          <Text style={baseStyles.sectionTitle}>Executive Summary</Text>
+          <Text style={baseStyles.paragraph}>{summary}</Text>
+        </View>
+
+        <View style={baseStyles.section}>
+          <Text style={baseStyles.sectionTitle}>Governance & Oversight</Text>
+          <View style={baseStyles.table}>
+            <View style={baseStyles.tableHeader}>
+              <Text style={[baseStyles.tableCellHeader, { width: '45%' }]}>Control</Text>
+              <Text style={[baseStyles.tableCellHeader, { width: '55%' }]}>Detail</Text>
+            </View>
+            {[
+              { label: 'Governance Owner', value: governanceOwner },
+              { label: 'Oversight Body', value: oversightBody },
+              { label: 'Review Frequency', value: reviewFrequency },
+              { label: 'Monitoring Cadence', value: monitoringCadence },
+              { label: 'Escalation Process', value: escalationProcess }
+            ].map((row, index) => (
+              <View
+                key={row.label}
+                style={[baseStyles.tableRow, index % 2 === 1 ? baseStyles.tableRowAlt : {}]}
+              >
+                <Text style={[baseStyles.tableCell, { width: '45%' }]}>{row.label}</Text>
+                <Text style={[baseStyles.tableCell, { width: '55%' }]}>{row.value || 'Not specified'}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={baseStyles.section}>
+          <Text style={baseStyles.sectionTitle}>Target Market & Distribution</Text>
+          <View style={baseStyles.table}>
+            <View style={baseStyles.tableHeader}>
+              <Text style={[baseStyles.tableCellHeader, { width: '45%' }]}>Area</Text>
+              <Text style={[baseStyles.tableCellHeader, { width: '55%' }]}>Detail</Text>
+            </View>
+            {[
+              { label: 'Target Market Definition', value: targetMarketDefinition },
+              { label: 'Distribution Channels', value: distributionChannels?.join(', ') },
+              { label: 'Vulnerability Approach', value: vulnerabilityApproach },
+              { label: 'Fair Value Assessment', value: fairValueAssessment }
+            ].map((row, index) => (
+              <View
+                key={row.label}
+                style={[baseStyles.tableRow, index % 2 === 1 ? baseStyles.tableRowAlt : {}]}
+              >
+                <Text style={[baseStyles.tableCell, { width: '45%' }]}>{row.label}</Text>
+                <Text style={[baseStyles.tableCell, { width: '55%' }]}>{row.value || 'Not specified'}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={baseStyles.section}>
+          <Text style={baseStyles.sectionTitle}>Services & Target Market Checks</Text>
+          {activeServices.length === 0 ? (
+            <Text style={baseStyles.paragraph}>No active services configured.</Text>
+          ) : (
+            activeServices.map((service, index) => (
+              <View key={`${service.name}-${index}`} style={{ marginBottom: 12 }}>
+                <Text style={baseStyles.sectionSubtitle}>{service.name}</Text>
+                {service.description && <Text style={baseStyles.paragraph}>{service.description}</Text>}
+                {service.targetMarketChecks.length > 0 && (
+                  <View style={{ marginTop: 6 }}>
+                    {service.targetMarketChecks.map((check, idx) => (
+                      <ListItem key={`${service.name}-check-${idx}`}>{check}</ListItem>
+                    ))}
+                  </View>
+                )}
+                {service.prodNotes && (
+                  <Text style={[baseStyles.paragraph, { color: colors.textLight }]}>
+                    Notes: {service.prodNotes}
+                  </Text>
+                )}
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={baseStyles.section}>
+          <Text style={baseStyles.sectionTitle}>Review & Version Control</Text>
+          <View style={baseStyles.table}>
+            <View style={baseStyles.tableHeader}>
+              <Text style={[baseStyles.tableCellHeader, { width: '45%' }]}>Item</Text>
+              <Text style={[baseStyles.tableCellHeader, { width: '55%' }]}>Detail</Text>
+            </View>
+            {[
+              { label: 'Version', value: version ? `v${version}` : 'Current' },
+              { label: 'Next Review Due', value: reviewDueDate ? new Date(reviewDueDate).toLocaleDateString('en-GB') : 'Not scheduled' },
+              { label: 'Status', value: reviewStatus || 'Pending' }
+            ].map((row, index) => (
+              <View
+                key={row.label}
+                style={[baseStyles.tableRow, index % 2 === 1 ? baseStyles.tableRowAlt : {}]}
+              >
+                <Text style={[baseStyles.tableCell, { width: '45%' }]}>{row.label}</Text>
+                <Text style={[baseStyles.tableCell, { width: '55%' }]}>{row.value}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <PageFooter firmName={firmName} />
+      </Page>
+    </Document>
+  );
+};
+
+// ================================================================
 // PDF GENERATION SERVICE
 // ================================================================
 
@@ -846,6 +1042,14 @@ export class PDFGenerator {
    */
   static async generateATRReport(data: PDFReportData): Promise<Blob> {
     const document = <ATRReportDocument data={data} />;
+    return await pdf(document).toBlob();
+  }
+
+  /**
+   * Generate PROD & Services Policy PDF
+   */
+  static async generateProdServicesReport(data: ProdServicesReportData): Promise<Blob> {
+    const document = <ProdServicesReportDocument data={data} />;
     return await pdf(document).toBlob();
   }
 
@@ -908,6 +1112,29 @@ export class PDFGenerator {
     }
 
     const blob = await this.generateATRReport(data);
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Generate PROD & Services PDF and trigger download (client-side only)
+   */
+  static async downloadProdServicesReport(
+    data: ProdServicesReportData,
+    filename: string = 'prod-services-policy.pdf'
+  ): Promise<void> {
+    if (typeof window === 'undefined') {
+      throw new Error('downloadProdServicesReport can only be used client-side');
+    }
+
+    const blob = await this.generateProdServicesReport(data);
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement('a');

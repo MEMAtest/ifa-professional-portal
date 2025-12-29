@@ -228,7 +228,8 @@ export class RealDocumentService {
           client_id: clientId,
           workflow_type: workflowType,
           status: 'created',
-          workflow_data: workflow,
+          metadata: workflow,
+          started_at: new Date().toISOString(),
           created_at: new Date().toISOString()
         })
     } catch (error) {

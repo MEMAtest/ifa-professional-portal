@@ -5,6 +5,7 @@
 // ===================================================================
 
 import { createClient } from '@/lib/supabase/client'
+import { normalizeIsoCountryCode } from '@/lib/isoCountries'
 import type { Client, ClientFormData } from '@/types/client'
 
 // ===================================================================
@@ -110,7 +111,7 @@ export class IntegratedClientService {
           firstName: formData.personalDetails?.firstName || '',
           lastName: formData.personalDetails?.lastName || '',
           dateOfBirth: formData.personalDetails?.dateOfBirth || '',
-          nationality: formData.personalDetails?.nationality || 'UK',
+          nationality: normalizeIsoCountryCode(formData.personalDetails?.nationality),
           maritalStatus: formData.personalDetails?.maritalStatus || 'single',
           dependents: formData.personalDetails?.dependents || 0,
           employmentStatus: formData.personalDetails?.employmentStatus || 'employed',
@@ -427,7 +428,7 @@ export class IntegratedClientService {
         firstName: personalDetails.firstName || personalDetails.first_name || '',
         lastName: personalDetails.lastName || personalDetails.last_name || '',
         dateOfBirth: personalDetails.dateOfBirth || personalDetails.date_of_birth || '',
-        nationality: personalDetails.nationality || 'UK',
+        nationality: normalizeIsoCountryCode(personalDetails.nationality),
         maritalStatus: personalDetails.maritalStatus || personalDetails.marital_status || 'single',
         dependents: personalDetails.dependents || 0,
         employmentStatus: personalDetails.employmentStatus || personalDetails.employment_status || 'employed',

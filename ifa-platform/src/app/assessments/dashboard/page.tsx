@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   TrendingUp, 
@@ -45,311 +45,30 @@ import {
   YAxis,
   CartesianGrid,
   LineChart,
-  Line,
-  Label
+  Line
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert, AlertDescription } from '@/components/ui/Alert';
 import { getAssessmentResumeUrl, normalizeAssessmentType } from '@/lib/assessments/routing';
+import { GRID_COLOR, RISK_COLORS, STATUS_COLORS } from '@/components/assessments/dashboard/constants';
+import { ChartTooltip, CenteredTotalLabel } from '@/components/assessments/dashboard/charts';
+import { useAssessmentDashboard } from '@/components/assessments/dashboard/hooks';
+import { formatCurrency, getAssessmentIcon, getAssessmentName } from '@/components/assessments/dashboard/utils';
 
-const RISK_COLORS: Record<string, string> = {
-  'Very Low': '#22c55e',
-  'Low': '#3b82f6',
-  'Medium': '#eab308',
-  'High': '#f97316',
-  'Very High': '#ef4444'
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  completed: '#22c55e',
-  inProgress: '#3b82f6',
-  needsReview: '#f59e0b',
-  notStarted: '#94a3b8'
-};
-
-const GRID_COLOR = '#e5e7eb';
-
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload || payload.length === 0) return null;
-
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
-      {label ? <div className="text-xs font-medium text-gray-900 mb-1">{label}</div> : null}
-      <div className="space-y-1">
-        {payload
-          .filter((p: any) => p && p.value != null && Number(p.value) !== 0)
-          .map((p: any) => (
-            <div key={p.dataKey || p.name} className="flex items-center justify-between gap-4 text-xs">
-              <span className="flex items-center gap-2 text-gray-600">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
-                {p.name}
-              </span>
-              <span className="font-semibold text-gray-900 tabular-nums">{p.value}</span>
-            </div>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-function CenteredTotalLabel({ value, subtitle }: { value: number; subtitle: string }) {
-  return (
-    <Label
-      content={({ viewBox }: any) => {
-        if (!viewBox) return null;
-        const cx = viewBox.cx;
-        const cy = viewBox.cy;
-        return (
-          <g>
-            <text x={cx} y={cy - 2} textAnchor="middle" dominantBaseline="middle" className="fill-gray-900">
-              <tspan className="text-base font-bold tabular-nums">{value}</tspan>
-            </text>
-            <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle" className="fill-gray-500">
-              <tspan className="text-[10px]">{subtitle}</tspan>
-            </text>
-          </g>
-        );
-      }}
-    />
-  );
-}
-
-interface DashboardMetrics {
-  clientCoverage: {
-    assessed: number;
-    total: number;
-    percentage: number;
-    byType: {
-      atr: number;
-      cfl: number;
-      persona: number;
-      suitability: number;
-      monte_carlo: number;
-      cashflow: number;
-    };
-    breakdown?: Array<{
-      key: string;
-      label: string;
-      completed: number;
-      inProgress: number;
-      needsReview: number;
-      notStarted: number;
-      total: number;
-    }>;
-  };
-  complianceStatus: {
-    needReview: number;
-    upToDate: number;
-    overdue: number;
-  };
-  riskDistribution: {
-    'Very Low': number;
-    'Low': number;
-    'Medium': number;
-    'High': number;
-    'Very High': number;
-  };
-  activityMetrics: {
-    last7Days: number;
-    last30Days: number;
-    averagePerMonth: number;
-  };
-  activityTrend?: Array<{ weekStart: string; label: string; completed: number }>;
-  demographics: {
-    gender: {
-      male: number;
-      female: number;
-      other: number;
-      notSpecified: number;
-    };
-    ageGroups: {
-      'Under 30': number;
-      '30-40': number;
-      '40-50': number;
-      '50-60': number;
-      '60-70': number;
-      'Over 70': number;
-    };
-    topCities: Array<{ city: string; count: number }>;
-    vulnerableClients: {
-      count: number;
-      percentage: number;
-      topFactors: Array<{ factor: string; count: number }>;
-    };
-  };
-  financialInsights: {
-    averageNetWorth: number;
-    averageAnnualIncome: number;
-    wealthDistribution: {
-      'Under £100k': number;
-      '£100k-£250k': number;
-      '£250k-£500k': number;
-      '£500k-£1M': number;
-      'Over £1M': number;
-    };
-    clientsWithFinancialData: number;
-    clientsWithNetWorth: number;
-    clientsWithIncome: number;
-  };
-  assessmentStats: {
-    byType: {
-      atr: number;
-      cfl: number;
-      persona: number;
-      suitability: number;
-      monte_carlo: number;
-      cashflow: number;
-    };
-    totalAssessments: number;
-    completedTotal: number;
-    inProgressTotal: number;
-    needsReviewTotal: number;
-    notStartedTotal: number;
-    totalPossible: number;
-    completionRate: number;
-    averageVersions: number;
-    maxVersionReached: number;
-  };
-  summary: {
-    totalClients: number;
-    assessedClients: number;
-    overdueReviews: number;
-    recentActivity: number;
-    femaleClients: number;
-    maleClients: number;
-    over60Clients: number;
-    highRiskClients: number;
-    vulnerableClients: number;
-    clientsWithData: number;
-  };
-}
-
-// Interface for incomplete assessments
-interface IncompleteAssessment {
-  id: string;
-  client_id: string;
-  client_name: string;
-  client_ref?: string | null;
-  assessment_type: string;
-  progress_percentage: number;
-  status: string;
-  last_updated: string;
-}
 
 export default function AssessmentDashboard() {
   const router = useRouter();
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [incompleteAssessments, setIncompleteAssessments] = useState<IncompleteAssessment[]>([]);
-  const [incompleteTotalCount, setIncompleteTotalCount] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-
-  useEffect(() => {
-    fetchMetrics();
-    fetchIncompleteAssessments();
-  }, []);
-
-  const fetchIncompleteAssessments = async () => {
-    try {
-      const response = await fetch('/api/assessments/incomplete?limit=20');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.assessments) {
-          setIncompleteAssessments(data.assessments);
-          setIncompleteTotalCount(typeof data.count === 'number' ? data.count : data.assessments.length);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching incomplete assessments:', err);
-    }
-  };
-
-  const fetchMetrics = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await fetch('/api/assessments/metrics');
-      const contentType = response.headers.get('content-type') || '';
-      const raw = await response.text();
-      const data = contentType.includes('application/json') ? JSON.parse(raw || '{}') : null;
-      
-      if (!response.ok) {
-        const message =
-          data && (data.message || data.error)
-            ? `${String(data.message || data.error)}${data.step ? ` (step: ${String(data.step)})` : ''}`
-            : raw
-              ? raw.slice(0, 180).replace(/\s+/g, ' ')
-              : 'Failed to fetch metrics';
-        throw new Error(message);
-      }
-      
-      if (data.success && data.metrics) {
-        setMetrics(data.metrics);
-        setLastRefresh(new Date());
-      } else {
-        throw new Error((data && data.error) ? String(data.error) : 'Invalid response format');
-      }
-    } catch (err) {
-      console.error('Error fetching metrics:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    fetchMetrics();
-    fetchIncompleteAssessments();
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value);
-  };
-
-  const getAssessmentIcon = (type: string) => {
-    switch (normalizeAssessmentType(type)) {
-      case 'atr': return Shield;
-      case 'cfl': return TrendingUp;
-      case 'persona': return Users;
-      case 'suitability': return FileText;
-      case 'monte_carlo': return LineChartIcon;
-      case 'cashflow': return Calculator;
-      default: return FileText;
-    }
-  };
-
-  const getAssessmentName = (type: string) => {
-    switch (normalizeAssessmentType(type)) {
-      case 'atr': return 'Attitude to Risk';
-      case 'cfl': return 'Capacity for Loss';
-      case 'persona': return 'Investor Persona';
-      case 'suitability': return 'Suitability';
-      case 'monte_carlo': return 'Monte Carlo';
-      case 'cashflow': return 'Cash Flow';
-      default: return type;
-    }
-  };
-
-  const getAssessmentColor = (type: string) => {
-    switch (normalizeAssessmentType(type)) {
-      case 'atr': return 'bg-blue-600';
-      case 'cfl': return 'bg-green-600';
-      case 'persona': return 'bg-purple-600';
-      case 'suitability': return 'bg-indigo-600';
-      case 'monte_carlo': return 'bg-orange-600';
-      case 'cashflow': return 'bg-teal-600';
-      default: return 'bg-gray-600';
-    }
-  };
+  const {
+    metrics,
+    incompleteAssessments,
+    incompleteTotalCount,
+    isLoading,
+    error,
+    lastRefresh,
+    refresh
+  } = useAssessmentDashboard();
 
   if (isLoading) {
     return (
@@ -371,7 +90,7 @@ export default function AssessmentDashboard() {
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
             {error || 'Failed to load dashboard metrics'}
-            <Button onClick={handleRefresh} variant="outline" size="sm" className="mt-2">
+            <Button onClick={refresh} variant="outline" size="sm" className="mt-2">
               Try Again
             </Button>
           </AlertDescription>
@@ -409,7 +128,7 @@ export default function AssessmentDashboard() {
             <span className="text-sm text-gray-500">
               Last updated: {lastRefresh.toLocaleTimeString()}
             </span>
-            <Button onClick={handleRefresh} variant="outline" size="sm">
+            <Button onClick={refresh} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>

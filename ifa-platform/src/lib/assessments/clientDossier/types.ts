@@ -1,12 +1,12 @@
-import type { Database } from '@/types/database.types'
+import type { DbRow } from '@/types/db'
 import type { SuitabilityReportData } from '@/lib/suitability/reporting/types'
 import type { RiskReconciliationResult } from '@/lib/assessments/riskReconciliation'
 
-export type ClientRow = Database['public']['Tables']['clients']['Row']
-export type SuitabilityRow = Database['public']['Tables']['suitability_assessments']['Row']
-export type AtrRow = Database['public']['Tables']['atr_assessments']['Row']
-export type CflRow = Database['public']['Tables']['cfl_assessments']['Row']
-export type PersonaRow = Database['public']['Tables']['persona_assessments']['Row']
+export type ClientRow = DbRow<'clients'>
+export type SuitabilityRow = DbRow<'suitability_assessments'>
+export type AtrRow = DbRow<'atr_assessments'>
+export type CflRow = DbRow<'cfl_assessments'>
+export type PersonaRow = DbRow<'persona_assessments'>
 
 export interface ClientDossierAssessmentSummary {
   id: string
@@ -52,4 +52,3 @@ export interface ClientDossierReportData {
   persona?: PersonaRow | null
   warnings: string[]
 }
-

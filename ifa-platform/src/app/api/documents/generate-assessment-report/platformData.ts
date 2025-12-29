@@ -1,10 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import type { Database } from '@/types/database.types'
+import type { Database, DbRow } from '@/types/db'
 import type { PulledPlatformData } from '@/types/suitability'
 
 export type SupabaseServiceClient = SupabaseClient<Database>
-export type PersonaRow = Database['public']['Tables']['persona_assessments']['Row']
+export type PersonaRow = DbRow<'persona_assessments'>
 
 export async function fetchLatestATRCFL(
   supabase: SupabaseServiceClient,
@@ -183,4 +183,3 @@ export async function fetchPersonaAtOrBefore(
   if (byCreated.error || !byCreated.data) return null
   return byCreated.data as PersonaRow
 }
-

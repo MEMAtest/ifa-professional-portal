@@ -137,7 +137,7 @@ export default function ReviewsDashboard() {
       .from('client_reviews')
       .select(`
         *,
-        clients!inner(
+        clients(
           id,
           client_ref,
           personal_details,
@@ -153,10 +153,11 @@ export default function ReviewsDashboard() {
 
     const reviewRecords: ClientReview[] = (reviewData || []).map((review: any) => {
       const personalDetails = (review.clients?.personal_details || {}) as any
+      const clientName = `${personalDetails.firstName || ''} ${personalDetails.lastName || ''}`.trim() || 'Unknown Client'
       return {
         id: review.id,
         client_id: review.client_id,
-        client_name: `${personalDetails.firstName || ''} ${personalDetails.lastName || ''}`.trim() || 'Unknown Client',
+        client_name: review.review_type === 'prod_policy' ? 'Firm PROD Review' : clientName,
         client_ref: review.clients?.client_ref || '',
         review_type: review.review_type || 'annual',
         due_date: review.due_date,
@@ -172,6 +173,59 @@ export default function ReviewsDashboard() {
         updated_at: review.updated_at
       }
     })
+
+    const isValidFirmId = (value?: string | null) => {
+      if (!value) return false
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    }
+
+    const { data: authData } = await supabase.auth.getUser()
+    const authUser = authData?.user
+    let resolvedFirmId =
+      (authUser?.user_metadata?.firm_id as string | undefined) ||
+      (authUser?.user_metadata?.firmId as string | undefined) ||
+      null
+
+    if (!isValidFirmId(resolvedFirmId) && authUser?.id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('firm_id')
+        .eq('id', authUser.id)
+        .maybeSingle()
+      resolvedFirmId = profile?.firm_id || null
+    }
+
+    if (isValidFirmId(resolvedFirmId)) {
+      const { data: firmData } = await supabase
+        .from('firms')
+        .select('settings')
+        .eq('id', resolvedFirmId)
+        .maybeSingle()
+
+      const reviewTask = (firmData?.settings as any)?.services_prod?.reviewTask
+      const summary = (firmData?.settings as any)?.services_prod?.prodPolicy || 'Firm PROD review scheduled.'
+
+      if (reviewTask?.due_date) {
+        reviewRecords.unshift({
+          id: `firm-prod-${reviewTask.version || 'current'}`,
+          client_id: null,
+          client_name: 'Firm PROD Review',
+          client_ref: 'FIRM',
+          review_type: 'prod_policy',
+          due_date: reviewTask.due_date,
+          completed_date: null,
+          review_summary: summary,
+          changes_made: {},
+          recommendations: {},
+          next_review_date: null,
+          status: reviewTask.status || 'scheduled',
+          created_by: user?.id || '',
+          completed_by: null,
+          created_at: reviewTask.created_at || new Date().toISOString(),
+          updated_at: reviewTask.updated_at || new Date().toISOString()
+        })
+      }
+    }
 
     setReviews(reviewRecords)
   }
@@ -264,6 +318,12 @@ export default function ReviewsDashboard() {
     return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
   }
 
+  const getReviewTypeLabel = (reviewType: string) => {
+    if (reviewType === 'prod_policy') return 'PROD Review'
+    if (reviewType === 'ad_hoc') return 'Ad Hoc'
+    return reviewType.replace('_', ' ').toUpperCase()
+  }
+
   // Categorize reviews
   const now = new Date()
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
@@ -308,7 +368,8 @@ export default function ReviewsDashboard() {
       { type: 'Annual', count: reviews.filter(r => r.review_type === 'annual').length, pending: reviews.filter(r => r.review_type === 'annual' && r.status !== 'completed').length },
       { type: 'Periodic', count: reviews.filter(r => r.review_type === 'periodic').length, pending: reviews.filter(r => r.review_type === 'periodic' && r.status !== 'completed').length },
       { type: 'Regulatory', count: reviews.filter(r => r.review_type === 'regulatory').length, pending: reviews.filter(r => r.review_type === 'regulatory' && r.status !== 'completed').length },
-      { type: 'Ad Hoc', count: reviews.filter(r => r.review_type === 'ad_hoc').length, pending: reviews.filter(r => r.review_type === 'ad_hoc' && r.status !== 'completed').length }
+      { type: 'Ad Hoc', count: reviews.filter(r => r.review_type === 'ad_hoc').length, pending: reviews.filter(r => r.review_type === 'ad_hoc' && r.status !== 'completed').length },
+      { type: 'PROD', count: reviews.filter(r => r.review_type === 'prod_policy').length, pending: reviews.filter(r => r.review_type === 'prod_policy' && r.status !== 'completed').length }
     ]
 
     // Monthly Trend (last 6 months)
@@ -589,7 +650,13 @@ export default function ReviewsDashboard() {
                             ? 'bg-red-50 border-2 border-red-300 hover:bg-red-100'
                             : 'bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                         }`}
-                        onClick={() => router.push(`/clients/${review.client_id}?tab=reviews`)}
+                        onClick={() => {
+                          if (review.client_id) {
+                            router.push(`/clients/${review.client_id}?tab=reviews`)
+                          } else {
+                            router.push('/settings?tab=services')
+                          }
+                        }}
                       >
                         <div className="flex items-center gap-4">
                           <div className={`p-2 rounded-lg ${reviewOverdue ? 'bg-red-200' : 'bg-blue-100'}`}>
@@ -608,7 +675,7 @@ export default function ReviewsDashboard() {
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge variant="outline" className="text-xs">
-                                {review.review_type.toUpperCase()}
+                                {getReviewTypeLabel(review.review_type)}
                               </Badge>
                               <span className="text-sm text-gray-500">
                                 Due: {formatDate(review.due_date)}
@@ -660,7 +727,13 @@ export default function ReviewsDashboard() {
                     <div
                       key={review.id}
                       className="flex items-center justify-between p-3 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
-                      onClick={() => router.push(`/clients/${review.client_id}?tab=reviews`)}
+                      onClick={() => {
+                        if (review.client_id) {
+                          router.push(`/clients/${review.client_id}?tab=reviews`)
+                        } else {
+                          router.push('/settings?tab=services')
+                        }
+                      }}
                     >
                       <div>
                         <p className="font-medium text-gray-900">{review.client_name}</p>

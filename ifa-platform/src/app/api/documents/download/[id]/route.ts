@@ -7,11 +7,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { log } from '@/lib/logging/structured'
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { notifyDocumentDownloaded } from '@/lib/notifications/notificationService'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Get auth context for notifications
+  const auth = await getAuthContext(request)
+  const userId = auth.context?.userId
+
   try {
     const documentId = params.id
     log.info('Download requested for document', { documentId })
@@ -45,9 +51,47 @@ export async function GET(
       )
     }
 
+    // Helper function to log download activity and send notification
+    const logDownloadActivity = async () => {
+      if (document.client_id) {
+        const activitySupabase = await createClient()
+
+        // Log activity
+        try {
+          await activitySupabase
+            .from('activity_log')
+            .insert({
+              id: crypto.randomUUID(),
+              client_id: document.client_id,
+              action: `Document downloaded: ${document.name || document.file_name || 'Document'}`,
+              type: 'document_downloaded',
+              date: new Date().toISOString()
+            })
+        } catch (activityError) {
+          log.warn('Failed to log document download activity', { clientId: document.client_id, error: activityError })
+        }
+
+        // Send bell notification
+        if (userId) {
+          try {
+            const { data: clientData } = await activitySupabase
+              .from('clients')
+              .select('personal_details')
+              .eq('id', document.client_id)
+              .single()
+            const clientName = clientData?.personal_details?.firstName || clientData?.personal_details?.first_name || 'Client'
+            await notifyDocumentDownloaded(userId, document.client_id, clientName, documentId, document.name || document.file_name || 'Document')
+          } catch (notifyError) {
+            log.warn('Failed to send document download notification', { clientId: document.client_id, error: notifyError })
+          }
+        }
+      }
+    }
+
     // Option 1: If we have a direct storage URL, redirect with download header
     if (document.storage_path && document.storage_path.startsWith('http')) {
       log.info('Redirecting to storage URL for download', { documentId, storage_path: document.storage_path })
+      await logDownloadActivity()
       // Add download parameter to force download
       const url = new URL(document.storage_path)
       url.searchParams.set('download', document.file_name || 'document.pdf')
@@ -62,12 +106,13 @@ export async function GET(
         .download(document.file_path)
 
       if (!downloadError && fileData) {
+        await logDownloadActivity()
         // Return file with download headers
         const headers = new Headers()
         headers.set('Content-Type', document.mime_type || 'application/pdf')
         headers.set('Content-Disposition', `attachment; filename="${document.file_name || 'document.pdf'}"`)
         headers.set('Cache-Control', 'no-cache')
-        
+
         if (document.file_size) {
           headers.set('Content-Length', document.file_size.toString())
         }
@@ -79,8 +124,9 @@ export async function GET(
     // Option 3: Check for base64 PDF in metadata (fallback)
     if (document.metadata?.pdf_base64) {
       log.info('Using base64 PDF from metadata', { documentId })
+      await logDownloadActivity()
       const pdfBuffer = Buffer.from(document.metadata.pdf_base64, 'base64')
-      
+
       const headers = new Headers()
       headers.set('Content-Type', 'application/pdf')
       headers.set('Content-Disposition', `attachment; filename="${document.name || 'document'}.pdf"`)

@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database.types';
+import type { Database } from '@/types/db';
 import type { AssessmentStatus } from '@/types/assessment-status';
 import type { SuitabilityUpdatePayload, SuitabilityFormData } from '@/types/suitability';
 import {

@@ -10,8 +10,13 @@ const DEDUPE_WINDOW_HOURS: Partial<Record<NotificationType, number>> = {
   // Prevent accidental double-toasts/double-click spam.
   document_generated: 2,
   document_ready: 2,
+  document_downloaded: 1,
   assessment_completed: 2,
   assessment_submitted: 2,
+  atr_completed: 2,
+  profile_updated: 1,
+  stress_test_completed: 1,
+  monte_carlo_completed: 1,
   signature_completed: 2,
   signature_requested: 2,
   signature_reminder: 6,
@@ -519,18 +524,20 @@ export async function notifyAssessmentCompleted(
   clientId: string,
   clientName: string,
   assessmentId: string,
-  assessmentType: string
+  assessmentType: string,
+  firmId?: string
 ): Promise<void> {
   await NotificationService.create({
     user_id: userId,
+    firm_id: firmId,
     client_id: clientId,
     entity_type: 'assessment',
     entity_id: assessmentId,
     type: 'assessment_completed',
     title: `Assessment completed: ${clientName}`,
-    message: `${assessmentType} assessment has been completed`,
-    action_url: `/assessments/${assessmentType.toLowerCase()}/${assessmentId}`,
-    priority: 'normal'
+    message: `${assessmentType} assessment has been completed and is ready for review`,
+    action_url: `/clients/${clientId}?tab=risk`,
+    priority: 'high'
   })
 }
 
@@ -567,5 +574,127 @@ export async function notifyComplianceAlert(
     message,
     action_url: actionUrl,
     priority: 'urgent'
+  })
+}
+
+/**
+ * Helper to get user's firm_id for firm-wide notifications
+ */
+async function getUserFirmId(userId: string): Promise<string | undefined> {
+  const supabase = getSupabaseServiceClient()
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('firm_id')
+    .eq('id', userId)
+    .single()
+  return profile?.firm_id ?? undefined
+}
+
+export async function notifyProfileUpdated(
+  userId: string,
+  clientId: string,
+  clientName: string
+): Promise<void> {
+  console.log('[Notification] Creating profile_updated notification', { userId, clientId, clientName })
+  const firmId = await getUserFirmId(userId)
+  console.log('[Notification] Got firm_id:', firmId)
+  const result = await NotificationService.create({
+    user_id: userId,
+    firm_id: firmId,
+    client_id: clientId,
+    entity_type: 'client',
+    entity_id: clientId,
+    type: 'profile_updated',
+    title: `Profile updated: ${clientName}`,
+    message: `Client profile has been updated`,
+    action_url: `/clients/${clientId}`,
+    priority: 'low'
+  })
+  console.log('[Notification] Result:', result ? 'created' : 'deduplicated or failed')
+}
+
+export async function notifyATRCompleted(
+  userId: string,
+  clientId: string,
+  clientName: string,
+  assessmentId: string,
+  score: number
+): Promise<void> {
+  const firmId = await getUserFirmId(userId)
+  await NotificationService.create({
+    user_id: userId,
+    firm_id: firmId,
+    client_id: clientId,
+    entity_type: 'assessment',
+    entity_id: assessmentId,
+    type: 'atr_completed',
+    title: `ATR completed: ${clientName}`,
+    message: `Risk assessment completed with score ${score}`,
+    action_url: `/clients/${clientId}?tab=risk`,
+    priority: 'normal'
+  })
+}
+
+export async function notifyStressTestCompleted(
+  userId: string,
+  clientId: string,
+  clientName: string,
+  testId: string
+): Promise<void> {
+  const firmId = await getUserFirmId(userId)
+  await NotificationService.create({
+    user_id: userId,
+    firm_id: firmId,
+    client_id: clientId,
+    entity_type: 'simulation',
+    entity_id: testId,
+    type: 'stress_test_completed',
+    title: `Stress test completed: ${clientName}`,
+    message: `Portfolio stress test analysis is ready`,
+    action_url: `/clients/${clientId}?tab=stress-testing`,
+    priority: 'normal'
+  })
+}
+
+export async function notifyMonteCarloCompleted(
+  userId: string,
+  clientId: string,
+  clientName: string,
+  simulationId: string
+): Promise<void> {
+  const firmId = await getUserFirmId(userId)
+  await NotificationService.create({
+    user_id: userId,
+    firm_id: firmId,
+    client_id: clientId,
+    entity_type: 'simulation',
+    entity_id: simulationId,
+    type: 'monte_carlo_completed',
+    title: `Monte Carlo completed: ${clientName}`,
+    message: `Portfolio simulation analysis is ready`,
+    action_url: `/clients/${clientId}?tab=monte-carlo`,
+    priority: 'normal'
+  })
+}
+
+export async function notifyDocumentDownloaded(
+  userId: string,
+  clientId: string,
+  clientName: string,
+  documentId: string,
+  documentName: string
+): Promise<void> {
+  const firmId = await getUserFirmId(userId)
+  await NotificationService.create({
+    user_id: userId,
+    firm_id: firmId,
+    client_id: clientId,
+    entity_type: 'document',
+    entity_id: documentId,
+    type: 'document_downloaded',
+    title: `Document downloaded: ${documentName}`,
+    message: `Document for ${clientName} was downloaded`,
+    action_url: `/documents/${documentId}`,
+    priority: 'low'
   })
 }

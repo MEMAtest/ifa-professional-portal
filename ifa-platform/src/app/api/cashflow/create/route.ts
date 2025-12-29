@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
+import type { Database, DbInsert } from '@/types/db'
 import { createClient as createBrowserClient } from '@/lib/supabase/client'
 import { clientService } from '@/services/ClientService'
 import { AssessmentService } from '@/services/AssessmentService'
@@ -39,7 +39,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Build scenario using the same logic as CashFlowDataService
-    const scenario = await CashFlowDataService.buildScenarioPayload(client, assessment, scenarioType, currentUserId)
+    const scenario = await CashFlowDataService.buildScenarioPayload(
+      client,
+      assessment,
+      scenarioType,
+      currentUserId
+    ) as DbInsert<'cash_flow_scenarios'>
 
     const { data, error } = await supabase
       .from('cash_flow_scenarios')
@@ -50,6 +55,31 @@ export async function POST(req: NextRequest) {
     if (error) {
       log.error('Cashflow insert error:', error)
       return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    // Save activity to activity_log for Activity Timeline
+    try {
+      const clientName = client.personalDetails?.firstName && client.personalDetails?.lastName
+        ? `${client.personalDetails.firstName} ${client.personalDetails.lastName}`
+        : `Client ${client.clientRef || clientId.slice(0, 8)}`;
+
+      await supabase
+        .from('activity_log')
+        .insert({
+          id: crypto.randomUUID(),
+          client_id: clientId,
+          action: `Cash flow scenario created: ${data.scenario_name || scenarioType} for ${clientName}`,
+          type: 'cashflow',
+          user_name: null,
+          date: new Date().toISOString()
+        });
+
+      log.info('Cash flow activity saved to database', { clientId, scenarioId: data.id });
+    } catch (activityError) {
+      log.warn('Failed to save cash flow activity', {
+        error: activityError instanceof Error ? activityError.message : String(activityError)
+      });
+      // Don't fail the request if activity logging fails
     }
 
     return NextResponse.json({ success: true, scenario: data })

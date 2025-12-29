@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
+import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
 
 interface GenerateDocumentRequest {
   content: string
@@ -110,6 +111,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
         },
         url: `/api/documents/preview/${documentId}`
       })
+    }
+
+    // Log activity for document generation
+    if (body.clientId) {
+      try {
+        await supabase
+          .from('activity_log')
+          .insert({
+            id: crypto.randomUUID(),
+            client_id: body.clientId,
+            action: `Document generated: ${body.title}`,
+            type: 'document_generated',
+            date: new Date().toISOString()
+          })
+      } catch (activityError) {
+        log.warn('Failed to log document generation activity', { clientId: body.clientId, error: activityError })
+      }
+
+      // Send bell notification
+      const userId = auth.context?.userId
+      if (userId) {
+        try {
+          // Fetch client name for notification
+          const { data: clientData } = await supabase
+            .from('clients')
+            .select('personal_details')
+            .eq('id', body.clientId)
+            .single()
+          const clientName = clientData?.personal_details?.firstName || clientData?.personal_details?.first_name || 'Client'
+          await notifyDocumentGenerated(userId, body.clientId, clientName, document.id, body.title)
+        } catch (notifyError) {
+          log.warn('Failed to send document generation notification', { clientId: body.clientId, error: notifyError })
+        }
+      }
     }
 
     // Return success response

@@ -16,7 +16,7 @@ import type {
   ClientObjectives,
   ClientRiskProfile
 } from '@/types/suitability'
-import type { Database } from '@/types/database.types'
+import type { Database } from '@/types/db'
 import { conditionalLogicEngine } from '@/lib/suitability/conditionalLogic'
 import { validationEngine } from '@/lib/suitability/validationEngine'
 import { calculateSuitabilityCompletion } from '@/lib/suitability/completion'

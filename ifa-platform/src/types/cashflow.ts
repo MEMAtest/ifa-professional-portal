@@ -4,7 +4,14 @@
 // ================================================================
 
 // Scenario Types
-export type ScenarioType = 'base' | 'optimistic' | 'pessimistic' | 'stress';
+export type ScenarioType =
+  | 'base'
+  | 'optimistic'
+  | 'pessimistic'
+  | 'stress'
+  | 'early_retirement'
+  | 'high_inflation'
+  | 'capacity_for_loss';
 
 // Return Assumptions
 export interface ReturnAssumptions {

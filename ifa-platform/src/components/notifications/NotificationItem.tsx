@@ -16,23 +16,32 @@ import {
   FileCheck,
   ClipboardCheck,
   CheckCircle,
-  X
+  X,
+  Download,
+  UserCog,
+  Calculator,
+  TrendingUp
 } from 'lucide-react'
 import type { Notification, NotificationType } from '@/types/notifications'
 import { cn } from '@/lib/utils'
 
 const ICONS: Record<NotificationType, React.ComponentType<{ className?: string }>> = {
   client_added: UserPlus,
+  profile_updated: UserCog,
   review_due: Calendar,
   review_overdue: AlertTriangle,
   review_completed: CheckCircle,
   document_generated: FileText,
   document_ready: FileCheck,
+  document_downloaded: Download,
   signature_requested: PenTool,
   signature_completed: CheckSquare,
   signature_reminder: Clock,
   assessment_submitted: ClipboardCheck,
   assessment_completed: Award,
+  atr_completed: ClipboardCheck,
+  stress_test_completed: Calculator,
+  monte_carlo_completed: TrendingUp,
   compliance_alert: Shield,
   system: Bell
 }

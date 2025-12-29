@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -41,8 +41,10 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   const [previewContent, setPreviewContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(100);
+  const [contentHeight, setContentHeight] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [showTerminologyHelp, setShowTerminologyHelp] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // FIX: Use EnhancedCashFlowReportService singleton instance
   const reportService = EnhancedCashFlowReportService.getInstance();
@@ -78,6 +80,27 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
       setIsLoading(false);
     }
   };
+
+  const updateIframeHeight = useCallback(() => {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument || iframe?.contentWindow?.document;
+    if (!doc) return;
+
+    const nextHeight = Math.max(
+      doc.body?.scrollHeight || 0,
+      doc.documentElement?.scrollHeight || 0
+    );
+
+    if (nextHeight > 0) {
+      setContentHeight(nextHeight);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!previewContent) return;
+    const timeout = setTimeout(updateIframeHeight, 100);
+    return () => clearTimeout(timeout);
+  }, [previewContent, updateIframeHeight]);
 
   // Add explanatory tooltips and glossary terms to the content
   const enhanceContentWithExplanations = (html: string): string => {
@@ -117,6 +140,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 25, 200));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 25, 50));
   const handleResetZoom = () => setZoomLevel(100);
+  const scaledHeight = contentHeight ? contentHeight * (zoomLevel / 100) : 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -214,25 +238,34 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
             </Card>
           </div>
         ) : (
-          <div className="bg-white shadow-lg rounded-lg overflow-hidden max-w-5xl mx-auto">
+          <div className="bg-white shadow-lg rounded-lg w-full max-w-none overflow-x-auto">
             <div 
               className="mx-auto bg-white"
               style={{
                 width: '100%',
                 maxWidth: '900px',
                 minHeight: '297mm',
-                transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : 'none',
-                transformOrigin: 'top center',
+                height: scaledHeight ? `${scaledHeight}px` : '297mm',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
               }}
             >
-              <iframe
-                srcDoc={previewContent}
-                className="w-full h-full border-0"
-                style={{ minHeight: '297mm' }}
-                title="Report Preview"
-                sandbox="allow-same-origin allow-scripts allow-modals allow-popups"
-              />
+              <div
+                style={{
+                  width: '100%',
+                  transform: zoomLevel !== 100 ? `scale(${zoomLevel / 100})` : 'none',
+                  transformOrigin: 'top center'
+                }}
+              >
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={previewContent}
+                  onLoad={updateIframeHeight}
+                  className="w-full border-0"
+                  style={{ height: contentHeight ? `${contentHeight}px` : '297mm' }}
+                  title="Report Preview"
+                  sandbox="allow-same-origin allow-scripts allow-modals allow-popups"
+                />
+              </div>
             </div>
           </div>
         )}

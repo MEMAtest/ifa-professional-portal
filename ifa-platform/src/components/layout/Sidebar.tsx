@@ -64,7 +64,12 @@ interface CashFlowStats {
   advancedAnalysisCount: number;
 }
 
-export const Sidebar = () => {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
   const supabase = createClient()
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -114,7 +119,6 @@ export const Sidebar = () => {
         { name: 'All Clients', href: '/clients', icon: Users },
         { name: 'Client Financials', href: '/clients/financials', icon: PoundSterling },
         { name: 'Reporting Hub', href: '/clients/reports', icon: PieChart },
-        { name: 'Suitability Assessments', href: '/assessments/suitability', icon: FileText },
         { name: 'Risk Center', href: '/risk', icon: Shield },
       ],
     },
@@ -122,8 +126,9 @@ export const Sidebar = () => {
       title: 'Financial Analysis',
       items: [
         { name: 'Monte Carlo Analysis', href: '/monte-carlo', icon: LineChart },
+        { name: 'Stress Testing', href: '/stress-testing', icon: AlertTriangle },
         { name: 'Cash Flow Modeling', href: '/cashflow', icon: Calculator },
-        { name: 'Advanced Analytics', href: '/cashflow/advanced-analytics', icon: Zap },
+        { name: 'Market Intelligence', href: '/market-intelligence', icon: TrendingUp },
       ],
     },
     {
@@ -134,7 +139,6 @@ export const Sidebar = () => {
         { name: 'ATR Questionnaire', href: '/assessments/atr', icon: Brain, requiresClient: true },
         { name: 'CFL Questionnaire', href: '/assessments/cfl', icon: Calculator, requiresClient: true },
         { name: 'Investor Persona', href: '/assessments/persona-assessment', icon: Target, requiresClient: true },
-        { name: 'Persona Library', href: '/assessments/personas', icon: Users },
       ],
     },
     {
@@ -156,6 +160,7 @@ export const Sidebar = () => {
       title: 'Compliance & Risk',
       items: [
         { name: 'Compliance Hub', href: '/compliance', icon: Shield },
+        { name: 'Services & PROD', href: '/compliance/prod-services', icon: FileText },
         { name: 'Compliance Metrics', href: '/compliance/metrics', icon: BarChart3 },
         { name: 'Client Reviews', href: '/reviews', icon: RotateCcw },
       ],
@@ -224,8 +229,9 @@ export const Sidebar = () => {
           if (item.name === 'Cash Flow Modeling') {
             return { ...item, count: cashFlowStats.totalScenarios > 0 ? cashFlowStats.totalScenarios : undefined };
           }
-          if (item.name === 'Advanced Analytics') {
-            return { ...item, count: cashFlowStats.advancedAnalysisCount > 0 ? cashFlowStats.advancedAnalysisCount : undefined };
+          if (item.name === 'Market Intelligence') {
+            // No count for Market Intelligence - it's a real-time view
+            return item;
           }
           return item;
         })
@@ -242,7 +248,22 @@ export const Sidebar = () => {
   };
 
   return (
-    <div className="fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 overflow-y-auto">
+    <>
+      <div
+        className={cn(
+          'fixed inset-0 bg-black/40 z-40 lg:hidden transition-opacity',
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        onClick={onClose}
+        aria-hidden={!isOpen}
+      />
+      <div
+        className={cn(
+          'fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 overflow-y-auto z-50',
+          'transform transition-transform lg:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
       <nav className="p-4 space-y-6">
         {navigationWithCounts.map((section) => {
           const isExpanded = expandedSections[section.title];
@@ -296,6 +317,7 @@ export const Sidebar = () => {
                         ) : (
                           <Link
                             href={finalHref}
+                            onClick={() => onClose?.()}
                             className={cn(
                               'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
                               isActive
@@ -364,5 +386,6 @@ export const Sidebar = () => {
         </div>
       </nav>
     </div>
+    </>
   );
 };

@@ -50,9 +50,10 @@ export class CashFlowDataService {
   static buildScenarioPayload(client: Client, assessment: AssessmentResult | null, scenarioType: ScenarioType, currentUserId: string | null) {
     const riskScore = (assessment as any)?.riskMetrics?.finalRiskProfile || 5;
     const returnAssumptions = this.getRiskBasedReturns(riskScore);
-    return {
+    const scenarioLabel = this.getScenarioLabel(scenarioType);
+    const baseScenario = {
       client_id: client.id,
-      scenario_name: `${client.personalDetails?.firstName || 'Client'} ${client.personalDetails?.lastName || ''} - ${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} Case`,
+      scenario_name: `${client.personalDetails?.firstName || 'Client'} ${client.personalDetails?.lastName || ''} - ${scenarioLabel}`,
       scenario_type: scenarioType,
       created_by: currentUserId,
       projection_years: 40,
@@ -104,6 +105,8 @@ export class CashFlowDataService {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+
+    return this.applyScenarioOverrides(baseScenario, scenarioType);
   }
 
   /**
@@ -330,10 +333,10 @@ export class CashFlowDataService {
     const baseLifeExpectancy = 85;
     
     if (maritalStatus === 'married' || maritalStatus === 'civil_partnership') {
-      return baseLifeExpectancy + 2;
+      return Math.max(baseLifeExpectancy + 2, age + 5);
     }
     
-    return baseLifeExpectancy;
+    return Math.max(baseLifeExpectancy, age + 5);
   }
 
   private static calculateTotalPensions(pensionArrangements: any[]): number {
@@ -413,8 +416,7 @@ export class CashFlowDataService {
     const age = this.calculateAge(dateOfBirth ?? undefined);
     const defaultRetirement = 67;
     const minRetirement = isNaN(age) ? defaultRetirement : age + 1;
-    const capped = Math.min(75, Math.max(defaultRetirement, minRetirement));
-    return capped;
+    return Math.max(defaultRetirement, minRetirement);
   }
 
   private static getVulnerabilityAdjustments(client: Client): any {
@@ -457,5 +459,68 @@ export class CashFlowDataService {
     const retirementDate = new Date();
     retirementDate.setFullYear(retirementDate.getFullYear() + yearsToRetirement);
     return retirementDate.toISOString();
+  }
+
+  private static getScenarioLabel(scenarioType: ScenarioType): string {
+    switch (scenarioType) {
+      case 'early_retirement':
+        return 'Early Retirement';
+      case 'high_inflation':
+        return 'High-Inflation Crisis';
+      case 'capacity_for_loss':
+        return 'Capacity for Loss';
+      case 'optimistic':
+        return 'Optimistic Case';
+      case 'pessimistic':
+        return 'Pessimistic Case';
+      case 'stress':
+        return 'Stress Test';
+      case 'base':
+      default:
+        return 'Base Case';
+    }
+  }
+
+  private static applyScenarioOverrides(baseScenario: Record<string, any>, scenarioType: ScenarioType) {
+    const scenario = { ...baseScenario };
+
+    switch (scenarioType) {
+      case 'optimistic': {
+        scenario.real_equity_return = (scenario.real_equity_return || 0) + 1.5;
+        scenario.real_bond_return = (scenario.real_bond_return || 0) + 0.5;
+        scenario.real_cash_return = Math.max(0, (scenario.real_cash_return || 0) + 0.25);
+        scenario.inflation_rate = Math.max(0, (scenario.inflation_rate || 0) - 0.25);
+        scenario.assumption_basis = 'Optimistic scenario: higher real returns and slightly lower inflation.';
+        break;
+      }
+      case 'pessimistic': {
+        scenario.real_equity_return = (scenario.real_equity_return || 0) - 1.5;
+        scenario.real_bond_return = (scenario.real_bond_return || 0) - 0.5;
+        scenario.real_cash_return = Math.max(0, (scenario.real_cash_return || 0) - 0.25);
+        scenario.inflation_rate = (scenario.inflation_rate || 0) + 0.5;
+        scenario.assumption_basis = 'Pessimistic scenario: lower real returns and higher inflation.';
+        break;
+      }
+      case 'early_retirement': {
+        const clientAge = Number(scenario.client_age) || 0;
+        const earlyRetirementAge = Math.max(60, clientAge + 1);
+        scenario.retirement_age = earlyRetirementAge;
+        scenario.assumption_basis = `Early retirement scenario with retirement at age ${earlyRetirementAge}.`;
+        break;
+      }
+      case 'high_inflation': {
+        scenario.inflation_rate = 5;
+        scenario.assumption_basis = 'High-inflation stress scenario: 5% inflation assumed for the first decade, then long-term average.';
+        break;
+      }
+      case 'capacity_for_loss': {
+        scenario.assumption_basis = 'Sequence of returns stress: 20% market drop in the first two years of retirement, then long-term average returns.';
+        break;
+      }
+      default:
+        break;
+    }
+
+    return scenario;
   }
 }

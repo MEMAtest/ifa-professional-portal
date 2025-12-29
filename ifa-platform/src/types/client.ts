@@ -18,6 +18,7 @@ export interface PersonalDetails {
   dependents: number;
   employmentStatus: 'employed' | 'self_employed' | 'retired' | 'unemployed' | 'student' | 'other';
   occupation: string;
+  retirementAge?: number;
 }
 
 export interface Address {
@@ -497,7 +498,7 @@ export function validateClientData(data: Partial<ClientFormData>): ValidationErr
 export function getDefaultClientFormData(): ClientFormData {
   return {
     personalDetails: {
-      title: '', firstName: '', lastName: '', dateOfBirth: '', gender: 'prefer_not_to_say', nationality: 'UK',
+      title: '', firstName: '', lastName: '', dateOfBirth: '', gender: 'prefer_not_to_say', nationality: 'GB',
       maritalStatus: 'single', dependents: 0, employmentStatus: 'employed', occupation: ''
     },
     contactInfo: {

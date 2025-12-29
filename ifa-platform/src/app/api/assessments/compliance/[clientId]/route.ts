@@ -5,16 +5,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import type { Database } from '@/types/database.types';
+import type { Database, DbInsert, DbRow } from '@/types/db';
 import { log } from '@/lib/logging/structured';
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
 
 // Type aliases from database
-type Tables = Database['public']['Tables'];
-type AssessmentProgressRow = Tables['assessment_progress']['Row'];
-type AssessmentHistoryInsert = Tables['assessment_history']['Insert'];
+type AssessmentProgressRow = DbRow<'assessment_progress'>;
+type AssessmentHistoryInsert = DbInsert<'assessment_history'>;
 
 // Define types locally if not available from imports
 interface AssessmentProgress {

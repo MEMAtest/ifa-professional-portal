@@ -14,10 +14,41 @@ import { Badge } from '@/components/ui/Badge';
 import { clientService } from '@/services/ClientService';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
-import { MonteCarloReportButton } from '@/components/monte-carlo/MonteCarloReport';
 import NuclearMonteCarlo from '@/components/monte-carlo/NuclearMonteCarlo';
 // FIX: Use existing AssessmentService
 import { AssessmentService } from '@/services/AssessmentService';
+import {
+  filterClients,
+  formatCurrency,
+  formatDate,
+  generateAllocationFromRiskScore,
+  generateFanChartData,
+  generateLongevityData,
+  generateWealthValues,
+  getClientAge,
+  getClientInitials
+} from '@/components/monte-carlo/utils';
+import {
+  MonteCarloDashboardStats,
+  ScenarioWithResult,
+  StatFilter,
+  ViewMode
+} from '@/components/monte-carlo/types';
+import {
+  fetchMonteCarloScenarios,
+  fetchMonteCarloStats
+} from '@/services/monte-carlo/monteCarloService';
+// NEW: Import enhanced components
+import MonteCarloReportModal from '@/components/monte-carlo/MonteCarloReportModal';
+import DashboardStats, { StatClickData } from '@/components/monte-carlo/DashboardStats';
+import StatsDrillDownModal from '@/components/monte-carlo/StatsDrillDownModal';
+import {
+  FanChart,
+  SuccessHistogram,
+  SustainabilityGauge,
+  LongevityHeatmap,
+  AssetAllocationPie
+} from '@/components/monte-carlo/charts';
 import { 
   ArrowLeft,
   User,
@@ -43,63 +74,6 @@ import {
 } from 'lucide-react';
 import type { Client, ClientListResponse } from '@/types/client';
 
-// Enhanced type definitions with strict typing
-interface MonteCarloScenario {
-  id: string;
-  client_id: string | null;
-  scenario_name: string;
-  created_at: string | null;
-  initial_wealth: number | null;
-  time_horizon: number | null;
-  withdrawal_amount: number | null;
-  risk_score: number | null;
-  inflation_rate: number | null;
-}
-
-interface MonteCarloResult {
-  id: string;
-  scenario_id: string;
-  success_probability: number;
-  simulation_count: number;
-  average_final_wealth: number;
-  median_final_wealth: number;
-  confidence_intervals: {
-    p10: number;
-    p25: number;
-    p50: number;
-    p75: number;
-    p90: number;
-  };
-  shortfall_risk: number;
-  average_shortfall_amount: number;
-  wealth_volatility: number;
-  maximum_drawdown: number;
-  calculation_status: string;
-  created_at: string;
-}
-
-interface ScenarioWithResult extends MonteCarloScenario {
-  result?: MonteCarloResult;
-  success_probability?: number;
-  simulation_count?: number;
-  average_final_wealth?: number;
-  median_final_wealth?: number;
-  confidence_intervals?: any;
-  shortfall_risk?: number;
-  volatility?: number;
-  max_drawdown?: number;
-}
-
-interface DashboardStats {
-  totalClients: number;
-  activeClients: number;
-  totalScenarios: number;
-  averageSuccessRate: number;
-}
-
-type ViewMode = 'dashboard' | 'simulation' | 'results' | 'history';
-type StatFilter = 'all' | 'active' | 'with-scenarios' | 'high-success';
-
 export default function MonteCarloPage() {
   const supabase = createClient()
   const router = useRouter();
@@ -116,7 +90,7 @@ export default function MonteCarloPage() {
   const [isLoadingScenarios, setIsLoadingScenarios] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState<MonteCarloDashboardStats>({
     totalClients: 0,
     activeClients: 0,
     totalScenarios: 0,
@@ -130,6 +104,14 @@ export default function MonteCarloPage() {
   const [showResults, setShowResults] = useState(false);
   // INTEGRATION: Add tracking state
   const [isTrackingProgress, setIsTrackingProgress] = useState(false);
+  // NEW: Report modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportScenario, setReportScenario] = useState<ScenarioWithResult | null>(null);
+
+  // NEW: Drill-down modal state
+  const [showDrillDownModal, setShowDrillDownModal] = useState(false);
+  const [drillDownData, setDrillDownData] = useState<StatClickData | null>(null);
+  const [drillDownClientNames, setDrillDownClientNames] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     loadInitialData();
@@ -168,43 +150,8 @@ export default function MonteCarloPage() {
 
   const loadStats = async () => {
     try {
-      // Get total clients count from database
-      const { count: clientCount } = await supabase
-        .from('clients')
-        .select('*', { count: 'exact', head: true });
-
-      // Get total scenarios
-      const { count: scenariosCount } = await supabase
-        .from('monte_carlo_scenarios')
-        .select('*', { count: 'exact', head: true });
-
-      // Get average success rate with null safety
-      const { data: resultsData } = await supabase
-        .from('monte_carlo_results')
-        .select('success_probability')
-        .not('success_probability', 'is', null);
-
-      const avgSuccess = resultsData && resultsData.length > 0
-        ? resultsData.reduce((sum: number, r: any) => sum + (r.success_probability || 0), 0) / resultsData.length
-        : 0;
-
-      // Active clients (those with scenarios in last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { data: recentScenarios } = await supabase
-        .from('monte_carlo_scenarios')
-        .select('client_id')
-        .gte('created_at', thirtyDaysAgo.toISOString());
-
-      const uniqueActiveClients = new Set(recentScenarios?.map((s: any) => s.client_id) || []);
-
-      setStats({
-        totalClients: clientCount || 0,
-        activeClients: uniqueActiveClients.size,
-        totalScenarios: scenariosCount || 0,
-        averageSuccessRate: avgSuccess
-      });
+      const dashboardStats = await fetchMonteCarloStats(supabase);
+      setStats(dashboardStats);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
@@ -231,47 +178,7 @@ export default function MonteCarloPage() {
 
   const loadScenarios = async (clientIdToLoad: string) => {
     try {
-      // Get scenarios
-      const { data: scenarios, error: scenarioError } = await supabase
-        .from('monte_carlo_scenarios')
-        .select('*')
-        .eq('client_id', clientIdToLoad)
-        .order('created_at', { ascending: false });
-
-      if (scenarioError) throw scenarioError;
-
-      if (!scenarios || scenarios.length === 0) {
-        setScenarios([]);
-        return;
-      }
-
-      // Get all results for these scenarios
-      const scenarioIds = scenarios.map((s: MonteCarloScenario) => s.id);
-      const { data: results, error: resultsError } = await supabase
-        .from('monte_carlo_results')
-        .select('*')
-        .in('scenario_id', scenarioIds);
-
-      if (resultsError) throw resultsError;
-
-      // Combine scenarios with their results - with null safety
-      const scenariosWithResults: ScenarioWithResult[] = scenarios.map((scenario: MonteCarloScenario) => {
-        const result = results?.find((r: any) => r.scenario_id === scenario.id);
-
-        return {
-          ...scenario,
-          result: result as any,
-          success_probability: result?.success_probability ?? 0,
-          simulation_count: result?.simulation_count ?? 0,
-          average_final_wealth: result?.average_final_wealth,
-          median_final_wealth: result?.median_final_wealth,
-          confidence_intervals: result?.confidence_intervals as any,
-          shortfall_risk: result?.shortfall_risk,
-          volatility: result?.wealth_volatility,
-          max_drawdown: result?.maximum_drawdown
-        };
-      });
-
+      const scenariosWithResults = await fetchMonteCarloScenarios(supabase, clientIdToLoad);
       setScenarios(scenariosWithResults);
     } catch (err) {
       console.error('Error loading scenarios:', err);
@@ -285,14 +192,46 @@ export default function MonteCarloPage() {
     router.push(`/monte-carlo?clientId=${client.id}`);
   };
 
+  // NEW: Handle stat card click for drill-down modal
+  const handleStatClick = (data: StatClickData) => {
+    // Build client names map from the data
+    const namesMap = new Map<string, string>();
+    data.clients.forEach(c => namesMap.set(c.id, c.name));
+    setDrillDownClientNames(namesMap);
+    setDrillDownData(data);
+    setShowDrillDownModal(true);
+  };
+
+  // NEW: Handle selection from drill-down modal
+  const handleDrillDownSelect = async (clientId: string, scenarioId?: string) => {
+    setShowDrillDownModal(false);
+
+    // Find the client from our loaded clients list
+    const client = clients.find(c => c.id === clientId);
+
+    if (client) {
+      handleClientSelect(client);
+
+      // If a specific scenario was selected, we could highlight it
+      // The scenario loading happens in handleClientSelect via router param
+      if (scenarioId) {
+        // Store scenarioId to auto-select after scenarios load
+        sessionStorage.setItem('autoSelectScenarioId', scenarioId);
+      }
+    } else {
+      // If client not in our list, navigate anyway
+      router.push(`/monte-carlo?clientId=${clientId}`);
+    }
+  };
+
   // ENHANCED: With assessment tracking using existing service
   const handleScenarioComplete = useCallback(async (results: any) => {
     console.log('Scenario completed with results:', results);
-    
-    // Store and show results
+
+    // Store results but DON'T change viewMode - let NuclearMonteCarlo show its detailed results
     setLatestResults(results);
     setShowResults(true);
-    setViewMode('results');
+    // NOTE: We intentionally DON'T set viewMode here - NuclearMonteCarlo has its own detailed results view
     
     // INTEGRATION: Track assessment completion in background
     if (selectedClient) {
@@ -369,61 +308,7 @@ export default function MonteCarloPage() {
     setViewMode('history');
   };
 
-  // Handle stat card clicks
-  const handleStatClick = (filter: StatFilter) => {
-    setStatFilter(filter);
-    // Apply filtering logic here
-  };
-
-  const formatCurrency = (value: number | null | undefined): string => {
-    if (value === null || value === undefined) return '£0';
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency: 'GBP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatDate = (dateString: string | null | undefined): string => {
-    if (!dateString) return 'Unknown date';
-    try {
-      return new Date(dateString).toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return 'Invalid date';
-    }
-  };
-
-  const getClientAge = (client: Client): number => {
-    // Calculate from DOB if available in client data
-    return 45; // Placeholder
-  };
-
-  const getClientInitials = (client: Client): string => {
-    const firstName = client.personalDetails?.firstName || '';
-    const lastName = client.personalDetails?.lastName || '';
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || 'XX';
-  };
-
-  // Filter clients based on search and stat filter
-  const filteredClients = clients.filter((client: Client) => {
-    const fullName = `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.toLowerCase();
-    const email = client.contactInfo?.email?.toLowerCase() || '';
-    const search = searchTerm.toLowerCase();
-    const matchesSearch = fullName.includes(search) || email.includes(search) || client.clientRef.toLowerCase().includes(search);
-    
-    // Apply stat filter
-    if (statFilter === 'all') return matchesSearch;
-    // Add more filter logic as needed
-    
-    return matchesSearch;
-  });
+  const filteredClients = filterClients({ clients, searchTerm, statFilter });
 
   // Loading state
   if (isLoading) {
@@ -451,63 +336,8 @@ export default function MonteCarloPage() {
               </p>
             </div>
 
-            {/* Interactive Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => handleStatClick('all')}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Clients</p>
-                      <p className="text-2xl font-bold">{stats.totalClients}</p>
-                    </div>
-                    <Users className="h-8 w-8 text-blue-500" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => handleStatClick('active')}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Active Clients</p>
-                      <p className="text-2xl font-bold">{stats.activeClients}</p>
-                      <p className="text-xs text-gray-500">Last 30 days</p>
-                    </div>
-                    <Activity className="h-8 w-8 text-green-500" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Scenarios</p>
-                      <p className="text-2xl font-bold">{stats.totalScenarios}</p>
-                    </div>
-                    <BarChart3 className="h-8 w-8 text-purple-500" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Avg Success Rate</p>
-                      <p className="text-2xl font-bold">{stats.averageSuccessRate.toFixed(1)}%</p>
-                    </div>
-                    <Target className="h-8 w-8 text-orange-500" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Enhanced Dashboard Stats - clickable for drill-down */}
+            <DashboardStats onStatClick={handleStatClick} />
 
             {/* Search Bar */}
             <div className="relative">
@@ -827,86 +657,230 @@ export default function MonteCarloPage() {
               </Card>
             )}
 
-            {/* Selected Scenario Details */}
+            {/* Selected Scenario Details - Enhanced with Charts */}
             {selectedScenario && viewMode === 'history' && (
-              <Card className="border-blue-200">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Scenario: {selectedScenario.scenario_name}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedScenario(null)}
-                    >
-                      ✕
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div>
-                      <p className="text-sm text-gray-600">Success Rate</p>
-                      <p className={`text-2xl font-bold ${
-                        (selectedScenario.success_probability || 0) >= 75 ? 'text-green-600' :
-                        (selectedScenario.success_probability || 0) >= 50 ? 'text-yellow-600' :
-                        'text-red-600'
-                      }`}>
-                        {(selectedScenario.success_probability || 0).toFixed(1)}%
-                      </p>
+              <div className="space-y-6">
+                {/* Header Card */}
+                <Card className="border-blue-200">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <LineChart className="h-5 w-5 text-blue-600" />
+                        Scenario: {selectedScenario.scenario_name}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {selectedScenario.result && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setReportScenario(selectedScenario);
+                              setShowReportModal(true);
+                            }}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Generate Report
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedScenario(null)}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Key Metrics Row */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                      <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                        <p className="text-sm text-blue-600 font-medium">Success Rate</p>
+                        <p className={`text-3xl font-bold ${
+                          (selectedScenario.success_probability || 0) >= 75 ? 'text-green-600' :
+                          (selectedScenario.success_probability || 0) >= 50 ? 'text-amber-600' :
+                          'text-red-600'
+                        }`}>
+                          {(selectedScenario.success_probability || 0).toFixed(1)}%
+                        </p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600">Median Wealth</p>
+                        <p className="text-xl font-bold text-gray-900">
+                          {formatCurrency(selectedScenario.median_final_wealth)}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-600">Average Wealth</p>
+                        <p className="text-xl font-bold text-gray-900">
+                          {formatCurrency(selectedScenario.average_final_wealth)}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-red-50 rounded-lg">
+                        <p className="text-sm text-red-600">Shortfall Risk</p>
+                        <p className="text-xl font-bold text-red-600">
+                          {(selectedScenario.shortfall_risk || 0).toFixed(1)}%
+                        </p>
+                      </div>
+                      <div className="p-4 bg-orange-50 rounded-lg">
+                        <p className="text-sm text-orange-600">Max Drawdown</p>
+                        <p className="text-xl font-bold text-orange-600">
+                          {(selectedScenario.max_drawdown || 0).toFixed(1)}%
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Median Wealth</p>
-                      <p className="text-lg font-semibold">
-                        {formatCurrency(selectedScenario.median_final_wealth)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Shortfall Risk</p>
-                      <p className="text-lg font-semibold text-red-600">
-                        {(selectedScenario.shortfall_risk || 0).toFixed(1)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Volatility</p>
-                      <p className="text-lg font-semibold">
-                        {(selectedScenario.volatility || 0).toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {selectedScenario.confidence_intervals && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h4 className="font-semibold mb-3">Confidence Intervals</h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">10th Percentile</span>
-                          <span className="font-medium">{formatCurrency(selectedScenario.confidence_intervals.p10)}</span>
+
+                    {/* Scenario Parameters */}
+                    <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                      <h4 className="font-semibold mb-3 text-gray-700">Scenario Parameters</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-500">Initial Wealth:</span>
+                          <span className="ml-2 font-medium">{formatCurrency(selectedScenario.initial_wealth)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">50th Percentile</span>
-                          <span className="font-medium">{formatCurrency(selectedScenario.confidence_intervals.p50)}</span>
+                        <div>
+                          <span className="text-gray-500">Annual Withdrawal:</span>
+                          <span className="ml-2 font-medium">{formatCurrency(selectedScenario.withdrawal_amount)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">90th Percentile</span>
-                          <span className="font-medium">{formatCurrency(selectedScenario.confidence_intervals.p90)}</span>
+                        <div>
+                          <span className="text-gray-500">Time Horizon:</span>
+                          <span className="ml-2 font-medium">{selectedScenario.time_horizon} years</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Risk Score:</span>
+                          <span className="ml-2 font-medium">{selectedScenario.risk_score}/10</span>
                         </div>
                       </div>
                     </div>
-                  )}
-                  
-                  <div className="mt-4">
-                    {selectedScenario.result && (
-                      <MonteCarloReportButton
-                        scenario={selectedScenario}
-                        result={selectedScenario.result}
-                        client={selectedClient}
-                        variant="default"
-                        className="w-full"
+                  </CardContent>
+                </Card>
+
+                {/* Charts Row 1: Sustainability Gauge + Asset Allocation */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Sustainability Gauge - component has its own Card wrapper */}
+                  <SustainabilityGauge
+                    successProbability={selectedScenario.success_probability || 0}
+                    withdrawalRate={selectedScenario.withdrawal_amount && selectedScenario.initial_wealth
+                      ? (selectedScenario.withdrawal_amount / selectedScenario.initial_wealth) * 100
+                      : 4}
+                    safeWithdrawalRate={4}
+                    currentWithdrawal={selectedScenario.withdrawal_amount || 25000}
+                    portfolioValue={selectedScenario.initial_wealth || 500000}
+                  />
+
+                  {/* Asset Allocation */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Portfolio Allocation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AssetAllocationPie
+                        allocation={generateAllocationFromRiskScore(selectedScenario.risk_score || 5)}
+                        riskScore={selectedScenario.risk_score || 5}
+                        portfolioValue={selectedScenario.initial_wealth || 500000}
                       />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Charts Row 2: Fan Chart (Confidence Intervals Over Time) */}
+                {selectedScenario.confidence_intervals && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Wealth Trajectory - Confidence Intervals</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <FanChart
+                        data={generateFanChartData(selectedScenario)}
+                        initialWealth={selectedScenario.initial_wealth || 500000}
+                        withdrawalAmount={selectedScenario.withdrawal_amount || 25000}
+                        timeHorizon={selectedScenario.time_horizon || 25}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Charts Row 3: Longevity Heatmap + Success Histogram */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Longevity Heatmap */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Longevity Risk Analysis</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <LongevityHeatmap
+                        currentAge={65}
+                        baseSuccessProbability={selectedScenario.success_probability || 70}
+                        longevityData={generateLongevityData(selectedScenario, 65)}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {/* Success Histogram */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Outcome Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <SuccessHistogram
+                        finalWealthValues={generateWealthValues(selectedScenario, 100)}
+                        simulationCount={selectedScenario.simulation_count || 5000}
+                        successProbability={selectedScenario.success_probability || 70}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Confidence Intervals Table */}
+                {selectedScenario.confidence_intervals && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Detailed Confidence Intervals</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-3 px-4 font-medium text-gray-600">Percentile</th>
+                              <th className="text-left py-3 px-4 font-medium text-gray-600">Final Wealth</th>
+                              <th className="text-left py-3 px-4 font-medium text-gray-600">Interpretation</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="border-b bg-red-50">
+                              <td className="py-3 px-4 font-medium">10th Percentile (Pessimistic)</td>
+                              <td className="py-3 px-4 font-bold">{formatCurrency(selectedScenario.confidence_intervals.p10)}</td>
+                              <td className="py-3 px-4 text-gray-600">90% chance of doing better than this</td>
+                            </tr>
+                            <tr className="border-b bg-amber-50">
+                              <td className="py-3 px-4 font-medium">25th Percentile</td>
+                              <td className="py-3 px-4 font-bold">{formatCurrency(selectedScenario.confidence_intervals.p25)}</td>
+                              <td className="py-3 px-4 text-gray-600">75% chance of doing better than this</td>
+                            </tr>
+                            <tr className="border-b bg-blue-50">
+                              <td className="py-3 px-4 font-medium">50th Percentile (Median)</td>
+                              <td className="py-3 px-4 font-bold">{formatCurrency(selectedScenario.confidence_intervals.p50)}</td>
+                              <td className="py-3 px-4 text-gray-600">Most likely outcome</td>
+                            </tr>
+                            <tr className="border-b bg-green-50">
+                              <td className="py-3 px-4 font-medium">75th Percentile</td>
+                              <td className="py-3 px-4 font-bold">{formatCurrency(selectedScenario.confidence_intervals.p75)}</td>
+                              <td className="py-3 px-4 text-gray-600">25% chance of doing better than this</td>
+                            </tr>
+                            <tr className="bg-emerald-50">
+                              <td className="py-3 px-4 font-medium">90th Percentile (Optimistic)</td>
+                              <td className="py-3 px-4 font-bold">{formatCurrency(selectedScenario.confidence_intervals.p90)}</td>
+                              <td className="py-3 px-4 text-gray-600">10% chance of doing better than this</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             )}
 
             {/* Scenario History */}
@@ -987,12 +961,17 @@ export default function MonteCarloPage() {
                                   <Eye className="h-4 w-4" />
                                 </Button>
                                 {scenario.result && (
-                                  <MonteCarloReportButton
-                                    scenario={scenario}
-                                    result={scenario.result}
-                                    client={selectedClient}
+                                  <Button
                                     variant="outline"
-                                  />
+                                    size="sm"
+                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                      e.stopPropagation();
+                                      setReportScenario(scenario);
+                                      setShowReportModal(true);
+                                    }}
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
                                 )}
                               </div>
                             </div>
@@ -1034,6 +1013,32 @@ export default function MonteCarloPage() {
           </div>
         </>
       )}
+
+      {/* Report Generation Modal */}
+      {showReportModal && reportScenario && reportScenario.result && selectedClient && (
+        <MonteCarloReportModal
+          isOpen={showReportModal}
+          onClose={() => {
+            setShowReportModal(false);
+            setReportScenario(null);
+          }}
+          scenario={reportScenario}
+          result={reportScenario.result}
+          client={selectedClient}
+        />
+      )}
+
+      {/* Stats Drill-Down Modal */}
+      <StatsDrillDownModal
+        isOpen={showDrillDownModal}
+        onClose={() => {
+          setShowDrillDownModal(false);
+          setDrillDownData(null);
+        }}
+        data={drillDownData}
+        onSelectClient={handleDrillDownSelect}
+        clientNames={drillDownClientNames}
+      />
     </div>
   );
 }
