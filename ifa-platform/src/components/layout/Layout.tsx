@@ -13,12 +13,17 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, loading } = useAuth()
   const isWrappedByRoot = useContext(LayoutContext)
-  
+
+  // Hooks must be called unconditionally at the top
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
+  const closeSidebar = () => setIsSidebarOpen(false)
+
   // If already wrapped by root layout, just return children
   if (isWrappedByRoot) {
     return <>{children}</>
   }
-  
+
   // Otherwise, provide layout (backward compatibility for any pages not using root wrapper)
   if (loading) {
     return (
@@ -31,10 +36,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   if (!user) {
     return <LoginForm />
   }
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
-  const closeSidebar = () => setIsSidebarOpen(false)
 
   return (
     <div className="min-h-screen bg-gray-50">

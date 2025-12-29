@@ -21,12 +21,17 @@ interface SmartLayoutWrapperProps {
 export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children }) => {
   const { user, loading } = useAuth()
   const pathname = usePathname()
-  
+
+  // Hooks must be called unconditionally at the top
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
+  const closeSidebar = () => setIsSidebarOpen(false)
+
   // Define pages that don't need layout (public/client-facing pages)
   const isPublicPage = pathname === '/login' ||
                        pathname === '/' ||
                        pathname.startsWith('/client/')
-  
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -34,16 +39,11 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
       </div>
     )
   }
-  
+
   // Show public pages without layout
   if (!user || isPublicPage) {
     return <>{children}</>
   }
-  
-  // For authenticated pages, provide persistent layout
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
-  const closeSidebar = () => setIsSidebarOpen(false)
 
   return (
     <LayoutContext.Provider value={true}>
