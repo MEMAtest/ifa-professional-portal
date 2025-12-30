@@ -357,8 +357,8 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -367,7 +367,7 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
               placeholder="Search complaints..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-10 pr-4 py-2 border rounded-lg text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -375,7 +375,7 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm"
+            className="border rounded-lg px-3 py-2 text-sm w-full sm:w-auto"
           >
             <option value="all">All Status ({stats.total})</option>
             <option value="open">Open ({stats.open})</option>
@@ -386,12 +386,12 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
           </select>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" onClick={handleExportCSV}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <Button variant="outline" onClick={handleExportCSV} className="w-full sm:w-auto">
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Log Complaint
           </Button>
@@ -416,92 +416,158 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50">
-                    <th className="text-left p-3 font-medium">Reference</th>
-                    <th className="text-left p-3 font-medium">Date</th>
-                    <th className="text-left p-3 font-medium">Client</th>
-                    <th className="text-left p-3 font-medium">Category</th>
-                    <th className="text-left p-3 font-medium">Summary</th>
-                    <th className="text-left p-3 font-medium">Status</th>
-                    <th className="text-left p-3 font-medium">Days Open</th>
-                    <th className="text-left p-3 font-medium">Redress</th>
-                    <th className="text-left p-3 font-medium">FCA</th>
-                    <th className="text-right p-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredComplaints.map((complaint) => (
-                    <tr
-                      key={complaint.id}
-                      className={`hover:bg-gray-50 ${
-                        isOverdue(complaint) ? 'bg-red-50' :
-                        isApproachingDeadline(complaint) ? 'bg-yellow-50' : ''
-                      }`}
-                    >
-                      <td className="p-3">
-                        <span className="font-mono text-xs">{complaint.reference_number}</span>
-                      </td>
-                      <td className="p-3">{formatDate(complaint.complaint_date)}</td>
-                      <td className="p-3">
-                        <span className="font-medium">{getClientName(complaint)}</span>
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
-                      </td>
-                      <td className="p-3 max-w-[200px]">
-                        <span className="text-gray-600 text-xs" title={complaint.description}>
-                          {complaint.description.length > 50
-                            ? `${complaint.description.substring(0, 50)}...`
-                            : complaint.description}
-                        </span>
-                      </td>
-                      <td className="p-3">{getStatusBadge(complaint.status)}</td>
-                      <td className="p-3">
+            <>
+              <div className="space-y-3 sm:hidden">
+                {filteredComplaints.map((complaint) => (
+                  <div
+                    key={complaint.id}
+                    className={`rounded-lg border p-4 shadow-sm ${
+                      isOverdue(complaint) ? 'border-red-200 bg-red-50/40' :
+                      isApproachingDeadline(complaint) ? 'border-yellow-200 bg-yellow-50/40' :
+                      'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500 font-mono">{complaint.reference_number}</p>
+                        <p className="text-sm font-semibold text-gray-900">{getClientName(complaint)}</p>
+                        <p className="text-xs text-gray-500 mt-1">{formatDate(complaint.complaint_date)}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedComplaint(complaint)}
+                        className="shrink-0"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                      <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
+                      {getStatusBadge(complaint.status)}
+                      {complaint.fca_reportable && (
+                        <Badge variant="destructive" className="text-xs">FCA</Badge>
+                      )}
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600">
+                      {complaint.description.length > 90
+                        ? `${complaint.description.substring(0, 90)}...`
+                        : complaint.description}
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-gray-400 uppercase">Days Open</p>
                         {complaint.status === 'resolved' || complaint.status === 'closed' ? (
-                          <span className="text-green-600">-</span>
+                          <p className="text-sm font-semibold text-green-600">-</p>
                         ) : (
-                          <span className={
-                            isOverdue(complaint) ? 'text-red-600 font-bold' :
-                            isApproachingDeadline(complaint) ? 'text-yellow-600 font-medium' :
-                            'text-gray-600'
-                          }>
+                          <p className={`text-sm font-semibold ${
+                            isOverdue(complaint) ? 'text-red-600' :
+                            isApproachingDeadline(complaint) ? 'text-yellow-600' :
+                            'text-gray-700'
+                          }`}>
                             {getDaysSinceComplaint(complaint.complaint_date)}d
-                            {isOverdue(complaint) && ' (Overdue!)'}
-                            {isApproachingDeadline(complaint) && !isOverdue(complaint) && ' (Due soon)'}
-                          </span>
+                          </p>
                         )}
-                      </td>
-                      <td className="p-3">
-                        {complaint.redress_amount > 0 ? (
-                          <span className="text-red-600">{formatCurrency(complaint.redress_amount)}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        {complaint.fca_reportable ? (
-                          <Badge variant="destructive" className="text-xs">Yes</Badge>
-                        ) : (
-                          <span className="text-gray-400">No</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedComplaint(complaint)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 uppercase">Redress</p>
+                        <p className={`text-sm font-semibold ${
+                          complaint.redress_amount > 0 ? 'text-red-600' : 'text-gray-500'
+                        }`}>
+                          {complaint.redress_amount > 0 ? formatCurrency(complaint.redress_amount) : '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-3 font-medium">Reference</th>
+                      <th className="text-left p-3 font-medium">Date</th>
+                      <th className="text-left p-3 font-medium">Client</th>
+                      <th className="text-left p-3 font-medium">Category</th>
+                      <th className="text-left p-3 font-medium">Summary</th>
+                      <th className="text-left p-3 font-medium">Status</th>
+                      <th className="text-left p-3 font-medium">Days Open</th>
+                      <th className="text-left p-3 font-medium">Redress</th>
+                      <th className="text-left p-3 font-medium">FCA</th>
+                      <th className="text-right p-3 font-medium">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredComplaints.map((complaint) => (
+                      <tr
+                        key={complaint.id}
+                        className={`hover:bg-gray-50 ${
+                          isOverdue(complaint) ? 'bg-red-50' :
+                          isApproachingDeadline(complaint) ? 'bg-yellow-50' : ''
+                        }`}
+                      >
+                        <td className="p-3">
+                          <span className="font-mono text-xs">{complaint.reference_number || '-'}</span>
+                        </td>
+                        <td className="p-3">{formatDate(complaint.complaint_date)}</td>
+                        <td className="p-3">
+                          <span className="font-medium">{getClientName(complaint)}</span>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
+                        </td>
+                        <td className="p-3 max-w-[200px]">
+                          <span className="text-gray-600 text-xs" title={complaint.description}>
+                            {complaint.description.length > 50
+                              ? `${complaint.description.substring(0, 50)}...`
+                              : complaint.description}
+                          </span>
+                        </td>
+                        <td className="p-3">{getStatusBadge(complaint.status)}</td>
+                        <td className="p-3">
+                          {complaint.status === 'resolved' || complaint.status === 'closed' ? (
+                            <span className="text-green-600">-</span>
+                          ) : (
+                            <span className={
+                              isOverdue(complaint) ? 'text-red-600 font-bold' :
+                              isApproachingDeadline(complaint) ? 'text-yellow-600 font-medium' :
+                              'text-gray-600'
+                            }>
+                              {getDaysSinceComplaint(complaint.complaint_date)}d
+                              {isOverdue(complaint) && ' (Overdue!)'}
+                              {isApproachingDeadline(complaint) && !isOverdue(complaint) && ' (Due soon)'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {complaint.redress_amount > 0 ? (
+                            <span className="text-red-600">{formatCurrency(complaint.redress_amount)}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {complaint.fca_reportable ? (
+                            <Badge variant="destructive" className="text-xs">Yes</Badge>
+                          ) : (
+                            <span className="text-gray-400">No</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedComplaint(complaint)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

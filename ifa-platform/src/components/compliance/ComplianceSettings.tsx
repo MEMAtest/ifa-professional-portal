@@ -43,7 +43,12 @@ export default function ComplianceSettings() {
     overdueAlertDays: 7,
     complaintEscalationDays: 28,
     emailNotifications: true,
-    dashboardAlerts: true
+    dashboardAlerts: true,
+    // AML Settings
+    amlLowRiskYears: 5,
+    amlMediumRiskYears: 3,
+    amlHighRiskYears: 1,
+    amlReminderDaysBefore: 60
   })
 
   const loadRules = useCallback(async () => {
@@ -67,17 +72,24 @@ export default function ComplianceSettings() {
       const highRiskRule = data?.find((r: ComplianceRule) => r.rule_name === 'High Risk Client Review')
       const overdueRule = data?.find((r: ComplianceRule) => r.rule_name === 'Overdue Review Alert')
       const complaintRule = data?.find((r: ComplianceRule) => r.rule_name === 'Complaint Escalation')
+      const amlSettingsRule = data?.find((r: ComplianceRule) => r.rule_name === 'AML Review Settings')
 
-      if (newBusinessRule || ongoingRule || highRiskRule || overdueRule || complaintRule) {
-        setSettings({
+      if (newBusinessRule || ongoingRule || highRiskRule || overdueRule || complaintRule || amlSettingsRule) {
+        setSettings(prev => ({
+          ...prev,
           newBusinessReviewRate: (newBusinessRule?.configuration as Record<string, number>)?.percentage || 100,
           ongoingReviewRate: (ongoingRule?.configuration as Record<string, number>)?.percentage || 25,
           highRiskReviewFrequency: (highRiskRule?.configuration as Record<string, string>)?.frequency || 'quarterly',
           overdueAlertDays: (overdueRule?.configuration as Record<string, number>)?.days_before || 7,
           complaintEscalationDays: (complaintRule?.configuration as Record<string, number>)?.auto_escalate_days || 28,
           emailNotifications: true,
-          dashboardAlerts: true
-        })
+          dashboardAlerts: true,
+          // AML Settings from database
+          amlLowRiskYears: (amlSettingsRule?.configuration as Record<string, number>)?.lowRiskYears || 5,
+          amlMediumRiskYears: (amlSettingsRule?.configuration as Record<string, number>)?.mediumRiskYears || 3,
+          amlHighRiskYears: (amlSettingsRule?.configuration as Record<string, number>)?.highRiskYears || 1,
+          amlReminderDaysBefore: (amlSettingsRule?.configuration as Record<string, number>)?.reminderDaysBefore || 60
+        }))
       }
     } catch (error) {
       console.error('Error loading rules:', error)
@@ -114,6 +126,17 @@ export default function ComplianceSettings() {
         {
           rule_name: 'Complaint Escalation',
           configuration: { auto_escalate_days: settings.complaintEscalationDays, description: `Auto-escalate complaints not resolved within ${settings.complaintEscalationDays} days` }
+        },
+        {
+          rule_name: 'AML Review Settings',
+          rule_type: 'review_frequency',
+          configuration: {
+            lowRiskYears: settings.amlLowRiskYears,
+            mediumRiskYears: settings.amlMediumRiskYears,
+            highRiskYears: settings.amlHighRiskYears,
+            reminderDaysBefore: settings.amlReminderDaysBefore,
+            description: `AML reviews: Low ${settings.amlLowRiskYears}yr, Med ${settings.amlMediumRiskYears}yr, High ${settings.amlHighRiskYears}yr`
+          }
         }
       ]
 
@@ -124,6 +147,16 @@ export default function ComplianceSettings() {
             .from('compliance_rules')
             .update({ configuration: update.configuration })
             .eq('id', existingRule.id)
+        } else if (update.rule_name === 'AML Review Settings') {
+          // Create the AML settings rule if it doesn't exist
+          await supabase
+            .from('compliance_rules')
+            .insert({
+              rule_name: update.rule_name,
+              rule_type: 'review_frequency',
+              configuration: update.configuration,
+              is_active: true
+            })
         }
       }
 
@@ -259,6 +292,95 @@ export default function ComplianceSettings() {
               <option value="biannually">Bi-annually</option>
               <option value="annually">Annually</option>
             </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* AML/CTF Review Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Shield className="h-5 w-5" />
+            <span>AML/CTF Review Frequencies</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="bg-blue-50 p-4 rounded-lg mb-4">
+            <p className="text-sm text-blue-800">
+              Configure how often AML reviews are required based on client risk rating.
+              These settings apply to all new risk assessments performed through the AML wizard.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Low Risk */}
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <h3 className="font-medium text-green-800 mb-2">Low Risk Clients</h3>
+              <p className="text-xs text-green-600 mb-3">Standard due diligence</p>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  value={settings.amlLowRiskYears}
+                  onChange={(e) => setSettings({ ...settings, amlLowRiskYears: parseInt(e.target.value) || 5 })}
+                  className="w-16 border rounded-lg px-3 py-2 text-sm text-center"
+                  min="1"
+                  max="10"
+                />
+                <span className="text-sm text-gray-600">years</span>
+              </div>
+            </div>
+
+            {/* Medium Risk */}
+            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <h3 className="font-medium text-yellow-800 mb-2">Medium Risk Clients</h3>
+              <p className="text-xs text-yellow-600 mb-3">Enhanced monitoring</p>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  value={settings.amlMediumRiskYears}
+                  onChange={(e) => setSettings({ ...settings, amlMediumRiskYears: parseInt(e.target.value) || 3 })}
+                  className="w-16 border rounded-lg px-3 py-2 text-sm text-center"
+                  min="1"
+                  max="5"
+                />
+                <span className="text-sm text-gray-600">years</span>
+              </div>
+            </div>
+
+            {/* High Risk */}
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <h3 className="font-medium text-red-800 mb-2">High Risk Clients</h3>
+              <p className="text-xs text-red-600 mb-3">Enhanced due diligence</p>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  value={settings.amlHighRiskYears}
+                  onChange={(e) => setSettings({ ...settings, amlHighRiskYears: parseInt(e.target.value) || 1 })}
+                  className="w-16 border rounded-lg px-3 py-2 text-sm text-center"
+                  min="1"
+                  max="3"
+                />
+                <span className="text-sm text-gray-600">year(s)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t">
+            <div>
+              <h3 className="font-medium">AML Review Reminder</h3>
+              <p className="text-sm text-gray-500">Days before review due to show reminder</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="number"
+                value={settings.amlReminderDaysBefore}
+                onChange={(e) => setSettings({ ...settings, amlReminderDaysBefore: parseInt(e.target.value) || 60 })}
+                className="w-20 border rounded-lg px-3 py-2 text-sm text-center"
+                min="7"
+                max="90"
+              />
+              <span className="text-sm text-gray-500">days</span>
+            </div>
           </div>
         </CardContent>
       </Card>

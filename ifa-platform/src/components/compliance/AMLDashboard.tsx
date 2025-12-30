@@ -25,9 +25,13 @@ import {
   PieChart,
   RefreshCw,
   ChevronDown,
-  Info
+  Info,
+  PlayCircle,
+  Calendar
 } from 'lucide-react'
+import AMLRiskWizard from './AMLRiskWizard'
 import { createClient } from '@/lib/supabase/client'
+import { createAMLReviewReminder, getAMLSettings } from '@/lib/calendar/amlReminders'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -142,13 +146,28 @@ export default function AMLDashboard({ onStatsChange }: Props) {
   const [filterRisk, setFilterRisk] = useState<string>('all')
   const [activeView, setActiveView] = useState<'table' | 'charts'>('table')
 
+  // Risk Assessment Wizard state
+  const [showWizard, setShowWizard] = useState(false)
+  const [selectedClientForWizard, setSelectedClientForWizard] = useState<{
+    id: string
+    name: string
+    recordId: string
+  } | null>(null)
+
   // Stats
   const [stats, setStats] = useState({
     total: 0,
     pendingReview: 0,
     highRisk: 0,
     overdueReviews: 0,
-    completedThisMonth: 0
+    completedThisMonth: 0,
+    // Risk breakdown stats
+    lowRiskCount: 0,
+    mediumRiskCount: 0,
+    highRiskCount: 0,
+    nextLowReview: null as string | null,
+    nextMediumReview: null as string | null,
+    nextHighReview: null as string | null
   })
 
   // Track if component is mounted to prevent state updates after unmount
@@ -185,12 +204,38 @@ export default function AMLDashboard({ onStatsChange }: Props) {
       return new Date(r.last_review_date) >= startOfMonth
     }).length
 
+    // Risk breakdown counts
+    const lowRiskCount = records.filter(r => r.risk_rating === 'low').length
+    const mediumRiskCount = records.filter(r => r.risk_rating === 'medium').length
+    const highRiskBreakdown = records.filter(r =>
+      r.risk_rating === 'high' || r.risk_rating === 'enhanced_due_diligence'
+    ).length
+
+    // Find next review dates for each risk level
+    const getNextReviewForRisk = (riskLevels: string[]) => {
+      const recordsWithReview = records.filter(r =>
+        riskLevels.includes(r.risk_rating) && r.next_review_date
+      )
+      if (recordsWithReview.length === 0) return null
+      const sorted = recordsWithReview.sort((a, b) =>
+        new Date(a.next_review_date!).getTime() - new Date(b.next_review_date!).getTime()
+      )
+      return sorted[0]?.next_review_date || null
+    }
+
     return {
       total: clientCount,
       pendingReview: pendingCount,
       highRisk: highRiskCount,
       overdueReviews: overdueCount,
-      completedThisMonth
+      completedThisMonth,
+      // Risk breakdown
+      lowRiskCount,
+      mediumRiskCount,
+      highRiskCount: highRiskBreakdown,
+      nextLowReview: getNextReviewForRisk(['low']),
+      nextMediumReview: getNextReviewForRisk(['medium']),
+      nextHighReview: getNextReviewForRisk(['high', 'enhanced_due_diligence'])
     }
   }, [])
 
@@ -430,6 +475,121 @@ export default function AMLDashboard({ onStatsChange }: Props) {
     }
   }
 
+  // Handle wizard completion - save risk assessment results
+  const handleWizardComplete = async (result: {
+    riskRating: 'low' | 'medium' | 'high'
+    nextReviewDate: string
+    lastReviewDate: string
+    assessmentDetails: {
+      jurisdiction: string
+      pepStatus: string
+      sanctions: string
+      natureOfBusiness: string
+      totalScore: number
+    }
+  }) => {
+    if (!selectedClientForWizard) return
+
+    try {
+      const recordId = selectedClientForWizard.recordId
+      const isVirtual = recordId.startsWith('virtual-')
+
+      // Map risk rating to review frequency
+      const reviewFrequencyMap = {
+        low: 'annually', // Will be updated by next_review_date
+        medium: 'annually',
+        high: 'annually'
+      }
+
+      // If virtual, create record first
+      let actualRecordId = recordId
+      if (isVirtual) {
+        const clientId = recordId.replace('virtual-', '')
+        const newRecord = await getOrCreateAMLRecord(clientId)
+        if (!newRecord) {
+          throw new Error('Failed to create AML record')
+        }
+        actualRecordId = newRecord.id
+      }
+
+      // Update the record with assessment results
+      const updateData = {
+        risk_rating: result.riskRating === 'high' ? 'high' : result.riskRating,
+        next_review_date: result.nextReviewDate,
+        last_review_date: result.lastReviewDate,
+        // Map assessment answers to existing fields
+        pep_status: result.assessmentDetails.pepStatus === 'Is a PEP' ? 'pep_high_risk' :
+                    result.assessmentDetails.pepStatus === 'Related to PEP' ? 'pep_low_risk' : 'not_pep',
+        sanctions_status: result.assessmentDetails.sanctions === 'Confirmed Match' ? 'confirmed_match' :
+                         result.assessmentDetails.sanctions === 'Potential Match' ? 'potential_match' : 'clear',
+        edd_notes: `Risk Assessment completed on ${result.lastReviewDate}. ` +
+                   `Score: ${result.assessmentDetails.totalScore}/8. ` +
+                   `Jurisdiction: ${result.assessmentDetails.jurisdiction}. ` +
+                   `Business: ${result.assessmentDetails.natureOfBusiness}.`,
+        updated_at: new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from('aml_client_status')
+        .update(updateData)
+        .eq('id', actualRecordId)
+
+      if (error) throw error
+
+      // Update local state
+      setAmlRecords(prev => {
+        const updated = prev.map(r =>
+          r.id === actualRecordId ? { ...r, ...updateData } : r
+        )
+        setStats(calculateStats(updated, allClients.length))
+        return updated
+      })
+
+      // Create calendar reminder for the AML review
+      try {
+        const amlSettings = await getAMLSettings(supabase)
+        await createAMLReviewReminder(supabase, {
+          clientId: selectedClientForWizard.id,
+          clientName: selectedClientForWizard.name,
+          riskRating: result.riskRating,
+          nextReviewDate: result.nextReviewDate,
+          reminderDaysBefore: amlSettings.reminderDaysBefore
+        })
+      } catch (calendarError) {
+        console.warn('Failed to create calendar reminder:', calendarError)
+        // Don't fail the whole operation if calendar reminder fails
+      }
+
+      toastRef.current({
+        title: 'Assessment Saved',
+        description: `${selectedClientForWizard.name} assessed as ${result.riskRating.toUpperCase()} risk. Next review: ${result.nextReviewDate}. Calendar reminder created.`
+      })
+
+      onStatsChange?.()
+    } catch (error) {
+      console.error('Error saving assessment:', error)
+      toastRef.current({
+        title: 'Error',
+        description: 'Failed to save assessment',
+        variant: 'destructive'
+      })
+    } finally {
+      setShowWizard(false)
+      setSelectedClientForWizard(null)
+    }
+  }
+
+  // Open wizard for a client
+  const openWizardForClient = (record: AMLClientStatus) => {
+    const clientName = `${record.clients?.personal_details?.firstName || 'Unknown'} ${record.clients?.personal_details?.lastName || ''}`.trim()
+    setSelectedClientForWizard({
+      id: record.client_id,
+      name: clientName,
+      recordId: record.id
+    })
+    setShowWizard(true)
+  }
+
   // Get badge color
   const getBadgeColor = (value: string, options: { value: string; color: string }[]) => {
     const option = options.find(o => o.value === value)
@@ -461,7 +621,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
       <select
         value={value}
         onChange={(e) => updateField(recordId, field, e.target.value)}
-        className={`text-xs border rounded px-2 py-1 cursor-pointer focus:ring-2 focus:ring-blue-500 ${
+        className={`text-xs border rounded px-2 py-1 w-full cursor-pointer focus:ring-2 focus:ring-blue-500 ${
           currentOption?.color === 'green' ? 'bg-green-50 border-green-200 text-green-700' :
           currentOption?.color === 'red' ? 'bg-red-50 border-red-200 text-red-700' :
           currentOption?.color === 'yellow' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
@@ -643,7 +803,7 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
           </CardHeader>
           <CardContent>
             <p className="text-gray-500 text-sm mb-4">
-              Once the table is set up, you'll be able to track AML/CTF status for these clients:
+              Once the table is set up, you&apos;ll be able to track AML/CTF status for these clients:
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {allClients.slice(0, 8).map(client => (
@@ -665,7 +825,7 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
+      {/* Stats Cards - Top Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setFilterRisk('all')}>
           <CardContent className="p-4">
@@ -718,6 +878,69 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
               <div>
                 <p className="text-sm text-gray-600">Overdue Reviews</p>
                 <p className="text-2xl font-bold">{stats.overdueReviews}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Risk Breakdown Cards - Second Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-green-500" onClick={() => setFilterRisk('low')}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Low Risk</p>
+                <p className="text-2xl font-bold text-green-600">{stats.lowRiskCount}</p>
+                {stats.nextLowReview && (
+                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Next: {stats.nextLowReview}
+                  </p>
+                )}
+              </div>
+              <div className="p-3 rounded-full bg-green-100">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-yellow-500" onClick={() => setFilterRisk('medium')}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Medium Risk</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.mediumRiskCount}</p>
+                {stats.nextMediumReview && (
+                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Next: {stats.nextMediumReview}
+                  </p>
+                )}
+              </div>
+              <div className="p-3 rounded-full bg-yellow-100">
+                <AlertCircle className="h-6 w-6 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-red-500" onClick={() => setFilterRisk('high')}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">High Risk</p>
+                <p className="text-2xl font-bold text-red-600">{stats.highRiskCount}</p>
+                {stats.nextHighReview && (
+                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Next: {stats.nextHighReview}
+                  </p>
+                )}
+              </div>
+              <div className="p-3 rounded-full bg-red-100">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
             </div>
           </CardContent>
@@ -797,8 +1020,9 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
             </CardHeader>
             <CardContent>
               {riskDistribution.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <RechartsPie>
+                <div className="h-56 sm:h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPie>
                     <Pie
                       data={riskDistribution}
                       cx="50%"
@@ -815,8 +1039,9 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
                     </Pie>
                     <Tooltip />
                     <Legend />
-                  </RechartsPie>
-                </ResponsiveContainer>
+                    </RechartsPie>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <div className="flex items-center justify-center h-[300px] text-gray-500">
                   No data available
@@ -831,8 +1056,9 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
               <CardTitle className="text-base">Check Status by Type</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={checkStatusData}>
+              <div className="h-56 sm:h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={checkStatusData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
                   <YAxis />
@@ -841,8 +1067,9 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
                   <Bar dataKey="verified" name="Verified/Clear" fill="#22c55e" stackId="a" />
                   <Bar dataKey="pending" name="Pending/Flagged" fill="#eab308" stackId="a" />
                   <Bar dataKey="notStarted" name="Not Started" fill="#94a3b8" stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -874,47 +1101,26 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
               <CardTitle className="text-base">AML/CTF Client Register</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="text-left p-3 font-medium text-gray-600">Client</th>
-                      <th className="text-left p-3 font-medium text-gray-600">ID Verification</th>
-                      <th className="text-left p-3 font-medium text-gray-600">PEP Status</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Sanctions</th>
-                      <th className="text-left p-3 font-medium text-gray-600">SOW</th>
-                      <th className="text-left p-3 font-medium text-gray-600">SOF</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Risk Rating</th>
-                      <th className="text-left p-3 font-medium text-gray-600">Next Review</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredRecords.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-8 text-center text-gray-500">
-                          No clients found matching your criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRecords.map(record => {
-                        const isVirtual = record.id.startsWith('virtual-')
-                        const isOverdue = record.next_review_date && new Date(record.next_review_date) < new Date()
-                        const isHighRisk = record.risk_rating === 'high' || record.risk_rating === 'enhanced_due_diligence'
+              {filteredRecords.length > 0 ? (
+                <>
+                  <div className="space-y-3 p-4 sm:hidden">
+                    {filteredRecords.map(record => {
+                      const isVirtual = record.id.startsWith('virtual-')
+                      const isOverdue = record.next_review_date && new Date(record.next_review_date) < new Date()
+                      const isHighRisk = record.risk_rating === 'high' || record.risk_rating === 'enhanced_due_diligence'
+                      const clientName = `${record.clients?.personal_details?.firstName || 'Unknown'} ${record.clients?.personal_details?.lastName || ''}`.trim()
 
-                        return (
-                          <tr
-                            key={record.id}
-                            className={`hover:bg-gray-50 ${isHighRisk ? 'bg-red-50' : ''} ${isVirtual ? 'bg-gray-50/50' : ''}`}
-                          >
-                            <td className="p-3">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => router.push(`/clients/${record.client_id}`)}
-                                  className="font-medium text-blue-600 hover:underline"
-                                >
-                                  {record.clients?.personal_details?.firstName || 'Unknown'}{' '}
-                                  {record.clients?.personal_details?.lastName || ''}
-                                </button>
+                      return (
+                        <div key={record.id} className={`rounded-lg border p-4 shadow-sm ${isHighRisk ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'} ${isVirtual ? 'bg-gray-50/70' : ''}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <button
+                                onClick={() => router.push(`/clients/${record.client_id}`)}
+                                className="text-sm font-semibold text-blue-600 hover:underline"
+                              >
+                                {clientName}
+                              </button>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                                 {isVirtual && (
                                   <Badge variant="outline" className="text-xs text-gray-500 border-gray-300">
                                     New
@@ -926,78 +1132,233 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
                                   </Badge>
                                 )}
                               </div>
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            {isOverdue && (
+                              <Badge variant="destructive" className="text-xs">
+                                Overdue
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">ID Verification</p>
                               <StatusDropdown
                                 recordId={record.id}
                                 field="id_verification"
                                 value={record.id_verification}
                                 options={ID_VERIFICATION_OPTIONS}
                               />
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">PEP Status</p>
                               <StatusDropdown
                                 recordId={record.id}
                                 field="pep_status"
                                 value={record.pep_status}
                                 options={PEP_STATUS_OPTIONS}
                               />
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Sanctions</p>
                               <StatusDropdown
                                 recordId={record.id}
                                 field="sanctions_status"
                                 value={record.sanctions_status}
                                 options={SANCTIONS_OPTIONS}
                               />
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Source of Wealth</p>
                               <StatusDropdown
                                 recordId={record.id}
                                 field="source_of_wealth"
                                 value={record.source_of_wealth}
                                 options={SOW_SOF_OPTIONS}
                               />
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Source of Funds</p>
                               <StatusDropdown
                                 recordId={record.id}
                                 field="source_of_funds"
                                 value={record.source_of_funds}
                                 options={SOW_SOF_OPTIONS}
                               />
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Risk Rating</p>
                               <StatusDropdown
                                 recordId={record.id}
                                 field="risk_rating"
                                 value={record.risk_rating}
                                 options={RISK_RATING_OPTIONS}
                               />
-                            </td>
-                            <td className="p-3">
-                              <div className="flex items-center space-x-2">
-                                <select
-                                  value={record.review_frequency}
-                                  onChange={(e) => updateField(record.id, 'review_frequency', e.target.value)}
-                                  className="text-xs border rounded px-2 py-1"
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Review Frequency</p>
+                              <select
+                                value={record.review_frequency}
+                                onChange={(e) => updateField(record.id, 'review_frequency', e.target.value)}
+                                className="text-xs border rounded px-2 py-1 w-full"
+                              >
+                                {REVIEW_FREQUENCY_OPTIONS.map(opt => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Start Assessment Button */}
+                          <div className="mt-4 pt-3 border-t">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openWizardForClient(record)}
+                              className="w-full text-xs"
+                            >
+                              <PlayCircle className="h-3 w-3 mr-2" />
+                              Start Risk Assessment
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="text-left p-3 font-medium text-gray-600">Client</th>
+                          <th className="text-left p-3 font-medium text-gray-600">ID Verification</th>
+                          <th className="text-left p-3 font-medium text-gray-600">PEP Status</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Sanctions</th>
+                          <th className="text-left p-3 font-medium text-gray-600">SOW</th>
+                          <th className="text-left p-3 font-medium text-gray-600">SOF</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Risk Rating</th>
+                          <th className="text-left p-3 font-medium text-gray-600">Next Review</th>
+                          <th className="text-center p-3 font-medium text-gray-600">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {filteredRecords.map(record => {
+                          const isVirtual = record.id.startsWith('virtual-')
+                          const isOverdue = record.next_review_date && new Date(record.next_review_date) < new Date()
+                          const isHighRisk = record.risk_rating === 'high' || record.risk_rating === 'enhanced_due_diligence'
+
+                          return (
+                            <tr
+                              key={record.id}
+                              className={`hover:bg-gray-50 ${isHighRisk ? 'bg-red-50' : ''} ${isVirtual ? 'bg-gray-50/50' : ''}`}
+                            >
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => router.push(`/clients/${record.client_id}`)}
+                                    className="font-medium text-blue-600 hover:underline"
+                                  >
+                                    {record.clients?.personal_details?.firstName || 'Unknown'}{' '}
+                                    {record.clients?.personal_details?.lastName || ''}
+                                  </button>
+                                  {isVirtual && (
+                                    <Badge variant="outline" className="text-xs text-gray-500 border-gray-300">
+                                      New
+                                    </Badge>
+                                  )}
+                                  {isHighRisk && (
+                                    <Badge variant="destructive" className="text-xs">
+                                      High Risk
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <StatusDropdown
+                                  recordId={record.id}
+                                  field="id_verification"
+                                  value={record.id_verification}
+                                  options={ID_VERIFICATION_OPTIONS}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <StatusDropdown
+                                  recordId={record.id}
+                                  field="pep_status"
+                                  value={record.pep_status}
+                                  options={PEP_STATUS_OPTIONS}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <StatusDropdown
+                                  recordId={record.id}
+                                  field="sanctions_status"
+                                  value={record.sanctions_status}
+                                  options={SANCTIONS_OPTIONS}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <StatusDropdown
+                                  recordId={record.id}
+                                  field="source_of_wealth"
+                                  value={record.source_of_wealth}
+                                  options={SOW_SOF_OPTIONS}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <StatusDropdown
+                                  recordId={record.id}
+                                  field="source_of_funds"
+                                  value={record.source_of_funds}
+                                  options={SOW_SOF_OPTIONS}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <StatusDropdown
+                                  recordId={record.id}
+                                  field="risk_rating"
+                                  value={record.risk_rating}
+                                  options={RISK_RATING_OPTIONS}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center space-x-2">
+                                  <select
+                                    value={record.review_frequency}
+                                    onChange={(e) => updateField(record.id, 'review_frequency', e.target.value)}
+                                    className="text-xs border rounded px-2 py-1"
+                                  >
+                                    {REVIEW_FREQUENCY_OPTIONS.map(opt => (
+                                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                  </select>
+                                  {isOverdue && (
+                                    <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openWizardForClient(record)}
+                                  className="text-xs"
                                 >
-                                  {REVIEW_FREQUENCY_OPTIONS.map(opt => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                  ))}
-                                </select>
-                                {isOverdue && (
-                                  <Badge variant="destructive" className="text-xs">Overdue</Badge>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                                  <PlayCircle className="h-3 w-3 mr-1" />
+                                  Assess
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="p-8 text-center text-gray-500">
+                  No clients found matching your criteria.
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
@@ -1019,6 +1380,19 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* AML Risk Assessment Wizard Modal */}
+      {showWizard && selectedClientForWizard && (
+        <AMLRiskWizard
+          clientId={selectedClientForWizard.id}
+          clientName={selectedClientForWizard.name}
+          onComplete={handleWizardComplete}
+          onCancel={() => {
+            setShowWizard(false)
+            setSelectedClientForWizard(null)
+          }}
+        />
       )}
     </div>
   )

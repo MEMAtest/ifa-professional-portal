@@ -40,6 +40,12 @@ interface FileReview {
   completed_at: string | null
   created_at: string
   updated_at: string
+  // Maker/Checker workflow fields
+  adviser_submitted_at: string | null
+  reviewer_started_at: string | null
+  reviewer_completed_at: string | null
+  adviser_name: string | null
+  reviewer_name: string | null
   clients?: {
     id: string
     client_ref: string
@@ -258,6 +264,67 @@ export default function FileReviewModal({
                 <option value="high">High</option>
                 <option value="critical">Critical</option>
               </select>
+            </div>
+          </div>
+
+          {/* Four-Eyes Check Workflow Status */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-medium text-blue-900 mb-3 flex items-center">
+              <User className="h-4 w-4 mr-2" />
+              Four-Eyes Check Status
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Step 1: Adviser (Maker) */}
+              <div className={`p-3 rounded-lg border-2 ${
+                review.adviser_submitted_at
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-gray-200 bg-white'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-500 uppercase">Step 1: Adviser (Maker)</span>
+                  {review.adviser_submitted_at && (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  )}
+                </div>
+                <p className="font-medium text-sm">{review.adviser_name || 'Not assigned'}</p>
+                {review.adviser_submitted_at ? (
+                  <p className="text-xs text-green-600 mt-1">
+                    Submitted: {formatDate(review.adviser_submitted_at)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-1">Pending submission</p>
+                )}
+              </div>
+
+              {/* Step 2: Reviewer (Checker) */}
+              <div className={`p-3 rounded-lg border-2 ${
+                review.reviewer_completed_at
+                  ? 'border-green-300 bg-green-50'
+                  : review.reviewer_started_at
+                  ? 'border-blue-300 bg-blue-50'
+                  : 'border-gray-200 bg-white'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-500 uppercase">Step 2: Reviewer (Checker)</span>
+                  {review.reviewer_completed_at ? (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  ) : review.reviewer_started_at ? (
+                    <Clock className="h-4 w-4 text-blue-600" />
+                  ) : null}
+                </div>
+                <p className="font-medium text-sm">{review.reviewer_name || 'Not assigned'}</p>
+                {review.reviewer_completed_at ? (
+                  <p className="text-xs text-green-600 mt-1">
+                    Completed: {formatDate(review.reviewer_completed_at)}
+                  </p>
+                ) : review.reviewer_started_at ? (
+                  <p className="text-xs text-blue-600 mt-1">
+                    In Progress since: {formatDate(review.reviewer_started_at)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-1">Awaiting review</p>
+                )}
+              </div>
             </div>
           </div>
 

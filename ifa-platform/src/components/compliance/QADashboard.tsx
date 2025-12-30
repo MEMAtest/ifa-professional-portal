@@ -53,6 +53,12 @@ interface FileReview {
   completed_at: string | null
   created_at: string
   updated_at: string
+  // Maker/Checker workflow fields
+  adviser_submitted_at: string | null
+  reviewer_started_at: string | null
+  reviewer_completed_at: string | null
+  adviser_name: string | null
+  reviewer_name: string | null
   clients?: {
     id: string
     client_ref: string
@@ -240,7 +246,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     return new Date(dueDate) < new Date()
   }
 
-  const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject' | 'escalate') => {
+  const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject' | 'escalate', reviewerDisplayName?: string) => {
     try {
       const statusMap = {
         approve: 'approved',
@@ -248,12 +254,24 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
         escalate: 'escalated'
       }
 
+      const now = new Date().toISOString()
+      const updateData: Record<string, any> = {
+        status: statusMap[action],
+        completed_at: action !== 'escalate' ? now : null,
+        // Maker/Checker workflow: Record reviewer completion
+        reviewer_completed_at: now,
+        reviewer_name: reviewerDisplayName || 'Current User' // TODO: Get from auth context
+      }
+
+      // If this is the first action on a pending review, also mark reviewer_started_at
+      const review = reviews.find(r => r.id === reviewId)
+      if (review && !review.reviewer_started_at) {
+        updateData.reviewer_started_at = now
+      }
+
       const { error } = await supabase
         .from('file_reviews')
-        .update({
-          status: statusMap[action],
-          completed_at: action !== 'escalate' ? new Date().toISOString() : null
-        })
+        .update(updateData)
         .eq('id', reviewId)
 
       if (error) throw error
@@ -400,13 +418,19 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
                           {getRiskBadge(review.risk_rating)}
                         </div>
                         <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
-                          <span className="flex items-center">
+                          <span className="flex items-center" title={review.adviser_submitted_at ? `Submitted: ${formatDate(review.adviser_submitted_at)}` : ''}>
                             <User className="h-3 w-3 mr-1" />
-                            Adviser: {getProfileName(review.adviser)}
+                            Adviser: {review.adviser_name || getProfileName(review.adviser)}
+                            {review.adviser_submitted_at && (
+                              <CheckCircle className="h-3 w-3 ml-1 text-green-500" />
+                            )}
                           </span>
-                          <span className="flex items-center">
+                          <span className="flex items-center" title={review.reviewer_completed_at ? `Completed: ${formatDate(review.reviewer_completed_at)}` : ''}>
                             <Eye className="h-3 w-3 mr-1" />
-                            Reviewer: {getProfileName(review.reviewer)}
+                            Reviewer: {review.reviewer_name || getProfileName(review.reviewer)}
+                            {review.reviewer_completed_at && (
+                              <CheckCircle className="h-3 w-3 ml-1 text-green-500" />
+                            )}
                           </span>
                         </div>
                         <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
@@ -588,6 +612,12 @@ function CreateReviewModal({
         'consumer_duty': false
       }
 
+      // Get adviser name for workflow tracking
+      const selectedAdviser = advisers.find(a => a.id === formData.adviser_id)
+      const adviserDisplayName = selectedAdviser
+        ? `${selectedAdviser.first_name || ''} ${selectedAdviser.last_name || ''}`.trim()
+        : 'Unknown Adviser'
+
       const { error } = await supabase
         .from('file_reviews')
         .insert({
@@ -598,7 +628,10 @@ function CreateReviewModal({
           due_date: formData.due_date || null,
           risk_rating: formData.risk_rating,
           checklist: defaultChecklist,
-          status: 'pending'
+          status: 'pending',
+          // Maker/Checker workflow: Record adviser submission
+          adviser_submitted_at: new Date().toISOString(),
+          adviser_name: adviserDisplayName
         })
 
       if (error) throw error
