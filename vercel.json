@@ -1,6 +1,5 @@
 {
-  "buildCommand": "cd ifa-platform && npm run build",
-  "outputDirectory": "ifa-platform/.next",
-  "installCommand": "cd ifa-platform && npm install",
-  "framework": "nextjs"
+  "version": 2,
+  "framework": "nextjs",
+  "rootDirectory": "ifa-platform"
 }
