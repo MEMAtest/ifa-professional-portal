@@ -2,7 +2,7 @@
 // FILE: /src/app/calendar/page.tsx - COMPLETE PRODUCTION FIX
 // ============================================
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Calendar, 
@@ -119,7 +119,7 @@ export default function CalendarPage() {
 
   const router = useRouter()
   const { toast } = useToast()
-  const supabase = createClient() // Create client instance
+  const supabase = useMemo(() => createClient(), []) // Create client instance
   
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -155,37 +155,13 @@ export default function CalendarPage() {
     }
   }, [])
 
-  // Initial load - runs once on mount
-  useEffect(() => {
-    loadData()
-  }, [])
-
   // Handle month navigation
   const handleMonthChange = async (newDate: Date) => {
     setCurrentDate(newDate)
     await loadEvents()
   }
 
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      await Promise.all([
-        loadEvents(),
-        loadClients()
-      ])
-    } catch (error) {
-      console.error('Error loading data:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to load calendar data',
-        variant: 'destructive'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     // Get date range for the current month view
     const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), -7)
     const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 7)
@@ -269,9 +245,9 @@ export default function CalendarPage() {
     } else if (error) {
       console.error('Error loading events:', error)
     }
-  }
+  }, [currentDate, supabase])
 
-	  const loadClients = async () => {
+	  const loadClients = useCallback(async () => {
 	    const { data, error } = await supabase
 	      .from('clients')
 	      .select('id, client_ref, personal_details')
@@ -292,7 +268,31 @@ export default function CalendarPage() {
 	      })
 	      setClients(sortedClients)
 	    }
-	  }
+	  }, [supabase])
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      await Promise.all([
+        loadEvents(),
+        loadClients()
+      ])
+    } catch (error) {
+      console.error('Error loading data:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load calendar data',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [loadClients, loadEvents, toast])
+
+  // Initial load - runs once on mount
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // Get calendar grid
   const getDaysInMonth = (date: Date) => {
@@ -859,7 +859,7 @@ export default function CalendarPage() {
               </div>
 
               {/* Date & Time */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Date *

@@ -1,5 +1,5 @@
 // src/components/documents/DocumentPreviewModal.tsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { X, Download, Loader2 } from 'lucide-react'
 
 interface DocumentPreviewModalProps {
@@ -22,13 +22,7 @@ export default function DocumentPreviewModal({
   const [loading, setLoading] = useState(true)
   const [htmlContent, setHtmlContent] = useState('')
 
-  useEffect(() => {
-    if (isOpen) {
-      loadPreview()
-    }
-  }, [isOpen])
-
-  const loadPreview = async () => {
+  const loadPreview = useCallback(async () => {
     setLoading(true)
     try {
       const response = await fetch('/api/documents/preview-assessment', {
@@ -46,7 +40,13 @@ export default function DocumentPreviewModal({
     } finally {
       setLoading(false)
     }
-  }
+  }, [assessmentId, assessmentType, clientId])
+
+  useEffect(() => {
+    if (isOpen) {
+      loadPreview()
+    }
+  }, [isOpen, loadPreview])
 
   if (!isOpen) return null
 

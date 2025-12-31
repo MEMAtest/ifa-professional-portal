@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useParams } from 'next/navigation';
 import type { Client } from '@/types/client';
 import { clientService } from '@/services/ClientService';
@@ -39,7 +39,7 @@ export function useClientContext(): UseClientContextReturn {
   const [error, setError] = useState<string | null>(null);
   
   // Fetch client data with improved error handling
-  const fetchClient = async () => {
+  const fetchClient = useCallback(async () => {
     if (!clientId || isProspect) return;
     
     setIsLoading(true);
@@ -83,10 +83,10 @@ export function useClientContext(): UseClientContextReturn {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [clientId, isProspect]);
   
   // Load prospect data from localStorage
-  const loadProspect = () => {
+  const loadProspect = useCallback(() => {
     if (!prospectId || !isProspect) return;
     
     try {
@@ -172,7 +172,7 @@ export function useClientContext(): UseClientContextReturn {
       console.error('Error loading prospect from localStorage:', err);
       setError('Failed to load prospect data from local storage');
     }
-  };
+  }, [prospectId, isProspect]);
   
   useEffect(() => {
     if (clientId && !isProspect) {
@@ -184,7 +184,7 @@ export function useClientContext(): UseClientContextReturn {
       setClient(null);
       setError(null);
     }
-  }, [clientId, prospectId, isProspect]);
+  }, [clientId, prospectId, isProspect, fetchClient, loadProspect]);
   
   const refresh = async () => {
     if (clientId && !isProspect) {

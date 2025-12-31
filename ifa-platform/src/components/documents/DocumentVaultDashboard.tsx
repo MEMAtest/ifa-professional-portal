@@ -193,7 +193,7 @@ export default function DocumentVaultDashboard() {
   // Initial load
   useEffect(() => {
     loadDashboardData()
-  }, [loadDashboardData])
+  }, [loadDashboardData, refreshInterval])
 
   // Auto-refresh setup
   useEffect(() => {
@@ -208,7 +208,7 @@ export default function DocumentVaultDashboard() {
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [loadDashboardData])
+  }, [loadDashboardData, refreshInterval])
 
   // ===================================================================
   // BULK OPERATIONS

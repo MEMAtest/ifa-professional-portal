@@ -127,7 +127,7 @@ export default function SuitabilityResultsPage() {
       label: derived.statusLabel,
       variant: derived.lifecycleStatus === 'completed' ? ('success' as const) : ('warning' as const)
     }
-  }, [assessment?.completion_percentage, assessment?.is_draft, assessment?.is_final, assessment?.status])
+  }, [assessment])
 
   const completionDisplay = useMemo(() => {
     if (!assessment) return 0
@@ -138,7 +138,7 @@ export default function SuitabilityResultsPage() {
       completionPercentage: assessment.completion_percentage
     })
     return derived.completionPercentage
-  }, [assessment?.completion_percentage, assessment?.is_draft, assessment?.is_final, assessment?.status])
+  }, [assessment])
 
   const loadClient = useCallback(async () => {
     const response = await fetch(`/api/clients/${clientId}`)

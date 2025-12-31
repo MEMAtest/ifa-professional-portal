@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { format, differenceInDays } from 'date-fns';
 import { 
@@ -218,22 +218,7 @@ export default function CFLResultsPage() {
   const [showVersionDetails, setShowVersionDetails] = useState(false);
   const [clientData, setClientData] = useState<any>(null);
 
-  useEffect(() => {
-    if (clientId) {
-      loadResults();
-      loadClientData();
-    }
-  }, [clientId]);
-
-  // ADDED: Sync displayed result with current on initial load
-  useEffect(() => {
-    if (currentResult && !displayedResult) {
-      setDisplayedResult(currentResult);
-      setSelectedVersion(currentResult.version || 1);
-    }
-  }, [currentResult]);
-
-  const loadClientData = async () => {
+  const loadClientData = useCallback(async () => {
     try {
       const response = await fetch(`/api/clients/${clientId}`);
       if (response.ok) {
@@ -243,9 +228,9 @@ export default function CFLResultsPage() {
     } catch (error) {
       console.error('Error loading client data:', error);
     }
-  };
+  }, [clientId]);
 
-  const loadResults = async () => {
+  const loadResults = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -280,7 +265,22 @@ export default function CFLResultsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [clientId]);
+
+  useEffect(() => {
+    if (clientId) {
+      loadResults();
+      loadClientData();
+    }
+  }, [clientId, loadClientData, loadResults]);
+
+  // ADDED: Sync displayed result with current on initial load
+  useEffect(() => {
+    if (currentResult && !displayedResult) {
+      setDisplayedResult(currentResult);
+      setSelectedVersion(currentResult.version || 1);
+    }
+  }, [currentResult, displayedResult]);
 
   const handleRetake = () => {
     router.push(`/assessments/cfl?clientId=${clientId}`);

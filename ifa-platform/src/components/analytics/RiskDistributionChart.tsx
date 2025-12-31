@@ -162,7 +162,7 @@ export function RiskDistributionChart({
 
         {/* Risk Profile Summary */}
         <div className="mt-6 pt-4 border-t">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <p className="text-xs text-gray-500 mb-1">Conservative</p>
               <p className="text-lg font-bold text-green-600">

@@ -3,7 +3,7 @@
 // HOOK TO FETCH REAL DATA FOR CLIENT DETAILS
 // ===================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Client } from '@/types/client';
 
 interface Communication {
@@ -51,7 +51,7 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCommunications = async () => {
+  const fetchCommunications = useCallback(async () => {
     if (!client?.id) return;
     
     try {
@@ -69,9 +69,9 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
       console.error('Error fetching communications:', err);
       setError('Failed to load communications');
     }
-  };
+  }, [client?.id]);
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     if (!client?.id) return;
     
     try {
@@ -84,9 +84,9 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
       console.error('Error fetching reviews:', err);
       setError('Failed to load reviews');
     }
-  };
+  }, [client?.id]);
 
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     if (!client?.id) return;
     
     try {
@@ -99,9 +99,9 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
       console.error('Error fetching activities:', err);
       setError('Failed to load activities');
     }
-  };
+  }, [client?.id]);
 
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -116,17 +116,17 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchCommunications, fetchReviews, fetchActivities]);
 
   useEffect(() => {
     if (client?.id) {
       fetchAllData();
     }
-  }, [client?.id]);
+  }, [client?.id, fetchAllData]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     await fetchAllData();
-  };
+  }, [fetchAllData]);
 
   return {
     communications,

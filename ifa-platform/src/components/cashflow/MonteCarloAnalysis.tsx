@@ -4,7 +4,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MonteCarloRunner } from '@/components/monte-carlo/MonteCarloRunner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -46,11 +46,6 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
   const [showInterpretation, setShowInterpretation] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load historical Monte Carlo results
-  useEffect(() => {
-    loadHistoricalResults();
-  }, [scenario.id]);
-
   // Check for results periodically when MonteCarloRunner is running
   useEffect(() => {
     const checkForResults = async () => {
@@ -87,7 +82,7 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
   }, [scenario.id, simulationResults]);
 
   // FIXED: Robust handling of API responses
-  const loadHistoricalResults = async () => {
+  const loadHistoricalResults = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await fetch(`/api/monte-carlo/results/${scenario.id}`);
@@ -146,7 +141,12 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [scenario.id, simulationResults]);
+
+  // Load historical Monte Carlo results
+  useEffect(() => {
+    loadHistoricalResults();
+  }, [loadHistoricalResults]);
 
   // Generate interpretation based on results
   const getInterpretation = (results: any) => {

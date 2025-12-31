@@ -95,7 +95,7 @@ export default function ClientCard({ client, onView, onEdit, onDelete }: ClientC
         </div>
         
         {/* Financial data with proper null handling */}
-        <div className="grid grid-cols-2 gap-4 py-3 border-t border-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-3 border-t border-gray-100">
           <div>
             <p className="text-xs text-gray-500 uppercase tracking-wide">Annual Income</p>
             <p className="text-sm font-semibold text-gray-900">

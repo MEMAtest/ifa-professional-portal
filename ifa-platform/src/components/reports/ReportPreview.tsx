@@ -49,11 +49,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   // FIX: Use EnhancedCashFlowReportService singleton instance
   const reportService = EnhancedCashFlowReportService.getInstance();
 
-  useEffect(() => {
-    generatePreview();
-  }, [scenario, templateType, options]);
-
-  const generatePreview = async () => {
+  const generatePreview = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -79,7 +75,11 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [options, reportService, scenario.id, templateType]);
+
+  useEffect(() => {
+    generatePreview();
+  }, [generatePreview]);
 
   const updateIframeHeight = useCallback(() => {
     const iframe = iframeRef.current;
@@ -195,7 +195,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
       {showTerminologyHelp && (
         <div className="bg-blue-50 border-b border-blue-200 p-4">
           <h4 className="font-medium text-blue-900 mb-2">Understanding Your Report</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
             <div>
               <strong className="text-blue-800">Portfolio:</strong>
               <span className="text-blue-700"> All your investments combined</span>

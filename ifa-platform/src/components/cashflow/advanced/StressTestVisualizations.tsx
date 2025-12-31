@@ -36,25 +36,24 @@ interface StressTestVisualizationsProps {
   scenarioName: string;
 }
 
+// Color scheme for consistent visualization
+const COLORS = {
+  positive: '#10b981',
+  negative: '#ef4444',
+  warning: '#f59e0b',
+  neutral: '#6b7280',
+  primary: '#3b82f6',
+  secondary: '#8b5cf6',
+  baseline: '#94a3b8',
+  stressed: '#dc2626'
+};
+
 export function StressTestVisualizations({
   results,
   yearByYearProjections,
   baselineProjections,
   scenarioName
 }: StressTestVisualizationsProps) {
-  
-  // Color scheme for consistent visualization
-  const COLORS = {
-    positive: '#10b981',
-    negative: '#ef4444',
-    warning: '#f59e0b',
-    neutral: '#6b7280',
-    primary: '#3b82f6',
-    secondary: '#8b5cf6',
-    baseline: '#94a3b8',
-    stressed: '#dc2626'
-  };
-
   // 1. WATERFALL IMPACT CHART - Shows cumulative impact of stress factors
   const impactData = useMemo(() => {
     if (!results.length) return [];

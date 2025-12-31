@@ -191,7 +191,7 @@ export function useDocumentList(initialParams?: DocumentListParams) {
 
   useEffect(() => {
     fetchDocuments();
-  }, []);
+  }, [fetchDocuments]);
 
   const updateParams = useCallback((newParams: Partial<DocumentListParams>) => {
     fetchDocuments(newParams);

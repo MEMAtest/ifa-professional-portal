@@ -2,7 +2,7 @@
 // ✅ FIXED VERSION - Uses correct database columns
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Settings,
   User,
@@ -21,8 +21,10 @@ import { useToast } from '@/hooks/use-toast'
 import { useSearchParams } from 'next/navigation'
 import { InvestorPersonaLibrary } from '@/components/settings/InvestorPersonaLibrary'
 import { ProdServicesPanel } from '@/components/settings/prod/ProdServicesPanel'
+import { ConsumerDutyPanel } from '@/components/settings/consumerDuty/ConsumerDutyPanel'
 import { useFirmContext } from '@/components/settings/hooks/useFirmContext'
 import { useProdServicesSettings } from '@/components/settings/hooks/useProdServicesSettings'
+import { useConsumerDutySettings } from '@/components/settings/hooks/useConsumerDutySettings'
 
 // Types based on actual database schema
 interface UserProfile {
@@ -59,7 +61,7 @@ export default function SettingsPage() {
   // State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'personas'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas'>('profile')
   const [showPassword, setShowPassword] = useState(false)
   const firmContext = useFirmContext({
     supabase,
@@ -102,6 +104,35 @@ export default function SettingsPage() {
     resolveFirmIdFromAuth: firmContext.resolveFirmIdFromAuth
   })
 
+  // Consumer Duty framework settings hook
+  const {
+    step: consumerDutyStep,
+    setStep: setConsumerDutyStep,
+    framework: consumerDutyFramework,
+    summary: consumerDutySummary,
+    saveStatus: consumerDutySaveStatus,
+    versions: consumerDutyVersions,
+    loadConsumerDutySettings,
+    handleSave: handleSaveConsumerDuty,
+    updateProducts: updateConsumerDutyProducts,
+    updatePricing: updateConsumerDutyPricing,
+    updateCommunication: updateConsumerDutyCommunication,
+    updateSupport: updateConsumerDutySupport,
+    updateNotes: updateConsumerDutyNotes,
+    toggleProductCategory,
+    toggleCommunicationStyle,
+    toggleAccessChannel,
+    restoreVersion: restoreConsumerDutyVersion,
+    handleCopySummary: handleCopyConsumerDutySummary
+  } = useConsumerDutySettings({
+    supabase,
+    userId: user?.id,
+    toast,
+    setSaving,
+    resolveFirmId: firmContext.resolveFirmId,
+    resolveFirmIdFromAuth: firmContext.resolveFirmIdFromAuth
+  })
+
   // Profile state based on actual schema
   const [userProfile, setUserProfile] = useState<UserProfile>({
     id: '',
@@ -135,34 +166,45 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    if (user) {
-      loadSettings()
-    }
-  }, [user])
-
-  useEffect(() => {
     const tab = searchParams.get('tab')
     if (tab === 'services') {
       setActiveTab('services')
+    } else if (tab === 'consumer-duty') {
+      setActiveTab('consumer-duty')
     } else if (tab === 'personas') {
       setActiveTab('personas')
     }
   }, [searchParams])
 
-  const loadSettings = async () => {
-    try {
-      setLoading(true)
-      const resolvedFirmId = await loadUserProfile()
-      await loadFirmSettings(resolvedFirmId)
-    } catch (error) {
-      console.error('Error loading settings:', error)
-      createMockData()
-    } finally {
-      setLoading(false)
-    }
-  }
+  const createDefaultProfile = useCallback(() => {
+    // Create default profile data
+    setUserProfile(prev => ({
+      ...prev,
+      id: user?.id || '',
+      full_name: user?.email?.split('@')[0] || '',
+      phone: '',
+      job_title: 'Financial Advisor',
+      bio: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }))
+  }, [user])
 
-  const loadUserProfile = async (): Promise<string | null> => {
+  const createMockData = useCallback(() => {
+    // Fallback mock data
+    setUserProfile(prev => ({
+      ...prev,
+      id: user?.id || '',
+      full_name: 'John Smith',
+      phone: '+44 7700 900123',
+      job_title: 'Senior Financial Advisor',
+      bio: 'Experienced financial advisor specializing in retirement planning and investment management.',
+      created_at: '2024-01-15T00:00:00Z',
+      updated_at: new Date().toISOString()
+    }))
+  }, [user])
+
+  const loadUserProfile = useCallback(async (): Promise<string | null> => {
     if (!user?.id) return null
 
     // ✅ FIXED: Use actual profiles table schema
@@ -195,35 +237,27 @@ export default function SettingsPage() {
       return resolvedFirmId
     }
     return firmContext.resolveFirmId(null)
-  }
+  }, [createDefaultProfile, firmContext, supabase, user])
 
-  const createDefaultProfile = () => {
-    // Create default profile data
-    setUserProfile(prev => ({
-      ...prev,
-      id: user?.id || '',
-      full_name: user?.email?.split('@')[0] || '',
-      phone: '',
-      job_title: 'Financial Advisor',
-      bio: '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }))
-  }
+  const loadSettings = useCallback(async () => {
+    try {
+      setLoading(true)
+      const resolvedFirmId = await loadUserProfile()
+      await loadFirmSettings(resolvedFirmId)
+      await loadConsumerDutySettings(resolvedFirmId)
+    } catch (error) {
+      console.error('Error loading settings:', error)
+      createMockData()
+    } finally {
+      setLoading(false)
+    }
+  }, [createMockData, loadFirmSettings, loadConsumerDutySettings, loadUserProfile])
 
-  const createMockData = () => {
-    // Fallback mock data
-    setUserProfile(prev => ({
-      ...prev,
-      id: user?.id || '',
-      full_name: 'John Smith',
-      phone: '+44 7700 900123',
-      job_title: 'Senior Financial Advisor',
-      bio: 'Experienced financial advisor specializing in retirement planning and investment management.',
-      created_at: '2024-01-15T00:00:00Z',
-      updated_at: new Date().toISOString()
-    }))
-  }
+  useEffect(() => {
+    if (user) {
+      loadSettings()
+    }
+  }, [user, loadSettings])
 
   const handleSaveProfile = async () => {
     try {
@@ -374,6 +408,7 @@ export default function SettingsPage() {
                 </div>
                 {[
                   { key: 'services', label: 'Services & PROD', icon: Briefcase },
+                  { key: 'consumer-duty', label: 'Consumer Duty', icon: Shield },
                   { key: 'personas', label: 'Investor Personas', icon: Users }
                 ].map(({ key, label, icon: Icon }) => (
                   <button
@@ -716,6 +751,29 @@ export default function SettingsPage() {
               prodVersions={prodVersions}
               onRestoreVersion={restoreProdVersion}
               latestProdDocument={latestProdDocument}
+            />
+          )}
+
+          {activeTab === 'consumer-duty' && (
+            <ConsumerDutyPanel
+              step={consumerDutyStep}
+              onStepChange={setConsumerDutyStep}
+              framework={consumerDutyFramework}
+              onUpdateProducts={updateConsumerDutyProducts}
+              onUpdatePricing={updateConsumerDutyPricing}
+              onUpdateCommunication={updateConsumerDutyCommunication}
+              onUpdateSupport={updateConsumerDutySupport}
+              onUpdateNotes={updateConsumerDutyNotes}
+              onToggleProductCategory={toggleProductCategory}
+              onToggleCommunicationStyle={toggleCommunicationStyle}
+              onToggleAccessChannel={toggleAccessChannel}
+              summary={consumerDutySummary}
+              saveStatus={consumerDutySaveStatus}
+              saving={saving}
+              onSave={handleSaveConsumerDuty}
+              onCopySummary={handleCopyConsumerDutySummary}
+              versions={consumerDutyVersions}
+              onRestoreVersion={restoreConsumerDutyVersion}
             />
           )}
 

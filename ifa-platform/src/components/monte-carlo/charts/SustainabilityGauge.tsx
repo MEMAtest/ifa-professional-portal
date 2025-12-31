@@ -276,7 +276,7 @@ export const SustainabilityGauge: React.FC<SustainabilityGaugeProps> = ({
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           {/* Current Withdrawal Rate */}
           <div className="p-4 bg-gray-50 rounded-lg">
             <div className="text-sm text-gray-600 mb-1">Your Withdrawal Rate</div>

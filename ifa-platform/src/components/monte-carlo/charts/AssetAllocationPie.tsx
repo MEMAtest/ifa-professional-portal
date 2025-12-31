@@ -295,7 +295,7 @@ export const AssetAllocationPie: React.FC<AssetAllocationPieProps> = ({
         )}
 
         {/* Expected Metrics */}
-        <div className="grid grid-cols-2 gap-4 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
           <div className="p-3 bg-green-50 rounded-lg border border-green-200">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-green-600" />

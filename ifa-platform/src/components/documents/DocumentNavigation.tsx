@@ -84,7 +84,7 @@ export function DocumentQuickStats() {
       <div className="bg-blue-50 p-4 rounded-lg">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-blue-600">Today's Sent</p>
+            <p className="text-sm text-blue-600">Today&apos;s Sent</p>
             <p className="text-2xl font-bold text-blue-900">12</p>
           </div>
           <Send className="h-8 w-8 text-blue-400" />

@@ -1,5 +1,5 @@
 // src/components/documents/ReportGenerationModal.tsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -20,6 +20,7 @@ import {
   Loader2
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { useToast } from '@/components/ui/use-toast'
 import { generatePDF } from '@/lib/pdf/generatePDF'
 import { sendReportEmail } from '@/services/emailService'
@@ -34,7 +35,9 @@ import type {
 const ReactQuill = dynamic(
   async () => {
     const { default: RQ } = await import('react-quill')
-    return ({ ...props }) => <RQ {...props} />
+    const QuillWrapper = (props: any) => <RQ {...props} />
+    QuillWrapper.displayName = 'ReactQuill'
+    return QuillWrapper
   },
   {
     ssr: false,
@@ -174,23 +177,16 @@ export default function ReportGenerationModal({
   // INITIALIZE REPORT SECTIONS
   // ================================================================
   
-  useEffect(() => {
-    if (isOpen) {
-      initializeReportSections()
-      loadFirmSettings()
-    }
-  }, [isOpen, assessmentData, assessmentType])
-
-  const initializeReportSections = () => {
+  const initializeReportSections = useCallback(() => {
     const sections = generateInitialSections(assessmentType, assessmentData, clientName)
     setReportSections(sections)
     setCustomSections([])
     setCurrentStep('edit')
     setPdfBlob(null)
     setDocumentId(null)
-  }
+  }, [assessmentData, assessmentType, clientName])
 
-  const loadFirmSettings = async () => {
+  const loadFirmSettings = useCallback(async () => {
     // Load from localStorage or user settings
     const savedSettings = localStorage.getItem('firmSettings')
     if (savedSettings) {
@@ -200,7 +196,14 @@ export default function ReportGenerationModal({
         console.error('Failed to load firm settings')
       }
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) {
+      initializeReportSections()
+      loadFirmSettings()
+    }
+  }, [isOpen, initializeReportSections, loadFirmSettings])
 
   // ================================================================
   // SECTION MANAGEMENT
@@ -467,10 +470,13 @@ export default function ReportGenerationModal({
             </label>
           </div>
           {firmSettings.logoUrl && (
-            <img 
-              src={firmSettings.logoUrl} 
-              alt="Firm logo" 
+            <Image
+              src={firmSettings.logoUrl}
+              alt="Firm logo"
+              width={120}
+              height={48}
               className="h-12 w-auto object-contain"
+              unoptimized
             />
           )}
         </div>

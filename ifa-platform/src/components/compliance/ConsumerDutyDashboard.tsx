@@ -353,28 +353,121 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
       }
 
       const updatedAt = new Date().toISOString()
+      const today = new Date().toISOString().split('T')[0]
+
+      // Build update object
+      const updateData: Record<string, any> = {
+        [field]: value,
+        updated_at: updatedAt
+      }
+
+      // If updating a status field, also set the corresponding last_review date
+      const statusFields = ['products_services_status', 'price_value_status', 'consumer_understanding_status', 'consumer_support_status']
+      if (statusFields.includes(field) && value !== 'not_assessed') {
+        const reviewField = field.replace('_status', '_last_review')
+        updateData[reviewField] = today
+      }
+
+      // If updating overall_status or any outcome status, auto-calculate next_review_date as 1 year from today
+      if ((field === 'overall_status' || statusFields.includes(field)) && value !== 'not_assessed') {
+        const nextYear = new Date()
+        nextYear.setFullYear(nextYear.getFullYear() + 1)
+        updateData.next_review_date = nextYear.toISOString().split('T')[0]
+      }
 
       const { error } = await supabase
         .from('consumer_duty_status')
-        .update({
-          [field]: value,
-          updated_at: updatedAt
-        })
+        .update(updateData)
         .eq('id', recordId)
 
       if (error) throw error
+
+      // Auto-calculate overall status if updating an outcome status
+      const outcomeStatusFields = ['products_services_status', 'price_value_status', 'consumer_understanding_status', 'consumer_support_status']
+      let calculatedOverall: string | null = null
+      if (outcomeStatusFields.includes(field)) {
+        // Find the record and calculate what overall should be
+        const currentRecord = records.find(r => r.id === recordId)
+        if (currentRecord) {
+          const updatedRecord = { ...currentRecord, [field]: value }
+          calculatedOverall = calculateOverallStatus(updatedRecord)
+          // Add overall_status to updateData if different
+          if (calculatedOverall !== currentRecord.overall_status) {
+            updateData.overall_status = calculatedOverall
+            // Also update in database
+            await supabase
+              .from('consumer_duty_status')
+              .update({ overall_status: calculatedOverall })
+              .eq('id', recordId)
+          }
+        }
+      }
 
       // Update local state immediately - no full reload needed
       setRecords(prev => {
         const updated = prev.map(r =>
           r.id === recordId
-            ? { ...r, [field]: value, updated_at: updatedAt }
+            ? { ...r, ...updateData }
             : r
         )
         // Recalculate stats with updated records
         setStats(calculateStats(updated))
         return updated
       })
+
+      // Also update selectedClient if this is the currently selected record
+      if (selectedClient && selectedClient.id === recordId) {
+        setSelectedClient(prev => prev ? { ...prev, ...updateData } : null)
+      }
+
+      // If updating overall_status, also create/update a client_review for tracking
+      if (field === 'overall_status' && value !== 'not_assessed') {
+        const record = records.find(r => r.id === recordId)
+        if (record?.client_id) {
+          const nextYear = new Date()
+          nextYear.setFullYear(nextYear.getFullYear() + 1)
+          const nextReviewDate = nextYear.toISOString().split('T')[0]
+
+          // Check if a consumer_duty review already exists for this client
+          const { data: existingReview } = await supabase
+            .from('client_reviews')
+            .select('id')
+            .eq('client_id', record.client_id)
+            .eq('review_type', 'consumer_duty')
+            .maybeSingle()
+
+          if (existingReview) {
+            // Update existing review
+            await supabase
+              .from('client_reviews')
+              .update({
+                status: value === 'fully_compliant' ? 'completed' : 'scheduled',
+                completed_date: value === 'fully_compliant' ? today : null,
+                next_review_date: nextReviewDate,
+                review_summary: `Consumer Duty assessment: ${value.replace(/_/g, ' ')}`,
+                updated_at: updatedAt
+              })
+              .eq('id', existingReview.id)
+          } else {
+            // Create new review
+            const { data: { user: authUser } } = await supabase.auth.getUser()
+            await supabase
+              .from('client_reviews')
+              .insert({
+                client_id: record.client_id,
+                review_type: 'consumer_duty',
+                due_date: today,
+                status: value === 'fully_compliant' ? 'completed' : 'scheduled',
+                completed_date: value === 'fully_compliant' ? today : null,
+                next_review_date: nextReviewDate,
+                review_summary: `Consumer Duty assessment: ${value.replace(/_/g, ' ')}`,
+                created_by: authUser?.id || '',
+                created_at: updatedAt,
+                updated_at: updatedAt
+              })
+          }
+        }
+      }
 
       toastRef.current({
         title: 'Updated',
@@ -413,6 +506,17 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
     return 'mostly_compliant'
   }
 
+  // Check if all four outcomes have been assessed
+  const isAssessmentComplete = (record: ConsumerDutyStatus): boolean => {
+    const statuses = [
+      record.products_services_status,
+      record.price_value_status,
+      record.consumer_understanding_status,
+      record.consumer_support_status
+    ]
+    return statuses.every(s => s !== 'not_assessed')
+  }
+
   // Get client name
   const getClientName = (record: ConsumerDutyStatus): string => {
     const pd = record.clients?.personal_details
@@ -439,6 +543,26 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
         {option.label}
       </span>
     )
+  }
+
+  const getStatusSelectClass = (status: string) => {
+    const base = 'text-xs border rounded px-2 py-1 w-full'
+    if (status === 'compliant') return `${base} bg-green-50 border-green-200 text-green-700`
+    if (status === 'non_compliant') return `${base} bg-red-50 border-red-200 text-red-700`
+    if (status === 'partially_compliant') return `${base} bg-yellow-50 border-yellow-200 text-yellow-700`
+    if (status === 'under_review') return `${base} bg-blue-50 border-blue-200 text-blue-700`
+    return `${base} bg-gray-50 border-gray-200 text-gray-700`
+  }
+
+  // Handle modal close with incomplete assessment warning
+  const handleModalClose = () => {
+    if (selectedClient && !selectedClient.id.startsWith('virtual-') && !isAssessmentComplete(selectedClient)) {
+      toastRef.current({
+        title: 'Assessment Incomplete',
+        description: 'Not all four Consumer Duty outcomes have been assessed for this client.'
+      })
+    }
+    setSelectedClient(null)
   }
 
   // Create merged list of ALL clients with their Consumer Duty status
@@ -853,147 +977,246 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-gray-50">
-                        <th className="text-left p-3 font-medium">Client</th>
-                        <th className="text-left p-3 font-medium">Products & Services</th>
-                        <th className="text-left p-3 font-medium">Price & Value</th>
-                        <th className="text-left p-3 font-medium">Understanding</th>
-                        <th className="text-left p-3 font-medium">Support</th>
-                        <th className="text-left p-3 font-medium">Overall</th>
-                        <th className="text-left p-3 font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {filteredRecords.map(record => {
-                        const isVirtual = record.id.startsWith('virtual-')
-                        return (
-                          <tr key={record.id} className={`hover:bg-gray-50 ${isVirtual ? 'bg-gray-50/50' : ''}`}>
-                            <td className="p-3">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{getClientName(record)}</span>
+                <>
+                  <div className="space-y-3 sm:hidden">
+                    {filteredRecords.map(record => {
+                      const isVirtual = record.id.startsWith('virtual-')
+                      return (
+                        <div key={record.id} className={`rounded-lg border p-4 shadow-sm ${isVirtual ? 'bg-gray-50/50' : 'bg-white'}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{getClientName(record)}</p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                                 {isVirtual && (
                                   <Badge variant="outline" className="text-xs text-gray-500 border-gray-300">
                                     New
                                   </Badge>
                                 )}
+                                {!isVirtual && !isAssessmentComplete(record) && (
+                                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Incomplete
+                                  </Badge>
+                                )}
                               </div>
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div className="shrink-0">{getStatusBadge(record.overall_status)}</div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-1 gap-3">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Products & Services</p>
                               <select
                                 value={record.products_services_status}
                                 onChange={(e) => updateField(record.id, 'products_services_status', e.target.value)}
-                                className={`text-xs border rounded px-2 py-1 ${
-                                  record.products_services_status === 'compliant' ? 'bg-green-50 border-green-200 text-green-700' :
-                                  record.products_services_status === 'non_compliant' ? 'bg-red-50 border-red-200 text-red-700' :
-                                  record.products_services_status === 'partially_compliant' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
-                                  record.products_services_status === 'under_review' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                                  'bg-gray-50 border-gray-200'
-                                }`}
+                                className={getStatusSelectClass(record.products_services_status)}
                               >
                                 {STATUS_OPTIONS.map(opt => (
                                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                               </select>
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Price & Value</p>
                               <select
                                 value={record.price_value_status}
                                 onChange={(e) => updateField(record.id, 'price_value_status', e.target.value)}
-                                className={`text-xs border rounded px-2 py-1 ${
-                                  record.price_value_status === 'compliant' ? 'bg-green-50 border-green-200 text-green-700' :
-                                  record.price_value_status === 'non_compliant' ? 'bg-red-50 border-red-200 text-red-700' :
-                                  record.price_value_status === 'partially_compliant' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
-                                  record.price_value_status === 'under_review' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                                  'bg-gray-50 border-gray-200'
-                                }`}
+                                className={getStatusSelectClass(record.price_value_status)}
                               >
                                 {STATUS_OPTIONS.map(opt => (
                                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                               </select>
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Understanding</p>
                               <select
                                 value={record.consumer_understanding_status}
                                 onChange={(e) => updateField(record.id, 'consumer_understanding_status', e.target.value)}
-                                className={`text-xs border rounded px-2 py-1 ${
-                                  record.consumer_understanding_status === 'compliant' ? 'bg-green-50 border-green-200 text-green-700' :
-                                  record.consumer_understanding_status === 'non_compliant' ? 'bg-red-50 border-red-200 text-red-700' :
-                                  record.consumer_understanding_status === 'partially_compliant' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
-                                  record.consumer_understanding_status === 'under_review' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                                  'bg-gray-50 border-gray-200'
-                                }`}
+                                className={getStatusSelectClass(record.consumer_understanding_status)}
                               >
                                 {STATUS_OPTIONS.map(opt => (
                                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                               </select>
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Support</p>
                               <select
                                 value={record.consumer_support_status}
                                 onChange={(e) => updateField(record.id, 'consumer_support_status', e.target.value)}
-                                className={`text-xs border rounded px-2 py-1 ${
-                                  record.consumer_support_status === 'compliant' ? 'bg-green-50 border-green-200 text-green-700' :
-                                  record.consumer_support_status === 'non_compliant' ? 'bg-red-50 border-red-200 text-red-700' :
-                                  record.consumer_support_status === 'partially_compliant' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
-                                  record.consumer_support_status === 'under_review' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                                  'bg-gray-50 border-gray-200'
-                                }`}
+                                className={getStatusSelectClass(record.consumer_support_status)}
                               >
                                 {STATUS_OPTIONS.map(opt => (
                                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                               </select>
-                            </td>
-                            <td className="p-3">{getStatusBadge(record.overall_status)}</td>
-                            <td className="p-3">
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Quick View"
-                                  onClick={async () => {
-                                    // For virtual records, create the record first before opening modal
-                                    if (isVirtual) {
-                                      const clientId = record.id.replace('virtual-', '')
-                                      const newRecord = await createRecordForClient(clientId)
-                                      if (newRecord) {
-                                        setSelectedClient(newRecord)
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                if (isVirtual) {
+                                  const clientId = record.id.replace('virtual-', '')
+                                  const newRecord = await createRecordForClient(clientId)
+                                  if (newRecord) {
+                                    setSelectedClient(newRecord)
+                                  }
+                                } else {
+                                  setSelectedClient(record)
+                                }
+                              }}
+                              className="flex-1"
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              Quick View
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => {
+                                const clientId = isVirtual ? record.id.replace('virtual-', '') : record.client_id
+                                setWizardClient({
+                                  id: clientId,
+                                  name: getClientName(record)
+                                })
+                              }}
+                            >
+                              <ClipboardList className="h-4 w-4 mr-2" />
+                              Full Assessment
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-gray-50">
+                          <th className="text-left p-3 font-medium">Client</th>
+                          <th className="text-left p-3 font-medium">Products & Services</th>
+                          <th className="text-left p-3 font-medium">Price & Value</th>
+                          <th className="text-left p-3 font-medium">Understanding</th>
+                          <th className="text-left p-3 font-medium">Support</th>
+                          <th className="text-left p-3 font-medium">Overall</th>
+                          <th className="text-left p-3 font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {filteredRecords.map(record => {
+                          const isVirtual = record.id.startsWith('virtual-')
+                          return (
+                            <tr key={record.id} className={`hover:bg-gray-50 ${isVirtual ? 'bg-gray-50/50' : ''}`}>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{getClientName(record)}</span>
+                                  {isVirtual && (
+                                    <Badge variant="outline" className="text-xs text-gray-500 border-gray-300">
+                                      New
+                                    </Badge>
+                                  )}
+                                  {!isVirtual && !isAssessmentComplete(record) && (
+                                    <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                      Incomplete
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <select
+                                  value={record.products_services_status}
+                                  onChange={(e) => updateField(record.id, 'products_services_status', e.target.value)}
+                                  className={getStatusSelectClass(record.products_services_status)}
+                                >
+                                  {STATUS_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="p-3">
+                                <select
+                                  value={record.price_value_status}
+                                  onChange={(e) => updateField(record.id, 'price_value_status', e.target.value)}
+                                  className={getStatusSelectClass(record.price_value_status)}
+                                >
+                                  {STATUS_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="p-3">
+                                <select
+                                  value={record.consumer_understanding_status}
+                                  onChange={(e) => updateField(record.id, 'consumer_understanding_status', e.target.value)}
+                                  className={getStatusSelectClass(record.consumer_understanding_status)}
+                                >
+                                  {STATUS_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="p-3">
+                                <select
+                                  value={record.consumer_support_status}
+                                  onChange={(e) => updateField(record.id, 'consumer_support_status', e.target.value)}
+                                  className={getStatusSelectClass(record.consumer_support_status)}
+                                >
+                                  {STATUS_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="p-3">{getStatusBadge(record.overall_status)}</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Quick View"
+                                    onClick={async () => {
+                                      if (isVirtual) {
+                                        const clientId = record.id.replace('virtual-', '')
+                                        const newRecord = await createRecordForClient(clientId)
+                                        if (newRecord) {
+                                          setSelectedClient(newRecord)
+                                        }
+                                      } else {
+                                        setSelectedClient(record)
                                       }
-                                    } else {
-                                      setSelectedClient(record)
-                                    }
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  title="Full Assessment"
-                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                  onClick={() => {
-                                    const clientId = isVirtual ? record.id.replace('virtual-', '') : record.client_id
-                                    setWizardClient({
-                                      id: clientId,
-                                      name: getClientName(record)
-                                    })
-                                  }}
-                                >
-                                  <ClipboardList className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    title="Full Assessment"
+                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    onClick={() => {
+                                      const clientId = isVirtual ? record.id.replace('virtual-', '') : record.client_id
+                                      setWizardClient({
+                                        id: clientId,
+                                        name: getClientName(record)
+                                      })
+                                    }}
+                                  >
+                                    <ClipboardList className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -1010,8 +1233,9 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
             </CardHeader>
             <CardContent>
               {overallStatusData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
+                <div className="h-56 sm:h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
                     <Pie
                       data={overallStatusData}
                       cx="50%"
@@ -1028,8 +1252,9 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
                     </Pie>
                     <Tooltip />
                     <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <div className="flex items-center justify-center h-[250px] text-gray-400">
                   No data to display
@@ -1044,8 +1269,9 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
               <CardTitle className="text-sm font-medium">Compliance by Outcome</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={outcomeComplianceData}>
+              <div className="h-56 sm:h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={outcomeComplianceData}>
                   <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
@@ -1053,8 +1279,9 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
                   <Bar dataKey="compliant" stackId="a" fill="#22c55e" name="Compliant" />
                   <Bar dataKey="partial" stackId="a" fill="#eab308" name="Partial" />
                   <Bar dataKey="nonCompliant" stackId="a" fill="#ef4444" name="Non-Compliant" />
-                </BarChart>
-              </ResponsiveContainer>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -1070,7 +1297,7 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
                 <p className="text-sm text-gray-500">{getClientName(selectedClient)}</p>
               </div>
               <button
-                onClick={() => setSelectedClient(null)}
+                onClick={handleModalClose}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
                 <AlertCircle className="h-5 w-5" />
@@ -1161,7 +1388,7 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
                 <ClipboardList className="h-4 w-4 mr-2" />
                 Full Assessment
               </Button>
-              <Button onClick={() => setSelectedClient(null)}>Close</Button>
+              <Button onClick={handleModalClose}>Close</Button>
             </div>
           </div>
         </div>

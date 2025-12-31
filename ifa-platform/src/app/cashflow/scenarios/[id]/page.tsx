@@ -72,12 +72,21 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
 
   const router = useRouter();
 
-  // ✅ PRESERVED: All existing useEffect and functions
-  useEffect(() => {
-    loadScenarioData();
-  }, [params.id]);
+  const generateProjections = useCallback(async (scenarioData: CashFlowScenario) => {
+    try {
+      setIsCalculating(true);
+      const result = await ProjectionEngine.generateProjections(scenarioData);
+      setProjectionResult(result);
+    } catch (err) {
+      console.error('Error generating projections:', err);
+      setError('Failed to generate projections');
+    } finally {
+      setIsCalculating(false);
+    }
+  }, []);
 
-  const loadScenarioData = async () => {
+  // ✅ PRESERVED: All existing useEffect and functions
+  const loadScenarioData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -101,20 +110,11 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [params.id, generateProjections]);
 
-  const generateProjections = useCallback(async (scenarioData: CashFlowScenario) => {
-    try {
-      setIsCalculating(true);
-      const result = await ProjectionEngine.generateProjections(scenarioData);
-      setProjectionResult(result);
-    } catch (err) {
-      console.error('Error generating projections:', err);
-      setError('Failed to generate projections');
-    } finally {
-      setIsCalculating(false);
-    }
-  }, []);
+  useEffect(() => {
+    loadScenarioData();
+  }, [loadScenarioData]);
 
   const handleAssumptionChange = useCallback(async (updatedScenario: CashFlowScenario) => {
     setScenario(updatedScenario);

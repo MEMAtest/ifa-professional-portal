@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -75,7 +75,7 @@ import {
 import type { Client, ClientListResponse } from '@/types/client';
 
 export default function MonteCarloPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientId = searchParams?.get('clientId');
@@ -113,18 +113,45 @@ export default function MonteCarloPage() {
   const [drillDownData, setDrillDownData] = useState<StatClickData | null>(null);
   const [drillDownClientNames, setDrillDownClientNames] = useState<Map<string, string>>(new Map());
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    if (clientId) {
-      loadClientAndScenarios(clientId);
-      setViewMode('history');
+  const loadStats = useCallback(async () => {
+    try {
+      const dashboardStats = await fetchMonteCarloStats(supabase);
+      setStats(dashboardStats);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
     }
-  }, [clientId]);
+  }, [supabase]);
 
-  const loadInitialData = async () => {
+  const loadScenarios = useCallback(async (clientIdToLoad: string) => {
+    try {
+      const scenariosWithResults = await fetchMonteCarloScenarios(supabase, clientIdToLoad);
+      setScenarios(scenariosWithResults);
+    } catch (err) {
+      console.error('Error loading scenarios:', err);
+      setError('Failed to load scenarios');
+    }
+  }, [supabase]);
+
+  const loadClientAndScenarios = useCallback(async (clientIdToLoad: string) => {
+    try {
+      setIsLoadingScenarios(true);
+      
+      // Load client details
+      const client = await clientService.getClientById(clientIdToLoad);
+      setSelectedClient(client);
+
+      // Load scenarios for this client
+      await loadScenarios(clientIdToLoad);
+
+    } catch (err) {
+      console.error('Error loading client and scenarios:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load client data');
+    } finally {
+      setIsLoadingScenarios(false);
+    }
+  }, [loadScenarios]);
+
+  const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -146,45 +173,18 @@ export default function MonteCarloPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [loadStats]);
 
-  const loadStats = async () => {
-    try {
-      const dashboardStats = await fetchMonteCarloStats(supabase);
-      setStats(dashboardStats);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  useEffect(() => {
+    if (clientId) {
+      loadClientAndScenarios(clientId);
+      setViewMode('history');
     }
-  };
-
-  const loadClientAndScenarios = async (clientIdToLoad: string) => {
-    try {
-      setIsLoadingScenarios(true);
-      
-      // Load client details
-      const client = await clientService.getClientById(clientIdToLoad);
-      setSelectedClient(client);
-
-      // Load scenarios for this client
-      await loadScenarios(clientIdToLoad);
-
-    } catch (err) {
-      console.error('Error loading client and scenarios:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load client data');
-    } finally {
-      setIsLoadingScenarios(false);
-    }
-  };
-
-  const loadScenarios = async (clientIdToLoad: string) => {
-    try {
-      const scenariosWithResults = await fetchMonteCarloScenarios(supabase, clientIdToLoad);
-      setScenarios(scenariosWithResults);
-    } catch (err) {
-      console.error('Error loading scenarios:', err);
-      setError('Failed to load scenarios');
-    }
-  };
+  }, [clientId, loadClientAndScenarios]);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
@@ -291,7 +291,7 @@ export default function MonteCarloPage() {
       // Refresh scenarios in background
       loadScenarios(selectedClient.id);
     }
-  }, [selectedClient, toast]);
+  }, [selectedClient, loadScenarios, supabase, toast]);
 
   const handleScenarioClick = async (scenario: ScenarioWithResult) => {
     // Check if scenario has results
@@ -611,7 +611,7 @@ export default function MonteCarloPage() {
                     <p className="text-gray-600 mb-6">
                       Based on {latestResults.simulationCount || 0} simulations
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-center">
                       <div>
                         <p className="text-sm text-gray-600">Median Wealth</p>
                         <p className="text-lg font-semibold">
@@ -694,7 +694,7 @@ export default function MonteCarloPage() {
                   </CardHeader>
                   <CardContent>
                     {/* Key Metrics Row */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                       <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
                         <p className="text-sm text-blue-600 font-medium">Success Rate</p>
                         <p className={`text-3xl font-bold ${
@@ -734,7 +734,7 @@ export default function MonteCarloPage() {
                     {/* Scenario Parameters */}
                     <div className="bg-gray-50 p-4 rounded-lg mb-6">
                       <h4 className="font-semibold mb-3 text-gray-700">Scenario Parameters</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
                           <span className="text-gray-500">Initial Wealth:</span>
                           <span className="ml-2 font-medium">{formatCurrency(selectedScenario.initial_wealth)}</span>

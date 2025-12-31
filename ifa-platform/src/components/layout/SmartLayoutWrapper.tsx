@@ -49,9 +49,9 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
     <LayoutContext.Provider value={true}>
       <NotificationsProvider>
         <div className="min-h-screen bg-gray-50">
-          <Header onToggleSidebar={toggleSidebar} />
+          <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} sidebarId="primary-navigation" />
           <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
-          <main className="pt-16 lg:ml-64">
+          <main className="pt-[var(--app-header-height)] lg:ml-64">
             <div className="p-4 sm:p-6">
               {children}
             </div>

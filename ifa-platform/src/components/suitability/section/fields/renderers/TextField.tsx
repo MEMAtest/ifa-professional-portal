@@ -42,7 +42,7 @@ export const TextField = memo<FieldProps>(
 
         onChange(newValue)
       },
-      [field.mask, field.transform, onChange]
+      [field, onChange]
     )
 
     return (
@@ -134,4 +134,3 @@ export const TextField = memo<FieldProps>(
 )
 
 TextField.displayName = 'TextField'
-

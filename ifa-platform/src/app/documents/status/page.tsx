@@ -3,7 +3,7 @@
 
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -58,15 +58,7 @@ export default function DocumentStatusPage() {
     }
   }, [])
 
-  useEffect(() => {
-    loadDocumentStatuses()
-  }, [])
-
-  useEffect(() => {
-    filterDocuments()
-  }, [documents, statusFilter, searchQuery, dateFilter])
-
-  const loadDocumentStatuses = async () => {
+  const loadDocumentStatuses = useCallback(async () => {
     if (!supabase) {
       console.error("Action failed: Supabase client is not available in loadDocumentStatuses.")
       setDocuments(getMockDocuments())
@@ -115,7 +107,7 @@ export default function DocumentStatusPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
 
   const getMockDocuments = (): DocumentStatus[] => [
     {
@@ -163,7 +155,7 @@ export default function DocumentStatusPage() {
     }
   ]
 
-  const filterDocuments = () => {
+  const filterDocuments = useCallback(() => {
     let filtered = [...documents]
 
     // Status filter
@@ -203,7 +195,15 @@ export default function DocumentStatusPage() {
     }
 
     setFilteredDocuments(filtered)
-  }
+  }, [documents, statusFilter, searchQuery, dateFilter])
+
+  useEffect(() => {
+    loadDocumentStatuses()
+  }, [loadDocumentStatuses])
+
+  useEffect(() => {
+    filterDocuments()
+  }, [filterDocuments])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -325,9 +325,9 @@ export default function DocumentStatusPage() {
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               {/* Search */}
-              <div className="flex-1 min-w-[200px]">
+              <div className="w-full sm:flex-1 sm:min-w-[200px]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
@@ -341,7 +341,7 @@ export default function DocumentStatusPage() {
 
               {/* Status Filter */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-full sm:w-[150px]">
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
@@ -356,7 +356,7 @@ export default function DocumentStatusPage() {
 
               {/* Date Filter */}
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-full sm:w-[150px]">
                   <SelectValue placeholder="All Time" />
                 </SelectTrigger>
                 <SelectContent>
@@ -372,6 +372,7 @@ export default function DocumentStatusPage() {
                 variant="outline"
                 onClick={loadDocumentStatuses}
                 disabled={loading}
+                className="w-full sm:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
@@ -385,7 +386,62 @@ export default function DocumentStatusPage() {
             <CardTitle>Documents ({filteredDocuments.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {filteredDocuments.length > 0 ? (
+              <div className="space-y-3 sm:hidden">
+                {filteredDocuments.map((doc) => (
+                  <div key={doc.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{doc.document_name}</p>
+                        <p className="text-xs text-gray-500">{doc.template_name}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        {doc.status !== 'signed' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => resendDocument(doc)}
+                          >
+                            <Mail className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => downloadDocument(doc)}
+                        >
+                          <Download className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600">
+                      <p>{doc.client_name}</p>
+                      <p>{doc.client_email}</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                      <Badge className={`${getStatusColor(doc.status)} flex items-center gap-1 w-fit`}>
+                        {getStatusIcon(doc.status)}
+                        {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}
+                      </Badge>
+                      <span className="text-gray-500">
+                        {doc.sent_at ? new Date(doc.sent_at).toLocaleDateString() : 'Not sent'}
+                      </span>
+                      {doc.signed_at && (
+                        <span className="text-green-600">
+                          Signed: {new Date(doc.signed_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 sm:hidden">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>No documents found matching your criteria</p>
+              </div>
+            )}
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full">
                 <thead>
                   <tr className="border-b">

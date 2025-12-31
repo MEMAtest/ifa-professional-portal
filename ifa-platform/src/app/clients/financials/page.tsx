@@ -71,7 +71,7 @@ const CHART_COLORS = ['#3B82F6', '#8B5CF6', '#22C55E', '#F59E0B', '#EF4444']
 
 export default function ClientFinancialsPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [loading, setLoading] = useState(true)
   const [firmAUM, setFirmAUM] = useState<FirmAUM | null>(null)
@@ -151,7 +151,7 @@ export default function ClientFinancialsPage() {
     }
 
     fetchClients()
-  }, [feeSchedule])
+  }, [feeSchedule, supabase])
 
   // Sorted and paginated clients
   const sortedClients = useMemo(() => {
@@ -504,7 +504,7 @@ export default function ClientFinancialsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
             {aumBands.map((band, index) => (
               <div
                 key={band.label}
@@ -639,7 +639,7 @@ export default function ClientFinancialsPage() {
                 <h4 className="font-medium text-gray-700">Revenue Projections</h4>
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">Based on current AUM</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-green-50 rounded-lg">
                   <p className="text-sm text-green-600">Annual Ongoing Revenue</p>
                   <p className="text-2xl font-bold text-green-700">

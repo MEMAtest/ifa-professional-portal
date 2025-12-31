@@ -148,7 +148,7 @@ export const SuitabilityStep = ({ assessment, onChange, errors }: SuitabilitySte
                 }
                 rows={3}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                placeholder="Explain how the recommendation meets or doesn't meet client objectives..."
+                placeholder="Explain how the recommendation meets or does not meet client objectives..."
               />
             </div>
           </div>
@@ -164,7 +164,7 @@ export const SuitabilityStep = ({ assessment, onChange, errors }: SuitabilitySte
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Is the recommendation suitable for the client's risk profile?
+                Is the recommendation suitable for the client&apos;s risk profile?
               </label>
               <div className="space-y-2">
                 {[

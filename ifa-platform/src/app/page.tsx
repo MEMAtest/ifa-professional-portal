@@ -215,7 +215,7 @@ export default function HomePage() {
 
         {/* Help Text */}
         <div className="mt-8 text-xs text-gray-400">
-          <p>If this takes longer than 10 seconds, you'll see timeout options</p>
+          <p>If this takes longer than 10 seconds, you&apos;ll see timeout options</p>
         </div>
       </div>
     </div>

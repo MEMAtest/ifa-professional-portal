@@ -4,7 +4,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
@@ -53,47 +53,8 @@ export default function ClientsPage() {
   // Advisors for filter
   const [advisors, setAdvisors] = useState<Array<{ id: string; name: string }>>([]);
 
-  // ✅ FIXED: Check for success message from URL params with null safety
-  useEffect(() => {
-    // ✅ PRODUCTION: Safe searchParams access with null checking
-    if (!searchParams) return;
-    
-    const successMessage = searchParams.get('success');
-    const updatedClientId = searchParams.get('updated');
-    
-    if (successMessage) {
-      toast({
-        title: 'Success',
-        description: decodeURIComponent(successMessage),
-        variant: 'default'
-      });
-      
-      // Clean up URL parameters
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
-      
-      // If we have an updated client ID, try to show that client
-      if (updatedClientId) {
-        loadClientAndShow(updatedClientId);
-      }
-    }
-  }, [searchParams, toast]);
-
-  // Load and show specific client
-  const loadClientAndShow = async (clientId: string) => {
-    try {
-      const client = await clientService.getClientById(clientId);
-      setSelectedClient(client);
-      setView('details');
-    } catch (error) {
-      console.error('Error loading updated client:', error);
-      // If we can't load the specific client, just show the list
-      loadClients();
-    }
-  };
-
   // Load clients data
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -120,10 +81,49 @@ export default function ClientsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, filters, currentPage, toast]);
+
+  // Load and show specific client
+  const loadClientAndShow = useCallback(async (clientId: string) => {
+    try {
+      const client = await clientService.getClientById(clientId);
+      setSelectedClient(client);
+      setView('details');
+    } catch (error) {
+      console.error('Error loading updated client:', error);
+      // If we can't load the specific client, just show the list
+      loadClients();
+    }
+  }, [loadClients]);
+
+  // ✅ FIXED: Check for success message from URL params with null safety
+  useEffect(() => {
+    // ✅ PRODUCTION: Safe searchParams access with null checking
+    if (!searchParams) return;
+    
+    const successMessage = searchParams.get('success');
+    const updatedClientId = searchParams.get('updated');
+    
+    if (successMessage) {
+      toast({
+        title: 'Success',
+        description: decodeURIComponent(successMessage),
+        variant: 'default'
+      });
+      
+      // Clean up URL parameters
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      
+      // If we have an updated client ID, try to show that client
+      if (updatedClientId) {
+        loadClientAndShow(updatedClientId);
+      }
+    }
+  }, [searchParams, toast, loadClientAndShow]);
 
   // Load advisors for filter
-  const loadAdvisors = async () => {
+  const loadAdvisors = useCallback(async () => {
     try {
       const response = await fetch('/api/advisors');
       if (response.ok) {
@@ -133,7 +133,7 @@ export default function ClientsPage() {
     } catch (error) {
       console.error('Error loading advisors:', error);
     }
-  };
+  }, []);
 
   // Search clients
   const handleSearch = async (query: string) => {
@@ -294,7 +294,7 @@ export default function ClientsPage() {
       loadClients();
       loadAdvisors(); // Load advisors on mount
     }
-  }, [user, filters, currentPage]);
+  }, [user, loadClients, loadAdvisors]);
 
   // ✅ PRODUCTION: Enhanced loading states
   if (authLoading || loading) {
@@ -441,8 +441,8 @@ export default function ClientsPage() {
       {/* Active Filters Display */}
       {(Object.keys(filters).length > 0 || searchQuery) && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-blue-900">Active Filters:</span>
               {filters.status && (
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
@@ -456,7 +456,7 @@ export default function ClientsPage() {
               )}
               {searchQuery && (
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                  Search: "{searchQuery}"
+                  Search: &quot;{searchQuery}&quot;
                 </span>
               )}
             </div>
@@ -467,6 +467,7 @@ export default function ClientsPage() {
                 handleClearFilters();
                 loadClients();
               }}
+              className="w-full sm:w-auto"
             >
               Clear All
             </Button>

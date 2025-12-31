@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { format, differenceInDays } from 'date-fns';
 import { 
@@ -182,22 +182,7 @@ export default function ATRResultsPage() {
   const [viewingVersion, setViewingVersion] = useState<ATRResult | null>(null);
   const [clientData, setClientData] = useState<any>(null);
 
-  useEffect(() => {
-    if (clientId) {
-      loadResults();
-      loadClientData();
-    }
-  }, [clientId]);
-
-  // Sync displayed result with current on initial load
-  useEffect(() => {
-    if (currentResult && !displayedResult) {
-      setDisplayedResult(currentResult);
-      setSelectedVersion(currentResult.version || 1);
-    }
-  }, [currentResult]);
-
-  const loadClientData = async () => {
+  const loadClientData = useCallback(async () => {
     try {
       // Load basic client info for document generation
       const response = await fetch(`/api/clients/${clientId}`);
@@ -209,9 +194,9 @@ export default function ATRResultsPage() {
       console.error('Error loading client data:', error);
       // Non-critical error, don't block the page
     }
-  };
+  }, [clientId]);
 
-  const loadResults = async () => {
+  const loadResults = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -239,7 +224,22 @@ export default function ATRResultsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [clientId]);
+
+  useEffect(() => {
+    if (clientId) {
+      loadResults();
+      loadClientData();
+    }
+  }, [clientId, loadClientData, loadResults]);
+
+  // Sync displayed result with current on initial load
+  useEffect(() => {
+    if (currentResult && !displayedResult) {
+      setDisplayedResult(currentResult);
+      setSelectedVersion(currentResult.version || 1);
+    }
+  }, [currentResult, displayedResult]);
 
   const handleRetake = () => {
     router.push(`/assessments/atr?clientId=${clientId}`);

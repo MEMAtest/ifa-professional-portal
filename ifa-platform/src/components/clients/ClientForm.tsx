@@ -6,42 +6,26 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { normalizeIsoCountryCode } from '@/lib/isoCountries';
 import { useClientIntegration } from '@/lib/hooks/useClientIntegration';
 import { AlertCircle, CheckCircle, Save, X, ChevronRight, ChevronLeft } from 'lucide-react';
-import { ContactInformationStep } from '@/components/clients/form/steps/ContactInformationStep';
-import { FinancialProfileStep } from '@/components/clients/form/steps/FinancialProfileStep';
-import { PersonalDetailsStep } from '@/components/clients/form/steps/PersonalDetailsStep';
-import { RiskProfileStep } from '@/components/clients/form/steps/RiskProfileStep';
-import { VulnerabilityAssessmentStep } from '@/components/clients/form/steps/VulnerabilityAssessmentStep';
+import { ClientFormStepContent } from '@/components/clients/form/ClientFormStepContent';
+import { useClientFormState } from '@/components/clients/form/hooks/useClientFormState';
 import {
   TOTAL_STEPS,
   formSteps
 } from '@/components/clients/form/constants';
 import {
-  deepMerge,
-  getEmptyFormData,
   transformFormDataToClient
 } from '@/components/clients/form/utils';
 import type {
   Client,
   ClientFormData,
-  PersonalDetails,
-  ContactInfo,
-  FinancialProfile,
-  VulnerabilityAssessment,
-  RiskProfile,
-  ClientStatus,
-  ValidationError
-} from '@/types/client';
-import {
-  validateClientData,
 } from '@/types/client';
 
 // ===================================================================
@@ -83,40 +67,25 @@ export default function ClientForm({
   // STATE MANAGEMENT
   // ===================================================================
   
-  const [formData, setFormData] = useState<ClientFormData>(() => {
-    const defaultData = getEmptyFormData();
-    
-    if (client) {
-      const normalizedPersonalDetails = {
-        ...(client.personalDetails || {}),
-        nationality: normalizeIsoCountryCode(client.personalDetails?.nationality)
-      };
-
-      return {
-        personalDetails: deepMerge(defaultData.personalDetails, normalizedPersonalDetails),
-        contactInfo: deepMerge(defaultData.contactInfo, client.contactInfo || {}),
-        financialProfile: deepMerge(defaultData.financialProfile, client.financialProfile || {}),
-        vulnerabilityAssessment: deepMerge(
-          defaultData.vulnerabilityAssessment || {}, 
-          client.vulnerabilityAssessment || {}
-        ),
-        riskProfile: deepMerge(
-          defaultData.riskProfile || {}, 
-          client.riskProfile || {}
-        ),
-        status: client.status || 'prospect',
-        clientRef: client.clientRef,
-        notes: client.notes
-      };
-    }
-    
-    return defaultData;
-  });
-
-  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isFormDirty, setIsFormDirty] = useState(false);
-  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    currentStep,
+    isFormDirty,
+    isDraftLoaded,
+    setIsDraftLoaded,
+    handleNextStep,
+    handlePrevStep,
+    handleStepClick,
+    updatePersonalDetails,
+    updateContactInfo,
+    updateFinancialProfile,
+    updateVulnerabilityAssessment,
+    toggleVulnerabilityList,
+    updateRiskProfile,
+    updateStatus
+  } = useClientFormState(client);
   const [isSaving, setIsSaving] = useState(false);
 
   // ===================================================================
@@ -203,8 +172,8 @@ export default function ClientForm({
   // DRAFT MANAGEMENT
   // ===================================================================
 
-  const draftManager = {
-    save: (data: any) => {
+  const draftManager = useMemo(() => ({
+    save: (data: ClientFormData) => {
       if (saveDraft && typeof saveDraft === 'function') {
         saveDraft(data);
       }
@@ -212,7 +181,7 @@ export default function ClientForm({
     loadDraft: async (type: string, id: string): Promise<ClientFormData | null> => {
       return null;
     }
-  };
+  }), [saveDraft]);
 
   // Load draft on mount
   useEffect(() => {
@@ -235,47 +204,14 @@ export default function ClientForm({
       }
     };
     loadDraft();
-  }, [client?.id, isDraftLoaded, toast]);
+  }, [client?.id, draftManager, isDraftLoaded, setFormData, setIsDraftLoaded, toast]);
 
   // Auto-save drafts
   useEffect(() => {
     if (formData && isFormDirty && !isSaving) {
       draftManager.save(formData);
     }
-  }, [formData, isFormDirty, isSaving]);
-
-  // Validation
-  useEffect(() => {
-    if (formData) {
-      const errors = validateClientData(formData);
-      setValidationErrors(errors);
-    }
-  }, [formData]);
-
-  // ===================================================================
-  // NAVIGATION HANDLERS
-  // ===================================================================
-
-  const handleNextStep = useCallback(() => {
-    if (currentStep < TOTAL_STEPS) {
-      console.log(`➡️ Moving from step ${currentStep} to step ${currentStep + 1}`);
-      setCurrentStep(currentStep + 1);
-    }
-  }, [currentStep]);
-
-  const handlePrevStep = useCallback(() => {
-    if (currentStep > 1) {
-      console.log(`⬅️ Moving from step ${currentStep} to step ${currentStep - 1}`);
-      setCurrentStep(currentStep - 1);
-    }
-  }, [currentStep]);
-
-  const handleStepClick = useCallback((stepId: number) => {
-    if (stepId <= currentStep || stepId === currentStep + 1) {
-      console.log(`🔢 Direct navigation to step ${stepId}`);
-      setCurrentStep(stepId);
-    }
-  }, [currentStep]);
+  }, [draftManager, formData, isFormDirty, isSaving]);
 
   const handleCancel = useCallback(() => {
     if (isFormDirty) {
@@ -287,120 +223,6 @@ export default function ClientForm({
       onCancel();
     }
   }, [isFormDirty, onCancel]);
-
-  // ===================================================================
-  // UPDATE HANDLERS
-  // ===================================================================
-
-  const updateFormData = useCallback((updates: Partial<ClientFormData>) => {
-    setFormData(prev => {
-      const newData = deepMerge(prev, updates);
-      setIsFormDirty(true);
-      return newData;
-    });
-  }, []);
-
-  const updatePersonalDetails = useCallback((updates: Partial<PersonalDetails>) => {
-    updateFormData({
-      personalDetails: deepMerge(formData.personalDetails, updates)
-    });
-  }, [formData.personalDetails, updateFormData]);
-
-  const updateContactInfo = useCallback((updates: Partial<ContactInfo>) => {
-    updateFormData({
-      contactInfo: deepMerge(formData.contactInfo, updates)
-    });
-  }, [formData.contactInfo, updateFormData]);
-
-  const updateFinancialProfile = useCallback((updates: Partial<FinancialProfile>) => {
-    updateFormData({
-      financialProfile: deepMerge(formData.financialProfile || {}, updates)
-    });
-  }, [formData.financialProfile, updateFormData]);
-
-  const updateVulnerabilityAssessment = useCallback((updates: Partial<VulnerabilityAssessment>) => {
-    updateFormData({
-      vulnerabilityAssessment: deepMerge(formData.vulnerabilityAssessment || {}, updates)
-    });
-  }, [formData.vulnerabilityAssessment, updateFormData]);
-
-  const toggleVulnerabilityList = useCallback(
-    (
-      field: 'vulnerabilityFactors' | 'supportNeeds' | 'communicationAdjustments',
-      value: string
-    ) => {
-      const existing = formData.vulnerabilityAssessment?.[field] || [];
-      const next = existing.includes(value)
-        ? existing.filter((item: string) => item !== value)
-        : [...existing, value];
-
-      updateVulnerabilityAssessment({ [field]: next } as Partial<VulnerabilityAssessment>);
-    },
-    [formData.vulnerabilityAssessment, updateVulnerabilityAssessment]
-  );
-
-  const updateRiskProfile = useCallback((updates: Partial<RiskProfile>) => {
-    updateFormData({
-      riskProfile: deepMerge(formData.riskProfile || {}, updates)
-    });
-  }, [formData.riskProfile, updateFormData]);
-
-  const updateStatus = useCallback((status: ClientStatus) => {
-    updateFormData({ status });
-  }, [updateFormData]);
-
-  const renderCurrentStep = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <PersonalDetailsStep
-            formData={formData}
-            hasDraft={hasDraft}
-            onUpdatePersonalDetails={updatePersonalDetails}
-            onUpdateStatus={updateStatus}
-          />
-        );
-      case 2:
-        return (
-          <ContactInformationStep
-            formData={formData}
-            onUpdateContactInfo={updateContactInfo}
-          />
-        );
-      case 3:
-        return (
-          <FinancialProfileStep
-            formData={formData}
-            onUpdateFinancialProfile={updateFinancialProfile}
-          />
-        );
-      case 4:
-        return (
-          <VulnerabilityAssessmentStep
-            formData={formData}
-            onUpdateVulnerabilityAssessment={updateVulnerabilityAssessment}
-            onToggleList={toggleVulnerabilityList}
-          />
-        );
-      case 5:
-        return (
-          <RiskProfileStep
-            formData={formData}
-            onUpdateRiskProfile={updateRiskProfile}
-          />
-        );
-      default:
-        console.error(`Invalid step: ${currentStep}`);
-        return (
-          <PersonalDetailsStep
-            formData={formData}
-            hasDraft={hasDraft}
-            onUpdatePersonalDetails={updatePersonalDetails}
-            onUpdateStatus={updateStatus}
-          />
-        );
-    }
-  };
 
   // ===================================================================
   // MAIN RENDER - NUCLEAR OPTION WITH NO FORM TAGS
@@ -483,7 +305,18 @@ export default function ClientForm({
 
       {/* ✅ NUCLEAR OPTION: NO FORM TAG - JUST DIV */}
       <div className="space-y-6">
-        {renderCurrentStep()}
+        <ClientFormStepContent
+          currentStep={currentStep}
+          formData={formData}
+          hasDraft={hasDraft}
+          onUpdatePersonalDetails={updatePersonalDetails}
+          onUpdateStatus={updateStatus}
+          onUpdateContactInfo={updateContactInfo}
+          onUpdateFinancialProfile={updateFinancialProfile}
+          onUpdateVulnerabilityAssessment={updateVulnerabilityAssessment}
+          onToggleVulnerabilityList={toggleVulnerabilityList}
+          onUpdateRiskProfile={updateRiskProfile}
+        />
       </div>
 
       {/* ✅ NAVIGATION WITH SAVE ALWAYS AVAILABLE */}

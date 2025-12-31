@@ -345,7 +345,7 @@ export default function ShareAssessmentModal({
                   <li>• Client clicks the link and sees the assessment questions</li>
                   <li>• They complete the questionnaire at their own pace</li>
                   <li>• You receive a notification when they finish</li>
-                  <li>• Results are saved to the client's profile</li>
+                  <li>• Results are saved to the client&apos;s profile</li>
                 </ul>
               </div>
 

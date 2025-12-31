@@ -209,7 +209,7 @@ export const ExpenseBreakdownTable: React.FC<ExpenseBreakdownTableProps> = ({
         </CardHeader>
         <CardContent>
           {/* Key Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <div className="p-3 bg-gray-50 rounded-lg">
               <p className="text-xs text-gray-500">Monthly Income</p>
               <p className="text-lg font-semibold">£{monthlyIncome.toLocaleString()}</p>

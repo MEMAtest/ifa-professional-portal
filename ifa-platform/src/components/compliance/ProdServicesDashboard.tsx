@@ -1,7 +1,7 @@
 // src/components/compliance/ProdServicesDashboard.tsx
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { Download, Settings, Calendar } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -37,7 +37,7 @@ const resolveDetail = (value?: string, other?: string) => {
 }
 
 export default function ProdServicesDashboard() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const { user } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
@@ -54,7 +54,7 @@ export default function ProdServicesDashboard() {
   const [downloading, setDownloading] = useState(false)
   const [openingStored, setOpeningStored] = useState(false)
 
-  const resolveFirmId = async () => {
+  const resolveFirmId = useCallback(async () => {
     const { data: authData } = await supabase.auth.getUser()
     const authUser = authData?.user
     let firmId =
@@ -72,9 +72,9 @@ export default function ProdServicesDashboard() {
     }
 
     return isValidFirmId(firmId) ? firmId : null
-  }
+  }, [supabase])
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       setLoading(true)
       const firmId = await resolveFirmId()
@@ -103,11 +103,11 @@ export default function ProdServicesDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [resolveFirmId, supabase, user?.id])
 
   useEffect(() => {
     loadSettings()
-  }, [user?.id])
+  }, [loadSettings])
 
   const handleDownload = async () => {
     if (!settings || !reportContext) return

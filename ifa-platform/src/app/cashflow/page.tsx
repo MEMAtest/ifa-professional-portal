@@ -9,11 +9,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import CashFlowDashboard from '@/components/cashflow/CashFlowDashboard';
-import { CashFlowDataService } from '@/services/CashFlowDataService';
-import { CashFlowScenarioService } from '@/services/CashFlowScenarioService';
-import { clientService } from '@/services/ClientService';
 import { useClientIntegration } from '@/lib/hooks/useClientIntegration';
-import { AssessmentService } from '@/services/AssessmentService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -52,11 +48,9 @@ import {
 } from '@/components/cashflow/dashboard/utils';
 import type {
   ClientFilterKey,
-  QuickAction,
-  TrackingState
+  QuickAction
 } from '@/components/cashflow/dashboard/types';
-import type { CashflowCoverageClientIds } from '@/services/cashflow/cashflowCoverageService';
-import { fetchCashflowCoverageData } from '@/services/cashflow/cashflowCoverageService';
+import { useCashFlowPageData } from '@/components/cashflow/hooks/useCashFlowPageData';
 import { 
   ArrowLeft,
   AlertCircle,
@@ -72,7 +66,7 @@ import {
   Users,
   Zap
 } from 'lucide-react';
-import type { Client, ClientListResponse } from '@/types/client';
+import type { Client } from '@/types/client';
 import type { CashFlowScenario } from '@/types/cashflow';
 
 // ================================================================
@@ -88,31 +82,10 @@ export default function CashFlowPage() {
   const { toast } = useToast();
 
   // Existing state
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [scenarios, setScenarios] = useState<CashFlowScenario[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isCreatingScenario, setIsCreatingScenario] = useState(false);
   const [showNewScenarioDialog, setShowNewScenarioDialog] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ClientFilterKey>('all');
   const [isDrillDownOpen, setIsDrillDownOpen] = useState(false);
   const [drillDownKey, setDrillDownKey] = useState<ClientFilterKey>('all');
-  const [coverageLoaded, setCoverageLoaded] = useState(false);
-  const [coverageClientIds, setCoverageClientIds] = useState<CashflowCoverageClientIds>({
-    assessed: [],
-    scenarios: [],
-    reports: []
-  });
-  const [scenarioRetirementAges, setScenarioRetirementAges] = useState<Record<string, number>>({});
-  const [trackingState, setTrackingState] = useState<TrackingState>({
-    isTracking: false
-  });
-
-  // ADDED: Modal state
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [showStressTestModal, setShowStressTestModal] = useState(false);
-  const [selectedScenarioForReport, setSelectedScenarioForReport] = useState<CashFlowScenario | null>(null);
 
   const { 
     client: integratedClient,
@@ -120,19 +93,36 @@ export default function CashFlowPage() {
     linkScenario,
     getIntegrationStatus
   } = useClientIntegration({
-    clientId: selectedClient?.id || undefined,
+    clientId: clientId || undefined,
     autoSave: false
   });
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
+  const {
+    selectedClient,
+    setSelectedClient,
+    clients,
+    scenarios,
+    isLoading,
+    error,
+    isCreatingScenario,
+    coverageLoaded,
+    coverageClientIds,
+    scenarioRetirementAges,
+    trackingState,
+    setTrackingState,
+    trackCashFlowProgress,
+    reloadData
+  } = useCashFlowPageData({
+    supabase,
+    clientId,
+    linkScenario,
+    toast
+  });
 
-  useEffect(() => {
-    if (clientId) {
-      loadClientAndScenarios(clientId);
-    }
-  }, [clientId]);
+  // ADDED: Modal state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showStressTestModal, setShowStressTestModal] = useState(false);
+  const [selectedScenarioForReport, setSelectedScenarioForReport] = useState<CashFlowScenario | null>(null);
 
   useEffect(() => {
     if (action === 'new' && selectedClient) {
@@ -163,7 +153,7 @@ export default function CashFlowPage() {
     return () => {
       window.removeEventListener('cashflow:scenarioSaved', handleScenarioSave as EventListener);
     };
-  }, [selectedClient, trackingState.lastTrackedScenarioId]);
+  }, [selectedClient, trackCashFlowProgress, trackingState.lastTrackedScenarioId, setTrackingState]);
 
   useEffect(() => {
     const handleScenarioSelected = (event: Event) => {
@@ -179,148 +169,6 @@ export default function CashFlowPage() {
       window.removeEventListener('cashflow:scenarioSelected', handleScenarioSelected as EventListener);
     };
   }, []);
-
-  const loadInitialData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const clientsResponse: ClientListResponse = await clientService.getAllClients(
-        { status: ['active'] },
-        1,
-        100
-      );
-      setClients(clientsResponse.clients);
-      await loadCoverageData(clientsResponse.clients);
-
-      if (clientId) {
-        await loadClientAndScenarios(clientId);
-      }
-
-    } catch (err) {
-      console.error('Error loading initial data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadCoverageData = async (clientList: Client[]) => {
-    const clientIds = clientList.map((client) => client.id);
-
-    try {
-      const { coverageClientIds: coverageData, scenarioRetirementAges: retirementAges } =
-        await fetchCashflowCoverageData(supabase, clientIds);
-      setCoverageClientIds(coverageData);
-      setScenarioRetirementAges(retirementAges);
-    } catch (coverageError) {
-      console.warn('Coverage data lookup failed:', coverageError);
-      setCoverageClientIds({ assessed: [], scenarios: [], reports: [] });
-      setScenarioRetirementAges({});
-    } finally {
-      setCoverageLoaded(true);
-    }
-  };
-
-  const loadClientAndScenarios = async (clientId: string) => {
-    try {
-      const client = await clientService.getClientById(clientId);
-      setSelectedClient(client);
-
-      const clientScenarios = await CashFlowDataService.getScenariosForClient(clientId);
-      setScenarios(clientScenarios);
-
-      if (clientScenarios.length === 0) {
-        await createDefaultScenario(client);
-      }
-
-    } catch (err) {
-      console.error('Error loading client and scenarios:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load client data');
-    }
-  };
-
-  const createDefaultScenario = async (client: Client) => {
-    try {
-      setIsCreatingScenario(true);
-      
-      const defaultScenario = await CashFlowScenarioService.ensureClientHasScenario(client.id);
-      
-      if (linkScenario) {
-        await linkScenario(defaultScenario.id);
-      }
-      
-      await trackCashFlowProgress(defaultScenario as any);
-      
-      const updatedScenarios = await CashFlowDataService.getScenariosForClient(client.id);
-      setScenarios(updatedScenarios);
-      
-      toast({
-        title: 'Default Scenario Created',
-        description: 'A base case scenario has been created for this client',
-        variant: 'default'
-      });
-    } catch (error) {
-      console.error('Error creating default scenario:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create default scenario',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsCreatingScenario(false);
-    }
-  };
-
-  const trackCashFlowProgress = async (scenario: CashFlowScenario) => {
-    if (!selectedClient) return;
-    
-    try {
-      setTrackingState({ isTracking: true, lastTrackedScenarioId: scenario.id });
-      
-      const { count } = await (supabase as any)
-        .from('cash_flow_scenarios')
-        .select('*', { count: 'exact', head: true })
-        .eq('client_id', selectedClient.id);
-      
-      const scenarioCount = count || 1;
-      
-      await AssessmentService.updateProgress(selectedClient.id, {
-        assessmentType: 'cashFlow',
-        status: 'completed',
-        progressPercentage: 100,
-        metadata: {
-          lastUpdate: new Date().toISOString(),
-          scenarioCount,
-          lastScenarioName: scenario.scenarioName || 'Cash Flow Scenario',
-          scenarioType: scenario.scenarioType || 'standard',
-          projectionYears: scenario.projectionYears || 30
-        }
-      });
-      
-      await AssessmentService.logHistory(selectedClient.id, {
-        assessmentType: 'cashFlow',
-        action: 'scenario_created',
-        changes: {
-          scenarioName: scenario.scenarioName,
-          type: scenario.scenarioType || 'standard',
-          projectionYears: scenario.projectionYears || 30
-        }
-      });
-      
-      toast({
-        title: 'Progress Updated',
-        description: 'Cash flow assessment has been recorded',
-        variant: 'default',
-        duration: 2000
-      });
-      
-    } catch (error) {
-      console.error('Failed to track cash flow progress:', error);
-    } finally {
-      setTrackingState(prev => ({ ...prev, isTracking: false }));
-    }
-  };
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
@@ -561,7 +409,7 @@ export default function CashFlowPage() {
               </div>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Cash Flow System</h2>
               <p className="text-gray-600 mb-6">{error}</p>
-              <Button onClick={loadInitialData} variant="outline">
+              <Button onClick={reloadData} variant="outline">
                 Try Again
               </Button>
             </div>

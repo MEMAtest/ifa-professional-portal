@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -29,6 +29,8 @@ import {
 } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { useClientDetailsData } from '@/hooks/useClientDetailsData';
+import { useClientCashFlowStatus } from '@/components/clients/detail/hooks/useClientCashFlowStatus';
+import { useClientDetailsTabs } from '@/components/clients/detail/hooks/useClientDetailsTabs';
 import { ActivityTab } from '@/components/clients/details/tabs/ActivityTab';
 import { CashflowTab } from '@/components/clients/details/tabs/CashflowTab';
 import { CommunicationsTab } from '@/components/clients/details/tabs/CommunicationsTab';
@@ -58,9 +60,7 @@ export function ClientDetails({
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient(); // ✅ ADD THIS LINE
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [hasCashFlowAnalysis, setHasCashFlowAnalysis] = useState(false);
-  const [cashFlowCount, setCashFlowCount] = useState(0);
+  const { activeTab, setActiveTab } = useClientDetailsTabs();
   
   // ✅ ADD: Modal states
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
@@ -78,44 +78,7 @@ export function ClientDetails({
     refresh 
   } = useClientDetailsData(client);
 
-  // ✅ ADD: Handle tab parameter from URL
-  useEffect(() => {
-    const tabParam = searchParams?.get('tab');
-    if (tabParam) {
-      const validTabs: TabType[] = ['overview', 'financial', 'risk', 'cashflow', 'communications', 'reviews', 'activity'];
-      if (validTabs.includes(tabParam as TabType)) {
-        setActiveTab(tabParam as TabType);
-      }
-    }
-  }, [searchParams]);
-
-  // Check for existing cash flow scenarios
-  useEffect(() => {
-    checkCashFlowData();
-  }, [client.id]);
-
-  const checkCashFlowData = async (): Promise<void> => {
-    try {
-      const { data, error, count } = await supabase
-        .from('cash_flow_scenarios')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', client.id)
-        .eq('is_active', true);
-
-      if (error) {
-        throw error;
-      }
-      
-      if (count !== null) {
-        setHasCashFlowAnalysis(count > 0);
-        setCashFlowCount(count);
-      }
-    } catch (error) {
-      console.error('Error checking cash flow data:', error);
-      setHasCashFlowAnalysis(false);
-      setCashFlowCount(0);
-    }
-  };
+  const { hasCashFlowAnalysis, cashFlowCount } = useClientCashFlowStatus(supabase, client.id);
 
   // ✅ ADD: Handler for adding communication
   const handleAddCommunication = () => {

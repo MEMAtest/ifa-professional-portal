@@ -52,6 +52,9 @@ import {
   Radar
 } from 'recharts'
 
+type SectionStatus = 'good' | 'watch' | 'attention' | 'critical'
+type SectionTrend = 'improving' | 'stable' | 'declining'
+
 // Types
 interface ComplianceMetrics {
   summary: {
@@ -200,28 +203,15 @@ function SectionRow({
   icon: Icon
 }: {
   name: string
-  status: 'good' | 'watch' | 'attention' | 'critical'
+  status: SectionStatus
   score: number
   issues: number
-  trend: 'improving' | 'stable' | 'declining'
+  trend: SectionTrend
   onClick: () => void
   icon: React.ComponentType<{ className?: string }>
 }) {
-  const statusConfig = {
-    good: { label: 'Good', bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle },
-    watch: { label: 'Watch', bg: 'bg-yellow-100', text: 'text-yellow-700', icon: AlertTriangle },
-    attention: { label: 'Attention', bg: 'bg-orange-100', text: 'text-orange-700', icon: AlertCircle },
-    critical: { label: 'Critical', bg: 'bg-red-100', text: 'text-red-700', icon: AlertTriangle }
-  }
-
-  const trendConfig = {
-    improving: { label: 'Improving', icon: TrendingUp, color: 'text-green-600' },
-    stable: { label: 'Stable', icon: Minus, color: 'text-gray-500' },
-    declining: { label: 'Attention', icon: TrendingDown, color: 'text-red-600' }
-  }
-
-  const StatusIcon = statusConfig[status].icon
-  const TrendIcon = trendConfig[trend].icon
+  const StatusIcon = SECTION_STATUS_CONFIG[status].icon
+  const TrendIcon = SECTION_TREND_CONFIG[trend].icon
 
   return (
     <tr
@@ -235,17 +225,17 @@ function SectionRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusConfig[status].bg} ${statusConfig[status].text}`}>
+        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${SECTION_STATUS_CONFIG[status].bg} ${SECTION_STATUS_CONFIG[status].text}`}>
           <StatusIcon className="h-3 w-3" />
-          {statusConfig[status].label}
+          {SECTION_STATUS_CONFIG[status].label}
         </span>
       </td>
       <td className="px-4 py-3 text-center font-medium">{score}%</td>
       <td className="px-4 py-3 text-center">{issues}</td>
       <td className="px-4 py-3">
-        <div className={`flex items-center gap-1 ${trendConfig[trend].color}`}>
+        <div className={`flex items-center gap-1 ${SECTION_TREND_CONFIG[trend].color}`}>
           <TrendIcon className="h-4 w-4" />
-          <span className="text-sm">{trendConfig[trend].label}</span>
+          <span className="text-sm">{SECTION_TREND_CONFIG[trend].label}</span>
         </div>
       </td>
       <td className="px-4 py-3">
@@ -263,6 +253,19 @@ const COLORS = {
   danger: '#EF4444',
   purple: '#8B5CF6',
   gray: '#6B7280'
+}
+
+const SECTION_STATUS_CONFIG: Record<SectionStatus, { label: string; bg: string; text: string; icon: React.ComponentType<{ className?: string }> }> = {
+  good: { label: 'Good', bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle },
+  watch: { label: 'Watch', bg: 'bg-yellow-100', text: 'text-yellow-700', icon: AlertTriangle },
+  attention: { label: 'Attention', bg: 'bg-orange-100', text: 'text-orange-700', icon: AlertCircle },
+  critical: { label: 'Critical', bg: 'bg-red-100', text: 'text-red-700', icon: AlertTriangle }
+}
+
+const SECTION_TREND_CONFIG: Record<SectionTrend, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  improving: { label: 'Improving', icon: TrendingUp, color: 'text-green-600' },
+  stable: { label: 'Stable', icon: Minus, color: 'text-gray-500' },
+  declining: { label: 'Attention', icon: TrendingDown, color: 'text-red-600' }
 }
 
 const PIE_COLORS = ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
@@ -391,6 +394,71 @@ export default function ComplianceMetricsPage() {
     return 'stable'
   }
 
+  const sectionRows: Array<{
+    name: string
+    icon: React.ComponentType<{ className?: string }>
+    status: SectionStatus
+    score: number
+    issues: number
+    trend: SectionTrend
+    onClick: () => void
+  }> = metrics ? [
+    {
+      name: 'QA & File Reviews',
+      icon: FileText,
+      status: getSectionStatus(metrics.qaReviews.passRate),
+      score: metrics.qaReviews.passRate,
+      issues: metrics.qaReviews.pending + metrics.qaReviews.rejected,
+      trend: getTrend(metrics.summary.qaPassRateTrend),
+      onClick: () => navigateToQA()
+    },
+    {
+      name: 'Complaints',
+      icon: AlertCircle,
+      status: metrics.complaints.open > 3 ? 'watch' : 'good',
+      score: Math.round((metrics.complaints.resolved / (metrics.complaints.total || 1)) * 100),
+      issues: metrics.complaints.open + metrics.complaints.investigating,
+      trend: metrics.complaints.open > 3 ? 'declining' : 'stable',
+      onClick: () => navigateToRegisters('complaints')
+    },
+    {
+      name: 'Breaches',
+      icon: AlertTriangle,
+      status: metrics.breaches.open > 0 ? 'attention' : 'good',
+      score: Math.round(((metrics.breaches.remediated + metrics.breaches.closed) / (metrics.breaches.total || 1)) * 100),
+      issues: metrics.breaches.open + metrics.breaches.investigating,
+      trend: metrics.breaches.open > 0 ? 'declining' : 'improving',
+      onClick: () => navigateToRegisters('breaches')
+    },
+    {
+      name: 'Vulnerability',
+      icon: Users,
+      status: metrics.vulnerability.overdueReviews > 0 ? 'watch' : 'good',
+      score: Math.round(((metrics.vulnerability.activeClients - metrics.vulnerability.overdueReviews) / (metrics.vulnerability.activeClients || 1)) * 100),
+      issues: metrics.vulnerability.overdueReviews,
+      trend: metrics.vulnerability.overdueReviews > 2 ? 'declining' : 'stable',
+      onClick: () => navigateToRegisters('vulnerability')
+    },
+    {
+      name: 'AML/CTF',
+      icon: Shield,
+      status: getSectionStatus(Math.round((metrics.aml.verified / (metrics.aml.totalClients || 1)) * 100)),
+      score: Math.round((metrics.aml.verified / (metrics.aml.totalClients || 1)) * 100),
+      issues: metrics.aml.pending + metrics.aml.expired + metrics.aml.overdueReviews,
+      trend: metrics.aml.overdueReviews > 5 ? 'declining' : 'stable',
+      onClick: () => navigateToAML()
+    },
+    {
+      name: 'Consumer Duty',
+      icon: Scale,
+      status: getSectionStatus(Math.round((metrics.consumerDuty.fullyCompliant / (metrics.consumerDuty.assessed || 1)) * 100)),
+      score: Math.round((metrics.consumerDuty.fullyCompliant / (metrics.consumerDuty.assessed || 1)) * 100),
+      issues: metrics.consumerDuty.needsAttention + metrics.consumerDuty.nonCompliant,
+      trend: 'improving',
+      onClick: () => navigateToConsumerDuty()
+    }
+  ] : []
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -424,7 +492,7 @@ export default function ComplianceMetricsPage() {
         {metrics && (
           <>
             {/* KPI Cards Row */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
               <ScoreCard
                 title="Compliance Score"
                 value={`${metrics.summary.complianceScore}%`}
@@ -625,7 +693,57 @@ export default function ComplianceMetricsPage() {
                 <p className="text-sm text-gray-500">Click any row to drill down into details</p>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
+                <div className="space-y-3 sm:hidden">
+                  {sectionRows.map((row) => {
+                    const StatusIcon = SECTION_STATUS_CONFIG[row.status].icon
+                    const TrendIcon = SECTION_TREND_CONFIG[row.trend].icon
+                    return (
+                      <button
+                        key={row.name}
+                        type="button"
+                        onClick={row.onClick}
+                        className="w-full rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className="rounded-lg bg-gray-100 p-2">
+                              <row.icon className="h-4 w-4 text-gray-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{row.name}</p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${SECTION_STATUS_CONFIG[row.status].bg} ${SECTION_STATUS_CONFIG[row.status].text}`}>
+                                  <StatusIcon className="h-3 w-3" />
+                                  {SECTION_STATUS_CONFIG[row.status].label}
+                                </span>
+                                <span className="text-gray-500">{row.issues} issues</span>
+                              </div>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-3">
+                          <div>
+                            <p className="text-[11px] uppercase text-gray-400">Score</p>
+                            <p className="text-sm font-semibold text-gray-900">{row.score}%</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase text-gray-400">Issues</p>
+                            <p className="text-sm font-semibold text-gray-900">{row.issues}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase text-gray-400">Trend</p>
+                            <div className={`mt-1 flex items-center gap-1 text-sm font-semibold ${SECTION_TREND_CONFIG[row.trend].color}`}>
+                              <TrendIcon className="h-3.5 w-3.5" />
+                              {SECTION_TREND_CONFIG[row.trend].label}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-200">
@@ -638,60 +756,9 @@ export default function ComplianceMetricsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      <SectionRow
-                        name="QA & File Reviews"
-                        icon={FileText}
-                        status={getSectionStatus(metrics.qaReviews.passRate)}
-                        score={metrics.qaReviews.passRate}
-                        issues={metrics.qaReviews.pending + metrics.qaReviews.rejected}
-                        trend={getTrend(metrics.summary.qaPassRateTrend)}
-                        onClick={() => navigateToQA()}
-                      />
-                      <SectionRow
-                        name="Complaints"
-                        icon={AlertCircle}
-                        status={metrics.complaints.open > 3 ? 'watch' : 'good'}
-                        score={Math.round((metrics.complaints.resolved / (metrics.complaints.total || 1)) * 100)}
-                        issues={metrics.complaints.open + metrics.complaints.investigating}
-                        trend={metrics.complaints.open > 3 ? 'declining' : 'stable'}
-                        onClick={() => navigateToRegisters('complaints')}
-                      />
-                      <SectionRow
-                        name="Breaches"
-                        icon={AlertTriangle}
-                        status={metrics.breaches.open > 0 ? 'attention' : 'good'}
-                        score={Math.round(((metrics.breaches.remediated + metrics.breaches.closed) / (metrics.breaches.total || 1)) * 100)}
-                        issues={metrics.breaches.open + metrics.breaches.investigating}
-                        trend={metrics.breaches.open > 0 ? 'declining' : 'improving'}
-                        onClick={() => navigateToRegisters('breaches')}
-                      />
-                      <SectionRow
-                        name="Vulnerability"
-                        icon={Users}
-                        status={metrics.vulnerability.overdueReviews > 0 ? 'watch' : 'good'}
-                        score={Math.round(((metrics.vulnerability.activeClients - metrics.vulnerability.overdueReviews) / (metrics.vulnerability.activeClients || 1)) * 100)}
-                        issues={metrics.vulnerability.overdueReviews}
-                        trend={metrics.vulnerability.overdueReviews > 2 ? 'declining' : 'stable'}
-                        onClick={() => navigateToRegisters('vulnerability')}
-                      />
-                      <SectionRow
-                        name="AML/CTF"
-                        icon={Shield}
-                        status={getSectionStatus(Math.round((metrics.aml.verified / (metrics.aml.totalClients || 1)) * 100))}
-                        score={Math.round((metrics.aml.verified / (metrics.aml.totalClients || 1)) * 100)}
-                        issues={metrics.aml.pending + metrics.aml.expired + metrics.aml.overdueReviews}
-                        trend={metrics.aml.overdueReviews > 5 ? 'declining' : 'stable'}
-                        onClick={() => navigateToAML()}
-                      />
-                      <SectionRow
-                        name="Consumer Duty"
-                        icon={Scale}
-                        status={getSectionStatus(Math.round((metrics.consumerDuty.fullyCompliant / (metrics.consumerDuty.assessed || 1)) * 100))}
-                        score={Math.round((metrics.consumerDuty.fullyCompliant / (metrics.consumerDuty.assessed || 1)) * 100)}
-                        issues={metrics.consumerDuty.needsAttention + metrics.consumerDuty.nonCompliant}
-                        trend="improving"
-                        onClick={() => navigateToConsumerDuty()}
-                      />
+                      {sectionRows.map((row) => (
+                        <SectionRow key={row.name} {...row} />
+                      ))}
                     </tbody>
                   </table>
                 </div>

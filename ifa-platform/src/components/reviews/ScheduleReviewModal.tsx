@@ -446,7 +446,7 @@ export function ScheduleReviewModal({
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden transform transition-all duration-300">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b">
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b">
             <div>
               <h2 id="modal-title" className="text-xl font-semibold text-gray-900">
                 Schedule Client Review
@@ -465,7 +465,7 @@ export function ScheduleReviewModal({
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5">
             {/* Review Type Selection */}
             <div>
               <Label htmlFor="review-type">Review Type *</Label>
@@ -527,7 +527,7 @@ export function ScheduleReviewModal({
                 aria-invalid={!!errors.review_summary}
                 aria-describedby={errors.review_summary ? 'summary-error' : undefined}
               />
-              <div className="flex justify-between items-center mt-1">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mt-1">
                 <span className="text-sm text-gray-500">
                   {formData.review_summary.length}/500 characters
                 </span>
@@ -599,19 +599,20 @@ export function ScheduleReviewModal({
           </form>
 
           {/* Footer */}
-          <div className="flex items-center justify-end space-x-3 px-6 py-4 bg-gray-50 border-t">
+          <div className="flex flex-col-reverse gap-3 px-4 sm:px-6 py-4 bg-gray-50 border-t sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={loading || Object.keys(errors).length > 0}
-              className="flex items-center space-x-2"
+              className="flex items-center space-x-2 w-full sm:w-auto"
             >
               {loading ? (
                 <>

@@ -141,7 +141,7 @@ export default function NuclearMonteCarlo({
           action: (
             <Button
               size="sm"
-              onClick={() => setInputs({ ...inputs, annualWithdrawal: suggestedWithdrawal })}
+              onClick={() => setInputs(prev => ({ ...prev, annualWithdrawal: suggestedWithdrawal }))}
             >
               Apply
             </Button>
@@ -149,7 +149,7 @@ export default function NuclearMonteCarlo({
         });
       }
     }
-  }, [inputs.initialPortfolio]);
+  }, [inputs.initialPortfolio, toast, withdrawalRate]);
 
   // Apply preset scenario
   const applyPreset = (params: SimulationParameters) => {
@@ -809,7 +809,7 @@ export default function NuclearMonteCarlo({
               <CardHeader>
                 <CardTitle>Success vs Failure Rate</CardTitle>
                 <p className="text-sm text-gray-500 mt-1">
-                  Percentage of simulations where your client's portfolio lasted the full projection period
+                  Percentage of simulations where your client&apos;s portfolio lasted the full projection period
                 </p>
               </CardHeader>
               <CardContent>
@@ -850,7 +850,7 @@ export default function NuclearMonteCarlo({
               <CardHeader>
                 <CardTitle>Final Wealth Distribution</CardTitle>
                 <p className="text-sm text-gray-500 mt-1">
-                  Range of possible portfolio values at the end of your client's planning horizon (percentiles)
+                  Range of possible portfolio values at the end of your client&apos;s planning horizon (percentiles)
                 </p>
               </CardHeader>
               <CardContent>
@@ -884,7 +884,7 @@ export default function NuclearMonteCarlo({
             <CardHeader>
               <CardTitle>Wealth Projection Over Time</CardTitle>
               <p className="text-sm text-gray-500 mt-1">
-                How your client's portfolio value may evolve year by year across different scenarios
+                How your client&apos;s portfolio value may evolve year by year across different scenarios
               </p>
             </CardHeader>
             <CardContent>
@@ -916,7 +916,7 @@ export default function NuclearMonteCarlo({
             <CardHeader>
               <CardTitle>Detailed Percentile Analysis</CardTitle>
               <p className="text-sm text-gray-500 mt-1">
-                Statistical breakdown showing best-case, worst-case, and median outcomes for your client's portfolio
+                Statistical breakdown showing best-case, worst-case, and median outcomes for your client&apos;s portfolio
               </p>
             </CardHeader>
             <CardContent>

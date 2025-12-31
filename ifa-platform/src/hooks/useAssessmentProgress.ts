@@ -90,7 +90,7 @@ export function useAssessmentProgress(clientId: string) {
       channel.unsubscribe()
       setIsSubscribed(false)
     }
-  }, [clientId, refetch, isSubscribed])
+  }, [clientId, refetch, isSubscribed, supabase])
 
   // Helper functions
   const startAssessment = useCallback(

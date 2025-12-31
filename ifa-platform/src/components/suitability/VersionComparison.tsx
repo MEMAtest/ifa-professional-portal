@@ -152,7 +152,7 @@ export const VersionComparison: React.FC<VersionComparisonProps> = ({
       )
       setDifferences(diffs)
     }
-  }, [selectedVersions, versionData, calculateDifferences])
+  }, [selectedVersions, versionData])
 
   // Auto-load on mount
   useEffect(() => {

@@ -45,6 +45,33 @@ interface Breach {
   created_by: string | null
   created_at: string
   updated_at: string
+  // Linked clients from junction table
+  breach_affected_clients?: BreachAffectedClient[]
+}
+
+interface BreachAffectedClient {
+  id: string
+  breach_id: string
+  client_id: string
+  impact_description: string | null
+  notified: boolean
+  notified_date: string | null
+  remediation_status: 'pending' | 'in_progress' | 'completed'
+  notes: string | null
+  clients?: {
+    id: string
+    personal_details: {
+      firstName?: string
+      lastName?: string
+    }
+    client_ref?: string
+  }
+}
+
+interface ClientOption {
+  id: string
+  name: string
+  client_ref: string
 }
 
 interface Props {
@@ -67,7 +94,19 @@ export default function BreachesRegister({ onStatsChange }: Props) {
       setLoading(true)
       let query = supabase
         .from('breach_register')
-        .select('*')
+        .select(`
+          *,
+          breach_affected_clients(
+            id,
+            client_id,
+            impact_description,
+            notified,
+            notified_date,
+            remediation_status,
+            notes,
+            clients(id, personal_details, client_ref)
+          )
+        `)
         .order('breach_date', { ascending: false })
 
       if (statusFilter !== 'all') {
@@ -77,6 +116,15 @@ export default function BreachesRegister({ onStatsChange }: Props) {
       const { data, error } = await query
 
       if (error) {
+        // If junction table doesn't exist yet, fall back to basic query
+        if (error.message?.includes('breach_affected_clients')) {
+          const { data: basicData } = await supabase
+            .from('breach_register')
+            .select('*')
+            .order('breach_date', { ascending: false })
+          setBreaches(basicData || [])
+          return
+        }
         console.error('Error loading breaches:', error)
         setBreaches([])
         return
@@ -191,8 +239,8 @@ export default function BreachesRegister({ onStatsChange }: Props) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -200,14 +248,14 @@ export default function BreachesRegister({ onStatsChange }: Props) {
               placeholder="Search breaches..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-10 pr-4 py-2 border rounded-lg text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm"
+            className="border rounded-lg px-3 py-2 text-sm w-full sm:w-auto"
           >
             <option value="all">All Status</option>
             <option value="open">Open</option>
@@ -217,12 +265,12 @@ export default function BreachesRegister({ onStatsChange }: Props) {
           </select>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" onClick={handleExportCSV}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <Button variant="outline" onClick={handleExportCSV} className="w-full sm:w-auto">
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button onClick={() => setShowCreateModal(true)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Log Breach
           </Button>
@@ -247,67 +295,127 @@ export default function BreachesRegister({ onStatsChange }: Props) {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50">
-                    <th className="text-left p-3 font-medium">Reference</th>
-                    <th className="text-left p-3 font-medium">Date</th>
-                    <th className="text-left p-3 font-medium">Category</th>
-                    <th className="text-left p-3 font-medium">Severity</th>
-                    <th className="text-left p-3 font-medium">Affected</th>
-                    <th className="text-left p-3 font-medium">Status</th>
-                    <th className="text-left p-3 font-medium">FCA</th>
-                    <th className="text-right p-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filteredBreaches.map((breach) => (
-                    <tr
-                      key={breach.id}
-                      className={`hover:bg-gray-50 ${
-                        breach.severity === 'critical' ? 'bg-red-50' :
-                        breach.severity === 'serious' ? 'bg-orange-50' : ''
-                      }`}
-                    >
-                      <td className="p-3">
-                        <span className="font-mono text-xs">{breach.reference_number}</span>
-                      </td>
-                      <td className="p-3">{formatDate(breach.breach_date)}</td>
-                      <td className="p-3">
-                        <Badge variant="outline">{getCategoryLabel(breach.category)}</Badge>
-                      </td>
-                      <td className="p-3">{getSeverityBadge(breach.severity)}</td>
-                      <td className="p-3">
-                        <div className="flex items-center space-x-1">
+            <>
+              <div className="space-y-3 sm:hidden">
+                {filteredBreaches.map((breach) => (
+                  <div
+                    key={breach.id}
+                    className={`rounded-lg border p-4 shadow-sm ${
+                      breach.severity === 'critical' ? 'border-red-200 bg-red-50/40' :
+                      breach.severity === 'serious' ? 'border-orange-200 bg-orange-50/40' :
+                      'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500 font-mono">{breach.reference_number}</p>
+                        <p className="text-sm font-semibold text-gray-900">{formatDate(breach.breach_date)}</p>
+                        <p className="text-xs text-gray-500 mt-1">{getCategoryLabel(breach.category)}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedBreach(breach)}
+                        className="shrink-0"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                      {getSeverityBadge(breach.severity)}
+                      {getStatusBadge(breach.status)}
+                      {breach.fca_notified && (
+                        <Badge variant="default" className="text-xs">FCA Notified</Badge>
+                      )}
+                      {!breach.fca_notified && (breach.severity === 'serious' || breach.severity === 'critical') && (
+                        <Badge variant="destructive" className="text-xs">FCA Required</Badge>
+                      )}
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-gray-400 uppercase">Affected</p>
+                        <div className="flex items-center gap-1 text-sm font-semibold text-gray-900">
                           <Users className="h-4 w-4 text-gray-400" />
-                          <span>{breach.affected_clients}</span>
+                          {breach.breach_affected_clients?.length || breach.affected_clients || 0}
                         </div>
-                      </td>
-                      <td className="p-3">{getStatusBadge(breach.status)}</td>
-                      <td className="p-3">
-                        {breach.fca_notified ? (
-                          <Badge variant="default" className="text-xs">Notified</Badge>
-                        ) : breach.severity === 'serious' || breach.severity === 'critical' ? (
-                          <Badge variant="destructive" className="text-xs">Required</Badge>
-                        ) : (
-                          <span className="text-gray-400">No</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedBreach(breach)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 uppercase">FCA</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {breach.fca_notified ? 'Notified' : breach.severity === 'serious' || breach.severity === 'critical' ? 'Required' : 'No'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-3 font-medium">Reference</th>
+                      <th className="text-left p-3 font-medium">Date</th>
+                      <th className="text-left p-3 font-medium">Category</th>
+                      <th className="text-left p-3 font-medium">Severity</th>
+                      <th className="text-left p-3 font-medium">Affected</th>
+                      <th className="text-left p-3 font-medium">Status</th>
+                      <th className="text-left p-3 font-medium">FCA</th>
+                      <th className="text-right p-3 font-medium">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredBreaches.map((breach) => (
+                      <tr
+                        key={breach.id}
+                        className={`hover:bg-gray-50 ${
+                          breach.severity === 'critical' ? 'bg-red-50' :
+                          breach.severity === 'serious' ? 'bg-orange-50' : ''
+                        }`}
+                      >
+                        <td className="p-3">
+                          <span className="font-mono text-xs">{breach.reference_number}</span>
+                        </td>
+                        <td className="p-3">{formatDate(breach.breach_date)}</td>
+                        <td className="p-3">
+                          <Badge variant="outline">{getCategoryLabel(breach.category)}</Badge>
+                        </td>
+                        <td className="p-3">{getSeverityBadge(breach.severity)}</td>
+                        <td className="p-3">
+                          <div className="flex items-center space-x-1">
+                            <Users className="h-4 w-4 text-gray-400" />
+                            <span>
+                              {breach.breach_affected_clients?.length || breach.affected_clients || 0}
+                            </span>
+                            {breach.breach_affected_clients && breach.breach_affected_clients.length > 0 && (
+                              <span className="text-xs text-blue-600 ml-1">(linked)</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">{getStatusBadge(breach.status)}</td>
+                        <td className="p-3">
+                          {breach.fca_notified ? (
+                            <Badge variant="default" className="text-xs">Notified</Badge>
+                          ) : breach.severity === 'serious' || breach.severity === 'critical' ? (
+                            <Badge variant="destructive" className="text-xs">Required</Badge>
+                          ) : (
+                            <span className="text-gray-400">No</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedBreach(breach)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -352,6 +460,9 @@ function BreachFormModal({
   const { toast } = useToast()
 
   const [submitting, setSubmitting] = useState(false)
+  const [clients, setClients] = useState<ClientOption[]>([])
+  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
+  const [clientSearchTerm, setClientSearchTerm] = useState('')
   const [formData, setFormData] = useState({
     breach_date: new Date().toISOString().split('T')[0],
     discovered_date: new Date().toISOString().split('T')[0],
@@ -360,6 +471,38 @@ function BreachFormModal({
     description: '',
     affected_clients: 0
   })
+
+  // Load clients for selection
+  useEffect(() => {
+    const loadClients = async () => {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, personal_details, client_ref')
+        .order('personal_details->lastName', { ascending: true })
+
+      if (data) {
+        setClients(data.map((c: { id: string; personal_details?: { firstName?: string; lastName?: string }; client_ref?: string }) => ({
+          id: c.id,
+          name: `${c.personal_details?.firstName || ''} ${c.personal_details?.lastName || ''}`.trim() || 'Unknown',
+          client_ref: c.client_ref || ''
+        })))
+      }
+    }
+    loadClients()
+  }, [supabase])
+
+  const filteredClients = clients.filter(c =>
+    c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
+    c.client_ref.toLowerCase().includes(clientSearchTerm.toLowerCase())
+  )
+
+  const toggleClient = (clientId: string) => {
+    setSelectedClientIds(prev =>
+      prev.includes(clientId)
+        ? prev.filter(id => id !== clientId)
+        : [...prev, clientId]
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -374,7 +517,8 @@ function BreachFormModal({
 
     setSubmitting(true)
     try {
-      const { error } = await supabase
+      // Create breach with count from selected clients or manual input
+      const { data: breach, error } = await supabase
         .from('breach_register')
         .insert({
           breach_date: formData.breach_date,
@@ -382,15 +526,34 @@ function BreachFormModal({
           category: formData.category,
           severity: formData.severity,
           description: formData.description,
-          affected_clients: formData.affected_clients,
+          affected_clients: selectedClientIds.length || formData.affected_clients,
           status: 'open'
         })
+        .select()
+        .single()
 
       if (error) throw error
 
+      // Link selected clients if any
+      if (breach && selectedClientIds.length > 0) {
+        const clientLinks = selectedClientIds.map(clientId => ({
+          breach_id: breach.id,
+          client_id: clientId,
+          remediation_status: 'pending'
+        }))
+
+        const { error: linkError } = await supabase
+          .from('breach_affected_clients')
+          .insert(clientLinks)
+
+        if (linkError) {
+          console.warn('Could not link clients (table may not exist yet):', linkError)
+        }
+      }
+
       toast({
         title: 'Breach Logged',
-        description: 'New breach has been recorded'
+        description: `New breach has been recorded${selectedClientIds.length > 0 ? ` with ${selectedClientIds.length} linked clients` : ''}`
       })
       onSaved()
     } catch (error) {
@@ -470,15 +633,93 @@ function BreachFormModal({
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Affected Clients</label>
-            <input
-              type="number"
-              value={formData.affected_clients}
-              onChange={(e) => setFormData({ ...formData, affected_clients: parseInt(e.target.value) || 0 })}
-              className="w-full border rounded-lg p-2 text-sm"
-              min="0"
-            />
+          {/* Affected Clients Selection */}
+          <div className="border rounded-lg p-3 bg-gray-50">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Affected Clients
+              {selectedClientIds.length > 0 && (
+                <span className="ml-2 text-blue-600">({selectedClientIds.length} selected)</span>
+              )}
+            </label>
+
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search clients..."
+                value={clientSearchTerm}
+                onChange={(e) => setClientSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm"
+              />
+            </div>
+
+            {/* Selected clients pills */}
+            {selectedClientIds.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {selectedClientIds.map(id => {
+                  const client = clients.find(c => c.id === id)
+                  return client ? (
+                    <span
+                      key={id}
+                      className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full"
+                    >
+                      {client.name}
+                      <button
+                        type="button"
+                        onClick={() => toggleClient(id)}
+                        className="ml-1 hover:text-blue-900"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ) : null
+                })}
+              </div>
+            )}
+
+            {/* Client list */}
+            <div className="max-h-32 overflow-y-auto border rounded bg-white">
+              {filteredClients.slice(0, 20).map(client => (
+                <label
+                  key={client.id}
+                  className={`flex items-center p-2 hover:bg-gray-50 cursor-pointer text-sm ${
+                    selectedClientIds.includes(client.id) ? 'bg-blue-50' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedClientIds.includes(client.id)}
+                    onChange={() => toggleClient(client.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 mr-2"
+                  />
+                  <span className="flex-1">{client.name}</span>
+                  <span className="text-xs text-gray-400">{client.client_ref}</span>
+                </label>
+              ))}
+              {filteredClients.length === 0 && (
+                <p className="p-2 text-sm text-gray-500">No clients found</p>
+              )}
+              {filteredClients.length > 20 && (
+                <p className="p-2 text-xs text-gray-400 text-center">
+                  Showing first 20 results. Refine your search.
+                </p>
+              )}
+            </div>
+
+            {/* Fallback manual count */}
+            {selectedClientIds.length === 0 && (
+              <div className="mt-2">
+                <label className="text-xs text-gray-500">Or enter count manually:</label>
+                <input
+                  type="number"
+                  value={formData.affected_clients}
+                  onChange={(e) => setFormData({ ...formData, affected_clients: parseInt(e.target.value) || 0 })}
+                  className="w-full border rounded-lg p-2 text-sm mt-1"
+                  min="0"
+                  placeholder="Number of affected clients"
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -627,9 +868,59 @@ function BreachDetailModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Affected Clients</label>
-              <div className="border rounded-lg p-2 text-sm bg-gray-50">{breach.affected_clients}</div>
+              <div className="border rounded-lg p-2 text-sm bg-gray-50">
+                {breach.breach_affected_clients?.length || breach.affected_clients}
+              </div>
             </div>
           </div>
+
+          {/* Linked Clients Section */}
+          {breach.breach_affected_clients && breach.breach_affected_clients.length > 0 && (
+            <div className="border rounded-lg p-4 bg-blue-50">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-2">
+                  <Users className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium">Linked Clients ({breach.breach_affected_clients.length})</span>
+                </div>
+              </div>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {breach.breach_affected_clients.map((link) => {
+                  const clientName = link.clients
+                    ? `${link.clients.personal_details?.firstName || ''} ${link.clients.personal_details?.lastName || ''}`.trim()
+                    : 'Unknown Client'
+                  return (
+                    <div
+                      key={link.id}
+                      className="flex items-center justify-between p-2 bg-white rounded border"
+                    >
+                      <div>
+                        <span className="font-medium text-sm">{clientName}</span>
+                        {link.clients?.client_ref && (
+                          <span className="text-xs text-gray-500 ml-2">({link.clients.client_ref})</span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {link.notified ? (
+                          <Badge variant="default" className="text-xs">Notified</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">Not Notified</Badge>
+                        )}
+                        <Badge
+                          variant={
+                            link.remediation_status === 'completed' ? 'default' :
+                            link.remediation_status === 'in_progress' ? 'secondary' : 'outline'
+                          }
+                          className="text-xs"
+                        >
+                          {link.remediation_status}
+                        </Badge>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Root Cause</label>

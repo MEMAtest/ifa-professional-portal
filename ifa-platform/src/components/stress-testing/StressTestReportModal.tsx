@@ -243,14 +243,7 @@ export const StressTestReportModal: React.FC<StressTestReportModalProps> = ({
     };
   }, []);
 
-  // Load history when switching to history tab
-  useEffect(() => {
-    if (activeTab === 'history' && clientProfile?.clientId) {
-      loadHistoryData();
-    }
-  }, [activeTab, clientProfile?.clientId]);
-
-  const loadHistoryData = async () => {
+  const loadHistoryData = useCallback(async () => {
     if (!clientProfile?.clientId) return;
 
     setHistoryLoading(true);
@@ -290,7 +283,14 @@ export const StressTestReportModal: React.FC<StressTestReportModalProps> = ({
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, [clientProfile?.clientId]);
+
+  // Load history when switching to history tab
+  useEffect(() => {
+    if (activeTab === 'history' && clientProfile?.clientId) {
+      loadHistoryData();
+    }
+  }, [activeTab, clientProfile?.clientId, loadHistoryData]);
 
   const handleViewReport = async (report: ReportHistoryItem) => {
     if (!report.storagePath) return;

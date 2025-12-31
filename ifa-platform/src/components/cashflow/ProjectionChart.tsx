@@ -409,7 +409,7 @@ export const ProjectionChart: React.FC<ProjectionChartProps> = ({
 
       {/* Statistics */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
             <p className="text-sm text-gray-600">
               Final Value{showRealTerms ? ' (Real Terms)' : ''}

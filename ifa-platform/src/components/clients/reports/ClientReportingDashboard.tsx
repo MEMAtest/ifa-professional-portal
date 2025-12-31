@@ -1306,7 +1306,7 @@ export default function ClientReportingDashboard() {
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">Current Filters</h4>
                     <div className="text-sm text-gray-600 space-y-1">
-                      {searchQuery && <p>Search: "{searchQuery}"</p>}
+                      {searchQuery && <p>Search: &quot;{searchQuery}&quot;</p>}
                       {selectedStatus !== 'all' && <p>Status: {selectedStatus}</p>}
                       {selectedRiskLevel !== 'all' && <p>Risk Level: {selectedRiskLevel}</p>}
                       {selectedVulnerability !== 'all' && <p>Vulnerability: {selectedVulnerability}</p>}

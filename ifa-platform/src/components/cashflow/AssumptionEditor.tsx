@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -63,12 +63,17 @@ export const AssumptionEditor: React.FC<AssumptionEditorProps> = ({
   }, [scenario]);
 
   // Debounced change handler
-  const debouncedOnChange = useCallback(
-    debounce((updatedScenario: CashFlowScenario) => {
+  const debouncedOnChange = useMemo(() => {
+    return debounce((updatedScenario: CashFlowScenario) => {
       onChange(updatedScenario);
-    }, 500),
-    [onChange]
-  );
+    }, 500);
+  }, [onChange]);
+
+  useEffect(() => {
+    return () => {
+      debouncedOnChange.cancel();
+    };
+  }, [debouncedOnChange]);
 
   const handleFieldChange = useCallback((field: keyof CashFlowScenario, value: number) => {
     const updated = { ...localScenario, [field]: value };
@@ -519,14 +524,21 @@ function getFieldConfig(fieldKey: keyof CashFlowScenario): AssumptionField | und
   return undefined;
 }
 
-// Debounce utility
+// Debounce utility with cancel method
 function debounce<T extends (...args: any[]) => any>(
   func: T,
   delay: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
+): ((...args: Parameters<T>) => void) & { cancel: () => void } {
+  let timeoutId: NodeJS.Timeout | undefined;
+  const debouncedFn = (...args: Parameters<T>) => {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => func(...args), delay);
   };
+  debouncedFn.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+  };
+  return debouncedFn;
 }

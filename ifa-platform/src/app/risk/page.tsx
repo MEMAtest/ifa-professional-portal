@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -72,7 +72,7 @@ interface TrendDataPoint {
 }
 
 export default function RiskCenterPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter();
   const searchParams = useSearchParams();
   const [clients, setClients] = useState<RiskClient[]>([]);
@@ -94,10 +94,6 @@ export default function RiskCenterPage() {
   const [selectedClient, setSelectedClient] = useState<RiskClient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  useEffect(() => {
-    loadRiskData();
-  }, []);
-
   // Allow drilldown from dashboard: /risk?bucket=Very%20High
   useEffect(() => {
     if (filterRiskLevel !== 'all') return;
@@ -114,11 +110,7 @@ export default function RiskCenterPage() {
     }
   }, [searchParams, filterRiskLevel]);
 
-  useEffect(() => {
-    filterClients();
-  }, [clients, searchTerm, filterRiskLevel, filterStatus]);
-
-  const loadRiskData = async () => {
+  const loadRiskData = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -234,7 +226,53 @@ export default function RiskCenterPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    loadRiskData();
+  }, [loadRiskData]);
+
+  const filterClients = useCallback(() => {
+    let filtered = [...clients];
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(client => {
+        const name = `${client.personalDetails?.firstName} ${client.personalDetails?.lastName}`.toLowerCase();
+        return name.includes(searchTerm.toLowerCase()) ||
+               client.clientRef?.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+    }
+
+    // Risk level filter
+    if (filterRiskLevel !== 'all') {
+      filtered = filtered.filter(client => {
+        const riskScore = client.riskProfile?.attitudeToRisk || 5;
+        if (filterRiskLevel === 'high') return riskScore >= 7;
+        if (filterRiskLevel === 'medium') return riskScore >= 4 && riskScore <= 6;
+        if (filterRiskLevel === 'low') return riskScore <= 3;
+        return true;
+      });
+    }
+
+    // Status filter
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(client => {
+        if (filterStatus === 'due') return client.daysSinceAssessment! > 365;
+        if (filterStatus === 'recent') return client.daysSinceAssessment! < 30;
+        return true;
+      });
+    }
+
+    // Sort by days since assessment (oldest first)
+    filtered.sort((a, b) => (b.daysSinceAssessment || 0) - (a.daysSinceAssessment || 0));
+
+    setFilteredClients(filtered);
+  }, [clients, filterRiskLevel, filterStatus, searchTerm]);
+
+  useEffect(() => {
+    filterClients();
+  }, [filterClients]);
 
   const calculateStatistics = (clientList: RiskClient[]) => {
     const stats: RiskStatistics = {
@@ -308,44 +346,6 @@ export default function RiskCenterPage() {
       assessments: item.assessments
     }));
   }, [trendData]);
-
-  const filterClients = () => {
-    let filtered = [...clients];
-
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(client => {
-        const name = `${client.personalDetails?.firstName} ${client.personalDetails?.lastName}`.toLowerCase();
-        return name.includes(searchTerm.toLowerCase()) ||
-               client.clientRef?.toLowerCase().includes(searchTerm.toLowerCase());
-      });
-    }
-
-    // Risk level filter
-    if (filterRiskLevel !== 'all') {
-      filtered = filtered.filter(client => {
-        const riskScore = client.riskProfile?.attitudeToRisk || 5;
-        if (filterRiskLevel === 'high') return riskScore >= 7;
-        if (filterRiskLevel === 'medium') return riskScore >= 4 && riskScore <= 6;
-        if (filterRiskLevel === 'low') return riskScore <= 3;
-        return true;
-      });
-    }
-
-    // Status filter
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(client => {
-        if (filterStatus === 'due') return client.daysSinceAssessment! > 365;
-        if (filterStatus === 'recent') return client.daysSinceAssessment! < 30;
-        return true;
-      });
-    }
-
-    // Sort by days since assessment (oldest first)
-    filtered.sort((a, b) => (b.daysSinceAssessment || 0) - (a.daysSinceAssessment || 0));
-
-    setFilteredClients(filtered);
-  };
 
   const getRiskColor = (score: number) => {
     if (score >= 8) return 'text-red-600';
@@ -715,86 +715,154 @@ export default function RiskCenterPage() {
           <CardTitle>Client Risk Profiles ({filteredClients.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4">Client</th>
-                  <th className="text-left py-3 px-4">Risk Score</th>
-                  <th className="text-left py-3 px-4">Risk Level</th>
-                  <th className="text-left py-3 px-4">Last Assessment</th>
-                  <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-left py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          {filteredClients.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No clients match your filters.
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3 sm:hidden">
                 {filteredClients.map((client) => {
                   const riskScore = client.riskProfile?.attitudeToRisk || 5;
                   const assessmentStatus = getAssessmentStatus(client.daysSinceAssessment || 0);
-                  
                   return (
-                    <tr key={client.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4">
+                    <div key={client.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-medium">
+                          <p className="text-sm font-semibold text-gray-900">
                             {client.personalDetails?.firstName} {client.personalDetails?.lastName}
                           </p>
-                          <p className="text-sm text-gray-500">{client.clientRef}</p>
+                          <p className="text-xs text-gray-500">{client.clientRef}</p>
                         </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center">
-                          <span className={`text-2xl font-bold ${getRiskColor(riskScore)}`}>
-                            {riskScore}
-                          </span>
-                          <span className="text-gray-500 ml-1">/10</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
                         <Badge variant={riskScore >= 7 ? 'destructive' : riskScore >= 4 ? 'warning' : 'success'}>
                           {getRiskLabel(riskScore)}
                         </Badge>
-                      </td>
-                      <td className="py-3 px-4">
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                         <div>
-                          <p className="text-sm">
-                            {client.daysSinceAssessment} days ago
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(client.lastAssessmentDate!).toLocaleDateString()}
+                          <p className="text-gray-400 uppercase">Risk Score</p>
+                          <p className={`text-lg font-semibold ${getRiskColor(riskScore)}`}>
+                            {riskScore}<span className="text-gray-400 text-xs">/10</span>
                           </p>
                         </div>
-                      </td>
-                      <td className="py-3 px-4">
+                        <div>
+                          <p className="text-gray-400 uppercase">Assessment</p>
+                          <p className="text-sm font-semibold text-gray-900">{client.daysSinceAssessment} days ago</p>
+                          <p className="text-xs text-gray-500">
+                            {client.lastAssessmentDate && new Date(client.lastAssessmentDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3">
                         <Badge variant={assessmentStatus.color as any}>
                           {assessmentStatus.label}
                         </Badge>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
+                      </div>
+                      <div className="mt-4 flex flex-col gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openClientModal(client)}
+                          className="w-full"
+                        >
+                          View Details
+                        </Button>
+                        {client.daysSinceAssessment! > 300 && (
                           <Button
                             size="sm"
-                            variant="outline"
-                            onClick={() => openClientModal(client)}
+                            onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
+                            className="w-full"
                           >
-                            View Details
+                            Update Assessment
                           </Button>
-                          {client.daysSinceAssessment! > 300 && (
-                            <Button
-                              size="sm"
-                              onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
-                            >
-                              Update Assessment
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </div>
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-3 px-4">Client</th>
+                      <th className="text-left py-3 px-4">Risk Score</th>
+                      <th className="text-left py-3 px-4">Risk Level</th>
+                      <th className="text-left py-3 px-4">Last Assessment</th>
+                      <th className="text-left py-3 px-4">Status</th>
+                      <th className="text-left py-3 px-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredClients.map((client) => {
+                      const riskScore = client.riskProfile?.attitudeToRisk || 5;
+                      const assessmentStatus = getAssessmentStatus(client.daysSinceAssessment || 0);
+                      
+                      return (
+                        <tr key={client.id} className="border-b hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <div>
+                              <p className="font-medium">
+                                {client.personalDetails?.firstName} {client.personalDetails?.lastName}
+                              </p>
+                              <p className="text-sm text-gray-500">{client.clientRef}</p>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center">
+                              <span className={`text-2xl font-bold ${getRiskColor(riskScore)}`}>
+                                {riskScore}
+                              </span>
+                              <span className="text-gray-500 ml-1">/10</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant={riskScore >= 7 ? 'destructive' : riskScore >= 4 ? 'warning' : 'success'}>
+                              {getRiskLabel(riskScore)}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div>
+                              <p className="text-sm">
+                                {client.daysSinceAssessment} days ago
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(client.lastAssessmentDate!).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant={assessmentStatus.color as any}>
+                              {assessmentStatus.label}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openClientModal(client)}
+                              >
+                                View Details
+                              </Button>
+                              {client.daysSinceAssessment! > 300 && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
+                                >
+                                  Update Assessment
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -819,7 +887,7 @@ export default function RiskCenterPage() {
               </div>
 
               {/* Risk Score */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Target className="h-4 w-4 text-gray-600" />

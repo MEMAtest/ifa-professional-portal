@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -161,31 +161,7 @@ export default function UnifiedDocumentWorkflow() {
   // DATA LOADING (FIXED)
   // ===================================================================
 
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  const loadInitialData = async () => {
-    if (!supabase) {
-      setError('Supabase client is not available')
-      return
-    }
-
-    setLoading(true)
-    try {
-      await Promise.all([
-        loadRealClients(),
-        loadTemplates()
-      ])
-    } catch (err) {
-      setError('Failed to load data. Please refresh the page.')
-      console.error('Data loading error:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadRealClients = async () => {
+  const loadRealClients = useCallback(async () => {
     if (!supabase) {
       console.error("Action failed: Supabase client is not available in loadRealClients.")
       return
@@ -223,9 +199,9 @@ export default function UnifiedDocumentWorkflow() {
       console.error('Error loading clients:', err)
       throw err
     }
-  }
+  }, [supabase])
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     if (!supabase) {
       console.error("Action failed: Supabase client is not available in loadTemplates.")
       // Set fallback templates even when client is not available
@@ -276,7 +252,31 @@ export default function UnifiedDocumentWorkflow() {
       console.error('Template loading error:', err)
       // Fallback templates already set
     }
-  }
+  }, [supabase])
+
+  const loadInitialData = useCallback(async () => {
+    if (!supabase) {
+      setError('Supabase client is not available')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await Promise.all([
+        loadRealClients(),
+        loadTemplates()
+      ])
+    } catch (err) {
+      setError('Failed to load data. Please refresh the page.')
+      console.error('Data loading error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [loadRealClients, loadTemplates, supabase])
+
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   // Helper to get fallback templates
   const getFallbackTemplates = (): DocumentTemplate[] => [

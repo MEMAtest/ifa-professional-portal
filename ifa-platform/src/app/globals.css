@@ -28,6 +28,7 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.75rem;
+    --app-header-height: calc(4rem + env(safe-area-inset-top));
     
     /* Plannetic brand colors */
     --plannetic-primary: 180 100% 40%;     /* Turquoise/Teal */

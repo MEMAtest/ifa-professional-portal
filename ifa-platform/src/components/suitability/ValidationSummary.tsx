@@ -111,7 +111,7 @@ export const ValidationSummary = memo(function ValidationSummary({
           </CardHeader>
           <CardContent>
             {compliance.fcaChecks && (
-              <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                 {Object.entries(compliance.fcaChecks).map(([check, passed]) => (
                   <div key={check} className="flex items-center gap-2 text-sm">
                     {passed ? (

@@ -62,6 +62,14 @@ interface ReportDateRange {
   days: number
 }
 
+const DATE_RANGES: ReportDateRange[] = [
+  { label: 'Last 7 days', value: '7', days: 7 },
+  { label: 'Last 30 days', value: '30', days: 30 },
+  { label: 'Last 90 days', value: '90', days: 90 },
+  { label: 'Last 6 months', value: '180', days: 180 },
+  { label: 'Last year', value: '365', days: 365 },
+]
+
 interface ExportFormat {
   format: 'csv' | 'excel' | 'pdf' | 'json'
   label: string
@@ -121,14 +129,6 @@ export default function EnhancedReportsPage() {
   // ===================================================================
   // CONSTANTS & CONFIGURATION
   // ===================================================================
-
-  const DATE_RANGES: ReportDateRange[] = [
-    { label: 'Last 7 days', value: '7', days: 7 },
-    { label: 'Last 30 days', value: '30', days: 30 },
-    { label: 'Last 90 days', value: '90', days: 90 },
-    { label: 'Last 6 months', value: '180', days: 180 },
-    { label: 'Last year', value: '365', days: 365 },
-  ]
 
   const EXPORT_FORMATS: ExportFormat[] = [
     { format: 'csv', label: 'CSV', icon: FileSpreadsheetIcon },
@@ -250,10 +250,55 @@ export default function EnhancedReportsPage() {
   }, [documents])
 
   // ===================================================================
+  // RISK SCORE CALCULATION
+  // ===================================================================
+
+  const calculateRiskScore = useCallback((): number => {
+    const metrics = documentMetrics
+    const nonCompliantDocs = metrics.complianceBreakdown.find(item => item.name === 'non_compliant')?.count || 0
+    const totalDocs = documents?.length || 1
+    const complianceRate = ((totalDocs - nonCompliantDocs) / totalDocs) * 100
+    return Math.max(0, Math.round(complianceRate))
+  }, [documentMetrics, documents])
+
+  // ===================================================================
   // ENHANCED EXPORT FUNCTIONALITY
   // ===================================================================
 
   const exportReport = useCallback(async () => {
+    const generateCSVReport = (data: any): string => {
+      const headers = ['Metric', 'Value', 'Category', 'Change', 'Risk Level']
+      const rows = [
+        ['Total Documents', data.summary.totalDocuments, 'Overview', '', 'Low'],
+        ['Pending Signatures', data.summary.pendingSignatures, 'Overview', '', 'Medium'],
+        ['Completed Signatures', data.summary.completedSignatures, 'Overview', '', 'Low'],
+        ['Compliance Score', `${data.summary.complianceScore}%`, 'Overview', '', data.summary.complianceScore < 70 ? 'High' : 'Low'],
+        ['Risk Score', `${data.summary.riskScore}%`, 'Risk', '', data.summary.riskScore < 80 ? 'High' : 'Low'],
+        ['Documents This Month', data.summary.documentsThisMonth, 'Overview', '', 'Low'],
+        ['', '', '', '', ''], // Empty row
+        ['Document Categories', '', 'Breakdown', '', ''],
+        ...data.documentMetrics.byCategory.map((item: any) => [item.name, item.count, 'Category', '', 'Low']),
+        ['', '', '', '', ''], // Empty row
+        ['Document Status', '', 'Breakdown', '', ''],
+        ...data.documentMetrics.byStatus.map((item: any) => [item.name, item.count, 'Status', '', 'Low']),
+        ['', '', '', '', ''], // Empty row
+        ['Risk Analysis', '', 'Risk Assessment', '', ''],
+        ...data.documentMetrics.riskAnalysis.map((item: any) => [item.name, item.count, 'Risk', '', item.risk]),
+      ]
+      
+      return [headers, ...rows].map(row => row.join(',')).join('\n')
+    }
+
+    const generateExcelReport = (data: any): string => {
+      // Simplified Excel format (would need proper library for full functionality)
+      return generateCSVReport(data)
+    }
+
+    const generatePDFReport = (data: any): string => {
+      // Simplified PDF generation (would need proper library for full functionality)
+      return `Document Report - ${data.generatedAt}\n\n${JSON.stringify(data, null, 2)}`
+    }
+
     setIsExporting(true)
     try {
       const reportData = {
@@ -320,19 +365,11 @@ export default function EnhancedReportsPage() {
     } finally {
       setIsExporting(false)
     }
-  }, [exportFormat, dateRange, analytics, documentMetrics, documents])
+  }, [exportFormat, dateRange, analytics, documentMetrics, documents, calculateRiskScore])
 
   // ===================================================================
-  // REPORT GENERATION FUNCTIONS
+  // CHART DATA HELPERS
   // ===================================================================
-
-  const calculateRiskScore = useCallback((): number => {
-    const metrics = documentMetrics
-    const nonCompliantDocs = metrics.complianceBreakdown.find(item => item.name === 'non_compliant')?.count || 0
-    const totalDocs = documents?.length || 1
-    const complianceRate = ((totalDocs - nonCompliantDocs) / totalDocs) * 100
-    return Math.max(0, Math.round(complianceRate))
-  }, [documentMetrics, documents])
 
   // Chart data helpers
   const statusChartData = useMemo(() => {
@@ -372,39 +409,6 @@ export default function EnhancedReportsPage() {
   }, [documentMetrics.byCategory])
 
   const chartColors = ['#2563eb', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9']
-
-  const generateCSVReport = (data: any): string => {
-    const headers = ['Metric', 'Value', 'Category', 'Change', 'Risk Level']
-    const rows = [
-      ['Total Documents', data.summary.totalDocuments, 'Overview', '', 'Low'],
-      ['Pending Signatures', data.summary.pendingSignatures, 'Overview', '', 'Medium'],
-      ['Completed Signatures', data.summary.completedSignatures, 'Overview', '', 'Low'],
-      ['Compliance Score', `${data.summary.complianceScore}%`, 'Overview', '', data.summary.complianceScore < 70 ? 'High' : 'Low'],
-      ['Risk Score', `${data.summary.riskScore}%`, 'Risk', '', data.summary.riskScore < 80 ? 'High' : 'Low'],
-      ['Documents This Month', data.summary.documentsThisMonth, 'Overview', '', 'Low'],
-      ['', '', '', '', ''], // Empty row
-      ['Document Categories', '', 'Breakdown', '', ''],
-      ...data.documentMetrics.byCategory.map((item: any) => [item.name, item.count, 'Category', '', 'Low']),
-      ['', '', '', '', ''], // Empty row
-      ['Document Status', '', 'Breakdown', '', ''],
-      ...data.documentMetrics.byStatus.map((item: any) => [item.name, item.count, 'Status', '', 'Low']),
-      ['', '', '', '', ''], // Empty row
-      ['Risk Analysis', '', 'Risk Assessment', '', ''],
-      ...data.documentMetrics.riskAnalysis.map((item: any) => [item.name, item.count, 'Risk', '', item.risk]),
-    ]
-    
-    return [headers, ...rows].map(row => row.join(',')).join('\n')
-  }
-
-  const generateExcelReport = (data: any): string => {
-    // Simplified Excel format (would need proper library for full functionality)
-    return generateCSVReport(data)
-  }
-
-  const generatePDFReport = (data: any): string => {
-    // Simplified PDF generation (would need proper library for full functionality)
-    return `Document Report - ${data.generatedAt}\n\n${JSON.stringify(data, null, 2)}`
-  }
 
   // ===================================================================
   // UTILITY FUNCTIONS
@@ -1298,7 +1302,7 @@ export default function EnhancedReportsPage() {
             <h3 className="text-lg font-semibold text-gray-900">Monthly Performance Summary</h3>
             <Badge className="bg-indigo-100 text-indigo-800">This Month vs Last Month</Badge>
           </div>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Documents This Month */}
             <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
               <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-500 rounded-full mb-3">

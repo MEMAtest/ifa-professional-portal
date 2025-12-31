@@ -269,102 +269,173 @@ export function ClientAssessmentsTab({
             <div className="text-center py-8 text-gray-500">
               <Send className="h-8 w-8 mx-auto mb-2 text-gray-300" />
               <p>No questionnaires sent yet</p>
-              <p className="text-sm">Click "Send Questionnaire" to get started</p>
+              <p className="text-sm">Click &quot;Send Questionnaire&quot; to get started</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b text-left text-sm text-gray-500">
-                    <th className="pb-3 font-medium">Type</th>
-                    <th className="pb-3 font-medium">Sent</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Expires</th>
-                    <th className="pb-3 font-medium text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {shares.map((share) => {
-                    const statusConfig = STATUS_CONFIG[share.status]
-                    const StatusIcon = statusConfig.icon
-                    const isActive = !['completed', 'expired', 'revoked'].includes(share.status)
+            <>
+              <div className="space-y-3 sm:hidden">
+                {shares.map((share) => {
+                  const statusConfig = STATUS_CONFIG[share.status]
+                  const StatusIcon = statusConfig.icon
+                  const isActive = !['completed', 'expired', 'revoked'].includes(share.status)
 
-                    return (
-                      <tr key={share.id} className="text-sm">
-                        <td className="py-3">
-                          <span className="font-medium">
+                  return (
+                    <div key={share.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
                             {ASSESSMENT_LABELS[share.assessment_type] || share.assessment_type}
-                          </span>
-                        </td>
-                        <td className="py-3 text-gray-600">
-                          {formatDate(share.created_at)}
-                        </td>
-                        <td className="py-3">
-                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
-                            <StatusIcon className="h-3 w-3" />
-                            {statusConfig.label}
-                          </div>
-                        </td>
-                        <td className="py-3 text-gray-600">
-                          {share.status === 'completed' ? (
-                            <span className="text-green-600">-</span>
-                          ) : (
-                            formatDate(share.expires_at)
-                          )}
-                        </td>
-                        <td className="py-3">
-                          <div className="flex justify-end gap-1">
-                            {share.status === 'completed' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewResults(share.assessment_type)}
-                                className="h-8 px-2"
-                              >
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                View
-                              </Button>
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">Sent {formatDate(share.created_at)}</p>
+                        </div>
+                        <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
+                          <StatusIcon className="h-3 w-3" />
+                          {statusConfig.label}
+                        </div>
+                      </div>
+                      <div className="mt-3 text-xs text-gray-600">
+                        Expires: {share.status === 'completed' ? '-' : formatDate(share.expires_at)}
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {share.status === 'completed' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewResults(share.assessment_type)}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        )}
+                        {isActive && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopyLink(share.token)}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRevoke(share.id)}
+                              disabled={actionLoading === share.id}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {['expired', 'revoked'].includes(share.status) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onSendAssessment}
+                          >
+                            <RotateCcw className="h-4 w-4 mr-1" />
+                            Resend
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b text-left text-sm text-gray-500">
+                      <th className="pb-3 font-medium">Type</th>
+                      <th className="pb-3 font-medium">Sent</th>
+                      <th className="pb-3 font-medium">Status</th>
+                      <th className="pb-3 font-medium">Expires</th>
+                      <th className="pb-3 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {shares.map((share) => {
+                      const statusConfig = STATUS_CONFIG[share.status]
+                      const StatusIcon = statusConfig.icon
+                      const isActive = !['completed', 'expired', 'revoked'].includes(share.status)
+
+                      return (
+                        <tr key={share.id} className="text-sm">
+                          <td className="py-3">
+                            <span className="font-medium">
+                              {ASSESSMENT_LABELS[share.assessment_type] || share.assessment_type}
+                            </span>
+                          </td>
+                          <td className="py-3 text-gray-600">
+                            {formatDate(share.created_at)}
+                          </td>
+                          <td className="py-3">
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
+                              <StatusIcon className="h-3 w-3" />
+                              {statusConfig.label}
+                            </div>
+                          </td>
+                          <td className="py-3 text-gray-600">
+                            {share.status === 'completed' ? (
+                              <span className="text-green-600">-</span>
+                            ) : (
+                              formatDate(share.expires_at)
                             )}
-                            {isActive && (
-                              <>
+                          </td>
+                          <td className="py-3">
+                            <div className="flex justify-end gap-1">
+                              {share.status === 'completed' && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleCopyLink(share.token)}
+                                  onClick={() => handleViewResults(share.assessment_type)}
                                   className="h-8 px-2"
                                 >
-                                  <Copy className="h-4 w-4" />
+                                  <ExternalLink className="h-4 w-4 mr-1" />
+                                  View
                                 </Button>
+                              )}
+                              {isActive && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCopyLink(share.token)}
+                                    className="h-8 px-2"
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRevoke(share.id)}
+                                    disabled={actionLoading === share.id}
+                                    className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                              {['expired', 'revoked'].includes(share.status) && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleRevoke(share.id)}
-                                  disabled={actionLoading === share.id}
-                                  className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={onSendAssessment}
+                                  className="h-8 px-2"
                                 >
-                                  <XCircle className="h-4 w-4" />
+                                  <RotateCcw className="h-4 w-4 mr-1" />
+                                  Resend
                                 </Button>
-                              </>
-                            )}
-                            {['expired', 'revoked'].includes(share.status) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={onSendAssessment}
-                                className="h-8 px-2"
-                              >
-                                <RotateCcw className="h-4 w-4 mr-1" />
-                                Resend
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

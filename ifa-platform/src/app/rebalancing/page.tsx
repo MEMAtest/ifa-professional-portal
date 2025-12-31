@@ -4,7 +4,7 @@
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { 
   RotateCcw,
   TrendingUp,
@@ -66,7 +66,7 @@ interface Client {
 }
 
 export default function RebalancingPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
@@ -88,30 +88,7 @@ export default function RebalancingPage() {
     totalValue: 0
   })
 
-  useEffect(() => {
-    if (user) {
-      loadData()
-    }
-  }, [user])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      await loadClients()
-      createMockPortfolioData()
-    } catch (error) {
-      console.error('Error loading data:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to load portfolio data',
-        variant: 'destructive'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadClients = async () => {
+  const loadClients = useCallback(async (): Promise<Client[]> => {
     // ✅ Load real clients from database
     const { data: clientData, error } = await supabase
       .from('clients')
@@ -120,20 +97,40 @@ export default function RebalancingPage() {
 
     if (error) {
       console.error('Error loading clients:', error)
-      return
+      return []
     }
 
-    setClients((clientData || []) as any)
-  }
+    const normalizedClients = (clientData || []) as Client[]
+    setClients(normalizedClients)
+    return normalizedClients
+  }, [supabase])
 
-  const createMockPortfolioData = () => {
+  const calculateStats = useCallback((portfolioData: PortfolioRebalance[]) => {
+    const needsRebalancing = portfolioData.filter(p => p.rebalance_required)
+    const urgent = portfolioData.filter(p => p.status === 'urgent')
+    const totalValue = portfolioData.reduce((sum, p) => sum + p.portfolio_value, 0)
+    const averageDrift = portfolioData.reduce((sum, p) => sum + p.drift_percentage, 0) / portfolioData.length
+
+    setStats({
+      totalPortfolios: portfolioData.length,
+      needsRebalancing: needsRebalancing.length,
+      urgentRebalancing: urgent.length,
+      averageDrift: Math.round(averageDrift * 10) / 10,
+      totalValue
+    })
+  }, [])
+
+  const createMockPortfolioData = useCallback((clientList: Client[]) => {
+    const list = clientList || []
     // Create realistic mock portfolio data
     const mockPortfolios: PortfolioRebalance[] = [
       {
         id: '1',
-        client_id: clients[0]?.id || 'mock-1',
-        client_name: clients[0] ? `${clients[0].personal_details.firstName} ${clients[0].personal_details.lastName}` : 'Geoffrey Clarkson',
-        client_ref: clients[0]?.client_ref || 'C250626917',
+        client_id: list[0]?.id || 'mock-1',
+        client_name: list[0]
+          ? `${list[0].personal_details.firstName} ${list[0].personal_details.lastName}`
+          : 'Geoffrey Clarkson',
+        client_ref: list[0]?.client_ref || 'C250626917',
         portfolio_value: 250000,
         target_allocation: {
           'UK Equities': 30,
@@ -176,9 +173,11 @@ export default function RebalancingPage() {
       },
       {
         id: '2',
-        client_id: clients[1]?.id || 'mock-2',
-        client_name: clients[1] ? `${clients[1].personal_details.firstName} ${clients[1].personal_details.lastName}` : 'Sarah Mitchell',
-        client_ref: clients[1]?.client_ref || 'C250625166',
+        client_id: list[1]?.id || 'mock-2',
+        client_name: list[1]
+          ? `${list[1].personal_details.firstName} ${list[1].personal_details.lastName}`
+          : 'Sarah Mitchell',
+        client_ref: list[1]?.client_ref || 'C250625166',
         portfolio_value: 180000,
         target_allocation: {
           'UK Equities': 40,
@@ -222,7 +221,7 @@ export default function RebalancingPage() {
     ]
 
     // Add more mock portfolios for other clients
-    const additionalMockPortfolios = clients.slice(2, 5).map((client, index) => ({
+    const additionalMockPortfolios = list.slice(2, 5).map((client, index) => ({
       id: `${index + 3}`,
       client_id: client.id,
       client_name: `${client.personal_details.firstName} ${client.personal_details.lastName}`,
@@ -252,22 +251,30 @@ export default function RebalancingPage() {
     const allPortfolios = [...mockPortfolios, ...additionalMockPortfolios]
     setPortfolios(allPortfolios)
     calculateStats(allPortfolios)
-  }
+  }, [calculateStats])
 
-  const calculateStats = (portfolioData: PortfolioRebalance[]) => {
-    const needsRebalancing = portfolioData.filter(p => p.rebalance_required)
-    const urgent = portfolioData.filter(p => p.status === 'urgent')
-    const totalValue = portfolioData.reduce((sum, p) => sum + p.portfolio_value, 0)
-    const averageDrift = portfolioData.reduce((sum, p) => sum + p.drift_percentage, 0) / portfolioData.length
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const loadedClients = await loadClients()
+      createMockPortfolioData(loadedClients)
+    } catch (error) {
+      console.error('Error loading data:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to load portfolio data',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [loadClients, createMockPortfolioData, toast])
 
-    setStats({
-      totalPortfolios: portfolioData.length,
-      needsRebalancing: needsRebalancing.length,
-      urgentRebalancing: urgent.length,
-      averageDrift: Math.round(averageDrift * 10) / 10,
-      totalValue
-    })
-  }
+  useEffect(() => {
+    if (user) {
+      loadData()
+    }
+  }, [user, loadData])
 
   const getStatusBadge = (status: string) => {
     const variants = {

@@ -165,7 +165,7 @@ export default function MonteCarloWorkerTest() {
           <p className="font-semibold mb-2">Logs:</p>
           <div className="h-64 overflow-y-auto font-mono text-xs">
             {logs.length === 0 ? (
-              <p className="text-gray-500">No logs yet. Click "Initialize Worker" to start.</p>
+              <p className="text-gray-500">No logs yet. Click &quot;Initialize Worker&quot; to start.</p>
             ) : (
               logs.map((log, i) => (
                 <div key={i} className="py-0.5">{log}</div>
@@ -178,12 +178,12 @@ export default function MonteCarloWorkerTest() {
         <div className="text-sm text-gray-600 bg-blue-50 p-4 rounded">
           <p className="font-semibold mb-1">Test Instructions:</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>Click "Initialize Worker" - should show "Worker is ready!"</li>
-            <li>Click "Run Test Simulation" - should show progress updates</li>
+            <li>Click &quot;Initialize Worker&quot; - should show &quot;Worker is ready!&quot;</li>
+            <li>Click &quot;Run Test Simulation&quot; - should show progress updates</li>
             <li>Check results appear in green box</li>
             <li>Check browser console for detailed logs</li>
           </ol>
-          <p className="mt-2 font-semibold">If it doesn't work:</p>
+          <p className="mt-2 font-semibold">If it does not work:</p>
           <ul className="list-disc list-inside space-y-1">
             <li>Check browser console for errors</li>
             <li>Verify file exists at /public/workers/monte-carlo-worker.js</li>

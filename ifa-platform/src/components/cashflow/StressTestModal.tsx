@@ -91,7 +91,7 @@ export function StressTestModal({ isOpen, onClose, scenario, client }: StressTes
       ];
       setSelectedScenarios(defaultSelections);
     }
-  }, []);
+  }, [selectedScenarios.length]);
 
   if (!isOpen) return null;
 
@@ -294,7 +294,7 @@ export function StressTestModal({ isOpen, onClose, scenario, client }: StressTes
                 <div>
                   <h3 className="text-lg font-medium mb-4">Select Stress Test Scenarios</h3>
                   <p className="text-sm text-gray-600 mb-6">
-                    Choose scenarios to test your financial plan's resilience. We now include personal crisis scenarios.
+                    Choose scenarios to test your financial plan&apos;s resilience. We now include personal crisis scenarios.
                   </p>
                 </div>
 

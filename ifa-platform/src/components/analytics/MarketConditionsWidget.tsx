@@ -203,7 +203,7 @@ export function MarketConditionsWidget({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {[1, 2, 3, 4, 5, 6].map(i => (
               <div key={i} className="animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-20 mb-2" />
@@ -445,7 +445,7 @@ export function MarketConditionsWidget({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* FTSE 100 */}
           <DataCard
             metricKey="ftse100"
@@ -556,7 +556,7 @@ export function MarketConditionsWidget({
                 <span className="text-xs font-normal text-gray-400">(hover for details)</span>
               </h4>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {/* FTSE 250 */}
               {marketData?.ftse250 && (
                 <DataCard

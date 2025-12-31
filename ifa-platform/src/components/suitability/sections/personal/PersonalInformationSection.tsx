@@ -122,11 +122,13 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
   })
   
   // Use provided save state or local fallback
-  const effectiveSaveState = saveState || {
-    isSaving: false,
-    lastSaved: localSaveState.lastLocalSave,
-    lastError: null
-  }
+  const effectiveSaveState = useMemo(() => {
+    return saveState || {
+      isSaving: false,
+      lastSaved: localSaveState.lastLocalSave,
+      lastError: null
+    }
+  }, [localSaveState.lastLocalSave, saveState])
   
   // Conditional fields
   const conditionalFields = useMemo(() => {

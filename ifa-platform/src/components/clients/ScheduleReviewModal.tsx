@@ -126,7 +126,7 @@ export function ScheduleReviewModal({
           {/* Review Type */}
           <div className="space-y-2">
             <Label>Review Type</Label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {REVIEW_TYPES.map(({ value, label, icon: Icon, description }) => (
                 <button
                   key={value}
@@ -170,7 +170,7 @@ export function ScheduleReviewModal({
           </div>
 
           {/* Quick Date Options */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {[
               { label: '1 Week', days: 7 },
               { label: '2 Weeks', days: 14 },
@@ -210,11 +210,11 @@ export function ScheduleReviewModal({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="flex flex-col-reverse gap-3 pt-4 border-t sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
               {saving ? 'Scheduling...' : 'Schedule Review'}
             </Button>
           </div>

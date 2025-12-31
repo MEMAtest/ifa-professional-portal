@@ -150,7 +150,7 @@ export default function ClientAssessmentCard({ client, onClick }: ClientAssessme
 
       {/* Client Details Grid */}
       <div className="space-y-4 mb-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div className="text-xs text-gray-500 mb-1">Portfolio Value</div>
             <div className="text-lg font-bold text-gray-900">
@@ -168,7 +168,7 @@ export default function ClientAssessmentCard({ client, onClick }: ClientAssessme
           </div>
         </div>
         
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div className="text-xs text-gray-500 mb-1">Performance YTD</div>
             <div className={`text-lg font-bold flex items-center ${

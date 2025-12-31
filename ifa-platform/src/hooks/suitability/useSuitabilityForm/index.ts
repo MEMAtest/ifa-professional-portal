@@ -232,59 +232,12 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       client,
       assessmentId,
       activeAssessmentId,
-      validationErrors,
       metrics,
-      saveState.isSaving,
-      saveState.retryCount,
-      saveState.maxRetries,
+      saveState,
       isProspect,
       calculateCompletion
     ]
   )
-  
-  // =====================================================
-  // LOAD DRAFT - WITH MULTIPLE FALLBACKS & ATR/CFL
-  // =====================================================
-  
-	  const loadDraft = useCallback(
-	    async () =>
-	      loadSuitabilityDraft({
-	        clientId,
-	        assessmentId,
-	        isProspect,
-	        client,
-	        enableConditionalLogic,
-	        enableValidation,
-	        hasLoadedDraftRef,
-	        hasInitializedUiRef,
-	        setIsLoading,
-	        setFormData,
-	        processConditionalLogic,
-	        runValidation,
-	        loadFromApi: loadFromAPI
-	      }),
-	    [clientId, client, enableConditionalLogic, enableValidation, assessmentId, isProspect]
-	  )
-  
-	  const loadFromAPI = async (effectiveClientId: string, reconcileWithLocal: boolean = false) => {
-      await hydrateSuitabilityDraftFromApi({
-        effectiveClientId,
-        assessmentId: assessmentId || undefined,
-        reconcileWithLocal,
-        client,
-        enableConditionalLogic,
-        enableValidation,
-        hasLoadedDraftRef,
-        saveToDraft,
-        processConditionalLogic,
-        runValidation,
-        setActiveAssessmentId,
-        setFormData,
-        setSaveState,
-        setMetrics,
-        setPulledData
-      })
-	  }
   
   // =====================================================
   // CONDITIONAL LOGIC PROCESSING - FIXED DUPLICATION
@@ -434,11 +387,84 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       return { errors: [], warnings: [] }
     }
   }, [enableValidation, pulledData, onValidationChange])
-  
+
+  // =====================================================
+  // LOAD FROM API
+  // =====================================================
+
+  const loadFromAPI = useCallback(
+    async (effectiveClientId: string, reconcileWithLocal: boolean = false) => {
+      await hydrateSuitabilityDraftFromApi({
+        effectiveClientId,
+        assessmentId: assessmentId || undefined,
+        reconcileWithLocal,
+        client,
+        enableConditionalLogic,
+        enableValidation,
+        hasLoadedDraftRef,
+        saveToDraft,
+        processConditionalLogic,
+        runValidation,
+        setActiveAssessmentId,
+        setFormData,
+        setSaveState,
+        setMetrics,
+        setPulledData
+      })
+    },
+    [
+      assessmentId,
+      client,
+      enableConditionalLogic,
+      enableValidation,
+      saveToDraft,
+      processConditionalLogic,
+      runValidation
+    ]
+  )
+
+  // =====================================================
+  // LOAD DRAFT - WITH MULTIPLE FALLBACKS & ATR/CFL
+  // =====================================================
+
+  const loadDraft = useCallback(
+    async () =>
+      loadSuitabilityDraft({
+        clientId,
+        assessmentId,
+        isProspect,
+        client,
+        enableConditionalLogic,
+        enableValidation,
+        hasLoadedDraftRef,
+        hasInitializedUiRef,
+        setIsLoading,
+        setFormData,
+        processConditionalLogic,
+        runValidation,
+        loadFromApi: loadFromAPI
+      }),
+    [
+      clientId,
+      client,
+      enableConditionalLogic,
+      enableValidation,
+      assessmentId,
+      isProspect,
+      loadFromAPI,
+      processConditionalLogic,
+      runValidation
+    ]
+  )
+
   // =====================================================
   // UPDATE HANDLERS
   // =====================================================
-  
+
+  // Refs to break circular dependencies
+  const broadcastUpdateRef = useRef<((sectionId: string, fieldId: string, value: any, source?: string) => void) | null>(null)
+  const debouncedAutoSaveRef = useRef<(() => void) | null>(null)
+
   const updateField = useCallback((
     sectionId: string,
     fieldId: string,
@@ -523,8 +549,8 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       }))
       
       // Broadcast change if needed
-      if (fieldOptions?.broadcast && syncEnabled && supabase) {
-        broadcastUpdate(sectionId, fieldId, value, fieldOptions.source)
+      if (fieldOptions?.broadcast && syncEnabled && supabase && broadcastUpdateRef.current) {
+        broadcastUpdateRef.current(sectionId, fieldId, value, fieldOptions.source)
       }
       
       // Trigger callbacks
@@ -536,8 +562,8 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
     })
     
     // Trigger auto-save
-    if (autoSave) {
-      debouncedAutoSave()
+    if (autoSave && debouncedAutoSaveRef.current) {
+      debouncedAutoSaveRef.current()
     }
   }, [
     processConditionalLogic,
@@ -593,8 +619,8 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       return newData
     })
     
-    if (autoSave) {
-      debouncedAutoSave()
+    if (autoSave && debouncedAutoSaveRef.current) {
+      debouncedAutoSaveRef.current()
     }
   }, [
     processConditionalLogic,
@@ -663,7 +689,10 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
     }, 3000), // 3 second debounce for stability
     [] // Empty deps - function is stable, uses refs for current values
   )
-  
+
+  // Update ref for circular dependency
+  debouncedAutoSaveRef.current = debouncedAutoSave
+
   // =====================================================
   // REALTIME SYNC
   // =====================================================
@@ -703,8 +732,11 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
     },
     [realtimeSync]
   )
-  
-	  // Load draft on mount / when assessment changes.
+
+  // Update ref for circular dependency
+  broadcastUpdateRef.current = broadcastUpdate
+
+  // Load draft on mount / when assessment changes.
 	  // IMPORTANT: Guard to avoid re-loading when `client` arrives (which changes `loadDraft` identity).
 	  const loadDraftRef = useRef(loadDraft)
 	  useEffect(() => {
@@ -786,15 +818,16 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
 	    runValidation
 	  ])
 
+  const reviewFrequency = (formData as any)?.ongoing_service?.review_frequency as string | undefined
+  const nextReviewDate = (formData as any)?.recommendation?.next_review_date as string | undefined
+
   // Auto-set next review date when review frequency is chosen (cadence depends on user selection).
   useEffect(() => {
-    const frequency = (formData as any)?.ongoing_service?.review_frequency as string | undefined
-    const currentNextReview = (formData as any)?.recommendation?.next_review_date as string | undefined
-    if (!frequency) return
-    if (currentNextReview) return
+    if (!reviewFrequency) return
+    if (nextReviewDate) return
 
     const months =
-      frequency === 'Quarterly' ? 3 : frequency === 'Semi-Annual' ? 6 : frequency === 'Annual' ? 12 : null
+      reviewFrequency === 'Quarterly' ? 3 : reviewFrequency === 'Semi-Annual' ? 6 : reviewFrequency === 'Annual' ? 12 : null
     if (!months) return
     const d = new Date()
     d.setMonth(d.getMonth() + months)
@@ -806,7 +839,7 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       skipConditionalLogic: true,
       broadcast: false
     })
-  }, [(formData as any)?.ongoing_service?.review_frequency, (formData as any)?.recommendation?.next_review_date, updateField])
+  }, [reviewFrequency, nextReviewDate, updateField])
 
   // REMOVED: Auto-save interval - replaced by debounced auto-save with mutex
   // The interval-based auto-save (every 30 seconds) was causing race conditions
@@ -816,12 +849,15 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
   
   // Cleanup
   useEffect(() => {
+    const saveQueueTimeout = saveQueueRef.current
+    const retryTimeout = retryTimeoutRef.current
+
     return () => {
-      if (saveQueueRef.current) {
-        clearTimeout(saveQueueRef.current)
+      if (saveQueueTimeout) {
+        clearTimeout(saveQueueTimeout)
       }
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current)
+      if (retryTimeout) {
+        clearTimeout(retryTimeout)
       }
       // REMOVED: autoSaveIntervalRef cleanup - no longer used
       debouncedAutoSave.cancel()

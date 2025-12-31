@@ -53,7 +53,7 @@ export function SuitabilityActionsCard(props: Props) {
 
         <div className="border-t pt-2 mt-2">
           <p className="text-xs text-gray-500 mb-2 font-medium">Generate PDF Report</p>
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
             <Button
               variant="outline"
               size="sm"
@@ -112,4 +112,3 @@ export function SuitabilityActionsCard(props: Props) {
     </Card>
   )
 }
-

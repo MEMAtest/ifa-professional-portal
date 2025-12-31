@@ -232,14 +232,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
     };
   }, [unsubscribeProgress]);
 
-  // Load preview data when switching to preview tab
-  useEffect(() => {
-    if (activeTab === 'preview' && scenario) {
-      loadPreviewData();
-    }
-  }, [activeTab, scenario, templateType, reportOptions]);
-
-  const loadPreviewData = async () => {
+  const loadPreviewData = useCallback(async () => {
     if (!scenario) return;
     
     setPreviewLoading(true);
@@ -257,7 +250,14 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
     } finally {
       setPreviewLoading(false);
     }
-  };
+  }, [reportOptions, scenario, templateType]);
+
+  // Load preview data when switching to preview tab
+  useEffect(() => {
+    if (activeTab === 'preview' && scenario) {
+      loadPreviewData();
+    }
+  }, [activeTab, loadPreviewData, scenario]);
 
   const loadHistoryData = useCallback(async () => {
     if (!scenario) return;

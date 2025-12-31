@@ -87,7 +87,7 @@ export function StressTestAnalysis({ scenario, client }: StressTestAnalysisProps
       ];
       setSelectedScenarios(defaultSelections);
     }
-  }, []);
+  }, [selectedScenarios.length]);
 
   const handleScenarioToggle = (scenarioId: string) => {
     setSelectedScenarios(prev => 
@@ -255,7 +255,7 @@ export function StressTestAnalysis({ scenario, client }: StressTestAnalysisProps
                 <div>
                   <h3 className="text-lg font-medium mb-4">Select Stress Test Scenarios</h3>
                   <p className="text-sm text-gray-600 mb-6">
-                    Choose scenarios to test your financial plan's resilience, including personal crisis scenarios.
+                    Choose scenarios to test your financial plan&apos;s resilience, including personal crisis scenarios.
                   </p>
                 </div>
 

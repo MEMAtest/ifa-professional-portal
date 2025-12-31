@@ -350,7 +350,7 @@ export default function DocumentsPage() {
     return (
       <Layout>
         <div className="space-y-6">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
           </div>
           <div className="animate-pulse space-y-4">
@@ -367,14 +367,14 @@ export default function DocumentsPage() {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
             <p className="text-gray-600 mt-1">Manage your client documents and files</p>
           </div>
           <Button 
             onClick={() => setShowUploadDialog(true)}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
           >
             <PlusIcon className="h-4 w-4 mr-2" />
             Upload Document
@@ -456,11 +456,11 @@ export default function DocumentsPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
               >
                 <option value="">All Categories</option>
                 {categories.map((category: any) => (
@@ -473,7 +473,7 @@ export default function DocumentsPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
               >
                 <option value="">All Status</option>
                 <option value="active">Active</option>
@@ -514,8 +514,8 @@ export default function DocumentsPage() {
           ) : (
             filteredDocuments.map((document: any) => (
               <Card key={document.id} className="p-6 hover:shadow-lg transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
                       <div className="p-3 bg-blue-100 rounded-lg">
                         <FileTextIcon className="h-6 w-6 text-blue-600" />
@@ -535,7 +535,7 @@ export default function DocumentsPage() {
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600">
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
                         {document.client_name && (
                           <>
                             <div className="flex items-center">
@@ -559,7 +559,7 @@ export default function DocumentsPage() {
                         </p>
                       )}
                       {document.tags && document.tags.length > 0 && (
-                        <div className="flex items-center space-x-1 mt-2">
+                        <div className="flex flex-wrap items-center gap-1 mt-2">
                           <TagIcon className="h-3 w-3 text-gray-400" />
                           {document.tags.slice(0, 3).map((tag: string) => (
                             <Badge key={tag} className="bg-gray-100 text-gray-600 text-xs">
@@ -575,7 +575,7 @@ export default function DocumentsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm">
                       <EyeIcon className="h-4 w-4 mr-1" />
                       View

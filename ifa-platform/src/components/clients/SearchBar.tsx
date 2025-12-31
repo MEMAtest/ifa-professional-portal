@@ -84,7 +84,7 @@ export default function SearchBar({
   }, []);
 
   return (
-    <div className="relative w-full max-w-md">
+    <div className="relative w-full sm:max-w-md">
       <div className="relative flex items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -112,7 +112,7 @@ export default function SearchBar({
           <Button
             onClick={handleSearch}
             disabled={!value.trim() || loading || isSearching}
-            className="ml-2"
+            className="ml-2 shrink-0"
             size="sm"
           >
             {isSearching ? (

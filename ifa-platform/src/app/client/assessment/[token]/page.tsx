@@ -194,7 +194,7 @@ export default function AssessmentLandingPage({
           </div>
 
           {/* Info cards */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="bg-blue-50 rounded-lg p-3 text-center">
               <Clock className="h-5 w-5 text-blue-600 mx-auto mb-1" />
               <p className="text-xs text-gray-500">Estimated Time</p>

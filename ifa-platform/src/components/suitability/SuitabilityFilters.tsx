@@ -101,7 +101,7 @@ export default function SuitabilityFilters({
       {searchTerm && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-sm text-gray-600">
-            Showing {clientCount} result{clientCount !== 1 ? 's' : ''} for "{searchTerm}"
+            Showing {clientCount} result{clientCount !== 1 ? 's' : ''} for &quot;{searchTerm}&quot;
           </p>
         </div>
       )}

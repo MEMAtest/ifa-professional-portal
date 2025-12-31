@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { formatCurrency } from '@/lib/utils'
@@ -54,7 +54,7 @@ export function ClientTableSelector({
   const [showFilters, setShowFilters] = useState(false)
 
   // Get impact level for a client based on type
-  const getImpactLevel = (client: ClientImpact): 'high' | 'medium' | 'low' => {
+  const getImpactLevel = useCallback((client: ClientImpact): 'high' | 'medium' | 'low' => {
     switch (impactType) {
       case 'rate':
         return client.rateImpact
@@ -63,7 +63,7 @@ export function ClientTableSelector({
       case 'equity':
         return client.equityImpact
     }
-  }
+  }, [impactType])
 
   // Filter and sort clients
   const filteredAndSortedClients = useMemo(() => {
@@ -107,7 +107,7 @@ export function ClientTableSelector({
     })
 
     return result
-  }, [clients, searchTerm, impactFilter, sortField, sortDirection, impactType])
+  }, [clients, searchTerm, impactFilter, sortField, sortDirection, getImpactLevel])
 
   // Handle column header click for sorting
   const handleSort = (field: SortField) => {
@@ -137,7 +137,7 @@ export function ClientTableSelector({
       medium: clients.filter(c => getImpactLevel(c) === 'medium').length,
       low: clients.filter(c => getImpactLevel(c) === 'low').length
     }
-  }, [clients, impactType])
+  }, [clients, getImpactLevel])
 
   return (
     <Card>

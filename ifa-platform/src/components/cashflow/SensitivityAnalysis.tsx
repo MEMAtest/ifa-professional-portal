@@ -5,7 +5,7 @@
 
 'use client';
 console.log("SensitivityAnalysis loaded - UPDATED VERSION");
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Slider } from '@/components/ui/Slider';
 import { Badge } from '@/components/ui/Badge';
@@ -131,51 +131,7 @@ export const SensitivityAnalysis: React.FC<SensitivityAnalysisProps> = ({
   const [sensitivityResults, setSensitivityResults] = useState<SensitivityResult[]>([]);
   const [selectedParameter, setSelectedParameter] = useState<string>('inflationRate');
 
-  // Calculate impact of parameter changes
-  useEffect(() => {
-    calculateSensitivity();
-  }, [parameters]);
-
-  const calculateSensitivity = () => {
-    // FIX: Explicitly type the entire results array
-    const results: SensitivityResult[] = [];
-    
-    for (const param of parameters) {
-      // Create variations array with explicit type
-      const paramVariations: VariationData[] = [];
-      const steps = 5;
-      const range = param.max - param.min;
-      const stepSize = range / steps;
-
-      for (let i = 0; i <= steps; i++) {
-        const value = param.min + (stepSize * i);
-        const impact = calculateImpact(param.id, value);
-        
-        // Create variation object
-        const variationItem: VariationData = {
-          value: value,
-          finalPortfolioValue: impact.portfolioValue,
-          successProbability: impact.successRate,
-          sustainabilityYears: impact.sustainabilityYears
-        };
-        
-        paramVariations.push(variationItem);
-      }
-
-      // Create result object
-      const result: SensitivityResult = {
-        parameterId: param.id,
-        parameterName: param.name,
-        variations: paramVariations
-      };
-      
-      results.push(result);
-    }
-
-    setSensitivityResults(results);
-  };
-
-  const calculateImpact = (parameterId: string, value: number) => {
+  const calculateImpact = useCallback((parameterId: string, value: number) => {
     // Simplified impact calculation - in production, this would recalculate projections
     const basePortfolioValue = 1000000;
     const baseSuccessRate = 75;
@@ -216,7 +172,51 @@ export const SensitivityAnalysis: React.FC<SensitivityAnalysisProps> = ({
       successRate: Math.max(0, Math.min(100, baseSuccessRate * multiplier)),
       sustainabilityYears: Math.max(0, baseSustainability * multiplier)
     };
-  };
+  }, [parameters]);
+
+  const calculateSensitivity = useCallback(() => {
+    // FIX: Explicitly type the entire results array
+    const results: SensitivityResult[] = [];
+    
+    for (const param of parameters) {
+      // Create variations array with explicit type
+      const paramVariations: VariationData[] = [];
+      const steps = 5;
+      const range = param.max - param.min;
+      const stepSize = range / steps;
+
+      for (let i = 0; i <= steps; i++) {
+        const value = param.min + (stepSize * i);
+        const impact = calculateImpact(param.id, value);
+        
+        // Create variation object
+        const variationItem: VariationData = {
+          value: value,
+          finalPortfolioValue: impact.portfolioValue,
+          successProbability: impact.successRate,
+          sustainabilityYears: impact.sustainabilityYears
+        };
+        
+        paramVariations.push(variationItem);
+      }
+
+      // Create result object
+      const result: SensitivityResult = {
+        parameterId: param.id,
+        parameterName: param.name,
+        variations: paramVariations
+      };
+      
+      results.push(result);
+    }
+
+    setSensitivityResults(results);
+  }, [parameters, calculateImpact]);
+
+  // Calculate impact of parameter changes
+  useEffect(() => {
+    calculateSensitivity();
+  }, [calculateSensitivity]);
 
   const handleParameterChange = (parameterId: string, value: number) => {
     setParameters(prev => prev.map(p => 

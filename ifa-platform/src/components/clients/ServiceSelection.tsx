@@ -397,7 +397,7 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
               <div>
                 <p className="text-sm font-medium text-gray-700">No Firm Services Configured</p>
                 <p className="text-sm text-gray-500 mt-1">
-                  Configure your firm's services and PROD requirements to enable target market checks.
+                  Configure your firm&apos;s services and PROD requirements to enable target market checks.
                 </p>
               </div>
               <a

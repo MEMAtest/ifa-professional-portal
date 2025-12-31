@@ -346,17 +346,8 @@ export default function ATRAssessmentPage() {
   // PROGRESS TRACKING INTEGRATION
   // ================================================================
 
-  // Track assessment start
-  useEffect(() => {
-    if (clientId && !hasTrackedStart) {
-      trackProgress('in_progress', 0)
-      logHistory('started')
-      setHasTrackedStart(true)
-    }
-  }, [clientId, hasTrackedStart])
-
   // Update progress API
-  const trackProgress = async (status: string, percentage: number, metadata?: any) => {
+  const trackProgress = useCallback(async (status: string, percentage: number, metadata?: any) => {
     if (!clientId) return
 
     try {
@@ -373,10 +364,10 @@ export default function ATRAssessmentPage() {
     } catch (error) {
       console.error('Error tracking progress:', error)
     }
-  }
+  }, [clientId])
 
   // Log to history API
-  const logHistory = async (action: string, changes?: any) => {
+  const logHistory = useCallback(async (action: string, changes?: any) => {
     if (!clientId) return
 
     try {
@@ -392,7 +383,16 @@ export default function ATRAssessmentPage() {
     } catch (error) {
       console.error('Error logging history:', error)
     }
-  }
+  }, [clientId])
+
+  // Track assessment start
+  useEffect(() => {
+    if (clientId && !hasTrackedStart) {
+      trackProgress('in_progress', 0)
+      logHistory('started')
+      setHasTrackedStart(true)
+    }
+  }, [clientId, hasTrackedStart, logHistory, trackProgress])
 
   // Answer handler with progress tracking
   const handleAnswer = useCallback(async (questionId: string, answerIndex: number) => {
@@ -403,7 +403,7 @@ export default function ATRAssessmentPage() {
     const progressPercentage = Math.round((answeredCount / atrQuestions.length) * 100)
     
     await trackProgress('in_progress', progressPercentage)
-  }, [answers, clientId])
+  }, [answers, trackProgress])
 
   // Navigation handlers
   const nextQuestion = async () => {

@@ -427,21 +427,21 @@ export default function CommunicationHubPage() {
           {/* Filters for Overview */}
           <Card>
             <CardContent className="p-4">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center space-x-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <Search className="h-4 w-4 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search communications..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
                   />
                 </div>
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value as CommunicationTypeFilter)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
                 >
                   <option value="all">All Types</option>
                   <option value="call">Calls</option>
@@ -450,13 +450,13 @@ export default function CommunicationHubPage() {
                 <select
                   value={filterDirection}
                   onChange={(e) => setFilterDirection(e.target.value as CommunicationDirectionFilter)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
                 >
                   <option value="all">All Directions</option>
                   <option value="inbound">Inbound</option>
                   <option value="outbound">Outbound</option>
                 </select>
-                <Button variant="outline" size="sm" onClick={() => refresh()}>
+                <Button variant="outline" size="sm" onClick={() => refresh()} className="w-full sm:w-auto">
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh
                 </Button>
@@ -919,7 +919,7 @@ export default function CommunicationHubPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Direction</label>
                   <select
@@ -1032,7 +1032,7 @@ export default function CommunicationHubPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
                   <input

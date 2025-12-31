@@ -302,17 +302,15 @@ export function useSuitabilityFormController(params: {
     }
   }, [
     activeAssessmentId,
-    aiSuggestions,
     completion.sectionProgress,
     completionScore,
     formData,
     navigateToSection,
     params,
-    pulledData,
     router,
-    saveState,
     showNotification,
-    submissionValidationErrors
+    submissionValidationErrors,
+    validationResult.compliance
   ])
 
   const handleGenerateDraftReport = useCallback(() => {

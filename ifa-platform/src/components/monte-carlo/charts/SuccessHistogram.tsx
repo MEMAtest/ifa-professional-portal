@@ -182,7 +182,7 @@ export const SuccessHistogram: React.FC<SuccessHistogramProps> = ({
       </CardHeader>
       <CardContent>
         {/* Summary Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <div className="bg-green-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-green-700">{successProbability.toFixed(1)}%</div>
             <div className="text-xs text-green-600">Success Rate</div>

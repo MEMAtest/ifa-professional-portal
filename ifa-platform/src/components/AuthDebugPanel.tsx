@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
@@ -16,7 +16,7 @@ interface AuthDebugState {
 }
 
 export function AuthDebugPanel() {
-  const supabase = createClient() as any
+  const supabase = useMemo(() => createClient() as any, [])
   const [authState, setAuthState] = useState<AuthDebugState>({
     user: null,
     session: null,
@@ -89,7 +89,7 @@ export function AuthDebugPanel() {
     return () => {
       subscription?.unsubscribe()
     }
-  }, [])
+  }, [supabase])
 
   const testConnection = async () => {
     try {

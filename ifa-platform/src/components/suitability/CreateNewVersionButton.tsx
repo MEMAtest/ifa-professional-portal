@@ -343,7 +343,7 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
       setIsCreating(false)
       setIsModalOpen(false)
     }
-  }, [clientId, currentAssessmentId, router, toast, onVersionCreated, supabase])
+  }, [clientId, currentAssessmentId, router, toast, onVersionCreated, supabase, user?.id])
 
   // Check if can create new version
   const normalizedStatus = String(currentVersion?.status || '').toLowerCase()

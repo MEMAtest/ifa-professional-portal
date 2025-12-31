@@ -99,7 +99,7 @@ export const useDashboardData = ({
 
   useEffect(() => {
     fetchDashboardData(upcomingEventsFilter)
-  }, [])
+  }, [fetchDashboardData, upcomingEventsFilter])
 
   useEffect(() => {
     if (!upcomingEventsInitialized.current) {

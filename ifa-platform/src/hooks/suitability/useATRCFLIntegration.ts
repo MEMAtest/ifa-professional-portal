@@ -232,10 +232,11 @@ export const useATRCFLIntegration = ({
     onError
   ])
   
+  const atrAssessment = state.atrAssessment
+  const cflAssessment = state.cflAssessment
+
   // Reconcile ATR and CFL scores
   const reconcileRiskProfiles = useCallback(() => {
-    const { atrAssessment, cflAssessment } = state
-    
     if (!atrAssessment || !cflAssessment) {
       return {
         finalRiskLevel: null,
@@ -271,7 +272,7 @@ export const useATRCFLIntegration = ({
       cflLevel,
       mismatch: atrLevel ? Math.abs(atrLevel - cflLevel) : null
     }
-  }, [state.atrAssessment, state.cflAssessment])
+  }, [atrAssessment, cflAssessment])
   
   // Manual refresh function
   const refresh = useCallback(async () => {

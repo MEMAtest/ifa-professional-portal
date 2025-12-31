@@ -221,16 +221,9 @@ export default function StressTestingPage() {
     } finally {
       setIsGeneratingReport(false);
     }
-  }, [selectedClient, results, selectedScenarios, toast]);
+  }, [selectedClient, results, selectedScenarios, supabase, toast]);
 
-  useEffect(() => {
-    if (clientId) {
-      loadClientData(clientId);
-      setViewMode('scenarios');
-    }
-  }, [clientId]);
-
-  const loadClientData = async (clientIdToLoad: string) => {
+  const loadClientData = useCallback(async (clientIdToLoad: string) => {
     try {
       const { client, monteCarloSuccessRate, results, selectedScenarios } =
         await loadStressTestingClientData(supabase, clientIdToLoad);
@@ -246,7 +239,14 @@ export default function StressTestingPage() {
       console.error('Error loading client data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load client data');
     }
-  };
+  }, [setError, supabase]);
+
+  useEffect(() => {
+    if (clientId) {
+      loadClientData(clientId);
+      setViewMode('scenarios');
+    }
+  }, [clientId, loadClientData]);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);

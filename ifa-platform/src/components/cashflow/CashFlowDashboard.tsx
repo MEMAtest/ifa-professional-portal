@@ -63,12 +63,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
 
   const router = useRouter();
 
-  // Load dashboard data on mount
-  useEffect(() => {
-    loadDashboardData();
-  }, [clientId]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -87,7 +82,12 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [clientId]);
+
+  // Load dashboard data on mount
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   const loadProjections = useCallback(async (scenario: CashFlowScenario) => {
     try {

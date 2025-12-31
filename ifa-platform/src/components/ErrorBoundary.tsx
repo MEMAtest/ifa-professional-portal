@@ -270,7 +270,7 @@ URL: ${window.location.href}
               Something went wrong
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
-              We're sorry, but something unexpected happened.
+              We&apos;re sorry, but something unexpected happened.
             </p>
           </div>
 
@@ -525,7 +525,7 @@ function RouteErrorBoundaryComponent({ children }: { children: ReactNode }) {
             </CardHeader>
             <CardContent>
               <p className="text-gray-600 mb-4">
-                This page encountered an error and couldn't load properly.
+                This page encountered an error and couldn&apos;t load properly.
               </p>
               <div className="flex space-x-2">
                 <Button onClick={() => window.location.reload()}>

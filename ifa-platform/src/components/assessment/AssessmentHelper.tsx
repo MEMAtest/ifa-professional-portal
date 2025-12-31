@@ -5,7 +5,7 @@
 
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useCallback } from 'react'
 import {
   AlertTriangle,
   Info,
@@ -78,7 +78,7 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
   onSuggestedQuestion
 }) => {
   // Analyze ATR data for inconsistencies
-  const analyzeATR = (): Insight[] => {
+  const analyzeATR = useCallback((): Insight[] => {
     const insights: Insight[] = []
 
     if (!atrData) return insights
@@ -143,10 +143,10 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
     }
 
     return insights
-  }
+  }, [atrData, clientAge])
 
   // Analyze CFL data
-  const analyzeCFL = (): Insight[] => {
+  const analyzeCFL = useCallback((): Insight[] => {
     const insights: Insight[] = []
 
     if (!cflData) return insights
@@ -227,10 +227,10 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
     }
 
     return insights
-  }
+  }, [cflData])
 
   // Analyze combined ATR vs CFL
-  const analyzeATRvsCFL = (): Insight[] => {
+  const analyzeATRvsCFL = useCallback((): Insight[] => {
     const insights: Insight[] = []
 
     if (!atrData || !cflData) return insights
@@ -262,10 +262,10 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
     }
 
     return insights
-  }
+  }, [atrData, cflData])
 
   // Generate suggested follow-up questions
-  const getSuggestedQuestions = (): string[] => {
+  const getSuggestedQuestions = useCallback((): string[] => {
     const questions: string[] = []
 
     if (atrData?.riskWillingness && atrData.riskWillingness >= 7 &&
@@ -286,10 +286,10 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
     }
 
     return questions
-  }
+  }, [atrData, cflData, clientAge])
 
   // Get regulatory considerations
-  const getRegulatoryConsiderations = (): Insight[] => {
+  const getRegulatoryConsiderations = useCallback((): Insight[] => {
     const insights: Insight[] = []
 
     // Consumer Duty considerations
@@ -313,7 +313,7 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
     }
 
     return insights
-  }
+  }, [atrData, cflData])
 
   // Combine all insights
   const allInsights = useMemo(() => {
@@ -336,9 +336,9 @@ export const AssessmentHelper: React.FC<AssessmentHelperProps> = ({
       const priorityOrder = { high: 0, medium: 1, low: 2 }
       return priorityOrder[a.priority] - priorityOrder[b.priority]
     })
-  }, [atrData, cflData, personaData, clientAge, assessmentType])
+  }, [assessmentType, analyzeATR, analyzeATRvsCFL, analyzeCFL, getRegulatoryConsiderations])
 
-  const suggestedQuestions = useMemo(() => getSuggestedQuestions(), [atrData, cflData, clientAge])
+  const suggestedQuestions = useMemo(() => getSuggestedQuestions(), [getSuggestedQuestions])
 
   if (allInsights.length === 0 && suggestedQuestions.length === 0) {
     return null

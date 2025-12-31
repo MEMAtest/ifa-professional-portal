@@ -15,8 +15,20 @@ async function login(page: Page) {
 
   if (isLoginPage && hasEmailField) {
     await emailField.fill('demo@plannetic.com');
-    await page.getByLabel('Password').fill('demo123');
-    await page.getByRole('button', { name: /sign in/i }).click();
+    const passwordLabel = page.getByLabel('Password');
+    const passwordInput = page.locator('input[type="password"]').first();
+    if (await passwordLabel.isVisible().catch(() => false)) {
+      await passwordLabel.fill('demo123');
+    } else if (await passwordInput.isVisible().catch(() => false)) {
+      await passwordInput.fill('demo123');
+    }
+    const signInButton = page.getByRole('button', { name: /sign in/i });
+    const submitButton = page.locator('button[type=\"submit\"]').first();
+    if (await signInButton.isVisible().catch(() => false)) {
+      await signInButton.click();
+    } else if (await submitButton.isVisible().catch(() => false)) {
+      await submitButton.click();
+    }
     await page.waitForTimeout(4000);
   }
 }
@@ -319,15 +331,22 @@ test.describe('Assessments', () => {
       await navigateTo(page, '/assessments/atr');
       await page.waitForTimeout(2000);
 
-      const clientButton = page.getByRole('button', { name: /select|choose/i }).first();
+      const guardHeading = page.getByRole('heading', { name: /client selection required/i });
 
-      if (await clientButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await clientButton.click();
-        await page.waitForTimeout(2000);
+      if (await guardHeading.isVisible().catch(() => false)) {
+        const clientButton = page.getByRole('button', { name: /select a client/i });
+        if (await clientButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await clientButton.click();
+          await page.waitForTimeout(2000);
 
-        // Should start assessment
+          // Navigation guard should send the user to client selection.
+          const url = page.url();
+          expect(url).toContain('/clients');
+        }
+      } else {
+        // Client already selected, assessment should remain accessible.
         const url = page.url();
-        expect(url).toContain('atr');
+        expect(url).toContain('/assessments/atr');
       }
     });
   });

@@ -7,7 +7,7 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -100,7 +100,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
   const [rawResults, setRawResults] = useState<ResultRow[]>([]);
   const [clientNames, setClientNames] = useState<Map<string, string>>(new Map());
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // Helper to handle stat card clicks
   const handleStatClick = (statType: StatType, title: string, count: number) => {
@@ -123,11 +123,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
     });
   };
 
-  useEffect(() => {
-    loadStats();
-  }, [clientId]);
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true);
     try {
       // Build queries based on whether we have a clientId
@@ -231,7 +227,11 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientId, supabase]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'Never';
@@ -253,7 +253,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[...Array(8)].map((_, i) => (
           <Card key={i} className="animate-pulse">
             <CardContent className="p-4">
@@ -328,7 +328,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
   return (
     <div className="space-y-3">
       {/* Primary Stats Row - Key Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           title="Total Simulations"
           value={formatNumber(stats.totalSimulations)}
@@ -364,7 +364,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
       </div>
 
       {/* Secondary Stats Row - Activity & Risk */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           title="This Month"
           value={`${stats.assessmentsThisMonth} assessments`}

@@ -1,7 +1,7 @@
 // src/app/documents/view/[id]/page.tsx
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -71,14 +71,7 @@ export default function DocumentViewerPage() {
   const [sending, setSending] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  // Fetch document data on mount
-  useEffect(() => {
-    if (documentId) {
-      fetchDocument()
-    }
-  }, [documentId])
-
-  const fetchDocument = async () => {
+  const fetchDocument = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -104,7 +97,14 @@ export default function DocumentViewerPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [documentId])
+
+  // Fetch document data on mount
+  useEffect(() => {
+    if (documentId) {
+      fetchDocument()
+    }
+  }, [documentId, fetchDocument])
 
   const handleDownload = async () => {
     if (!document) return

@@ -183,4 +183,6 @@ export const ConfirmationModal = memo(function ConfirmationModal({
   )
 })
 
-export default { Modal, NotificationDisplay, ConfirmationModal }
+const SuitabilityFormModals = { Modal, NotificationDisplay, ConfirmationModal }
+
+export default SuitabilityFormModals

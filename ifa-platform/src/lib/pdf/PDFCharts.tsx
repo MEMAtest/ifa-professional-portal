@@ -997,7 +997,7 @@ export const GaugeChart: React.FC<GaugeChartProps> = ({
 // EXPORT ALL
 // ================================================================
 
-export default {
+const PDFCharts = {
   LineChart,
   MultiLineChart,
   BarChart,
@@ -1007,3 +1007,5 @@ export default {
   chartColors,
   defaultPalette,
 };
+
+export default PDFCharts;

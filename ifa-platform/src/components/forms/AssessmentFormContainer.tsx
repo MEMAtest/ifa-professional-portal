@@ -36,16 +36,6 @@ export const AssessmentFormContainer = ({
     autoSaveEnabled: true
   })
 
-  // Auto-save functionality
-  useEffect(() => {
-    if (state.isDirty && state.autoSaveEnabled && onSave) {
-      const timer = setTimeout(() => {
-        handleAutoSave()
-      }, 2000)
-      return () => clearTimeout(timer)
-    }
-  }, [state.assessment, state.isDirty])
-
   const handleAutoSave = useCallback(async () => {
     if (onSave && state.isDirty) {
       try {
@@ -60,6 +50,16 @@ export const AssessmentFormContainer = ({
       }
     }
   }, [onSave, state.assessment, state.isDirty])
+
+  // Auto-save functionality
+  useEffect(() => {
+    if (state.isDirty && state.autoSaveEnabled && onSave) {
+      const timer = setTimeout(() => {
+        handleAutoSave()
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [handleAutoSave, onSave, state.autoSaveEnabled, state.isDirty])
 
   const updateAssessment = useCallback((updates: Partial<Assessment>) => {
     setState(prev => ({

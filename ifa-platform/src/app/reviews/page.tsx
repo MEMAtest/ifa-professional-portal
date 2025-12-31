@@ -2,7 +2,7 @@
 // CLIENT REVIEWS DASHBOARD - Widget-based layout with Charts
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Calendar,
   Clock,
@@ -88,7 +88,7 @@ interface NewReviewFormData {
 }
 
 export default function ReviewsDashboard() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
@@ -109,30 +109,7 @@ export default function ReviewsDashboard() {
     next_review_date: ''
   })
 
-  useEffect(() => {
-    if (user) {
-      loadData()
-    }
-  }, [user])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      await loadClients()
-      await loadReviews()
-    } catch (error) {
-      console.error('Error loading data:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to load review data',
-        variant: 'destructive'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadReviews = async () => {
+  const loadReviews = useCallback(async () => {
     const { data: reviewData, error } = await supabase
       .from('client_reviews')
       .select(`
@@ -228,9 +205,9 @@ export default function ReviewsDashboard() {
     }
 
     setReviews(reviewRecords)
-  }
+  }, [supabase, user])
 
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     const { data: clientData, error } = await supabase
       .from('clients')
       .select('id, client_ref, personal_details, contact_info')
@@ -242,7 +219,26 @@ export default function ReviewsDashboard() {
     }
 
     setClients((clientData || []) as any)
-  }
+  }, [supabase])
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      await loadClients()
+      await loadReviews()
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [loadClients, loadReviews])
+
+  useEffect(() => {
+    if (user) {
+      loadData()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   const handleScheduleReview = async () => {
     try {
@@ -325,7 +321,7 @@ export default function ReviewsDashboard() {
   }
 
   // Categorize reviews
-  const now = new Date()
+  const now = useMemo(() => new Date(), [])
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   const next30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 

@@ -313,7 +313,7 @@ export const FanChart: React.FC<FanChartProps> = ({
         </ResponsiveContainer>
 
         {/* Summary Statistics */}
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div className="bg-gray-50 p-3 rounded-lg">
             <div className="text-gray-600">Starting Value</div>
             <div className="font-semibold text-gray-900">{formatFullCurrency(initialWealth)}</div>

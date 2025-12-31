@@ -563,7 +563,7 @@ export const SectionCharts: React.FC<SectionChartsProps> = ({
 // EXPORT ALL COMPONENTS
 // ================================================================
 
-export default {
+const Charts = {
   FinancialBreakdownChart,
   RiskProfileChart,
   ProjectionChart,
@@ -572,3 +572,5 @@ export default {
   GaugeChart,
   SectionCharts
 }
+
+export default Charts

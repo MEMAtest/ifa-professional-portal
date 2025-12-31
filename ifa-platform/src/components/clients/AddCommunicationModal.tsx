@@ -128,7 +128,7 @@ export function AddCommunicationModal({
           {/* Communication Type */}
           <div className="space-y-2">
             <Label>Type</Label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {COMMUNICATION_TYPES.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -150,11 +150,11 @@ export function AddCommunicationModal({
           {/* Direction */}
           <div className="space-y-2">
             <Label>Direction</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, direction: 'outbound' }))}
-                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors w-full ${
                   formData.direction === 'outbound'
                     ? 'border-blue-500 bg-blue-50 text-blue-600'
                     : 'border-gray-200 hover:border-gray-300'
@@ -165,7 +165,7 @@ export function AddCommunicationModal({
               <button
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, direction: 'inbound' }))}
-                className={`flex-1 py-2 px-4 rounded-lg border transition-colors ${
+                className={`flex-1 py-2 px-4 rounded-lg border transition-colors w-full ${
                   formData.direction === 'inbound'
                     ? 'border-blue-500 bg-blue-50 text-blue-600'
                     : 'border-gray-200 hover:border-gray-300'
@@ -233,11 +233,11 @@ export function AddCommunicationModal({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="flex flex-col-reverse gap-3 pt-4 border-t sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
               {saving ? 'Saving...' : 'Log Communication'}
             </Button>
           </div>

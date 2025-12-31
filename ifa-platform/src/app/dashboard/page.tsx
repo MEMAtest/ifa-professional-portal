@@ -87,7 +87,7 @@ export default function DashboardPage() {
             Welcome back, {user?.firstName}
           </h1>
           <p className="text-gray-600">
-            Here's what's happening with your clients today.
+            Here&apos;s what&apos;s happening with your clients today.
           </p>
         </div>
 
@@ -324,7 +324,7 @@ export default function DashboardPage() {
               {/* UK Region Visualization - Clickable Cards */}
               <div className="space-y-4">
                 {/* Visual Region Grid */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(() => {
                     const regionConfig = [
                       { name: 'Scotland', color: '#06b6d4', bgColor: '#06b6d420' },
@@ -639,7 +639,7 @@ export default function DashboardPage() {
                     {timelineClientFilter
                       ? 'Try selecting a different client or time range'
                       : timelineDays !== 'all'
-                        ? 'Try selecting "All" to see older activity'
+                        ? 'Try selecting &quot;All&quot; to see older activity'
                         : 'Activity will appear here as you work with clients'}
                   </p>
                 </div>
@@ -653,7 +653,7 @@ export default function DashboardPage() {
             {/* This Week's Summary */}
             <Card>
               <CardHeader>
-                <CardTitle>This Week's Summary</CardTitle>
+                <CardTitle>This Week&apos;s Summary</CardTitle>
                 <CardDescription>
                   Key performance indicators
                 </CardDescription>

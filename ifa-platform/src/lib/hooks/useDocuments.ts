@@ -596,7 +596,7 @@ export function useDocuments(initialParams?: DocumentListParams) {
   // Initialize data on mount
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   // Refetch when filters change
   useEffect(() => {
@@ -1240,7 +1240,7 @@ export function useClientStatistics() {
 }
 
 // Export all hooks
-export default {
+const DocumentHooks = {
   useDocuments,
   useDocumentAnalytics,
   useDocumentCategories,
@@ -1248,3 +1248,5 @@ export default {
   useAssessmentMetrics,
   useClientStatistics
 }
+
+export default DocumentHooks

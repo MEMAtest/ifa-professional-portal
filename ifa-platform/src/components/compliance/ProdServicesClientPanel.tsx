@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { Search, RefreshCw, CheckCircle, AlertTriangle, Users } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -70,7 +70,7 @@ export function ProdServicesClientPanel() {
   const [clientStatus, setClientStatus] = useState<'active' | 'prospect' | 'inactive' | 'archived' | 'all'>('active')
   const [selectedClient, setSelectedClient] = useState<ProdClientSummary | null>(null)
 
-  const fetchClients = async (isRefresh = false) => {
+  const fetchClients = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true)
     } else {
@@ -91,20 +91,15 @@ export function ProdServicesClientPanel() {
       setServicesCatalog(result.servicesCatalog || [])
     } catch (error) {
       console.error('Failed to fetch PROD clients', error)
-      toast({
-        title: 'Unable to load client target market data',
-        description: 'Please try again shortly.',
-        variant: 'destructive'
-      })
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [clientStatus])
 
   useEffect(() => {
     fetchClients()
-  }, [clientStatus])
+  }, [fetchClients])
 
   const serviceLabelMap = useMemo(() => {
     return new Map(servicesCatalog.map((service) => [service.id, service.label]))
@@ -395,22 +390,24 @@ export function ProdServicesClientPanel() {
       </Card>
 
       <Dialog open={!!selectedClient} onOpenChange={(open) => !open && setSelectedClient(null)}>
-        <DialogContent className="max-w-5xl">
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {selectedClient ? `Service Selection · ${selectedClient.clientName}` : 'Service Selection'}
             </DialogTitle>
           </DialogHeader>
-          {selectedClient && (
-            <ServiceSelection
-              clientId={selectedClient.clientId}
-              firmId={selectedClient.firmId || undefined}
-              onSaved={() => {
-                toast({ title: 'Saved', description: 'Client service selection updated.' })
-                fetchClients(true)
-              }}
-            />
-          )}
+          <div className="flex-1 overflow-auto">
+            {selectedClient && (
+              <ServiceSelection
+                clientId={selectedClient.clientId}
+                firmId={selectedClient.firmId || undefined}
+                onSaved={() => {
+                  toast({ title: 'Saved', description: 'Client service selection updated.' })
+                  fetchClients(true)
+                }}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -43,17 +43,13 @@ interface RiskProfileTabProps {
 
 export function RiskProfileTab({ clientId, client }: RiskProfileTabProps) {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [atrAssessment, setAtrAssessment] = useState<AtrAssessment | null>(null);
   const [cflAssessment, setCflAssessment] = useState<CflAssessment | null>(null);
   const [riskProfile, setRiskProfile] = useState<RiskProfileData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadAssessments();
-  }, [clientId]);
-
-  const loadAssessments = async (): Promise<void> => {
+  const loadAssessments = useCallback(async (): Promise<void> => {
     try {
       const { data: atrArray, error: atrError } = await supabase
         .from('atr_assessments')
@@ -99,7 +95,11 @@ export function RiskProfileTab({ clientId, client }: RiskProfileTabProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientId, supabase]);
+
+  useEffect(() => {
+    loadAssessments();
+  }, [loadAssessments]);
 
   const hasNewAssessments = atrAssessment || cflAssessment || riskProfile;
   const displayRiskLevel = riskProfile?.final_risk_level || client.riskProfile?.attitudeToRisk || 5;

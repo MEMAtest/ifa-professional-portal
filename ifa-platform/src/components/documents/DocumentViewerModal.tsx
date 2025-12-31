@@ -1,7 +1,7 @@
 // src/components/documents/DocumentViewerModal.tsx
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { 
   X, 
   Download, 
@@ -64,24 +64,7 @@ export default function DocumentViewerModal({
   const [sending, setSending] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isOpen && documentId) {
-      fetchDocument()
-    }
-  }, [isOpen, documentId])
-
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.document.body.style.overflow = isOpen ? 'hidden' : 'auto'
-      
-      return () => {
-        window.document.body.style.overflow = 'auto'
-      }
-    }
-  }, [isOpen])
-
-  const fetchDocument = async () => {
+  const fetchDocument = useCallback(async () => {
     setLoading(true)
     try {
       const response = await fetch(`/api/documents/${documentId}`)
@@ -95,7 +78,24 @@ export default function DocumentViewerModal({
     } finally {
       setLoading(false)
     }
-  }
+  }, [documentId])
+
+  useEffect(() => {
+    if (isOpen && documentId) {
+      fetchDocument()
+    }
+  }, [isOpen, documentId, fetchDocument])
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.document.body.style.overflow = isOpen ? 'hidden' : 'auto'
+      
+      return () => {
+        window.document.body.style.overflow = 'auto'
+      }
+    }
+  }, [isOpen])
 
   const handleDownload = async () => {
     setDownloading(true)

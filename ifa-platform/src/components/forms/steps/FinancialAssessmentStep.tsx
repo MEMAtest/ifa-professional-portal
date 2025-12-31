@@ -43,7 +43,7 @@ export const FinancialAssessmentStep = ({ financialProfile, onChange, errors }: 
       setLocalProfile(updates)
       onChange(updates)
     }
-  }, [localProfile.totalAssets, localProfile.totalLiabilities, localProfile.monthlyIncome, localProfile.monthlyExpenditure, localProfile.netWorth, localProfile.disposableIncome, onChange])
+  }, [localProfile, localProfile.totalAssets, localProfile.totalLiabilities, localProfile.monthlyIncome, localProfile.monthlyExpenditure, localProfile.netWorth, localProfile.disposableIncome, onChange])
 
   const handleChange = (field: keyof FinancialProfile, value: number | string | string[]) => {
     const updates = { ...localProfile, [field]: value }

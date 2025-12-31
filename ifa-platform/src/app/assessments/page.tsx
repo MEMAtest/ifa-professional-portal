@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Users, 
@@ -104,7 +104,7 @@ const Input = ({
 );
 
 export default function AssessmentsPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [clients, setClients] = useState<ClientWithAssessmentStatus[]>([]);
@@ -123,10 +123,6 @@ export default function AssessmentsPage() {
     incompleteAssessments: 0,
     overdueAssessments: 0
   });
-
-  useEffect(() => {
-    loadClientsWithAssessmentStatus();
-  }, []);
 
   // Support drilldowns from dashboard charts:
   //   /assessments?type=atr&status=in_progress
@@ -150,7 +146,7 @@ export default function AssessmentsPage() {
     }
   }, [searchParams]);
 
-  const loadClientsWithAssessmentStatus = async () => {
+  const loadClientsWithAssessmentStatus = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -287,7 +283,12 @@ export default function AssessmentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
+
+  // Load clients on mount
+  useEffect(() => {
+    loadClientsWithAssessmentStatus();
+  }, [loadClientsWithAssessmentStatus]);
 
   const handleClientSelect = (client: Client) => {
     router.push(`/assessments/client/${client.id}`);

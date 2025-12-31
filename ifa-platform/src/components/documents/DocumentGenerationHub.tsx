@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { 
   FileText, 
   Download, 
@@ -43,11 +43,7 @@ export default function DocumentGenerationHub({
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchAssessments()
-  }, [clientId])
-
-  const fetchAssessments = async () => {
+  const fetchAssessments = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -105,7 +101,11 @@ export default function DocumentGenerationHub({
     } finally {
       setLoading(false)
     }
-  }
+  }, [clientId])
+
+  useEffect(() => {
+    fetchAssessments()
+  }, [fetchAssessments])
 
   const handleSelectAll = () => {
     if (selectedAssessments.length === assessments.length) {
@@ -295,7 +295,7 @@ export default function DocumentGenerationHub({
           <div>
             <h2 className="text-xl font-semibold text-gray-900">Document Generation Hub</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Generate documents from {clientName}'s assessments
+              Generate documents from {clientName}&apos;s assessments
             </p>
           </div>
           <button
@@ -444,7 +444,7 @@ export default function DocumentGenerationHub({
 
       {/* Footer with tips */}
       <div className="p-4 bg-gray-50 text-sm text-gray-600">
-        <p>💡 Tip: Select multiple assessments to generate documents in batch, or use "Generate Combined Report" for a comprehensive annual review.</p>
+        <p>💡 Tip: Select multiple assessments to generate documents in batch, or use &quot;Generate Combined Report&quot; for a comprehensive annual review.</p>
       </div>
     </div>
   )

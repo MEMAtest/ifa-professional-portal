@@ -26,7 +26,7 @@ export const RiskProfileStep = ({ riskProfile, financialProfile, onChange, error
       setLocalProfile(updates)
       onChange(updates)
     }
-  }, [financialProfile.emergencyFund, financialProfile.monthlyExpenditure])
+  }, [financialProfile.emergencyFund, financialProfile.monthlyExpenditure, localProfile, onChange])
 
   const handleChange = (field: keyof RiskProfile, value: number | string) => {
     const updates = { ...localProfile, [field]: value }

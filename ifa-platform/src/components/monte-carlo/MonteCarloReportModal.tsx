@@ -301,14 +301,7 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
     };
   }, []);
 
-  // Load history when switching to history tab
-  useEffect(() => {
-    if (activeTab === 'history' && simulationResult?.clientId) {
-      loadHistoryData();
-    }
-  }, [activeTab, simulationResult?.clientId]);
-
-  const loadHistoryData = async () => {
+  const loadHistoryData = useCallback(async () => {
     if (!simulationResult?.clientId) return;
 
     setHistoryLoading(true);
@@ -351,7 +344,14 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, [simulationResult?.clientId]);
+
+  // Load history when switching to history tab
+  useEffect(() => {
+    if (activeTab === 'history' && simulationResult?.clientId) {
+      loadHistoryData();
+    }
+  }, [activeTab, loadHistoryData, simulationResult?.clientId]);
 
   // Handle viewing/downloading a past report
   const handleViewReport = async (report: ReportHistoryItem) => {

@@ -4,7 +4,7 @@
 // ================================================================
 
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -304,16 +304,8 @@ export default function PersonaAssessmentPage() {
     ''
   const clientEmail = client?.contactInfo?.email || ''
 
-  // Track assessment start
-  useEffect(() => {
-    if (clientId && !hasTrackedStart) {
-      trackProgress('in_progress', 0)
-      setHasTrackedStart(true)
-    }
-  }, [clientId, hasTrackedStart])
-
   // Track progress
-  const trackProgress = async (status: string, percentage: number, metadata?: any) => {
+  const trackProgress = useCallback(async (status: string, percentage: number, metadata?: any) => {
     if (!clientId) return
 
     try {
@@ -330,7 +322,15 @@ export default function PersonaAssessmentPage() {
     } catch (error) {
       console.error('Error tracking progress:', error)
     }
-  }
+  }, [clientId])
+
+  // Track assessment start
+  useEffect(() => {
+    if (clientId && !hasTrackedStart) {
+      trackProgress('in_progress', 0)
+      setHasTrackedStart(true)
+    }
+  }, [clientId, hasTrackedStart, trackProgress])
 
   // Calculate persona
   const calculatePersona = () => {

@@ -285,7 +285,7 @@ export function EditReviewModal({
       
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
-          <div className="flex items-center justify-between p-6 border-b">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 sm:p-6 border-b">
             <div>
               <h2 className="text-xl font-semibold">Edit Review</h2>
               <p className="text-sm text-gray-500 mt-1">{clientName}</p>
@@ -298,7 +298,7 @@ export function EditReviewModal({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
             <div>
               <Label htmlFor="status">Status</Label>
               <select
@@ -373,19 +373,19 @@ export function EditReviewModal({
             )}
           </form>
 
-          <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-t">
+          <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 bg-gray-50 border-t sm:flex-row sm:items-center sm:justify-between">
             <button
               onClick={handleDelete}
-              className="text-red-600 hover:text-red-700 text-sm font-medium"
+              className="text-red-600 hover:text-red-700 text-sm font-medium w-full sm:w-auto text-left"
               disabled={loading}
             >
               Delete Review
             </button>
-            <div className="flex space-x-3">
-              <Button variant="outline" onClick={onClose} disabled={loading}>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:gap-3">
+              <Button variant="outline" onClick={onClose} disabled={loading} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button onClick={handleSubmit} disabled={loading}>
+              <Button onClick={handleSubmit} disabled={loading} className="w-full sm:w-auto">
                 {loading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />

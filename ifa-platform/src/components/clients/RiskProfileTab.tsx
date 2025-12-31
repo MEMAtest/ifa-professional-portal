@@ -1,5 +1,5 @@
 // src/components/clients/RiskProfileTab.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -21,17 +21,13 @@ interface RiskProfileTabProps {
 
 export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
   const router = useRouter();
-  const supabase = createClient(); // ✅ ADD THIS LINE
+  const supabase = useMemo(() => createClient(), []); // ✅ ADD THIS LINE
   const [atrAssessment, setAtrAssessment] = useState<any>(null);
   const [cflAssessment, setCflAssessment] = useState<any>(null);
   const [riskProfile, setRiskProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadAssessments();
-  }, [clientId]);
-
-  const loadAssessments = async () => {
+  const loadAssessments = useCallback(async () => {
     try {
       // ✅ FIXED: Load ATR without .single()
       const { data: atrArray, error: atrError } = await supabase
@@ -77,7 +73,11 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientId, supabase]);
+
+  useEffect(() => {
+    loadAssessments();
+  }, [loadAssessments]);
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-GB', {

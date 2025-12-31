@@ -499,7 +499,7 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
                         <span className="font-medium">Year {year}</span>
                         <Badge variant="outline">{new Date().getFullYear() + year}</Badge>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-gray-500">Projected Net Worth:</span>
                           <p className="font-medium">£{projectedNetWorth.toLocaleString()}</p>

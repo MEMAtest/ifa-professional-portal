@@ -168,7 +168,7 @@ export const RiskAnalysisDashboard: React.FC<RiskAnalysisDashboardProps> = ({
             </div>
 
             {/* Risk Summary Cards */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {Object.entries(riskMetrics).map(([key, value]) => {
                 const Icon = getRiskIcon(key as keyof RiskMetrics);
                 const riskDetail = riskDetails.find(d => d.riskType === key);

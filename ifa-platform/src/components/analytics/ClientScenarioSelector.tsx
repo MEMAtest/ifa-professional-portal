@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -26,17 +26,7 @@ export function ClientScenarioSelector({
   const [loading, setLoading] = useState(true);
   const [scenariosLoading, setScenariosLoading] = useState(false);
 
-  useEffect(() => {
-    loadClients();
-  }, []);
-
-  useEffect(() => {
-    if (selectedClientId) {
-      loadClientScenarios(selectedClientId);
-    }
-  }, [selectedClientId]);
-
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     try {
       setLoading(true);
       const clientsData = await CashFlowScenarioService.getClientsWithScenarios();
@@ -46,9 +36,9 @@ export function ClientScenarioSelector({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadClientScenarios = async (clientId: string) => {
+  const loadClientScenarios = useCallback(async (clientId: string) => {
     try {
       setScenariosLoading(true);
       const scenariosData = await CashFlowScenarioService.getClientScenarios(clientId);
@@ -70,7 +60,17 @@ export function ClientScenarioSelector({
     } finally {
       setScenariosLoading(false);
     }
-  };
+  }, [onScenarioSelect, selectedScenarioId]);
+
+  useEffect(() => {
+    loadClients();
+  }, [loadClients]);
+
+  useEffect(() => {
+    if (selectedClientId) {
+      loadClientScenarios(selectedClientId);
+    }
+  }, [selectedClientId, loadClientScenarios]);
 
   const handleCreateScenario = async () => {
     if (!selectedClientId) return;

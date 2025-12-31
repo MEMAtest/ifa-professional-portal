@@ -108,7 +108,7 @@ export const useSuitabilityProgress = ({
     } finally {
       setIsTracking(false)
     }
-  }, [clientId, calculateOverallProgress, sectionProgress])
+  }, [clientId, calculateOverallProgress, sectionProgress, isTracking])
   
   useEffect(() => {
     calculateOverallProgress()

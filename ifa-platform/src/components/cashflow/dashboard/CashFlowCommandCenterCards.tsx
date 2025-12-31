@@ -24,7 +24,7 @@ export function CashFlowCommandCenterCards({
   getInteractiveCardProps
 }: CashFlowCommandCenterCardsProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
       <Card {...getInteractiveCardProps('all')}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">

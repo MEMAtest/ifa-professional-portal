@@ -98,7 +98,7 @@ export const EmergencyFundTracker: React.FC<EmergencyFundTrackerProps> = ({
       monthlySavingsNeeded,
       status
     }
-  }, [currentFund, monthlyExpenditure, annualIncome, dependents, employmentStatus, riskProfile])
+  }, [currentFund, monthlyExpenditure, dependents, employmentStatus, riskProfile])
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -155,7 +155,7 @@ export const EmergencyFundTracker: React.FC<EmergencyFundTrackerProps> = ({
           </div>
           
           {/* Key Metrics */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div className="p-3 bg-white rounded-lg border">
               <p className="text-xs text-gray-500 mb-1">Current Fund</p>
               <p className="text-lg font-semibold">£{currentFund.toLocaleString()}</p>

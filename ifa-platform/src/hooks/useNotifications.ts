@@ -154,12 +154,16 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
 
       hasLoadedOnceRef.current = true
     } catch (err) {
+      // Silently ignore AbortError (timeout or component unmount)
+      if (err instanceof Error && err.name === 'AbortError') {
+        return
+      }
       console.error('Error fetching notifications:', err)
       setError(err instanceof Error ? err.message : 'Failed to load notifications')
     } finally {
       setLoading(false)
     }
-  }, [user?.id, limit, getAuthHeaders])
+  }, [user?.id, limit, getAuthHeaders, enableRealtime, toast])
 
   useEffect(() => {
     if (!user?.id || backfillTriggeredRef.current) return

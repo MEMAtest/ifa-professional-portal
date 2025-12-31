@@ -348,7 +348,7 @@ export const ScenarioComparison: React.FC<ScenarioComparisonProps> = ({
         </div>
 
         {/* Metric Comparison Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <MetricCard
             label="Success Rate"
             values={scenariosWithDeltas.map(s => ({

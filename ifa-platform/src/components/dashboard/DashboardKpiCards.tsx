@@ -51,7 +51,7 @@ export function DashboardKpiCards({ stats, formatCurrency }: DashboardKpiCardsPr
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{stats.thisWeek.documentsGenerated}</div>
-          <p className="text-xs text-muted-foreground">This week's activity</p>
+          <p className="text-xs text-muted-foreground">This week&apos;s activity</p>
         </CardContent>
       </Card>
     </div>

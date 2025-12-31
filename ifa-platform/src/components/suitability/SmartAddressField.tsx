@@ -3,7 +3,7 @@
 // COMPLETE SMART ADDRESS COMPONENT - FIXED
 // =====================================================
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Loader2, MapPin, Search } from 'lucide-react'
 import { SmartAddressLookupResult } from '@/types/suitability'
 import { debounce } from 'lodash'
@@ -59,12 +59,17 @@ export const SmartAddressField: React.FC<SmartAddressFieldProps> = ({
     }
   }, [])
   
-  const debouncedSearch = useCallback(
-    debounce((query: string) => {
+  const debouncedSearch = useMemo(() => {
+    return debounce((query: string) => {
       searchAddress(query)
-    }, 300),
-    [searchAddress]
-  )
+    }, 300)
+  }, [searchAddress])
+
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel()
+    }
+  }, [debouncedSearch])
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
