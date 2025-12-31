@@ -20,7 +20,10 @@ import {
   User,
   Calendar,
   FileText,
-  MoreVertical
+  MoreVertical,
+  X,
+  TrendingUp,
+  BarChart3
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -94,6 +97,19 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
   const [selectedReview, setSelectedReview] = useState<FileReview | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
+
+  // Drill down modal state
+  const [drillDownData, setDrillDownData] = useState<{
+    isOpen: boolean
+    title: string
+    reviews: FileReview[]
+  }>({ isOpen: false, title: '', reviews: [] })
+
+  // Open drill down modal
+  const openDrillDown = (title: string, filterFn: (r: FileReview) => boolean) => {
+    const filteredReviews = reviews.filter(filterFn)
+    setDrillDownData({ isOpen: true, title, reviews: filteredReviews })
+  }
 
   // Load reviews
   const loadReviews = useCallback(async () => {
@@ -314,8 +330,150 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     )
   }
 
+  // Calculate stats for widgets
+  const stats = {
+    pending: reviews.filter(r => r.status === 'pending').length,
+    inProgress: reviews.filter(r => r.status === 'in_progress').length,
+    approved: reviews.filter(r => r.status === 'approved').length,
+    rejected: reviews.filter(r => r.status === 'rejected').length,
+    escalated: reviews.filter(r => r.status === 'escalated').length,
+    overdue: reviews.filter(r => r.due_date && new Date(r.due_date) < new Date() && !['approved', 'rejected'].includes(r.status)).length,
+    highRisk: reviews.filter(r => r.risk_rating === 'high' || r.risk_rating === 'critical').length,
+    completedThisMonth: reviews.filter(r => {
+      if (!r.completed_at) return false
+      const completed = new Date(r.completed_at)
+      const now = new Date()
+      return completed.getMonth() === now.getMonth() && completed.getFullYear() === now.getFullYear()
+    }).length
+  }
+
   return (
     <div className="space-y-6">
+      {/* Stats Cards with Drill Down */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => openDrillDown('Pending Reviews', r => r.status === 'pending')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Pending</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+              </div>
+              <div className="p-3 rounded-full bg-yellow-100">
+                <Clock className="h-6 w-6 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => openDrillDown('Approved Reviews', r => r.status === 'approved')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Approved</p>
+                <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
+              </div>
+              <div className="p-3 rounded-full bg-green-100">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => openDrillDown('Rejected Reviews', r => r.status === 'rejected')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Rejected</p>
+                <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
+              </div>
+              <div className="p-3 rounded-full bg-red-100">
+                <XCircle className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-orange-500"
+          onClick={() => openDrillDown('Overdue Reviews', r => r.due_date ? new Date(r.due_date) < new Date() && !['approved', 'rejected'].includes(r.status) : false)}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Overdue</p>
+                <p className="text-2xl font-bold text-orange-600">{stats.overdue}</p>
+              </div>
+              <div className="p-3 rounded-full bg-orange-100">
+                <AlertTriangle className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Secondary Stats Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => openDrillDown('In Progress Reviews', r => r.status === 'in_progress')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">In Progress</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.inProgress}</p>
+              </div>
+              <div className="p-3 rounded-full bg-blue-100">
+                <Eye className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => openDrillDown('Escalated Reviews', r => r.status === 'escalated')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Escalated</p>
+                <p className="text-2xl font-bold text-purple-600">{stats.escalated}</p>
+              </div>
+              <div className="p-3 rounded-full bg-purple-100">
+                <AlertTriangle className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => openDrillDown('High/Critical Risk Reviews', r => r.risk_rating === 'high' || r.risk_rating === 'critical')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">High/Critical Risk</p>
+                <p className="text-2xl font-bold text-red-600">{stats.highRisk}</p>
+              </div>
+              <div className="p-3 rounded-full bg-red-100">
+                <BarChart3 className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Header with actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -507,6 +665,112 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
             onStatsChange?.()
           }}
         />
+      )}
+
+      {/* Drill Down Modal */}
+      {drillDownData.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setDrillDownData({ isOpen: false, title: '', reviews: [] })}>
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+              <div>
+                <h3 className="text-lg font-semibold">{drillDownData.title}</h3>
+                <p className="text-sm text-gray-500">{drillDownData.reviews.length} review(s)</p>
+              </div>
+              <button
+                onClick={() => setDrillDownData({ isOpen: false, title: '', reviews: [] })}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[60vh]">
+              {drillDownData.reviews.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="text-left p-3 font-medium text-gray-600">Client</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Type</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Status</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Risk</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Due Date</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Adviser</th>
+                      <th className="text-center p-3 font-medium text-gray-600">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {drillDownData.reviews.map((review) => {
+                      const clientName = getClientName(review)
+                      const reviewOverdue = isOverdue(review.due_date)
+
+                      return (
+                        <tr key={review.id} className="hover:bg-gray-50">
+                          <td className="p-3">
+                            <button
+                              onClick={() => {
+                                setDrillDownData({ isOpen: false, title: '', reviews: [] })
+                                router.push(`/clients/${review.client_id}`)
+                              }}
+                              className="font-medium text-blue-600 hover:underline"
+                            >
+                              {clientName}
+                            </button>
+                          </td>
+                          <td className="p-3">
+                            {getReviewTypeBadge(review.review_type)}
+                          </td>
+                          <td className="p-3">
+                            {getStatusBadge(review.status)}
+                          </td>
+                          <td className="p-3">
+                            {getRiskBadge(review.risk_rating)}
+                          </td>
+                          <td className="p-3">
+                            {review.due_date ? (
+                              <span className={`text-xs ${reviewOverdue ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                                {formatDate(review.due_date)}
+                                {reviewOverdue && ' (Overdue)'}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">Not set</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span className="text-xs text-gray-600">
+                              {review.adviser_name || getProfileName(review.adviser)}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setDrillDownData({ isOpen: false, title: '', reviews: [] })
+                                handleViewReview(review)
+                              }}
+                              className="text-xs"
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center text-gray-500">
+                  No reviews found in this category.
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <Button variant="outline" onClick={() => setDrillDownData({ isOpen: false, title: '', reviews: [] })}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

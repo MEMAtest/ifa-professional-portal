@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -39,7 +39,10 @@ import {
   LineChart,
   ChevronDown,
   ChevronRight,
-  Lock
+  Lock,
+  UserCheck,
+  X,
+  Fingerprint
 } from 'lucide-react';
 
 interface NavItem {
@@ -70,11 +73,14 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
   const { clientId, isProspect } = useClientContext();
+  const sidebarRef = useRef<HTMLDivElement | null>(null)
+  const lastActiveRef = useRef<HTMLElement | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
   const [cashFlowStats, setCashFlowStats] = useState<CashFlowStats>({
     totalScenarios: 0,
     clientsWithAnalysis: 0,
@@ -160,18 +166,84 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
       title: 'Compliance & Risk',
       items: [
         { name: 'Compliance Hub', href: '/compliance', icon: Shield },
+        { name: 'AML/CTF', href: '/compliance/aml', icon: Fingerprint },
+        { name: 'Consumer Duty', href: '/compliance/consumer-duty', icon: UserCheck },
         { name: 'Services & PROD', href: '/compliance/prod-services', icon: FileText },
         { name: 'Compliance Metrics', href: '/compliance/metrics', icon: BarChart3 },
         { name: 'Client Reviews', href: '/reviews', icon: RotateCcw },
       ],
     },
     {
-      title: 'Settings',
+      title: 'Administration',
       items: [
-        { name: 'Settings', href: '/settings', icon: Settings },
+        { name: 'Preferences', href: '/settings', icon: Settings },
       ],
     },
   ];
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mediaQuery = window.matchMedia('(max-width: 1023px)')
+    const update = () => setIsMobile(mediaQuery.matches)
+    update()
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', update)
+      return () => mediaQuery.removeEventListener('change', update)
+    }
+
+    mediaQuery.addListener(update)
+    return () => mediaQuery.removeListener(update)
+  }, [])
+
+  const closeSidebar = useCallback(() => {
+    if (isMobile) {
+      onClose?.()
+    }
+  }, [isMobile, onClose])
+
+  useEffect(() => {
+    if (!isOpen || !isMobile) return
+
+    lastActiveRef.current = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    sidebarRef.current?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose?.()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const focusable = sidebarRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+      )
+      if (!focusable || focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const isShift = event.shiftKey
+      const active = document.activeElement
+
+      if (isShift && active === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!isShift && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+      lastActiveRef.current?.focus()
+    }
+  }, [isOpen, isMobile, onClose])
 
   // Fetch stats
   useEffect(() => {
@@ -215,7 +287,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     fetchStats();
     const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [supabase]);
 
   // Add counts to navigation items
   const navigationWithCounts = navigation.map(section => {
@@ -254,17 +326,35 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
           'fixed inset-0 bg-black/40 z-40 lg:hidden transition-opacity',
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
-        onClick={onClose}
+        onClick={closeSidebar}
         aria-hidden={!isOpen}
       />
       <div
+        id="primary-navigation"
+        role={isMobile ? 'dialog' : undefined}
+        aria-modal={isMobile ? true : undefined}
+        aria-label="Primary navigation"
+        tabIndex={-1}
+        ref={sidebarRef}
         className={cn(
-          'fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 overflow-y-auto z-50',
+          'fixed left-0 top-[var(--app-header-height)] w-64 bg-white border-r border-gray-200 overflow-y-auto z-50',
           'transform transition-transform lg:translate-x-0',
+          'h-[calc(100dvh-var(--app-header-height))] pb-[env(safe-area-inset-bottom)]',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
       <nav className="p-4 space-y-6">
+        <div className="flex items-center justify-between lg:hidden">
+          <span className="text-sm font-semibold text-gray-900">Menu</span>
+          <button
+            type="button"
+            onClick={closeSidebar}
+            className="p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+            aria-label="Close navigation menu"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
         {navigationWithCounts.map((section) => {
           const isExpanded = expandedSections[section.title];
 
@@ -317,7 +407,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
                         ) : (
                           <Link
                             href={finalHref}
-                            onClick={() => onClose?.()}
+                            onClick={closeSidebar}
                             className={cn(
                               'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
                               isActive

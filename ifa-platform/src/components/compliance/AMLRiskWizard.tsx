@@ -18,7 +18,10 @@ import {
   CheckCircle,
   X,
   Info,
-  Calendar
+  Calendar,
+  BadgeCheck,
+  Wallet,
+  Banknote
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -33,9 +36,12 @@ interface AMLSettings {
 }
 
 interface AssessmentAnswers {
+  idVerification: number | null
   jurisdiction: number | null
   pepStatus: number | null
   sanctions: number | null
+  sourceOfWealth: number | null
+  sourceOfFunds: number | null
   natureOfBusiness: number | null
 }
 
@@ -53,9 +59,12 @@ interface AMLRiskWizardProps {
     nextReviewDate: string
     lastReviewDate: string
     assessmentDetails: {
+      idVerification: string
       jurisdiction: string
       pepStatus: string
       sanctions: string
+      sourceOfWealth: string
+      sourceOfFunds: string
       natureOfBusiness: string
       totalScore: number
     }
@@ -63,8 +72,20 @@ interface AMLRiskWizardProps {
   onCancel: () => void
 }
 
-// Question configurations
+// Question configurations - 7 questions linking to table dropdowns
 const QUESTIONS = [
+  {
+    id: 'idVerification',
+    title: 'ID Verification Status',
+    description: 'Has the client\'s identity been verified?',
+    icon: BadgeCheck,
+    dbField: 'id_verification',
+    options: [
+      { value: 0, label: 'Verified', description: 'ID documents verified and on file', risk: 'Low', dbValue: 'verified' },
+      { value: 1, label: 'Pending', description: 'Verification in progress', risk: 'Medium', dbValue: 'pending' },
+      { value: 2, label: 'Not Started', description: 'ID verification not yet initiated', risk: 'High', dbValue: 'not_started' }
+    ]
+  },
   {
     id: 'jurisdiction',
     title: 'Client Jurisdiction',
@@ -81,10 +102,11 @@ const QUESTIONS = [
     title: 'Politically Exposed Person (PEP)',
     description: 'Is the client or a close associate a PEP?',
     icon: User,
+    dbField: 'pep_status',
     options: [
-      { value: 0, label: 'Not a PEP', description: 'No political exposure identified', risk: 'Low' },
-      { value: 1, label: 'Related to PEP', description: 'Close family member or associate of a PEP', risk: 'Medium' },
-      { value: 2, label: 'Is a PEP', description: 'Currently or recently held prominent public function', risk: 'High' }
+      { value: 0, label: 'Not a PEP', description: 'No political exposure identified', risk: 'Low', dbValue: 'not_pep' },
+      { value: 1, label: 'Related to PEP', description: 'Close family member or associate of a PEP', risk: 'Medium', dbValue: 'pep_low_risk' },
+      { value: 2, label: 'Is a PEP', description: 'Currently or recently held prominent public function', risk: 'High', dbValue: 'pep_high_risk' }
     ]
   },
   {
@@ -92,21 +114,46 @@ const QUESTIONS = [
     title: 'Sanctions & Adverse Media',
     description: 'Have sanctions or adverse media checks been performed?',
     icon: AlertTriangle,
+    dbField: 'sanctions_status',
     options: [
-      { value: 0, label: 'Clear', description: 'No sanctions matches, no adverse media', risk: 'Low' },
-      { value: 1, label: 'Potential Match', description: 'Possible name match requiring investigation', risk: 'Medium' },
-      { value: 2, label: 'Confirmed Match', description: 'Confirmed sanctions or significant adverse media', risk: 'High' }
+      { value: 0, label: 'Clear', description: 'No sanctions matches, no adverse media', risk: 'Low', dbValue: 'clear' },
+      { value: 1, label: 'Potential Match', description: 'Possible name match requiring investigation', risk: 'Medium', dbValue: 'potential_match' },
+      { value: 2, label: 'Confirmed Match', description: 'Confirmed sanctions or significant adverse media', risk: 'High', dbValue: 'confirmed_match' }
+    ]
+  },
+  {
+    id: 'sourceOfWealth',
+    title: 'Source of Wealth (SOW)',
+    description: 'What is the origin of the client\'s overall wealth?',
+    icon: Wallet,
+    dbField: 'source_of_wealth',
+    options: [
+      { value: 0, label: 'Verified', description: 'Source of wealth documented and verified', risk: 'Low', dbValue: 'verified' },
+      { value: 1, label: 'Partially Verified', description: 'Some documentation, needs further verification', risk: 'Medium', dbValue: 'partially_verified' },
+      { value: 2, label: 'Not Verified', description: 'Source of wealth not yet verified', risk: 'High', dbValue: 'not_verified' }
+    ]
+  },
+  {
+    id: 'sourceOfFunds',
+    title: 'Source of Funds (SOF)',
+    description: 'What is the origin of funds for this transaction/investment?',
+    icon: Banknote,
+    dbField: 'source_of_funds',
+    options: [
+      { value: 0, label: 'Verified', description: 'Source of funds documented and verified', risk: 'Low', dbValue: 'verified' },
+      { value: 1, label: 'Partially Verified', description: 'Some documentation provided', risk: 'Medium', dbValue: 'partially_verified' },
+      { value: 2, label: 'Not Verified', description: 'Source of funds not yet verified', risk: 'High', dbValue: 'not_verified' }
     ]
   },
   {
     id: 'natureOfBusiness',
-    title: 'Nature of Business / Source of Wealth',
-    description: 'What is the client\'s primary source of income/wealth?',
+    title: 'Nature of Business',
+    description: 'What is the client\'s occupation or business type?',
     icon: Briefcase,
     options: [
       { value: 0, label: 'Standard Employment', description: 'Salaried employment, pension, verifiable income', risk: 'Low' },
       { value: 1, label: 'Self-employed / Complex', description: 'Business owner, multiple income sources', risk: 'Medium' },
-      { value: 2, label: 'Cash-intensive / High-risk', description: 'Cash business, inheritance, gambling, crypto', risk: 'High' }
+      { value: 2, label: 'Cash-intensive / High-risk', description: 'Cash business, gambling, crypto, high-risk sectors', risk: 'High' }
     ]
   }
 ]
@@ -128,26 +175,30 @@ export default function AMLRiskWizard({
 }: AMLRiskWizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [answers, setAnswers] = useState<AssessmentAnswers>({
+    idVerification: null,
     jurisdiction: null,
     pepStatus: null,
     sanctions: null,
+    sourceOfWealth: null,
+    sourceOfFunds: null,
     natureOfBusiness: null
   })
   const [showSummary, setShowSummary] = useState(false)
 
-  // Calculate risk rating from scores
+  // Calculate risk rating from scores (7 questions, max 14 points)
   const calculateRiskRating = (scores: (number | null)[]): 'low' | 'medium' | 'high' => {
     const validScores = scores.filter((s): s is number => s !== null)
     if (validScores.length === 0) return 'low'
 
     const total = validScores.reduce((a, b) => a + b, 0)
     const hasHighRisk = validScores.some(s => s === 2)
+    const highRiskCount = validScores.filter(s => s === 2).length
 
-    // Any high-risk answer OR total score >= 5 = High Risk
-    if (hasHighRisk || total >= 5) return 'high'
-    // Total score 2-4 = Medium Risk
-    if (total >= 2) return 'medium'
-    // Total score 0-1 = Low Risk
+    // Any 2+ high-risk answers OR total score >= 8 = High Risk
+    if (highRiskCount >= 2 || total >= 8) return 'high'
+    // Any single high-risk answer OR total score 4-7 = Medium Risk
+    if (hasHighRisk || total >= 4) return 'medium'
+    // Total score 0-3 = Low Risk
     return 'low'
   }
 
@@ -167,7 +218,15 @@ export default function AMLRiskWizard({
   // Get current question
   const currentQuestion = QUESTIONS[currentStep]
   const allAnswered = Object.values(answers).every(a => a !== null)
-  const scores = [answers.jurisdiction, answers.pepStatus, answers.sanctions, answers.natureOfBusiness]
+  const scores = [
+    answers.idVerification,
+    answers.jurisdiction,
+    answers.pepStatus,
+    answers.sanctions,
+    answers.sourceOfWealth,
+    answers.sourceOfFunds,
+    answers.natureOfBusiness
+  ]
   const riskRating = calculateRiskRating(scores)
   const totalScore = scores.filter((s): s is number => s !== null).reduce((a, b) => a + b, 0)
 
@@ -201,15 +260,24 @@ export default function AMLRiskWizard({
     const nextReviewDate = calculateNextReviewDate(riskRating)
     const lastReviewDate = new Date().toISOString().split('T')[0]
 
+    // Helper to get label from question
+    const getLabel = (questionId: string, answer: number | null) => {
+      const question = QUESTIONS.find(q => q.id === questionId)
+      return question?.options.find(o => o.value === answer)?.label || 'Not assessed'
+    }
+
     onComplete({
       riskRating,
       nextReviewDate,
       lastReviewDate,
       assessmentDetails: {
-        jurisdiction: QUESTIONS[0].options.find(o => o.value === answers.jurisdiction)?.label || 'Not assessed',
-        pepStatus: QUESTIONS[1].options.find(o => o.value === answers.pepStatus)?.label || 'Not assessed',
-        sanctions: QUESTIONS[2].options.find(o => o.value === answers.sanctions)?.label || 'Not assessed',
-        natureOfBusiness: QUESTIONS[3].options.find(o => o.value === answers.natureOfBusiness)?.label || 'Not assessed',
+        idVerification: getLabel('idVerification', answers.idVerification),
+        jurisdiction: getLabel('jurisdiction', answers.jurisdiction),
+        pepStatus: getLabel('pepStatus', answers.pepStatus),
+        sanctions: getLabel('sanctions', answers.sanctions),
+        sourceOfWealth: getLabel('sourceOfWealth', answers.sourceOfWealth),
+        sourceOfFunds: getLabel('sourceOfFunds', answers.sourceOfFunds),
+        natureOfBusiness: getLabel('natureOfBusiness', answers.natureOfBusiness),
         totalScore
       }
     })
@@ -308,7 +376,7 @@ export default function AMLRiskWizard({
                 <CardContent className="p-6 text-center">
                   <div className="text-sm uppercase tracking-wide mb-2">Overall Risk Rating</div>
                   <div className="text-3xl font-bold capitalize">{riskRating} Risk</div>
-                  <div className="text-sm mt-2">Total Score: {totalScore}/8</div>
+                  <div className="text-sm mt-2">Total Score: {totalScore}/14</div>
                 </CardContent>
               </Card>
 

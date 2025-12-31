@@ -481,9 +481,12 @@ export default function AMLDashboard({ onStatsChange }: Props) {
     nextReviewDate: string
     lastReviewDate: string
     assessmentDetails: {
+      idVerification: string
       jurisdiction: string
       pepStatus: string
       sanctions: string
+      sourceOfWealth: string
+      sourceOfFunds: string
       natureOfBusiness: string
       totalScore: number
     }
@@ -493,13 +496,6 @@ export default function AMLDashboard({ onStatsChange }: Props) {
     try {
       const recordId = selectedClientForWizard.recordId
       const isVirtual = recordId.startsWith('virtual-')
-
-      // Map risk rating to review frequency
-      const reviewFrequencyMap = {
-        low: 'annually', // Will be updated by next_review_date
-        medium: 'annually',
-        high: 'annually'
-      }
 
       // If virtual, create record first
       let actualRecordId = recordId
@@ -512,18 +508,44 @@ export default function AMLDashboard({ onStatsChange }: Props) {
         actualRecordId = newRecord.id
       }
 
+      // Map wizard answers to database field values
+      const mapIdVerification = (label: string) => {
+        if (label === 'Verified') return 'verified'
+        if (label === 'Pending') return 'pending'
+        return 'not_started'
+      }
+
+      const mapPepStatus = (label: string) => {
+        if (label === 'Is a PEP') return 'pep_high_risk'
+        if (label === 'Related to PEP') return 'pep_low_risk'
+        return 'not_pep'
+      }
+
+      const mapSanctions = (label: string) => {
+        if (label === 'Confirmed Match') return 'confirmed_match'
+        if (label === 'Potential Match') return 'potential_match'
+        return 'clear'
+      }
+
+      const mapSourceVerification = (label: string) => {
+        if (label === 'Verified') return 'verified'
+        if (label === 'Partially Verified') return 'partially_verified'
+        return 'not_verified'
+      }
+
       // Update the record with assessment results
       const updateData = {
-        risk_rating: result.riskRating === 'high' ? 'high' : result.riskRating,
+        risk_rating: result.riskRating,
         next_review_date: result.nextReviewDate,
         last_review_date: result.lastReviewDate,
-        // Map assessment answers to existing fields
-        pep_status: result.assessmentDetails.pepStatus === 'Is a PEP' ? 'pep_high_risk' :
-                    result.assessmentDetails.pepStatus === 'Related to PEP' ? 'pep_low_risk' : 'not_pep',
-        sanctions_status: result.assessmentDetails.sanctions === 'Confirmed Match' ? 'confirmed_match' :
-                         result.assessmentDetails.sanctions === 'Potential Match' ? 'potential_match' : 'clear',
+        // Map assessment answers to database fields
+        id_verification: mapIdVerification(result.assessmentDetails.idVerification),
+        pep_status: mapPepStatus(result.assessmentDetails.pepStatus),
+        sanctions_status: mapSanctions(result.assessmentDetails.sanctions),
+        source_of_wealth: mapSourceVerification(result.assessmentDetails.sourceOfWealth),
+        source_of_funds: mapSourceVerification(result.assessmentDetails.sourceOfFunds),
         edd_notes: `Risk Assessment completed on ${result.lastReviewDate}. ` +
-                   `Score: ${result.assessmentDetails.totalScore}/8. ` +
+                   `Score: ${result.assessmentDetails.totalScore}/14. ` +
                    `Jurisdiction: ${result.assessmentDetails.jurisdiction}. ` +
                    `Business: ${result.assessmentDetails.natureOfBusiness}.`,
         updated_at: new Date().toISOString()
@@ -636,14 +658,90 @@ export default function AMLDashboard({ onStatsChange }: Props) {
     )
   }
 
+  // Drill down state
+  const [drillDownData, setDrillDownData] = useState<{
+    isOpen: boolean
+    title: string
+    clients: AMLClientStatus[]
+  }>({ isOpen: false, title: '', clients: [] })
+
+  // Open drill down modal
+  const openDrillDown = (title: string, filterFn: (r: AMLClientStatus) => boolean) => {
+    const filteredClients = amlRecords.filter(filterFn)
+    setDrillDownData({ isOpen: true, title, clients: filteredClients })
+  }
+
   // Chart data
   const riskDistribution = RISK_RATING_OPTIONS.map(opt => ({
     name: opt.label,
     value: amlRecords.filter(r => r.risk_rating === opt.value).length,
     color: opt.color === 'green' ? '#22c55e' :
            opt.color === 'yellow' ? '#eab308' :
-           opt.color === 'orange' ? '#f97316' : '#ef4444'
+           opt.color === 'orange' ? '#f97316' : '#ef4444',
+    riskLevel: opt.value
   })).filter(d => d.value > 0)
+
+  // Compliance score calculation (percentage of fully verified clients)
+  const complianceScore = amlRecords.length > 0 ? Math.round(
+    (amlRecords.filter(r =>
+      r.id_verification === 'verified' &&
+      (r.pep_status === 'not_pep' || r.pep_status === 'not_checked') &&
+      r.sanctions_status === 'clear' &&
+      r.source_of_wealth === 'verified' &&
+      r.source_of_funds === 'verified'
+    ).length / amlRecords.length) * 100
+  ) : 0
+
+  // Verification funnel data
+  const verificationFunnel = [
+    { stage: 'ID Verified', count: amlRecords.filter(r => r.id_verification === 'verified').length, color: '#3b82f6' },
+    { stage: 'SOW Verified', count: amlRecords.filter(r => r.source_of_wealth === 'verified').length, color: '#6366f1' },
+    { stage: 'SOF Verified', count: amlRecords.filter(r => r.source_of_funds === 'verified').length, color: '#8b5cf6' },
+    { stage: 'Fully Compliant', count: amlRecords.filter(r =>
+      r.id_verification === 'verified' &&
+      r.sanctions_status === 'clear' &&
+      r.source_of_wealth === 'verified' &&
+      r.source_of_funds === 'verified'
+    ).length, color: '#22c55e' }
+  ]
+
+  // Review timeline data (next 6 months)
+  const reviewTimelineData = (() => {
+    const months: { month: string; low: number; medium: number; high: number }[] = []
+    const now = new Date()
+    for (let i = 0; i < 6; i++) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() + i, 1)
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + i + 1, 0)
+      const monthName = monthDate.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
+
+      months.push({
+        month: monthName,
+        low: amlRecords.filter(r => {
+          if (!r.next_review_date) return false
+          const reviewDate = new Date(r.next_review_date)
+          return reviewDate >= monthDate && reviewDate <= monthEnd && r.risk_rating === 'low'
+        }).length,
+        medium: amlRecords.filter(r => {
+          if (!r.next_review_date) return false
+          const reviewDate = new Date(r.next_review_date)
+          return reviewDate >= monthDate && reviewDate <= monthEnd && r.risk_rating === 'medium'
+        }).length,
+        high: amlRecords.filter(r => {
+          if (!r.next_review_date) return false
+          const reviewDate = new Date(r.next_review_date)
+          return reviewDate >= monthDate && reviewDate <= monthEnd && (r.risk_rating === 'high' || r.risk_rating === 'enhanced_due_diligence')
+        }).length
+      })
+    }
+    return months
+  })()
+
+  // PEP and Sanctions breakdown
+  const pepSanctionsData = [
+    { category: 'Clear', pep: amlRecords.filter(r => r.pep_status === 'not_pep').length, sanctions: amlRecords.filter(r => r.sanctions_status === 'clear').length },
+    { category: 'Flagged', pep: amlRecords.filter(r => ['pep_low_risk', 'pep_high_risk', 'rca'].includes(r.pep_status)).length, sanctions: amlRecords.filter(r => ['potential_match', 'confirmed_match'].includes(r.sanctions_status)).length },
+    { category: 'Not Checked', pep: amlRecords.filter(r => r.pep_status === 'not_checked').length, sanctions: amlRecords.filter(r => r.sanctions_status === 'not_checked').length }
+  ]
 
   const checkStatusData = [
     {
@@ -1012,66 +1110,235 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
 
       {/* Charts View */}
       {activeView === 'charts' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Risk Distribution Pie Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Client Risk Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {riskDistribution.length > 0 ? (
-                <div className="h-56 sm:h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPie>
-                    <Pie
-                      data={riskDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {riskDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+        <div className="space-y-6">
+          {/* Top Row - Compliance Score + Risk Distribution */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Compliance Score Gauge */}
+            <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => openDrillDown('Fully Compliant Clients', r =>
+              r.id_verification === 'verified' &&
+              r.sanctions_status === 'clear' &&
+              r.source_of_wealth === 'verified' &&
+              r.source_of_funds === 'verified'
+            )}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>AML Compliance Score</span>
+                  <Badge variant="outline" className="text-xs">Click to drill down</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col items-center justify-center py-4">
+                  <div className="relative w-32 h-32">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="64" cy="64" r="56" fill="none" stroke="#e5e7eb" strokeWidth="12" />
+                      <circle
+                        cx="64" cy="64" r="56" fill="none"
+                        stroke={complianceScore >= 80 ? '#22c55e' : complianceScore >= 50 ? '#eab308' : '#ef4444'}
+                        strokeWidth="12"
+                        strokeDasharray={`${complianceScore * 3.52} 352`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-3xl font-bold">{complianceScore}%</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">Fully Verified Clients</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Risk Distribution Donut */}
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Client Risk Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {riskDistribution.length > 0 ? (
+                  <div className="flex items-center gap-6">
+                    <div className="h-48 w-48 flex-shrink-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsPie>
+                          <Pie
+                            data={riskDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={70}
+                            fill="#8884d8"
+                            dataKey="value"
+                            onClick={(data) => openDrillDown(`${data.name} Risk Clients`, r => r.risk_rating === data.riskLevel)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {riskDistribution.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </RechartsPie>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      {riskDistribution.map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => openDrillDown(`${item.name} Risk Clients`, r => r.risk_rating === item.riskLevel)}
+                          className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                            <span className="text-sm font-medium">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-bold">{item.value}</span>
+                            <span className="text-xs text-gray-500">
+                              ({Math.round((item.value / amlRecords.length) * 100)}%)
+                            </span>
+                          </div>
+                        </button>
                       ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                    </RechartsPie>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-48 text-gray-500">No data available</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Second Row - Verification Funnel + Review Timeline */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Verification Funnel */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Verification Progress</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {verificationFunnel.map((stage, idx) => {
+                    const percentage = amlRecords.length > 0 ? Math.round((stage.count / amlRecords.length) * 100) : 0
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          const filters: Record<string, (r: AMLClientStatus) => boolean> = {
+                            'ID Verified': r => r.id_verification === 'verified',
+                            'SOW Verified': r => r.source_of_wealth === 'verified',
+                            'SOF Verified': r => r.source_of_funds === 'verified',
+                            'Fully Compliant': r => r.id_verification === 'verified' && r.sanctions_status === 'clear' && r.source_of_wealth === 'verified' && r.source_of_funds === 'verified'
+                          }
+                          openDrillDown(stage.stage, filters[stage.stage])
+                        }}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium">{stage.stage}</span>
+                          <span className="text-sm text-gray-600">{stage.count} ({percentage}%)</span>
+                        </div>
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${percentage}%`, backgroundColor: stage.color }}
+                          />
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Review Timeline */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Upcoming Reviews (6 Months)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={reviewTimelineData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="low" name="Low Risk" fill="#22c55e" stackId="a" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="medium" name="Medium Risk" fill="#eab308" stackId="a" radius={[0, 0, 0, 0]} />
+                      <Bar dataKey="high" name="High Risk" fill="#ef4444" stackId="a" radius={[4, 4, 0, 0]} />
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
-              ) : (
-                <div className="flex items-center justify-center h-[300px] text-gray-500">
-                  No data available
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Check Status Bar Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Check Status by Type</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-56 sm:h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={checkStatusData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="verified" name="Verified/Clear" fill="#22c55e" stackId="a" />
-                  <Bar dataKey="pending" name="Pending/Flagged" fill="#eab308" stackId="a" />
-                  <Bar dataKey="notStarted" name="Not Started" fill="#94a3b8" stackId="a" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Third Row - PEP/Sanctions Analysis */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* PEP & Sanctions Comparison */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">PEP & Sanctions Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={pepSanctionsData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis dataKey="category" type="category" tick={{ fontSize: 11 }} width={80} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="pep" name="PEP Status" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="sanctions" name="Sanctions" fill="#f97316" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quick Stats Grid */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Quick Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => openDrillDown('Overdue Reviews', r => r.next_review_date ? new Date(r.next_review_date) < new Date() : false)}
+                    className="p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-left"
+                  >
+                    <p className="text-2xl font-bold text-red-600">{stats.overdueReviews}</p>
+                    <p className="text-xs text-red-700">Overdue Reviews</p>
+                  </button>
+                  <button
+                    onClick={() => openDrillDown('High Risk Clients', r => r.risk_rating === 'high' || r.risk_rating === 'enhanced_due_diligence')}
+                    className="p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors text-left"
+                  >
+                    <p className="text-2xl font-bold text-orange-600">{stats.highRisk}</p>
+                    <p className="text-xs text-orange-700">High Risk Clients</p>
+                  </button>
+                  <button
+                    onClick={() => openDrillDown('Pending Verification', r => r.id_verification === 'pending' || r.id_verification === 'not_started')}
+                    className="p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors text-left"
+                  >
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {amlRecords.filter(r => r.id_verification === 'pending' || r.id_verification === 'not_started').length}
+                    </p>
+                    <p className="text-xs text-yellow-700">Pending ID Verification</p>
+                  </button>
+                  <button
+                    onClick={() => openDrillDown('PEP Flagged', r => ['pep_low_risk', 'pep_high_risk', 'rca'].includes(r.pep_status))}
+                    className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors text-left"
+                  >
+                    <p className="text-2xl font-bold text-purple-600">
+                      {amlRecords.filter(r => ['pep_low_risk', 'pep_high_risk', 'rca'].includes(r.pep_status)).length}
+                    </p>
+                    <p className="text-xs text-purple-700">PEP Flagged</p>
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -1393,6 +1660,140 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
             setSelectedClientForWizard(null)
           }}
         />
+      )}
+
+      {/* Drill Down Modal */}
+      {drillDownData.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setDrillDownData({ isOpen: false, title: '', clients: [] })}>
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+              <div>
+                <h3 className="text-lg font-semibold">{drillDownData.title}</h3>
+                <p className="text-sm text-gray-500">{drillDownData.clients.length} client(s)</p>
+              </div>
+              <button
+                onClick={() => setDrillDownData({ isOpen: false, title: '', clients: [] })}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[60vh]">
+              {drillDownData.clients.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="text-left p-3 font-medium text-gray-600">Client</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Risk Rating</th>
+                      <th className="text-left p-3 font-medium text-gray-600">ID Verification</th>
+                      <th className="text-left p-3 font-medium text-gray-600">PEP</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Sanctions</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Next Review</th>
+                      <th className="text-center p-3 font-medium text-gray-600">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {drillDownData.clients.map((client) => {
+                      const clientName = `${client.clients?.personal_details?.firstName || 'Unknown'} ${client.clients?.personal_details?.lastName || ''}`.trim()
+                      const isOverdue = client.next_review_date && new Date(client.next_review_date) < new Date()
+                      const riskOpt = RISK_RATING_OPTIONS.find(o => o.value === client.risk_rating)
+                      const idOpt = ID_VERIFICATION_OPTIONS.find(o => o.value === client.id_verification)
+                      const pepOpt = PEP_STATUS_OPTIONS.find(o => o.value === client.pep_status)
+                      const sanctOpt = SANCTIONS_OPTIONS.find(o => o.value === client.sanctions_status)
+
+                      return (
+                        <tr key={client.id} className="hover:bg-gray-50">
+                          <td className="p-3">
+                            <button
+                              onClick={() => {
+                                setDrillDownData({ isOpen: false, title: '', clients: [] })
+                                router.push(`/clients/${client.client_id}`)
+                              }}
+                              className="font-medium text-blue-600 hover:underline"
+                            >
+                              {clientName}
+                            </button>
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              variant={riskOpt?.color === 'green' ? 'default' : riskOpt?.color === 'red' ? 'destructive' : 'secondary'}
+                              className="text-xs"
+                            >
+                              {riskOpt?.label || client.risk_rating}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              idOpt?.color === 'green' ? 'bg-green-100 text-green-700' :
+                              idOpt?.color === 'red' ? 'bg-red-100 text-red-700' :
+                              idOpt?.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {idOpt?.label || client.id_verification}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              pepOpt?.color === 'green' ? 'bg-green-100 text-green-700' :
+                              pepOpt?.color === 'red' ? 'bg-red-100 text-red-700' :
+                              pepOpt?.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {pepOpt?.label || client.pep_status}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              sanctOpt?.color === 'green' ? 'bg-green-100 text-green-700' :
+                              sanctOpt?.color === 'red' ? 'bg-red-100 text-red-700' :
+                              sanctOpt?.color === 'orange' ? 'bg-orange-100 text-orange-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {sanctOpt?.label || client.sanctions_status}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {client.next_review_date ? (
+                              <span className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                                {new Date(client.next_review_date).toLocaleDateString('en-GB')}
+                                {isOverdue && ' (Overdue)'}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">Not set</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setDrillDownData({ isOpen: false, title: '', clients: [] })
+                                openWizardForClient(client)
+                              }}
+                              className="text-xs"
+                            >
+                              <PlayCircle className="h-3 w-3 mr-1" />
+                              Assess
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center text-gray-500">
+                  No clients found in this category.
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <Button variant="outline" onClick={() => setDrillDownData({ isOpen: false, title: '', clients: [] })}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

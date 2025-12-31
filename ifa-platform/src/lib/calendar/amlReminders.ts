@@ -152,8 +152,17 @@ export async function removeAMLReviewReminders(
   }
 }
 
+// Default AML settings - used when no custom settings are configured
+const DEFAULT_AML_SETTINGS = {
+  lowRiskYears: 5,
+  mediumRiskYears: 3,
+  highRiskYears: 1,
+  reminderDaysBefore: 60
+}
+
 /**
- * Get AML settings from compliance_rules table
+ * Get AML settings from compliance_rules table or firm settings
+ * Returns defaults if table doesn't exist or no settings are configured
  */
 export async function getAMLSettings(
   supabase: SupabaseClient
@@ -163,32 +172,40 @@ export async function getAMLSettings(
   highRiskYears: number
   reminderDaysBefore: number
 }> {
+  // Try to fetch from compliance_rules first
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('compliance_rules')
       .select('configuration')
       .eq('rule_name', 'AML Review Settings')
       .eq('is_active', true)
-      .single()
+      .maybeSingle() // Use maybeSingle instead of single to avoid error when no rows found
+
+    // If table doesn't exist (406 error) or other errors, silently use defaults
+    if (error) {
+      // 406 typically means table doesn't exist - this is expected in some setups
+      if (error.code === '42P01' || error.message?.includes('406')) {
+        console.log('AML settings: Using defaults (compliance_rules table not found)')
+      }
+      return DEFAULT_AML_SETTINGS
+    }
 
     if (data?.configuration) {
       const config = data.configuration as Record<string, number>
       return {
-        lowRiskYears: config.lowRiskYears || 5,
-        mediumRiskYears: config.mediumRiskYears || 3,
-        highRiskYears: config.highRiskYears || 1,
-        reminderDaysBefore: config.reminderDaysBefore || 60
+        lowRiskYears: config.lowRiskYears || DEFAULT_AML_SETTINGS.lowRiskYears,
+        mediumRiskYears: config.mediumRiskYears || DEFAULT_AML_SETTINGS.mediumRiskYears,
+        highRiskYears: config.highRiskYears || DEFAULT_AML_SETTINGS.highRiskYears,
+        reminderDaysBefore: config.reminderDaysBefore || DEFAULT_AML_SETTINGS.reminderDaysBefore
       }
     }
-  } catch (error) {
-    console.error('Error fetching AML settings:', error)
+  } catch (error: any) {
+    // Silently handle table not found errors
+    if (error?.code !== '42P01') {
+      console.warn('Error fetching AML settings, using defaults:', error?.message || error)
+    }
   }
 
-  // Return defaults if no settings found
-  return {
-    lowRiskYears: 5,
-    mediumRiskYears: 3,
-    highRiskYears: 1,
-    reminderDaysBefore: 60
-  }
+  // Return defaults if no settings found or any error occurred
+  return DEFAULT_AML_SETTINGS
 }
