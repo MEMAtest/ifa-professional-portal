@@ -145,3 +145,49 @@ input[type="range"]::-moz-range-thumb {
 .plannetic-pulse {
   animation: plannetic-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Marketing page floating animation */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Marketing page gradient text animation */
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-text {
+  background-size: 200% 200%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Marketing page section transitions */
+.marketing-section {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.marketing-section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}

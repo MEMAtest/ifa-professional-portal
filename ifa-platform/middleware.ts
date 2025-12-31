@@ -39,6 +39,7 @@ export async function middleware(request: NextRequest) {
 
   // Public routes that don't require authentication
   const publicRoutes = [
+    '/', // Marketing landing page (public)
     '/client/assessment', // Client assessment portal (public access via token)
     '/login',
     '/signup',
@@ -47,9 +48,13 @@ export async function middleware(request: NextRequest) {
     '/reset-password'
   ]
 
-  const isPublicRoute = publicRoutes.some(route =>
-    request.nextUrl.pathname.startsWith(route)
-  )
+  const isPublicRoute = publicRoutes.some(route => {
+    // Exact match for root path to avoid matching all routes
+    if (route === '/') {
+      return request.nextUrl.pathname === '/'
+    }
+    return request.nextUrl.pathname.startsWith(route)
+  })
 
   // Skip auth check for public routes
   if (isPublicRoute) {
