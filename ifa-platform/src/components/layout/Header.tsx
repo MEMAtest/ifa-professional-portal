@@ -35,9 +35,11 @@ interface BreadcrumbItem {
 
 interface HeaderProps {
   onToggleSidebar?: () => void
+  isSidebarOpen?: boolean
+  sidebarId?: string
 }
 
-export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
+export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, sidebarId }) => {
   const { user, signOut } = useAuth()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const pathname = usePathname()
@@ -53,7 +55,17 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
       { label: 'Dashboard', href: '/dashboard', icon: Home }
     ]
 
-    if (segments.length === 0 || segments[0] === 'dashboard') {
+    if (segments.length === 0) {
+      return [{ label: 'Dashboard', icon: Home }]
+    }
+
+    if (segments[0] === 'dashboard') {
+      if (segments[1] === 'ai-insights') {
+        return [
+          { label: 'Dashboard', href: '/dashboard', icon: Home },
+          { label: 'AI Insights' }
+        ]
+      }
       return [{ label: 'Dashboard', icon: Home }]
     }
 
@@ -62,8 +74,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         breadcrumbs.push({ label: 'Clients', href: '/clients', icon: Users })
         if (segments[1] === 'reports') {
           breadcrumbs.push({ label: 'Reporting Hub', href: '/clients/reports' })
+        } else if (segments[1] === 'financials') {
+          breadcrumbs.push({ label: 'Client Financials' })
         } else if (segments[1] && segments[1] !== 'new' && segments[1] !== 'migrate' && segments[1] !== 'migration') {
-          breadcrumbs.push({ label: `Client Details`, href: `/clients/${segments[1]}` })
+          breadcrumbs.push({ label: 'Client Details', href: `/clients/${segments[1]}` })
           if (segments[2] === 'edit') {
             breadcrumbs.push({ label: 'Edit Client' })
           }
@@ -79,18 +93,33 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           const assessmentTypes: Record<string, string> = {
             'suitability': 'Suitability Assessment',
             'atr': 'Risk Assessment (ATR)',
-            'cfl': 'Cash Flow Analysis',
+            'cfl': 'Capacity for Loss',
             'personas': 'Investor Personas',
-            'persona-assessment': 'Persona Assessment'
+            'persona-assessment': 'Persona Assessment',
+            'dashboard': 'Assessment Dashboard'
           }
-          breadcrumbs.push({ 
+          breadcrumbs.push({
             label: assessmentTypes[segments[1]] || segments[1],
             href: `/assessments/${segments[1]}`
           })
+          // Handle results sub-page
+          if (segments[2] === 'results') {
+            breadcrumbs.push({ label: 'Results' })
+          }
         }
         break
       case 'documents':
         breadcrumbs.push({ label: 'Documents', href: '/documents', icon: Briefcase })
+        if (segments[1]) {
+          const docTypes: Record<string, string> = {
+            'analytics': 'Document Analytics',
+            'status': 'Document Status',
+            'view': 'View Document'
+          }
+          if (docTypes[segments[1]]) {
+            breadcrumbs.push({ label: docTypes[segments[1]] })
+          }
+        }
         break
       case 'reports':
         breadcrumbs.push({ label: 'Reports', href: '/reports', icon: BarChart3 })
@@ -103,23 +132,52 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         break
       case 'cashflow':
         breadcrumbs.push({ label: 'Cash Flow Modeling', href: '/cashflow', icon: PoundSterling })
+        if (segments[1] === 'scenarios' && segments[2]) {
+          breadcrumbs.push({ label: 'Scenario Details' })
+        }
         break
       case 'risk':
         breadcrumbs.push({ label: 'Risk Profiling', href: '/risk', icon: Shield })
         break
       case 'compliance':
-        breadcrumbs.push({ label: 'Compliance', href: '/compliance' })
+        breadcrumbs.push({ label: 'Compliance Hub', href: '/compliance', icon: Shield })
         if (segments[1]) {
           const complianceTypes: Record<string, string> = {
+            'aml': 'AML/CTF',
+            'consumer-duty': 'Consumer Duty',
+            'prod-services': 'Services & PROD',
+            'metrics': 'Compliance Metrics',
             'vulnerable': 'Vulnerable Clients',
-            'reviews': 'Review Schedule',
+            'reviews': 'Client Reviews',
             'audit': 'Audit Trail'
           }
-          breadcrumbs.push({ 
-            label: complianceTypes[segments[1]] || segments[1],
+          breadcrumbs.push({
+            label: complianceTypes[segments[1]] || segments[1].charAt(0).toUpperCase() + segments[1].slice(1).replace(/-/g, ' '),
             href: `/compliance/${segments[1]}`
           })
         }
+        break
+      case 'reviews':
+        breadcrumbs.push({ label: 'Compliance Hub', href: '/compliance', icon: Shield })
+        breadcrumbs.push({ label: 'Client Reviews' })
+        break
+      case 'monte-carlo':
+        breadcrumbs.push({ label: 'Monte Carlo Analysis', href: '/monte-carlo', icon: BarChart3 })
+        break
+      case 'stress-testing':
+        breadcrumbs.push({ label: 'Stress Testing', href: '/stress-testing', icon: Shield })
+        break
+      case 'market-intelligence':
+        breadcrumbs.push({ label: 'Market Intelligence', href: '/market-intelligence', icon: BarChart3 })
+        break
+      case 'communication':
+        breadcrumbs.push({ label: 'Communication Hub', href: '/communication', icon: Bell })
+        break
+      case 'calendar':
+        breadcrumbs.push({ label: 'Calendar', href: '/calendar' })
+        break
+      case 'signatures':
+        breadcrumbs.push({ label: 'Signatures', href: '/signatures', icon: FileText })
         break
       default:
         const label = segments[0].charAt(0).toUpperCase() + segments[0].slice(1)
@@ -131,14 +189,16 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const breadcrumbs = getBreadcrumbs()
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50">
-      <div className="flex items-center justify-between h-full px-4 sm:px-6">
+    <header className="fixed top-0 left-0 right-0 h-[var(--app-header-height)] pt-[env(safe-area-inset-top)] bg-white border-b border-gray-200 z-50">
+      <div className="flex items-center justify-between h-16 px-4 sm:px-6">
         <div className="flex items-center gap-3 sm:gap-6 flex-1 min-w-0">
           <button
             type="button"
             onClick={() => onToggleSidebar?.()}
             className="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
             aria-label="Open navigation menu"
+            aria-expanded={isSidebarOpen}
+            aria-controls={sidebarId}
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -146,36 +206,45 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           <Logo variant="full" className="flex-shrink-0" />
           
           {breadcrumbs.length > 1 && (
-            <nav className="hidden md:flex items-center space-x-2 text-sm min-w-0 flex-1">
-              {breadcrumbs.map((item, index) => {
-                const isLast = index === breadcrumbs.length - 1
-                const Icon = item.icon
-                return (
-                  <div key={index} className="flex items-center min-w-0">
-                    {index > 0 && (
-                      <ChevronRight className="h-4 w-4 text-gray-400 mx-2 flex-shrink-0" />
-                    )}
-                    {item.href && !isLast ? (
-                      <Link
-                        href={item.href}
-                        className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 transition-colors min-w-0"
-                      >
-                        {Icon && index === 0 && <Icon className="h-4 w-4 flex-shrink-0" />}
-                        <span className="truncate">{item.label}</span>
-                      </Link>
-                    ) : (
-                      <span className={cn(
-                        "flex items-center gap-1.5 min-w-0",
-                        isLast ? "text-gray-900 font-medium" : "text-gray-500"
-                      )}>
-                        {Icon && index === 0 && <Icon className="h-4 w-4 flex-shrink-0" />}
-                        <span className="truncate">{item.label}</span>
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </nav>
+            <>
+              {/* Mobile: Show current page only */}
+              <nav className="flex md:hidden items-center text-sm min-w-0 flex-1">
+                <span className="text-gray-900 font-medium truncate">
+                  {breadcrumbs[breadcrumbs.length - 1].label}
+                </span>
+              </nav>
+              {/* Desktop: Full breadcrumb trail */}
+              <nav className="hidden md:flex items-center space-x-2 text-sm min-w-0 flex-1">
+                {breadcrumbs.map((item, index) => {
+                  const isLast = index === breadcrumbs.length - 1
+                  const Icon = item.icon
+                  return (
+                    <div key={index} className="flex items-center min-w-0">
+                      {index > 0 && (
+                        <ChevronRight className="h-4 w-4 text-gray-400 mx-2 flex-shrink-0" />
+                      )}
+                      {item.href && !isLast ? (
+                        <Link
+                          href={item.href}
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 transition-colors min-w-0"
+                        >
+                          {Icon && index === 0 && <Icon className="h-4 w-4 flex-shrink-0" />}
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      ) : (
+                        <span className={cn(
+                          "flex items-center gap-1.5 min-w-0",
+                          isLast ? "text-gray-900 font-medium" : "text-gray-500"
+                        )}>
+                          {Icon && index === 0 && <Icon className="h-4 w-4 flex-shrink-0" />}
+                          <span className="truncate">{item.label}</span>
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </nav>
+            </>
           )}
         </div>
 
