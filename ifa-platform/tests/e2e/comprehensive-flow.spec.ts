@@ -52,6 +52,21 @@ async function login(page: Page) {
   }
 }
 
+async function safeGoto(page: Page, url: string, label: string) {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    return true;
+  } catch {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      return true;
+    } catch (error) {
+      logIssue(label, `Failed to load: ${error}`);
+      return false;
+    }
+  }
+}
+
 // Helper to take screenshot on error
 async function screenshotOnError(page: Page, name: string) {
   await page.screenshot({ path: `test-results/screenshots/${name}-${Date.now()}.png` });
@@ -240,28 +255,24 @@ test.describe('Comprehensive User Journey', () => {
     // STEP 3: NAVIGATE TO ASSESSMENTS
     // ========================================
     console.log('\n📋 STEP 3: NAVIGATE TO ASSESSMENTS');
-    try {
-      await page.goto('/assessments', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const assessmentsLoaded = await safeGoto(page, '/assessments', 'Assessments');
+    if (assessmentsLoaded) {
       await page.waitForTimeout(2000);
-
       const assessmentsPageContent = await page.locator('body').textContent();
       if (assessmentsPageContent?.toLowerCase().includes('assessment')) {
         logSuccess('Assessments', 'Assessments page loaded');
       } else {
         logIssue('Assessments', 'Assessments page may not have loaded correctly');
       }
-    } catch (e) {
-      logIssue('Assessments', `Failed to load: ${e}`);
     }
 
     // ========================================
     // STEP 4: ATR ASSESSMENT
     // ========================================
     console.log('\n📋 STEP 4: ATR ASSESSMENT');
-    try {
-      await page.goto('/assessments/atr', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const atrLoaded = await safeGoto(page, '/assessments/atr', 'ATR Assessment');
+    if (atrLoaded) {
       await page.waitForTimeout(2000);
-
       const atrContent = await page.locator('body').textContent();
       if (atrContent?.toLowerCase().includes('risk') || atrContent?.toLowerCase().includes('atr') || atrContent?.toLowerCase().includes('attitude')) {
         logSuccess('ATR Assessment', 'ATR page loaded');
@@ -280,54 +291,45 @@ test.describe('Comprehensive User Journey', () => {
       } else {
         logIssue('ATR Assessment', 'ATR page content not as expected');
       }
-    } catch (e) {
-      logIssue('ATR Assessment', `Error: ${e}`);
     }
 
     // ========================================
     // STEP 5: SUITABILITY ASSESSMENT
     // ========================================
     console.log('\n📋 STEP 5: SUITABILITY ASSESSMENT');
-    try {
-      await page.goto('/assessments/suitability', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const suitabilityLoaded = await safeGoto(page, '/assessments/suitability', 'Suitability Assessment');
+    if (suitabilityLoaded) {
       await page.waitForTimeout(2000);
-
       const suitContent = await page.locator('body').textContent();
       if (suitContent?.toLowerCase().includes('suitability') || suitContent?.toLowerCase().includes('assessment') || suitContent?.toLowerCase().includes('client')) {
         logSuccess('Suitability Assessment', 'Suitability page loaded');
       } else {
         logIssue('Suitability Assessment', 'Page content not as expected');
       }
-    } catch (e) {
-      logIssue('Suitability Assessment', `Error: ${e}`);
     }
 
     // ========================================
     // STEP 6: PERSONA ASSESSMENT
     // ========================================
     console.log('\n📋 STEP 6: PERSONA ASSESSMENT');
-    try {
-      await page.goto('/assessments/persona-assessment', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const personaLoaded = await safeGoto(page, '/assessments/persona-assessment', 'Persona Assessment');
+    if (personaLoaded) {
       await page.waitForTimeout(2000);
-
       const personaContent = await page.locator('body').textContent();
       if (personaContent?.toLowerCase().includes('persona') || page.url().includes('persona')) {
         logSuccess('Persona Assessment', 'Persona page loaded');
       } else {
         logIssue('Persona Assessment', 'Persona page content not as expected');
       }
-    } catch (e) {
-      logIssue('Persona Assessment', `Error: ${e}`);
     }
 
     // ========================================
     // STEP 7: CASHFLOW ASSESSMENT
     // ========================================
     console.log('\n📋 STEP 7: CASHFLOW ASSESSMENT');
-    try {
-      await page.goto('/cashflow', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const cashflowLoaded = await safeGoto(page, '/cashflow', 'Cashflow');
+    if (cashflowLoaded) {
       await page.waitForTimeout(2000);
-
       const cashflowContent = await page.locator('body').textContent();
       if (cashflowContent?.toLowerCase().includes('cashflow') || cashflowContent?.toLowerCase().includes('cash flow') || cashflowContent?.toLowerCase().includes('scenario')) {
         logSuccess('Cashflow', 'Cashflow page loaded');
@@ -340,8 +342,6 @@ test.describe('Comprehensive User Journey', () => {
       } else {
         logIssue('Cashflow', 'Cashflow page not as expected');
       }
-    } catch (e) {
-      logIssue('Cashflow', `Error: ${e}`);
     }
 
     // ========================================

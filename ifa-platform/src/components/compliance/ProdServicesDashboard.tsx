@@ -206,7 +206,11 @@ export default function ProdServicesDashboard() {
             You can still complete client target market checks below using the default services catalog.
             Configure your firm PROD settings to customise the service list and governance summary.
           </p>
-          <Button variant="outline" onClick={() => router.push('/settings?tab=services')}>
+          <Button
+            variant="outline"
+            onClick={() => router.push('/settings?tab=services')}
+            className="w-full sm:w-auto"
+          >
             <Settings className="h-4 w-4 mr-2" />
             Configure firm PROD
           </Button>
@@ -233,15 +237,19 @@ export default function ProdServicesDashboard() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>PROD &amp; Services Overview</CardTitle>
             <p className="text-sm text-gray-600 mt-1">
               Firm-level PROD governance, target market, and service catalogue.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => router.push('/settings?tab=services')}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/settings?tab=services')}
+              className="w-full sm:w-auto"
+            >
               <Settings className="h-4 w-4 mr-2" />
               Edit Settings
             </Button>
@@ -250,16 +258,21 @@ export default function ProdServicesDashboard() {
                 variant="outline"
                 onClick={() => handleOpenStoredPdf(latestDocumentPath)}
                 disabled={openingStored}
+                className="w-full sm:w-auto"
               >
                 <Download className="h-4 w-4 mr-2" />
                 {openingStored ? 'Opening PDF...' : 'Open Saved PDF'}
               </Button>
             )}
-            <Button variant="outline" onClick={() => router.push('/reviews')}>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/reviews')}
+              className="w-full sm:w-auto"
+            >
               <Calendar className="h-4 w-4 mr-2" />
               View Reviews
             </Button>
-            <Button onClick={handleDownload} disabled={downloading}>
+            <Button onClick={handleDownload} disabled={downloading} className="w-full sm:w-auto">
               <Download className="h-4 w-4 mr-2" />
               {downloading ? 'Generating PDF...' : 'Download PDF'}
             </Button>
@@ -296,7 +309,7 @@ export default function ProdServicesDashboard() {
             ) : (
               services.map((service: any, index: number) => (
                 <div key={`${service.id || index}`} className="border rounded-lg p-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="font-medium text-gray-900">{service.label || service.name}</p>
                     <Badge variant={service.active === false ? 'secondary' : 'default'}>
                       {service.active === false ? 'Inactive' : 'Active'}

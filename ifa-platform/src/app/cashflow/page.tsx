@@ -387,7 +387,7 @@ export default function CashFlowPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-4 sm:p-6">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -400,7 +400,7 @@ export default function CashFlowPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-4 sm:p-6">
         <Card>
           <CardContent className="p-8">
             <div className="text-center">
@@ -420,10 +420,10 @@ export default function CashFlowPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-4 sm:p-6">
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Cash Flow Analysis</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Cash Flow Analysis</h1>
         <p className="text-gray-600">
           Professional cash flow modeling and financial planning for your clients
         </p>
@@ -601,15 +601,15 @@ export default function CashFlowPage() {
         // Client Cash Flow Dashboard View
         <div className="space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button
                 variant="outline"
                 onClick={() => {
                   setSelectedClient(null);
                   router.push('/cashflow');
                 }}
-                className="flex items-center space-x-2"
+                className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span>Back to Client List</span>
@@ -625,7 +625,7 @@ export default function CashFlowPage() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap gap-2">
               {trackingState.isTracking && (
                 <Badge variant="default" className="animate-pulse">
                   <Save className="h-3 w-3 mr-1" />
@@ -651,7 +651,7 @@ export default function CashFlowPage() {
           </div>
 
           {/* Quick Actions Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {getQuickActions().map((action, index) => (
               <Card
                 key={index}
@@ -691,7 +691,7 @@ export default function CashFlowPage() {
           {dashboardData?.currentAssessment && scenarios.length > 0 && (
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-4">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="p-2 rounded-full bg-blue-100">
                     <Shield className="h-5 w-5 text-blue-600" />
                   </div>
@@ -706,7 +706,7 @@ export default function CashFlowPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleStartAssessment}
-                    className="text-blue-700 border-blue-300"
+                    className="w-full sm:w-auto text-blue-700 border-blue-300"
                   >
                     Update Assessment
                   </Button>
@@ -720,9 +720,9 @@ export default function CashFlowPage() {
 
           {/* Assessment Hub Link */}
           {scenarios.length > 0 && (
-            <Card className="bg-purple-50 border-purple-200">
+          <Card className="bg-purple-50 border-purple-200">
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <Calculator className="h-5 w-5 text-purple-600" />
                     <div>
@@ -736,7 +736,7 @@ export default function CashFlowPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleViewAssessmentHub}
-                    className="text-purple-700 border-purple-300"
+                    className="w-full sm:w-auto text-purple-700 border-purple-300"
                   >
                     View Hub
                   </Button>
@@ -753,8 +753,8 @@ export default function CashFlowPage() {
             <CardContent>
               <div className="space-y-3">
                 {!dashboardData?.currentAssessment && (
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg">
+                    <div className="flex items-start gap-3 sm:items-center">
                       <div className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">
                         <AlertCircle className="h-4 w-4 text-orange-600" />
                       </div>
@@ -763,7 +763,7 @@ export default function CashFlowPage() {
                         <p className="text-sm text-gray-600">Required for accurate projections</p>
                       </div>
                     </div>
-                    <Button size="sm" onClick={handleStartAssessment}>
+                    <Button size="sm" onClick={handleStartAssessment} className="w-full sm:w-auto">
                       Start Assessment
                     </Button>
                   </div>
@@ -771,8 +771,8 @@ export default function CashFlowPage() {
                 
                 {scenarios.length > 0 && (
                   <>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg">
+                      <div className="flex items-start gap-3 sm:items-center">
                         <div className="h-8 w-8 rounded-full bg-orange-100 flex items-center justify-center">
                           <Zap className="h-4 w-4 text-orange-600" />
                         </div>
@@ -781,13 +781,13 @@ export default function CashFlowPage() {
                           <p className="text-sm text-gray-600">Test financial resilience</p>
                         </div>
                       </div>
-                      <Button size="sm" variant="outline" onClick={handleStressTest}>
+                      <Button size="sm" variant="outline" onClick={handleStressTest} className="w-full sm:w-auto">
                         Run Test
                       </Button>
                     </div>
                     
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg">
+                      <div className="flex items-start gap-3 sm:items-center">
                         <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
                           <Activity className="h-4 w-4 text-blue-600" />
                         </div>
@@ -796,15 +796,15 @@ export default function CashFlowPage() {
                           <p className="text-sm text-gray-600">Test scenario probability</p>
                         </div>
                       </div>
-                      <Button size="sm" variant="outline" onClick={handleRunMonteCarlo}>
+                      <Button size="sm" variant="outline" onClick={handleRunMonteCarlo} className="w-full sm:w-auto">
                         Run Analysis
                       </Button>
                     </div>
                   </>
                 )}
                 
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg">
+                  <div className="flex items-start gap-3 sm:items-center">
                     <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
                       <FileText className="h-4 w-4 text-green-600" />
                     </div>
@@ -818,6 +818,7 @@ export default function CashFlowPage() {
                     variant="outline" 
                     onClick={handleGenerateReport}
                     disabled={scenarios.length === 0}
+                    className="w-full sm:w-auto"
                   >
                     Generate Report
                   </Button>

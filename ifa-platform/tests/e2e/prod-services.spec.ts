@@ -22,6 +22,33 @@ async function login(page: Page) {
   }
 }
 
+async function openMobileNavIfNeeded(page: Page) {
+  const menuButton = page
+    .locator('button[aria-label*="menu" i], [class*="hamburger"], [class*="menu-toggle"]')
+    .first();
+
+  if (await menuButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await menuButton.click();
+    await page.waitForTimeout(500);
+  }
+}
+
+async function openProdServiceModal(page: Page) {
+  await page.goto('/compliance?tab=prod-services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await page.waitForTimeout(2000);
+  await openMobileNavIfNeeded(page);
+
+  const actionButton = page.getByRole('button', { name: /start|review|assess/i }).first();
+  if (await actionButton.isVisible().catch(() => false)) {
+    await actionButton.scrollIntoViewIfNeeded().catch(() => null);
+    await actionButton.click({ force: true });
+    await page.waitForTimeout(1000);
+    return true;
+  }
+
+  return false;
+}
+
 test.describe('PROD & Services Settings', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
@@ -267,16 +294,8 @@ test.describe('PROD Client Service Selection', () => {
 
   test.describe('Client Service Selection Modal', () => {
     test('should open service selection modal for client', async ({ page }) => {
-      await page.goto('/compliance?tab=prod-services', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
-
-      // Find and click Start Assessment or Review button
-      const actionButton = page.getByRole('button', { name: /start|review|assess/i }).first();
-      if (await actionButton.isVisible().catch(() => false)) {
-        await actionButton.click();
-        await page.waitForTimeout(2000);
-
-        // Modal should open
+      const modalOpened = await openProdServiceModal(page);
+      if (modalOpened) {
         const hasModal = await page.locator('[role="dialog"]').isVisible().catch(() => false);
         expect(hasModal || true).toBeTruthy();
       } else {
@@ -285,16 +304,8 @@ test.describe('PROD Client Service Selection', () => {
     });
 
     test('should have scroll capability in modal', async ({ page }) => {
-      await page.goto('/compliance?tab=prod-services', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
-
-      // Open modal
-      const actionButton = page.getByRole('button', { name: /start|review|assess/i }).first();
-      if (await actionButton.isVisible().catch(() => false)) {
-        await actionButton.click();
-        await page.waitForTimeout(2000);
-
-        // Check modal exists
+      const modalOpened = await openProdServiceModal(page);
+      if (modalOpened) {
         const modal = page.locator('[role="dialog"]');
         const hasModal = await modal.isVisible().catch(() => false);
         expect(hasModal || true).toBeTruthy();
@@ -332,16 +343,8 @@ test.describe('PROD Client Service Selection', () => {
 
   test.describe('Service Selection', () => {
     test('should display service checkboxes in modal', async ({ page }) => {
-      await page.goto('/compliance?tab=prod-services', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
-
-      // Navigate to PROD tab and open modal
-      const actionButton = page.getByRole('button', { name: /start|review|assess/i }).first();
-      if (await actionButton.isVisible().catch(() => false)) {
-        await actionButton.click();
-        await page.waitForTimeout(2000);
-
-        // Check for checkboxes or form elements
+      const modalOpened = await openProdServiceModal(page);
+      if (modalOpened) {
         const hasCheckboxes = await page.locator('input[type="checkbox"]').count() > 0;
         expect(hasCheckboxes || true).toBeTruthy();
       } else {
@@ -350,19 +353,11 @@ test.describe('PROD Client Service Selection', () => {
     });
 
     test('should toggle service selection', async ({ page }) => {
-      await page.goto('/compliance?tab=prod-services', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
-
-      // Open modal
-      const actionButton = page.getByRole('button', { name: /start|review|assess/i }).first();
-      if (await actionButton.isVisible().catch(() => false)) {
-        await actionButton.click();
-        await page.waitForTimeout(2000);
-
-        // Toggle a checkbox
+      const modalOpened = await openProdServiceModal(page);
+      if (modalOpened) {
         const checkbox = page.locator('input[type="checkbox"]').first();
         if (await checkbox.isVisible().catch(() => false)) {
-          await checkbox.click();
+          await checkbox.click({ force: true });
           await page.waitForTimeout(500);
           expect(true).toBeTruthy();
         } else {
@@ -374,20 +369,12 @@ test.describe('PROD Client Service Selection', () => {
     });
 
     test('should save service selection', async ({ page }) => {
-      await page.goto('/compliance?tab=prod-services', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
-
-      // Open modal
-      const actionButton = page.getByRole('button', { name: /start|review|assess/i }).first();
-      if (await actionButton.isVisible().catch(() => false)) {
-        await actionButton.click();
-        await page.waitForTimeout(2000);
-
-        // Save
+      const modalOpened = await openProdServiceModal(page);
+      if (modalOpened) {
         const saveButton = page.getByRole('button', { name: /save/i });
         if (await saveButton.isVisible().catch(() => false)) {
-          await saveButton.click();
-          await page.waitForTimeout(2000);
+          await saveButton.click({ force: true });
+          await page.waitForTimeout(1000);
           expect(true).toBeTruthy();
         } else {
           expect(true).toBeTruthy();

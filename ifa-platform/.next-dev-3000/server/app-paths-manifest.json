@@ -1,18 +1,4 @@
 {
-  "/not-found": "app/not-found.js",
-  "/api/notifications/unread-count/route": "app/api/notifications/unread-count/route.js",
-  "/api/clients/route": "app/api/clients/route.js",
-  "/login/page": "app/login/page.js",
-  "/api/reviews/upcoming/route": "app/api/reviews/upcoming/route.js",
-  "/api/notifications/backfill-profile-updates/route": "app/api/notifications/backfill-profile-updates/route.js",
-  "/api/dashboard/weekly-activity/route": "app/api/dashboard/weekly-activity/route.js",
-  "/clients/page": "app/clients/page.js",
-  "/api/activity-log/route": "app/api/activity-log/route.js",
-  "/api/assessments/incomplete/route": "app/api/assessments/incomplete/route.js",
-  "/api/advisors/route": "app/api/advisors/route.js",
-  "/api/notifications/route": "app/api/notifications/route.js",
-  "/api/market-data/route": "app/api/market-data/route.js",
-  "/clients/new/page": "app/clients/new/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/clients/[id]/edit/page": "app/clients/[id]/edit/page.js"
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js"
 }

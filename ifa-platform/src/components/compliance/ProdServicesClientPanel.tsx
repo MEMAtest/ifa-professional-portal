@@ -159,20 +159,25 @@ export function ProdServicesClientPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Client Target Market Checks</h2>
           <p className="text-sm text-gray-600">
             Track which active clients have services selected and whether target market checks are complete.
           </p>
         </div>
-        <Button variant="outline" onClick={() => fetchClients(true)} disabled={refreshing}>
+        <Button
+          variant="outline"
+          onClick={() => fetchClients(true)}
+          disabled={refreshing}
+          className="w-full sm:w-auto"
+        >
           <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -238,15 +243,17 @@ export function ProdServicesClientPanel() {
                 No active clients to assess yet.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={coveragePipelineData} margin={{ left: 20, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={60} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip formatter={(value) => [`${value} clients`, 'Clients']} />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="h-[220px] sm:h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={coveragePipelineData} margin={{ left: 20, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={60} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip formatter={(value) => [`${value} clients`, 'Clients']} />
+                    <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -261,24 +268,26 @@ export function ProdServicesClientPanel() {
                 No completion data yet.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie
-                      data={completionStatusData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={50}
-                      outerRadius={80}
-                      paddingAngle={3}
-                    >
-                      {completionStatusData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`${value} clients`, 'Clients']} />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div className="h-[220px] sm:h-[240px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={completionStatusData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={3}
+                      >
+                        {completionStatusData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`${value} clients`, 'Clients']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
                 <div className="space-y-2 text-sm">
                   {completionStatusData.map((entry) => (
                     <div key={entry.name} className="flex items-center justify-between">
@@ -299,20 +308,20 @@ export function ProdServicesClientPanel() {
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <CardTitle className="text-base">Client coverage</CardTitle>
-          <div className="flex flex-wrap gap-3">
-            <div className="relative">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative w-full sm:w-64">
               <Search className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search client name or ref"
-                className="pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <select
               value={clientStatus}
               onChange={(event) => setClientStatus(event.target.value as typeof clientStatus)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-auto border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="active">Active clients (incl. review due + missing status)</option>
               <option value="prospect">Prospects</option>
@@ -323,7 +332,7 @@ export function ProdServicesClientPanel() {
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as CompletionStatus | 'all')}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-auto border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All check statuses</option>
               <option value="complete">Complete</option>
@@ -343,7 +352,10 @@ export function ProdServicesClientPanel() {
                 const badge = completionBadge(client.completionStatus)
                 const serviceLabels = client.servicesSelected.map((id) => serviceLabelMap.get(id) || id)
                 return (
-                  <div key={client.clientId} className="border rounded-lg p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div
+                    key={client.clientId}
+                    className="border rounded-lg p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
                         <p className="font-semibold text-gray-900">{client.clientName}</p>
@@ -378,6 +390,7 @@ export function ProdServicesClientPanel() {
                     <Button
                       variant="outline"
                       onClick={() => setSelectedClient(client)}
+                      className="w-full sm:w-auto"
                     >
                       {client.completionStatus === 'none' ? 'Start assessment' : 'Review'}
                     </Button>

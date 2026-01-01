@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
 
   // Public routes that don't require authentication
   const publicRoutes = [
-    '/', // Marketing landing page (public)
+    '/', // Redirects to login
+    '/marketing', // Marketing landing page (public)
     '/client/assessment', // Client assessment portal (public access via token)
     '/login',
     '/signup',

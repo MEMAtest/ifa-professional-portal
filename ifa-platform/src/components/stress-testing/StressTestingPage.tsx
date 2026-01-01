@@ -349,7 +349,7 @@ export default function StressTestingPage() {
           <div className="space-y-6">
             {/* Header */}
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex flex-wrap items-center gap-3">
                 <Zap className="h-8 w-8 text-orange-500" />
                 Stress Testing
               </h1>
@@ -359,7 +359,7 @@ export default function StressTestingPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               <Card
                 className="cursor-pointer hover:shadow-lg transition-shadow"
                 onClick={() =>
@@ -478,7 +478,7 @@ export default function StressTestingPage() {
                   <CardTitle>Stress Test Activity</CardTitle>
                   <p className="text-xs text-gray-500">Runs captured over the last 12 months</p>
                 </CardHeader>
-                <CardContent className="h-[280px]">
+                <CardContent className="h-[220px] sm:h-[280px]">
                   {testsOverTime.some((entry) => entry.count > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={testsOverTime} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
@@ -520,7 +520,7 @@ export default function StressTestingPage() {
                     <CardTitle>Scenario Mix</CardTitle>
                     <p className="text-xs text-gray-500">Categories covered across latest tests</p>
                   </CardHeader>
-                  <CardContent className="h-[200px]">
+                  <CardContent className="h-[180px] sm:h-[200px]">
                     {scenarioMix.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={scenarioMix} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
@@ -571,7 +571,7 @@ export default function StressTestingPage() {
                     <CardTitle>Severity Mix</CardTitle>
                     <p className="text-xs text-gray-500">Latest test severity levels</p>
                   </CardHeader>
-                  <CardContent className="h-[180px]">
+                  <CardContent className="h-[160px] sm:h-[180px]">
                     {severityMix.some((entry) => entry.count > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={severityMix} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -613,7 +613,7 @@ export default function StressTestingPage() {
                   <CardTitle>Alerts & Next Actions</CardTitle>
                   <p className="text-xs text-gray-500">Across all active clients</p>
                 </CardHeader>
-                <CardContent className="h-[240px] flex flex-col justify-between text-sm">
+                <CardContent className="h-auto sm:h-[240px] flex flex-col gap-4 text-sm">
                   <div className="space-y-3">
                     <div
                       {...getInteractiveRowProps(
@@ -691,7 +691,7 @@ export default function StressTestingPage() {
                   <CardTitle>Coverage Funnel</CardTitle>
                   <p className="text-xs text-gray-500">From scenarios to stress test reports</p>
                 </CardHeader>
-                <CardContent className="h-[240px]">
+                <CardContent className="h-[220px] sm:h-[240px]">
                   {coverageSeries.some((entry) => entry.count > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
@@ -741,7 +741,7 @@ export default function StressTestingPage() {
                   <CardTitle>Resilience Distribution</CardTitle>
                   <p className="text-xs text-gray-500">Latest resilience scores by band</p>
                 </CardHeader>
-                <CardContent className="h-[240px]">
+                <CardContent className="h-[220px] sm:h-[240px]">
                   {resilienceDistribution.some((entry) => entry.count > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={resilienceDistribution}>
@@ -806,11 +806,11 @@ export default function StressTestingPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredClients.map((client) => (
                       <div
                         key={client.id}
-                        className="bg-white p-6 rounded-lg border hover:border-orange-300 hover:shadow-lg transition-all cursor-pointer group"
+                        className="bg-white p-4 sm:p-6 rounded-lg border hover:border-orange-300 hover:shadow-lg transition-all cursor-pointer group"
                         onClick={() => handleClientSelect(client)}
                       >
                         <div className="flex items-start justify-between mb-4">
@@ -867,8 +867,8 @@ export default function StressTestingPage() {
           {/* Header */}
           <div className="sticky top-0 bg-white border-b z-10">
             <div className="container mx-auto px-4">
-              <div className="flex items-center justify-between h-16">
-                <div className="flex items-center space-x-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-3 sm:h-16">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <Button
                     variant="ghost"
                     onClick={() => {
@@ -876,7 +876,7 @@ export default function StressTestingPage() {
                       setResults([]);
                       router.push('/stress-testing');
                     }}
-                    className="flex items-center space-x-2"
+                    className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     <span>Back to Clients</span>
@@ -912,46 +912,46 @@ export default function StressTestingPage() {
             {monteCarloSuccessRate !== null && (
               <Card className="bg-blue-50 border-blue-200">
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <LineChartIcon className="h-6 w-6 text-blue-600" />
-                    <div>
-                      <p className="font-medium text-blue-900">Monte Carlo Success Rate</p>
-                      <p className="text-2xl font-bold text-blue-700">{monteCarloSuccessRate.toFixed(1)}%</p>
-                    </div>
-                    <div className="ml-auto">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/monte-carlo?clientId=${selectedClient.id}`)}
-                        className="text-blue-700 border-blue-300"
-                      >
-                        View Monte Carlo
-                      </Button>
-                    </div>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <LineChartIcon className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <p className="font-medium text-blue-900">Monte Carlo Success Rate</p>
+                    <p className="text-2xl font-bold text-blue-700">{monteCarloSuccessRate.toFixed(1)}%</p>
                   </div>
+                  <div className="w-full sm:w-auto sm:ml-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/monte-carlo?clientId=${selectedClient.id}`)}
+                      className="w-full sm:w-auto text-blue-700 border-blue-300"
+                    >
+                      View Monte Carlo
+                    </Button>
+                  </div>
+                </div>
                 </CardContent>
               </Card>
             )}
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="scenarios" className="flex items-center gap-2">
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2">
+                <TabsTrigger value="scenarios" className="flex items-center gap-2 text-xs sm:text-sm">
                   <AlertTriangle className="h-4 w-4" />
                   Scenarios
                 </TabsTrigger>
-                <TabsTrigger value="custom" className="flex items-center gap-2">
+                <TabsTrigger value="custom" className="flex items-center gap-2 text-xs sm:text-sm">
                   <Filter className="h-4 w-4" />
                   Custom
                 </TabsTrigger>
-                <TabsTrigger value="results" className="flex items-center gap-2">
+                <TabsTrigger value="results" className="flex items-center gap-2 text-xs sm:text-sm">
                   <BarChart3 className="h-4 w-4" />
                   Results
                   {results.length > 0 && (
                     <Badge variant="secondary" className="ml-1">{results.length}</Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="reports" className="flex items-center gap-2">
+                <TabsTrigger value="reports" className="flex items-center gap-2 text-xs sm:text-sm">
                   <FileText className="h-4 w-4" />
                   Reports
                 </TabsTrigger>
@@ -1034,13 +1034,13 @@ export default function StressTestingPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Stress Severity
                           </label>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row">
                             {(['mild', 'moderate', 'severe'] as const).map((level) => (
                               <Button
                                 key={level}
                                 variant={severity === level ? 'default' : 'outline'}
                                 onClick={() => setSeverity(level)}
-                                className={severity === level ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                                className={`${severity === level ? 'bg-orange-500 hover:bg-orange-600' : ''} w-full sm:w-auto`}
                               >
                                 {level.charAt(0).toUpperCase() + level.slice(1)}
                               </Button>
@@ -1177,17 +1177,17 @@ export default function StressTestingPage() {
                 ) : (
                   <>
                     {/* View Toggle */}
-                    <div className="flex items-center justify-between bg-white rounded-lg p-3 border shadow-sm">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg p-3 border shadow-sm">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-600">View:</span>
-                        <div className="flex rounded-lg border overflow-hidden">
+                        <div className="flex w-full sm:w-auto rounded-lg border overflow-hidden">
                           <button
                             onClick={() => setResultsViewMode('focus')}
                             className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors ${
                               resultsViewMode === 'focus'
                                 ? 'bg-orange-500 text-white'
                                 : 'bg-white text-gray-600 hover:bg-gray-50'
-                            }`}
+                            } flex-1 sm:flex-none justify-center`}
                           >
                             <Focus className="h-4 w-4" />
                             Focus
@@ -1198,7 +1198,7 @@ export default function StressTestingPage() {
                               resultsViewMode === 'list'
                                 ? 'bg-orange-500 text-white'
                                 : 'bg-white text-gray-600 hover:bg-gray-50'
-                            }`}
+                            } flex-1 sm:flex-none justify-center`}
                           >
                             <List className="h-4 w-4" />
                             List
@@ -1230,19 +1230,19 @@ export default function StressTestingPage() {
                         {/* Summary Card */}
                         <Card className="border-orange-200">
                       <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Shield className="h-5 w-5 text-orange-500" />
-                            Overall Resilience Score
-                          </div>
-                          <Button
-                            onClick={() => setShowReportModal(true)}
-                            className="bg-orange-500 hover:bg-orange-600"
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Generate Report
-                          </Button>
-                        </CardTitle>
+                      <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-5 w-5 text-orange-500" />
+                          Overall Resilience Score
+                        </div>
+                        <Button
+                          onClick={() => setShowReportModal(true)}
+                          className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Generate Report
+                        </Button>
+                      </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center justify-center py-4">
@@ -1411,9 +1411,9 @@ export default function StressTestingPage() {
                             <li>• FCA compliance documentation</li>
                           </ul>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <Button
-                            className="flex-1 bg-orange-500 hover:bg-orange-600"
+                            className="w-full sm:flex-1 bg-orange-500 hover:bg-orange-600"
                             onClick={() => handleGenerateReport('pdf')}
                             disabled={isGeneratingReport}
                           >
@@ -1426,7 +1426,7 @@ export default function StressTestingPage() {
                           </Button>
                           <Button
                             variant="outline"
-                            className="flex-1"
+                            className="w-full sm:flex-1"
                             onClick={() => handleGenerateReport('html')}
                             disabled={isGeneratingReport}
                           >

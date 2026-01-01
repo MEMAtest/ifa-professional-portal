@@ -80,6 +80,16 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
   const { clientId, isProspect } = useClientContext();
   const sidebarRef = useRef<HTMLDivElement | null>(null)
   const lastActiveRef = useRef<HTMLElement | null>(null)
+  const bodyStyleRef = useRef<{
+    overflow: string
+    position: string
+    top: string
+    width: string
+    touchAction: string
+  } | null>(null)
+  const htmlOverflowRef = useRef<string>('')
+  const scrollYRef = useRef(0)
+  const lastLocationRef = useRef<string>('')
   const [isMobile, setIsMobile] = useState(false)
   const [cashFlowStats, setCashFlowStats] = useState<CashFlowStats>({
     totalScenarios: 0,
@@ -202,12 +212,30 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     }
   }, [isMobile, onClose])
 
+  const searchKey = searchParams?.toString() ?? ''
+
   useEffect(() => {
     if (!isOpen || !isMobile) return
 
     lastActiveRef.current = document.activeElement as HTMLElement | null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const body = document.body
+    const html = document.documentElement
+    scrollYRef.current = window.scrollY
+    bodyStyleRef.current = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      touchAction: body.style.touchAction
+    }
+    htmlOverflowRef.current = html.style.overflow
+
+    body.style.overflow = 'hidden'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollYRef.current}px`
+    body.style.width = '100%'
+    body.style.touchAction = 'none'
+    html.style.overflow = 'hidden'
     sidebarRef.current?.focus()
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -239,11 +267,32 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.body.style.overflow = previousOverflow
+      const previousStyles = bodyStyleRef.current
+      if (previousStyles) {
+        body.style.overflow = previousStyles.overflow
+        body.style.position = previousStyles.position
+        body.style.top = previousStyles.top
+        body.style.width = previousStyles.width
+        body.style.touchAction = previousStyles.touchAction
+      }
+      html.style.overflow = htmlOverflowRef.current
+      window.scrollTo(0, scrollYRef.current)
       document.removeEventListener('keydown', handleKeyDown)
       lastActiveRef.current?.focus()
     }
   }, [isOpen, isMobile, onClose])
+
+  useEffect(() => {
+    if (!isMobile) return
+    const locationKey = `${pathname}?${searchKey}`
+    const previousKey = lastLocationRef.current
+    lastLocationRef.current = locationKey
+
+    if (!previousKey || previousKey === locationKey) return
+    if (isOpen) {
+      onClose?.()
+    }
+  }, [pathname, searchKey, isMobile, isOpen, onClose])
 
   // Fetch stats
   useEffect(() => {
@@ -334,14 +383,19 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
         role={isMobile ? 'dialog' : undefined}
         aria-modal={isMobile ? true : undefined}
         aria-label="Primary navigation"
+        aria-hidden={isMobile && !isOpen ? true : undefined}
         tabIndex={-1}
         ref={sidebarRef}
         className={cn(
-          'fixed left-0 top-[var(--app-header-height)] w-64 bg-white border-r border-gray-200 overflow-y-auto z-50',
+          'fixed left-0 top-[var(--app-header-height)] w-64 bg-white border-r border-gray-200 overflow-y-auto overscroll-contain touch-pan-y z-50',
           'transform transition-transform lg:translate-x-0',
-          'h-[calc(100dvh-var(--app-header-height))] pb-[env(safe-area-inset-bottom)]',
+          'h-[calc(100vh-var(--app-header-height))] pb-[env(safe-area-inset-bottom)]',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
+        style={{
+          height: 'calc(100dvh - var(--app-header-height))',
+          WebkitOverflowScrolling: 'touch'
+        }}
       >
       <nav className="p-4 space-y-6">
         <div className="flex items-center justify-between lg:hidden">
