@@ -7,12 +7,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { log } from '@/lib/logging/structured'
 
-// Initialize Resend with your API key - MUST be set in environment
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Lazy initialize Resend to avoid build-time errors
+let resend: Resend | null = null
 
-// Validate at startup
-if (!process.env.RESEND_API_KEY) {
-  log.error('RESEND_API_KEY environment variable is not set')
+function getResendClient(): Resend {
+  if (!resend) {
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY environment variable is not set')
+    }
+    resend = new Resend(process.env.RESEND_API_KEY)
+  }
+  return resend
 }
 
 // Email templates (keeping existing ones)
@@ -296,7 +301,7 @@ export async function POST(request: NextRequest) {
         emailData.attachments = attachments
       }
 
-      const { data: resendData, error } = await resend.emails.send(emailData)
+      const { data: resendData, error } = await getResendClient().emails.send(emailData)
 
       if (error) {
         log.error('Resend error', { message: error.message, name: error.name })
