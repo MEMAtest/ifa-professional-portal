@@ -30,6 +30,15 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   // Define pages that don't need layout (public/client-facing pages)
   const isPublicPage = pathname === '/login' ||
                        pathname === '/' ||
+                       pathname === '/marketing' ||
+                       pathname.startsWith('/marketing/') ||
+                       pathname === '/privacy' ||
+                       pathname === '/terms' ||
+                       pathname === '/gdpr' ||
+                       pathname === '/about' ||
+                       pathname === '/contact' ||
+                       pathname === '/blog' ||
+                       pathname.startsWith('/blog/') ||
                        pathname.startsWith('/client/')
 
   if (loading) {

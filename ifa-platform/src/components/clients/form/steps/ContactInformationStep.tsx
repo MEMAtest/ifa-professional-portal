@@ -16,7 +16,7 @@ export function ContactInformationStep({
       <CardHeader>
         <CardTitle>Contact Information</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5 sm:space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
@@ -24,7 +24,7 @@ export function ContactInformationStep({
               type="email"
               value={formData.contactInfo.email}
               onChange={(e) => onUpdateContactInfo({ email: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="client@example.com"
               required
             />
@@ -36,7 +36,7 @@ export function ContactInformationStep({
               type="tel"
               value={formData.contactInfo.phone || ''}
               onChange={(e) => onUpdateContactInfo({ phone: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="01234 567890"
             />
           </div>
@@ -49,7 +49,7 @@ export function ContactInformationStep({
               type="tel"
               value={formData.contactInfo.mobile || ''}
               onChange={(e) => onUpdateContactInfo({ mobile: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="07700 900123"
             />
           </div>
@@ -59,7 +59,7 @@ export function ContactInformationStep({
             <select
               value={formData.contactInfo.preferredContact}
               onChange={(e) => onUpdateContactInfo({ preferredContact: e.target.value as ContactInfo['preferredContact'] })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="email">Email</option>
               <option value="phone">Phone</option>
@@ -86,6 +86,7 @@ export function ContactInformationStep({
               })
             }
             label="Address"
+            className="sm:space-y-4"
           />
         </div>
 

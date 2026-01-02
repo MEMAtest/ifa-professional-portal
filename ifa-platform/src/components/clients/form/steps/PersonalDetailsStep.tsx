@@ -1,8 +1,9 @@
+import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { OccupationAutocomplete } from '@/components/suitability/sections/personal/OccupationAutocomplete';
 import { CLIENT_STATUS_OPTIONS } from '@/components/clients/form/constants';
-import { ISO_COUNTRIES, DEFAULT_NATIONALITY_CODE } from '@/lib/isoCountries';
+import { ISO_COUNTRIES, DEFAULT_NATIONALITY_CODE, getCountryLabel } from '@/lib/isoCountries';
 import type { ClientFormData, ClientStatus, PersonalDetails } from '@/types/client';
 
 interface PersonalDetailsStepProps {
@@ -18,6 +19,25 @@ export function PersonalDetailsStep({
   onUpdatePersonalDetails,
   onUpdateStatus
 }: PersonalDetailsStepProps) {
+  const [nationalitySearch, setNationalitySearch] = useState('');
+
+  const filteredNationalities = useMemo(() => {
+    const query = nationalitySearch.trim().toLowerCase();
+    if (!query) return ISO_COUNTRIES;
+    return ISO_COUNTRIES.filter(
+      (country) =>
+        country.name.toLowerCase().includes(query) ||
+        country.code.toLowerCase().includes(query)
+    );
+  }, [nationalitySearch]);
+
+  const selectedNationalityCode = formData.personalDetails.nationality || DEFAULT_NATIONALITY_CODE;
+  const selectedNationalityLabel = getCountryLabel(selectedNationalityCode) || selectedNationalityCode;
+  const nationalityOptions =
+    filteredNationalities.length > 0
+      ? filteredNationalities
+      : [{ code: selectedNationalityCode, name: selectedNationalityLabel }];
+
   return (
     <Card>
       <CardHeader>
@@ -30,14 +50,14 @@ export function PersonalDetailsStep({
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5 sm:space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
             <select
               value={formData.personalDetails.title}
               onChange={(e) => onUpdatePersonalDetails({ title: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Select title</option>
               <option value="Mr">Mr</option>
@@ -56,7 +76,7 @@ export function PersonalDetailsStep({
               type="text"
               value={formData.personalDetails.firstName}
               onChange={(e) => onUpdatePersonalDetails({ firstName: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="First name"
               required
             />
@@ -68,7 +88,7 @@ export function PersonalDetailsStep({
               type="text"
               value={formData.personalDetails.lastName}
               onChange={(e) => onUpdatePersonalDetails({ lastName: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Last name"
               required
             />
@@ -79,7 +99,7 @@ export function PersonalDetailsStep({
             <select
               value={formData.status}
               onChange={(e) => onUpdateStatus(e.target.value as ClientStatus)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               {CLIENT_STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -97,23 +117,35 @@ export function PersonalDetailsStep({
               type="date"
               value={formData.personalDetails.dateOfBirth}
               onChange={(e) => onUpdatePersonalDetails({ dateOfBirth: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nationality (ISO)</label>
+            <input
+              type="text"
+              value={nationalitySearch}
+              onChange={(e) => setNationalitySearch(e.target.value)}
+              placeholder="Search nationality..."
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm mb-2"
+            />
             <select
-              value={formData.personalDetails.nationality || DEFAULT_NATIONALITY_CODE}
+              value={selectedNationalityCode}
               onChange={(e) => onUpdatePersonalDetails({ nationality: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              {ISO_COUNTRIES.map((country) => (
+              {nationalityOptions.map((country) => (
                 <option key={country.code} value={country.code}>
                   {country.name}
                 </option>
               ))}
+              {filteredNationalities.length === 0 && (
+                <option value="" disabled>
+                  No matches found
+                </option>
+              )}
             </select>
           </div>
         </div>
@@ -128,7 +160,7 @@ export function PersonalDetailsStep({
                   gender: e.target.value as PersonalDetails['gender']
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="prefer_not_to_say">Prefer not to say</option>
               <option value="male">Male</option>
@@ -147,7 +179,7 @@ export function PersonalDetailsStep({
                   maritalStatus: e.target.value as PersonalDetails['maritalStatus']
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="single">Single</option>
               <option value="married">Married</option>
@@ -167,7 +199,7 @@ export function PersonalDetailsStep({
               min="0"
               value={formData.personalDetails.dependents}
               onChange={(e) => onUpdatePersonalDetails({ dependents: parseInt(e.target.value, 10) || 0 })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="0"
             />
           </div>
@@ -181,7 +213,7 @@ export function PersonalDetailsStep({
                   employmentStatus: e.target.value as PersonalDetails['employmentStatus']
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="employed">Employed</option>
               <option value="self_employed">Self-Employed</option>

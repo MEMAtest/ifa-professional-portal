@@ -66,6 +66,8 @@ export function EnhancedAddressField({
   const [houseNumber, setHouseNumber] = useState('')
   const [addressLine2, setAddressLine2] = useState('')
   const [areaInfo, setAreaInfo] = useState({ city: '', county: '' })
+  const [manualEntry, setManualEntry] = useState(false)
+  const [manualLine1, setManualLine1] = useState('')
 
   const [isLoadingPostcodes, setIsLoadingPostcodes] = useState(false)
   const [isLoadingStreets, setIsLoadingStreets] = useState(false)
@@ -103,6 +105,7 @@ export function EnhancedAddressField({
         } else {
           setSelectedStreet(value.line1)
         }
+        setManualLine1(value.line1)
       }
       if (value.line2) setAddressLine2(value.line2)
     }
@@ -132,6 +135,24 @@ export function EnhancedAddressField({
       country: 'United Kingdom'
     }
 
+    onChangeRef.current(address)
+  }, [])
+
+  const emitManualAddress = useCallback((
+    line1: string,
+    line2: string,
+    city: string,
+    county: string,
+    postcodeValue: string
+  ) => {
+    const address: AddressComponents = {
+      line1: line1 || '',
+      line2: line2 || undefined,
+      city: city || '',
+      county: county || '',
+      postcode: postcodeValue || '',
+      country: 'United Kingdom'
+    }
     onChangeRef.current(address)
   }, [])
 
@@ -170,6 +191,68 @@ export function EnhancedAddressField({
       emitAddress(newHouseNumber, newSelectedStreet, newCustomStreet, newAddressLine2, areaInfo, postcode)
     }
   }, [houseNumber, selectedStreet, customStreet, addressLine2, postcode, areaInfo, emitAddress])
+
+  const updateManualField = useCallback((field: string, newValue: string) => {
+    let nextLine1 = manualLine1
+    let nextLine2 = addressLine2
+    let nextCity = areaInfo.city
+    let nextCounty = areaInfo.county
+    let nextPostcode = postcode
+
+    switch (field) {
+      case 'line1':
+        nextLine1 = newValue
+        setManualLine1(newValue)
+        break
+      case 'line2':
+        nextLine2 = newValue
+        setAddressLine2(newValue)
+        break
+      case 'city':
+        nextCity = newValue
+        setAreaInfo((prev) => ({ ...prev, city: newValue }))
+        break
+      case 'county':
+        nextCounty = newValue
+        setAreaInfo((prev) => ({ ...prev, county: newValue }))
+        break
+      case 'postcode': {
+        const normalized = newValue.toUpperCase()
+        nextPostcode = normalized
+        setPostcode(normalized)
+        setPostcodeInput(normalized)
+        break
+      }
+    }
+
+    setPostcodeError('')
+    emitManualAddress(nextLine1, nextLine2, nextCity, nextCounty, nextPostcode)
+  }, [manualLine1, addressLine2, areaInfo, postcode, emitManualAddress])
+
+  const handleEnableManualEntry = useCallback(() => {
+    const currentStreet = selectedStreet || customStreet
+    const derivedLine1 = houseNumber && currentStreet
+      ? `${houseNumber} ${currentStreet}`
+      : currentStreet || manualLine1
+
+    setManualLine1(derivedLine1)
+    setManualEntry(true)
+    setShowPostcodeDropdown(false)
+    setShowStreetDropdown(false)
+    setShowCustomStreetInput(false)
+    setPostcodeError('')
+    emitManualAddress(
+      derivedLine1,
+      addressLine2,
+      areaInfo.city,
+      areaInfo.county,
+      postcode
+    )
+  }, [addressLine2, areaInfo.city, areaInfo.county, customStreet, emitManualAddress, houseNumber, manualLine1, postcode, selectedStreet])
+
+  const handleDisableManualEntry = useCallback(() => {
+    setManualEntry(false)
+  }, [])
 
   // Fetch postcode suggestions as user types
   const fetchPostcodeSuggestions = useCallback(async (query: string) => {
@@ -310,6 +393,8 @@ export function EnhancedAddressField({
     setPostcodeError('')
     setShowCustomStreetInput(false)
     setShowPostcodeDropdown(false)
+    setManualEntry(false)
+    setManualLine1('')
     onChangeRef.current({
       line1: '',
       line2: '',
@@ -321,7 +406,11 @@ export function EnhancedAddressField({
   }
 
   const hasAreaInfo = areaInfo.city || streets.length > 0
+  const showLookupPanel = !manualEntry && hasAreaInfo
   const currentStreet = selectedStreet || customStreet
+  const previewLine1 = houseNumber && currentStreet
+    ? `${houseNumber} ${currentStreet}`
+    : currentStreet || houseNumber
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -331,54 +420,166 @@ export function EnhancedAddressField({
         {label} {required && <span className="text-red-500">*</span>}
       </label>
 
-      {/* Step 1: Postcode Input with Autocomplete */}
-      <div className="relative" ref={postcodeDropdownRef}>
-        <div className="relative">
-          <Input
-            type="text"
-            value={postcodeInput}
-            onChange={handlePostcodeInputChange}
-            onKeyDown={handlePostcodeKeyDown}
-            onFocus={() => postcodeSuggestions.length > 0 && setShowPostcodeDropdown(true)}
-            placeholder="Start typing postcode (e.g. SE20)"
-            disabled={disabled || isLoadingStreets}
-            className={cn(
-              "pr-10",
-              postcodeError && "border-red-500",
-              hasAreaInfo && "border-green-500"
-            )}
-          />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {isLoadingPostcodes && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            {hasAreaInfo && (
-              <button
-                type="button"
-                onClick={handleReset}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+      {!manualEntry && (
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center" ref={postcodeDropdownRef}>
+            <div className="relative flex-1">
+              <Input
+                type="text"
+                value={postcodeInput}
+                onChange={handlePostcodeInputChange}
+                onKeyDown={handlePostcodeKeyDown}
+                onFocus={() => postcodeSuggestions.length > 0 && setShowPostcodeDropdown(true)}
+                placeholder="Start typing postcode (e.g. SE20)"
+                disabled={disabled || isLoadingStreets}
+                inputMode="search"
+                autoComplete="postal-code"
+                enterKeyHint="search"
+                className={cn(
+                  "pr-10 text-base sm:text-sm",
+                  postcodeError && "border-red-500",
+                  hasAreaInfo && "border-green-500"
+                )}
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {isLoadingPostcodes && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+                {hasAreaInfo && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {showPostcodeDropdown && postcodeSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-auto">
+                  {postcodeSuggestions.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handlePostcodeSelect(suggestion)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between"
+                    >
+                      <span>{suggestion}</span>
+                      {index === 0 && <span className="text-xs text-gray-400">Press Enter</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const trimmed = postcodeInput.trim()
+                if (trimmed.length >= 5) {
+                  handlePostcodeSelect(trimmed)
+                }
+              }}
+              disabled={disabled || isLoadingStreets || postcodeInput.trim().length < 5}
+              className={cn(
+                "w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md border",
+                "border-gray-200 bg-white text-gray-700 hover:border-gray-300",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+            >
+              Find address
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={handleEnableManualEntry}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Enter address manually
+          </button>
+        </div>
+      )}
+
+      {manualEntry && (
+        <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium text-gray-700">Manual address entry</p>
+            <button
+              type="button"
+              onClick={handleDisableManualEntry}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              Use postcode lookup
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-gray-700">Address Line 1 *</label>
+              <Input
+                type="text"
+                value={manualLine1}
+                onChange={(e) => updateManualField('line1', e.target.value)}
+                placeholder="Street address"
+                disabled={disabled}
+                className="bg-white text-base sm:text-sm mt-1"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-gray-700">
+                Address Line 2 <span className="text-gray-400">(optional)</span>
+              </label>
+              <Input
+                type="text"
+                value={addressLine2}
+                onChange={(e) => updateManualField('line2', e.target.value)}
+                placeholder="Apartment, suite, etc."
+                disabled={disabled}
+                className="bg-white text-base sm:text-sm mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700">City/Town *</label>
+              <Input
+                type="text"
+                value={areaInfo.city}
+                onChange={(e) => updateManualField('city', e.target.value)}
+                placeholder="City"
+                disabled={disabled}
+                className="bg-white text-base sm:text-sm mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700">County</label>
+              <Input
+                type="text"
+                value={areaInfo.county}
+                onChange={(e) => updateManualField('county', e.target.value)}
+                placeholder="County"
+                disabled={disabled}
+                className="bg-white text-base sm:text-sm mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700">Postcode *</label>
+              <Input
+                type="text"
+                value={postcode}
+                onChange={(e) => updateManualField('postcode', e.target.value)}
+                placeholder="Postcode"
+                disabled={disabled}
+                className="bg-white text-base sm:text-sm mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700">Country</label>
+              <Input
+                type="text"
+                value="United Kingdom"
+                disabled
+                className="bg-white text-base sm:text-sm mt-1"
+              />
+            </div>
           </div>
         </div>
-
-        {/* Postcode autocomplete dropdown */}
-        {showPostcodeDropdown && postcodeSuggestions.length > 0 && (
-          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-auto">
-            {postcodeSuggestions.map((suggestion, index) => (
-              <button
-                key={index}
-                type="button"
-                onClick={() => handlePostcodeSelect(suggestion)}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between"
-              >
-                <span>{suggestion}</span>
-                {index === 0 && <span className="text-xs text-gray-400">Press Enter</span>}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {postcodeError && (
         <p className="text-sm text-red-600 flex items-center gap-1">
@@ -388,7 +589,7 @@ export function EnhancedAddressField({
       )}
 
       {/* Loading streets indicator */}
-      {isLoadingStreets && (
+      {!manualEntry && isLoadingStreets && (
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" />
           Finding streets...
@@ -396,7 +597,7 @@ export function EnhancedAddressField({
       )}
 
       {/* Step 2: Street Selection (shown after postcode lookup) */}
-      {hasAreaInfo && (
+      {showLookupPanel && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-blue-900">
@@ -419,7 +620,7 @@ export function EnhancedAddressField({
                   disabled={disabled}
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-2 bg-white border rounded-md text-left",
-                    "hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                    "hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm",
                     currentStreet ? "text-gray-900" : "text-gray-500"
                   )}
                 >
@@ -462,11 +663,11 @@ export function EnhancedAddressField({
               <div className="space-y-2">
                 <Input
                   type="text"
-                  value={customStreet}
+                  value={currentStreet}
                   onChange={(e) => updateAndEmit('customStreet', e.target.value)}
                   placeholder="Enter street name (e.g. Tremaine Road)"
                   disabled={disabled}
-                  className="bg-white"
+                  className="bg-white text-base sm:text-sm"
                 />
                 {streets.length > 0 && (
                   <button
@@ -495,7 +696,7 @@ export function EnhancedAddressField({
               onChange={(e) => updateAndEmit('houseNumber', e.target.value)}
               placeholder="e.g. 42, 15A, Flat 3"
               disabled={disabled}
-              className="bg-white mt-1"
+              className="bg-white mt-1 text-base sm:text-sm"
             />
           </div>
 
@@ -510,8 +711,17 @@ export function EnhancedAddressField({
               onChange={(e) => updateAndEmit('addressLine2', e.target.value)}
               placeholder="e.g. Flat 4, Building Name"
               disabled={disabled}
-              className="bg-white mt-1"
+              className="bg-white mt-1 text-base sm:text-sm"
             />
+          </div>
+
+          <div className="rounded-md border border-dashed border-blue-200 bg-white px-3 py-2 text-xs text-gray-600">
+            <span className="font-medium text-gray-700">Preview:</span>{' '}
+            {previewLine1
+              ? [previewLine1, addressLine2, areaInfo.city, areaInfo.county, postcode]
+                  .filter(Boolean)
+                  .join(', ')
+              : 'Add house number and street to build line 1.'}
           </div>
 
           {/* Auto-filled info */}
@@ -523,7 +733,7 @@ export function EnhancedAddressField({
       )}
 
       {/* Help text when no postcode entered */}
-      {!hasAreaInfo && !postcodeError && (
+      {!manualEntry && !hasAreaInfo && !postcodeError && (
         <p className="text-xs text-gray-500">
           Enter your UK postcode to find your street
         </p>

@@ -45,6 +45,7 @@ export const OccupationAutocomplete = ({
   const [otherValue, setOtherValue] = useState('')
   const suggestions = useMemo(() => filterOccupations(value), [value])
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const otherInputRef = useRef<HTMLInputElement | null>(null)
   const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null)
 
   useEffect(() => {
@@ -103,6 +104,14 @@ export const OccupationAutocomplete = ({
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOtherSelected) return
+    const timer = setTimeout(() => {
+      otherInputRef.current?.focus()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [isOtherSelected])
+
   return (
     <div className="relative">
       <input
@@ -113,6 +122,11 @@ export const OccupationAutocomplete = ({
         onChange={(e) => {
           onChange(e.target.value)
           setIsOpen(true)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setIsOpen(false)
+          }
         }}
         onFocus={() => {
           setIsOpen(true)
@@ -126,9 +140,13 @@ export const OccupationAutocomplete = ({
         placeholder={placeholder}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
+        aria-autocomplete="list"
+        aria-expanded={isOpen}
         autoComplete="off"
+        inputMode="text"
+        autoCapitalize="words"
         className={cn(
-          'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+          'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm',
           'ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           'disabled:cursor-not-allowed disabled:opacity-50',
           className
@@ -185,6 +203,7 @@ export const OccupationAutocomplete = ({
           <input
             id={`${id}-other`}
             type="text"
+            ref={otherInputRef}
             value={otherValue}
             onChange={(e) => {
               const next = e.target.value
@@ -193,11 +212,13 @@ export const OccupationAutocomplete = ({
             }}
             placeholder="Enter occupation"
             className={cn(
-              'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+              'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm',
               'ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               'disabled:cursor-not-allowed disabled:opacity-50'
             )}
             disabled={disabled}
+            inputMode="text"
+            autoCapitalize="words"
           />
         </div>
       )}

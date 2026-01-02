@@ -12,7 +12,7 @@ export function RiskProfileStep({ formData, onUpdateRiskProfile }: RiskProfileSt
       <CardHeader>
         <CardTitle>Risk Profile</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5 sm:space-y-4">
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <p className="text-sm text-yellow-800">
             Risk assessment questionnaires will be completed separately. This section is for reference only.
@@ -25,7 +25,7 @@ export function RiskProfileStep({ formData, onUpdateRiskProfile }: RiskProfileSt
             <select
               value={formData.riskProfile?.riskTolerance || ''}
               onChange={(e) => onUpdateRiskProfile({ riskTolerance: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Not yet assessed</option>
               <option value="conservative">Conservative</option>
@@ -40,7 +40,7 @@ export function RiskProfileStep({ formData, onUpdateRiskProfile }: RiskProfileSt
             <select
               value={formData.riskProfile?.knowledgeExperience || ''}
               onChange={(e) => onUpdateRiskProfile({ knowledgeExperience: e.target.value })}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Not yet assessed</option>
               <option value="basic">Basic</option>

@@ -2,29 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
+import { MarketingShell } from '@/components/marketing/MarketingShell'
 
 // ============================================================================
 // MARKETING PAGE - Complete Landing Page for Plannetic
 // ============================================================================
 
 export const MarketingPage = () => {
-  const [isScrolled, setIsScrolled] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [selectedFeature, setSelectedFeature] = useState<string | null>(null)
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
-
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <Navigation isScrolled={isScrolled} mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
-
+    <MarketingShell>
       {/* Hero Section */}
       <HeroSection />
 
@@ -54,99 +43,9 @@ export const MarketingPage = () => {
       {/* Compliance & Security */}
       <ComplianceSection />
 
-      {/* Testimonials */}
-      <TestimonialsSection />
-
       {/* CTA Section */}
       <CTASection />
-
-      {/* Footer */}
-      <Footer />
-    </div>
-  )
-}
-
-// ============================================================================
-// NAVIGATION
-// ============================================================================
-
-const Navigation = ({
-  isScrolled,
-  mobileMenuOpen,
-  setMobileMenuOpen
-}: {
-  isScrolled: boolean
-  mobileMenuOpen: boolean
-  setMobileMenuOpen: (open: boolean) => void
-}) => {
-  return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      isScrolled ? 'bg-white shadow-sm border-b border-gray-100' : 'bg-white/80 backdrop-blur-sm'
-    }`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 lg:h-20">
-          {/* Logo */}
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center mr-3">
-              <span className="text-white font-bold text-lg">P</span>
-            </div>
-            <span className="text-xl font-bold text-gray-900">plannetic</span>
-          </div>
-
-          {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center space-x-8">
-            <a href="#demo" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
-              Try Demo
-            </a>
-            <a href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
-              Features
-            </a>
-            <a href="#security" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
-              Security
-            </a>
-          </div>
-
-          {/* CTA Buttons */}
-          <div className="hidden lg:flex items-center space-x-4">
-            <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
-              Sign In
-            </Link>
-            <Link
-              href="/login"
-              className="px-5 py-2.5 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              Start Free Trial
-            </Link>
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {mobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
-        </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden bg-white border-t py-4 space-y-4">
-            <a href="#demo" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">Try Demo</a>
-            <a href="#features" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">Features</a>
-            <a href="#security" className="block px-4 py-2 text-gray-700 hover:bg-gray-50">Security</a>
-            <div className="px-4 pt-4 border-t space-y-2">
-              <Link href="/login" className="block w-full text-center py-2 text-gray-700">Sign In</Link>
-              <Link href="/login" className="block w-full text-center py-2.5 bg-teal-600 text-white rounded-lg">
-                Start Free Trial
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
-    </nav>
+    </MarketingShell>
   )
 }
 
@@ -286,8 +185,8 @@ const EnhancedDashboardPreview = () => (
     {/* Header */}
     <div className="flex items-center justify-between">
       <div>
-        <h3 className="text-white font-semibold text-sm">Good morning, Sarah</h3>
-        <p className="text-slate-400 text-xs">Mitchell Financial Planning</p>
+        <h3 className="text-white font-semibold text-sm">Good morning, Adviser</h3>
+        <p className="text-slate-400 text-xs">Adviser Workspace</p>
       </div>
       <div className="flex gap-2">
         <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
@@ -330,9 +229,9 @@ const EnhancedDashboardPreview = () => (
         <p className="text-teal-400 text-xs">View all</p>
       </div>
       {[
-        { name: 'James Thompson', status: 'ATR Complete', statusColor: 'bg-green-500', risk: '6/10' },
-        { name: 'Emma Williams', status: 'CFL Pending', statusColor: 'bg-amber-500', risk: '4/10' },
-        { name: 'Robert Chen', status: 'Review Due', statusColor: 'bg-red-500', risk: '7/10' },
+        { name: 'Client A', status: 'ATR Complete', statusColor: 'bg-green-500', risk: '6/10' },
+        { name: 'Client B', status: 'CFL Pending', statusColor: 'bg-amber-500', risk: '4/10' },
+        { name: 'Client C', status: 'Review Due', statusColor: 'bg-red-500', risk: '7/10' },
       ].map((client, i) => (
         <div key={i} className="flex items-center gap-3 py-2 border-t border-slate-700/50 first:border-0">
           <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center text-white text-xs font-medium">
@@ -713,6 +612,104 @@ const SuitabilityFormDemo = () => {
               </ul>
             </div>
           )}
+
+          {/* Risk Scoring Breakdown */}
+          <div className="mb-6">
+            <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+              <svg className="w-5 h-5 text-purple-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+              </svg>
+              How Your Score Was Calculated
+            </h4>
+            <div className="bg-purple-50 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">Knowledge & Experience</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span key={i} className={`w-3 h-3 rounded-full ${i <= (formData.investmentExperience === 'experienced' ? 5 : formData.investmentExperience === 'intermediate' ? 3 : 2) ? 'bg-purple-500' : 'bg-purple-200'}`} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">Financial Situation</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span key={i} className={`w-3 h-3 rounded-full ${i <= (formData.totalInvestableAssets > 100000 ? 4 : formData.totalInvestableAssets > 50000 ? 3 : 2) ? 'bg-purple-500' : 'bg-purple-200'}`} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">Investment Objectives</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span key={i} className={`w-3 h-3 rounded-full ${i <= 4 ? 'bg-purple-500' : 'bg-purple-200'}`} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">Risk Tolerance</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span key={i} className={`w-3 h-3 rounded-full ${i <= (formData.investmentExperience === 'experienced' ? 4 : 3) ? 'bg-purple-500' : 'bg-purple-200'}`} />
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-purple-200 pt-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-900">Overall Suitability Score</span>
+                  <span className="text-sm font-bold text-purple-700">{result.suitabilityLevel === 'Suitable' ? '16' : result.suitabilityLevel === 'Suitable with Conditions' ? '14' : '10'}/20</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Consumer Duty Alignment */}
+          <div className="mb-6">
+            <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+              <svg className="w-5 h-5 text-emerald-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Consumer Duty Alignment
+            </h4>
+            <div className="bg-emerald-50 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <svg className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Understanding (Outcome 1)</p>
+                  <p className="text-xs text-gray-600">Client comprehension verified through experience assessment</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <svg className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Fair Value (Outcome 2)</p>
+                  <p className="text-xs text-gray-600">Costs proportionate to service level and client needs</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <svg className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Suitable Products (Outcome 3)</p>
+                  <p className="text-xs text-gray-600">Recommendations matched to stated objectives and risk tolerance</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <svg className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Support (Outcome 4)</p>
+                  <p className="text-xs text-gray-600">Ongoing review scheduled and documented</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* FCA Compliance Note */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
@@ -1474,6 +1471,7 @@ const CashFlowDemo = () => {
           Interactive Cash Flow Projection
         </h3>
         <p className="text-slate-400 text-sm mt-1">Adjust the sliders to model your retirement scenario</p>
+        <p className="text-slate-500 text-xs mt-1">See how savings grow during accumulation (teal) and draw down in retirement (amber). Assumes 5% annual growth.</p>
       </div>
 
       <div className="p-6">
@@ -1637,10 +1635,16 @@ const CashFlowDemo = () => {
 // ============================================================================
 
 const MonteCarloDemo = () => {
+  const [currentPortfolio, setCurrentPortfolio] = useState(250000)
   const [portfolioValue, setPortfolioValue] = useState(500000)
   const [annualWithdrawal, setAnnualWithdrawal] = useState(20000)
   const [yearsInRetirement, setYearsInRetirement] = useState(25)
   const [riskLevel, setRiskLevel] = useState(5)
+
+  // Asset allocation (must sum to 100)
+  const [equities, setEquities] = useState(60)
+  const [bonds, setBonds] = useState(30)
+  const cash = 100 - equities - bonds
 
   // Calculate withdrawal rate
   const withdrawalRate = (annualWithdrawal / portfolioValue) * 100
@@ -1649,17 +1653,25 @@ const MonteCarloDemo = () => {
   const isWithdrawalTooHigh = withdrawalRate > 5
   const isCritical = withdrawalRate > 7
 
-  // Calculate success rate based on inputs
+  // Calculate success rate based on inputs (including allocation)
   const baseSuccess = 95
   const withdrawalPenalty = Math.max(0, (withdrawalRate - 4) * 10)
   const yearsPenalty = Math.max(0, (yearsInRetirement - 20) * 1.5)
   const riskBonus = (riskLevel - 5) * 2
-  const successRate = Math.max(15, Math.min(98, Math.round(baseSuccess - withdrawalPenalty - yearsPenalty + riskBonus)))
+  const allocationBonus = (equities - 50) * 0.1 // Higher equities = slightly better long-term
+  const successRate = Math.max(15, Math.min(98, Math.round(baseSuccess - withdrawalPenalty - yearsPenalty + riskBonus + allocationBonus)))
 
   // Simulate percentile outcomes
   const p10 = Math.round(portfolioValue * (0.3 + (successRate / 200)))
   const p50 = Math.round(portfolioValue * (0.8 + (successRate / 400)))
   const p90 = Math.round(portfolioValue * (1.5 + (successRate / 150)))
+
+  // Mini pie chart for allocation
+  const pieSegments = [
+    { name: 'Equities', value: equities, color: '#0d9488' },
+    { name: 'Bonds', value: bonds, color: '#3b82f6' },
+    { name: 'Cash', value: cash, color: '#9ca3af' }
+  ]
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
@@ -1675,6 +1687,113 @@ const MonteCarloDemo = () => {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Controls */}
           <div className="space-y-5">
+            {/* Current Portfolio */}
+            <div>
+              <label className="flex justify-between text-sm font-medium text-gray-700 mb-2">
+                <span>Current Portfolio Value</span>
+                <span className="text-teal-600 font-bold">£{currentPortfolio.toLocaleString()}</span>
+              </label>
+              <input
+                type="range"
+                min="50000"
+                max="1000000"
+                step="25000"
+                value={currentPortfolio}
+                onChange={(e) => setCurrentPortfolio(Number(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
+              />
+            </div>
+
+            {/* Asset Allocation */}
+            <div className="bg-slate-50 rounded-xl p-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Asset Allocation</p>
+              <div className="flex gap-4 items-start">
+                {/* Mini Donut Chart */}
+                <div className="relative w-20 h-20 flex-shrink-0">
+                  <svg viewBox="0 0 32 32" className="w-full h-full -rotate-90">
+                    {pieSegments.reduce((acc, segment, i) => {
+                      const offset = acc.offset
+                      const circumference = 2 * Math.PI * 12
+                      const strokeDasharray = (segment.value / 100) * circumference
+                      acc.elements.push(
+                        <circle
+                          key={segment.name}
+                          cx="16"
+                          cy="16"
+                          r="12"
+                          fill="none"
+                          stroke={segment.color}
+                          strokeWidth="6"
+                          strokeDasharray={`${strokeDasharray} ${circumference}`}
+                          strokeDashoffset={-offset}
+                        />
+                      )
+                      acc.offset += strokeDasharray
+                      return acc
+                    }, { offset: 0, elements: [] as React.ReactNode[] }).elements}
+                  </svg>
+                  {/* Center text */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[10px] font-semibold text-gray-600">100%</span>
+                  </div>
+                </div>
+                {/* Allocation info */}
+                <div className="flex-1 text-xs text-gray-500">
+                  <p>Adjust sliders below to change allocation.</p>
+                  <p className="mt-1">Higher equities = more growth potential but higher volatility.</p>
+                </div>
+              </div>
+              {/* Allocation Sliders */}
+              <div className="mt-3 space-y-3">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-1.5 text-gray-600">
+                      <span className="w-2 h-2 rounded-full bg-teal-600" />
+                      Equities
+                    </span>
+                    <span className="font-semibold text-teal-600">{equities}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="20"
+                    max="90"
+                    value={equities}
+                    onChange={(e) => {
+                      const newEquities = Number(e.target.value)
+                      const maxBonds = 100 - newEquities - 5 // Keep at least 5% cash
+                      setEquities(newEquities)
+                      if (bonds > maxBonds) setBonds(maxBonds)
+                    }}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="flex items-center gap-1.5 text-gray-600">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      Bonds
+                    </span>
+                    <span className="font-semibold text-blue-600">{bonds}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max={100 - equities - 5}
+                    value={bonds}
+                    onChange={(e) => setBonds(Number(e.target.value))}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-200">
+                  <span className="flex items-center gap-1.5 text-gray-500">
+                    <span className="w-2 h-2 rounded-full bg-gray-400" />
+                    Cash (auto-calculated)
+                  </span>
+                  <span className="font-semibold text-gray-500">{cash}%</span>
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="flex justify-between text-sm font-medium text-gray-700 mb-2">
                 <span>Portfolio Value at Retirement</span>
@@ -1832,7 +1951,7 @@ const TrustIndicators = () => {
     { name: 'Cyber Essentials', icon: 'shield' },
     { name: 'FCA Aligned', icon: 'check' },
     { name: 'GDPR Compliant', icon: 'lock' },
-    { name: 'UK Data Residency', icon: 'flag' },
+    { name: 'Consumer Duty Ready', icon: 'users' },
   ]
 
   return (
@@ -2228,6 +2347,8 @@ const FeatureModal = ({ featureId, onClose }: { featureId: string; onClose: () =
 
           {/* Content */}
           <div className="p-6 space-y-6">
+            <FeaturePreview featureId={featureId} />
+
             {/* How We Built It */}
             <div>
               <div className="flex items-center mb-3">
@@ -2297,6 +2418,513 @@ const FeatureModal = ({ featureId, onClose }: { featureId: string; onClose: () =
 }
 
 // ============================================================================
+// FEATURE PREVIEWS (INTERACTIVE / ANIMATED)
+// ============================================================================
+
+const useRotatingIndex = (length: number, intervalMs: number) => {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (length < 2) return
+    const timer = setInterval(() => {
+      setIndex((prev) => (prev + 1) % length)
+    }, intervalMs)
+    return () => clearInterval(timer)
+  }, [length, intervalMs])
+
+  return [index, setIndex] as const
+}
+
+const PreviewFrame = ({
+  title,
+  badgeClass,
+  onShuffle,
+  children
+}: {
+  title: string
+  badgeClass?: string
+  onShuffle?: () => void
+  children: React.ReactNode
+}) => (
+  <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-4 text-white shadow-inner">
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-red-400/70" />
+          <span className="h-2 w-2 rounded-full bg-amber-300/70" />
+          <span className="h-2 w-2 rounded-full bg-green-400/70" />
+        </div>
+        <span className="text-[10px] uppercase tracking-wide text-slate-400">{title}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            'rounded-full px-2 py-0.5 text-[10px] font-semibold border',
+            badgeClass || 'bg-teal-500/15 text-teal-300 border-teal-500/30'
+          )}
+        >
+          Live
+        </span>
+        {onShuffle && (
+          <button
+            type="button"
+            onClick={onShuffle}
+            className="text-[10px] px-2 py-1 rounded-full border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition"
+          >
+            Shuffle
+          </button>
+        )}
+      </div>
+    </div>
+    {children}
+  </div>
+)
+
+const FeaturePreview = ({ featureId }: { featureId: string }) => {
+  switch (featureId) {
+    case 'client-management':
+      return <ClientManagementPreview />
+    case 'assessments':
+      return <AssessmentsPreview />
+    case 'cashflow':
+      return <CashFlowPreview />
+    case 'montecarlo':
+      return <MonteCarloPreview />
+    case 'compliance':
+      return <CompliancePreview />
+    case 'documents':
+      return <DocumentsPreview />
+    case 'signatures':
+      return <SignaturesPreview />
+    case 'reviews':
+      return <ReviewsPreview />
+    default:
+      return null
+  }
+}
+
+const ClientManagementPreview = () => {
+  const clients = [
+    { name: 'Client A', risk: '6/10', status: 'Review due', pill: 'bg-amber-500/20 text-amber-300' },
+    { name: 'Client B', risk: '4/10', status: 'Vulnerable', pill: 'bg-rose-500/20 text-rose-300' },
+    { name: 'Client C', risk: '7/10', status: 'Active', pill: 'bg-emerald-500/20 text-emerald-300' }
+  ]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(clients.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % clients.length)
+
+  return (
+    <PreviewFrame
+      title="Client Management"
+      badgeClass="bg-teal-500/15 text-teal-300 border-teal-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="rounded-lg bg-slate-800/70 p-2">
+          <p className="text-[10px] text-slate-400">Active clients</p>
+          <p className="text-lg font-semibold">127</p>
+          <p className="text-[10px] text-emerald-300">+3 this month</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/70 p-2">
+          <p className="text-[10px] text-slate-400">Vulnerable</p>
+          <div className="flex items-center gap-2">
+            <p className="text-lg font-semibold">9</p>
+            <span className="h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
+          </div>
+          <p className="text-[10px] text-rose-300">Enhanced review</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {clients.map((client, index) => (
+          <div
+            key={client.name}
+            className={cn(
+              'flex items-center justify-between rounded-lg px-3 py-2 transition',
+              index === activeIndex
+                ? 'bg-slate-800/80 ring-1 ring-teal-400/50'
+                : 'bg-slate-800/40'
+            )}
+          >
+            <div>
+              <p className="text-sm text-white">{client.name}</p>
+              <p className="text-[10px] text-slate-400">Risk {client.risk}</p>
+            </div>
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full', client.pill)}>
+              {client.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const AssessmentsPreview = () => {
+  const suitabilityStates = [
+    { title: 'Suitable', note: 'Balanced portfolio fit', tone: 'text-emerald-300', ring: 'ring-emerald-400/40' },
+    { title: 'Conditions', note: 'Emergency fund required', tone: 'text-amber-300', ring: 'ring-amber-400/40' },
+    { title: 'Review', note: 'Clarify time horizon', tone: 'text-rose-300', ring: 'ring-rose-400/40' }
+  ]
+  const riskInputs = [
+    {
+      label: 'ATR',
+      subtitle: 'Attitude to Risk',
+      score: '6 / 10',
+      tone: 'text-amber-300',
+      bar: 'bg-amber-400',
+      badge: 'bg-amber-500/20 text-amber-200'
+    },
+    {
+      label: 'CFL',
+      subtitle: 'Capacity for Loss',
+      score: '5 / 10',
+      tone: 'text-blue-300',
+      bar: 'bg-blue-400',
+      badge: 'bg-blue-500/20 text-blue-200'
+    }
+  ]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(suitabilityStates.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % suitabilityStates.length)
+  const suitability = suitabilityStates[activeIndex]
+
+  return (
+    <PreviewFrame
+      title="Risk Assessments"
+      badgeClass="bg-amber-500/15 text-amber-300 border-amber-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="rounded-lg bg-slate-800/80 p-3 mb-3 ring-1 ring-slate-700">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Suitability outcome</p>
+            <p className={cn('text-lg font-semibold', suitability.tone)}>{suitability.title}</p>
+            <p className="text-[10px] text-slate-400">{suitability.note}</p>
+          </div>
+          <div className={cn('h-10 w-10 rounded-full bg-slate-900 ring-2 flex items-center justify-center', suitability.ring)}>
+            <span className={cn('text-xs font-semibold', suitability.tone)}>COBS</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {riskInputs.map((input, index) => (
+          <div key={input.label} className="rounded-lg bg-slate-800/70 p-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full', input.badge)}>
+                {input.label}
+              </span>
+              <span className={cn('text-[10px] font-semibold', input.tone)}>{input.score}</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mb-2">{input.subtitle}</p>
+            <div className="h-1.5 rounded-full bg-slate-700">
+              <div
+                className={cn('h-1.5 rounded-full transition-all duration-700', input.bar)}
+                style={{ width: `${index === 0 ? 70 : 60}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-400">
+        <span className="h-2 w-2 rounded-full bg-amber-300 animate-pulse" />
+        Suitability derived from ATR + CFL (lower-of logic)
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const CashFlowPreview = () => {
+  const scenarios = [
+    { name: 'Base', finalValue: '2.1m', shortfall: 'Low', stroke: 'stroke-teal-400', fill: 'fill-teal-300' },
+    { name: 'Early Retire', finalValue: '1.7m', shortfall: 'Med', stroke: 'stroke-blue-400', fill: 'fill-blue-300' },
+    { name: 'High Inflation', finalValue: '1.3m', shortfall: 'High', stroke: 'stroke-fuchsia-400', fill: 'fill-fuchsia-300' }
+  ]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(scenarios.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % scenarios.length)
+
+  return (
+    <PreviewFrame
+      title="Cash Flow Modelling"
+      badgeClass="bg-teal-500/15 text-teal-300 border-teal-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="flex flex-wrap gap-2 mb-3">
+        {scenarios.map((scenario, index) => (
+          <span
+            key={scenario.name}
+            className={cn(
+              'px-2 py-1 rounded-full text-[10px] border',
+              index === activeIndex
+                ? 'border-teal-400/60 text-teal-200 bg-teal-500/10'
+                : 'border-slate-700 text-slate-400'
+            )}
+          >
+            {scenario.name}
+          </span>
+        ))}
+      </div>
+      <div className="rounded-lg bg-slate-800/70 p-3">
+        <svg viewBox="0 0 120 40" className="w-full h-24">
+          {scenarios.map((scenario, index) => (
+            <path
+              key={scenario.name}
+              d={
+                index === 0
+                  ? 'M2 34 L28 30 L52 26 L76 18 L102 12 L118 8'
+                  : index === 1
+                    ? 'M2 34 L28 31 L52 27 L76 22 L102 18 L118 15'
+                    : 'M2 34 L28 32 L52 30 L76 26 L102 24 L118 22'
+              }
+              className={cn(
+                'fill-none transition-all duration-700',
+                scenario.stroke,
+                index === activeIndex ? 'opacity-100' : 'opacity-30'
+              )}
+              strokeWidth={index === activeIndex ? 2 : 1.5}
+            />
+          ))}
+          <circle
+            cx="118"
+            cy={activeIndex === 0 ? 8 : activeIndex === 1 ? 15 : 22}
+            r="2.5"
+            className={cn('animate-pulse', scenarios[activeIndex].fill)}
+          />
+        </svg>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-3">
+        <div className="rounded-lg bg-slate-800/70 p-2">
+          <p className="text-[10px] text-slate-400">Final value</p>
+          <p className="text-lg font-semibold">{scenarios[activeIndex].finalValue}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/70 p-2">
+          <p className="text-[10px] text-slate-400">Shortfall</p>
+          <p className="text-lg font-semibold text-amber-300">{scenarios[activeIndex].shortfall}</p>
+        </div>
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const MonteCarloPreview = () => {
+  const rates = [94, 89, 82]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(rates.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % rates.length)
+  const success = rates[activeIndex]
+  const bars = [18, 30, 44, 70, 44, 30, 18]
+
+  return (
+    <PreviewFrame
+      title="Monte Carlo Engine"
+      badgeClass="bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-[10px] text-slate-400">Success probability</p>
+          <p className="text-2xl font-semibold text-indigo-200">{success}%</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-slate-400">Simulation runs</p>
+          <p className="text-sm font-semibold text-slate-200">1,000</p>
+        </div>
+      </div>
+      <div className="flex items-end gap-1 h-20">
+        {bars.map((height, index) => (
+          <div
+            key={index}
+            className={cn(
+              'flex-1 rounded-t bg-indigo-500/30 transition-all duration-700',
+              index === 3 ? 'bg-indigo-400' : 'bg-indigo-500/30'
+            )}
+            style={{ height: `${height}%` }}
+          />
+        ))}
+      </div>
+      <div className="mt-3 h-1.5 bg-slate-700 rounded-full">
+        <div
+          className="h-1.5 bg-indigo-400 rounded-full transition-all duration-700"
+          style={{ width: `${success}%` }}
+        />
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const CompliancePreview = () => {
+  const scores = [98, 94, 88]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(scores.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % scores.length)
+  const score = scores[activeIndex]
+  const angle = Math.round((score / 100) * 360)
+
+  return (
+    <PreviewFrame
+      title="Compliance Framework"
+      badgeClass="bg-blue-500/15 text-blue-300 border-blue-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="flex items-center gap-4">
+        <div
+          className="h-16 w-16 rounded-full p-1"
+          style={{
+            background: `conic-gradient(#38bdf8 ${angle}deg, #1f2937 0deg)`
+          }}
+        >
+          <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center text-sm font-semibold text-blue-200">
+            {score}%
+          </div>
+        </div>
+        <div className="space-y-2 flex-1">
+          <div className="flex items-center justify-between rounded-lg bg-slate-800/70 px-3 py-2">
+            <span className="text-[10px] text-slate-400">Consumer Duty</span>
+            <span className="text-xs text-emerald-300">All clear</span>
+          </div>
+          <div className="flex items-center justify-between rounded-lg bg-slate-800/70 px-3 py-2">
+            <span className="text-[10px] text-slate-400">Reviews overdue</span>
+            <span className="text-xs text-amber-300">2 flagged</span>
+          </div>
+        </div>
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const DocumentsPreview = () => {
+  const docs = [
+    { name: 'Suitability Report', status: 'Ready', pill: 'bg-emerald-500/20 text-emerald-300' },
+    { name: 'Annual Review', status: 'Generating', pill: 'bg-amber-500/20 text-amber-300' },
+    { name: 'Client Summary', status: 'Sent', pill: 'bg-blue-500/20 text-blue-300' }
+  ]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(docs.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % docs.length)
+
+  return (
+    <PreviewFrame
+      title="Reports & Documents"
+      badgeClass="bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="space-y-2">
+        {docs.map((doc, index) => (
+          <div
+            key={doc.name}
+            className={cn(
+              'flex items-center justify-between rounded-lg px-3 py-2 transition',
+              index === activeIndex ? 'bg-slate-800/80 ring-1 ring-emerald-400/40' : 'bg-slate-800/40'
+            )}
+          >
+            <div>
+              <p className="text-sm text-white">{doc.name}</p>
+              <p className="text-[10px] text-slate-400">Last updated 2m ago</p>
+            </div>
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full', doc.pill)}>
+              {doc.status}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 h-1.5 bg-slate-700 rounded-full">
+        <div
+          className="h-1.5 bg-emerald-400 rounded-full animate-pulse"
+          style={{ width: `${(activeIndex + 1) * 30}%` }}
+        />
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const SignaturesPreview = () => {
+  const steps = ['Sent', 'Viewed', 'Signed']
+  const [activeIndex, setActiveIndex] = useRotatingIndex(steps.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % steps.length)
+
+  return (
+    <PreviewFrame
+      title="Digital Signatures"
+      badgeClass="bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        {steps.map((step, index) => (
+          <div
+            key={step}
+            className={cn(
+              'flex-1 rounded-lg px-2 py-2 text-center text-[10px]',
+              index <= activeIndex ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-slate-800/60 text-slate-400'
+            )}
+          >
+            {step}
+          </div>
+        ))}
+      </div>
+      <div className="rounded-lg bg-slate-800/70 p-3">
+        <p className="text-[10px] text-slate-400 mb-2">Signer sequence</p>
+        <div className="flex items-center gap-2">
+          {['Advisor', 'Client', 'Compliance'].map((role, index) => (
+            <div
+              key={role}
+              className={cn(
+                'flex-1 rounded-full px-2 py-1 text-center text-[10px]',
+                index <= activeIndex ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-slate-800 text-slate-400'
+              )}
+            >
+              {role}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 h-1.5 bg-slate-700 rounded-full">
+        <div
+          className="h-1.5 bg-fuchsia-400 rounded-full transition-all duration-700"
+          style={{ width: `${((activeIndex + 1) / steps.length) * 100}%` }}
+        />
+      </div>
+    </PreviewFrame>
+  )
+}
+
+const ReviewsPreview = () => {
+  const reviews = [
+    { name: 'Household A', due: '2 Sep', status: 'Overdue', pill: 'bg-rose-500/20 text-rose-300' },
+    { name: 'Household B', due: '7 Sep', status: 'Due soon', pill: 'bg-amber-500/20 text-amber-300' },
+    { name: 'Household C', due: '14 Sep', status: 'Scheduled', pill: 'bg-emerald-500/20 text-emerald-300' }
+  ]
+  const [activeIndex, setActiveIndex] = useRotatingIndex(reviews.length, 2400)
+  const handleShuffle = () => setActiveIndex((prev) => (prev + 1) % reviews.length)
+
+  return (
+    <PreviewFrame
+      title="Client Reviews"
+      badgeClass="bg-sky-500/15 text-sky-300 border-sky-500/30"
+      onShuffle={handleShuffle}
+    >
+      <div className="space-y-2">
+        {reviews.map((review, index) => (
+          <div
+            key={review.name}
+            className={cn(
+              'flex items-center justify-between rounded-lg px-3 py-2 transition',
+              index === activeIndex ? 'bg-slate-800/80 ring-1 ring-sky-400/40' : 'bg-slate-800/40'
+            )}
+          >
+            <div>
+              <p className="text-sm text-white">{review.name}</p>
+              <p className="text-[10px] text-slate-400">Review due {review.due}</p>
+            </div>
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-full', review.pill)}>
+              {review.status}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-400">
+        <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+        Auto reminders at 30, 7, and 0 days
+      </div>
+    </PreviewFrame>
+  )
+}
+
+// ============================================================================
 // COMPLIANCE SECTION
 // ============================================================================
 
@@ -2307,7 +2935,7 @@ const ComplianceSection = () => {
     { name: 'GDPR Compliant', description: 'Data protection controls' },
     { name: 'Consumer Duty Ready', description: 'Outcome-focused monitoring' },
     { name: 'SOC 2 Ready', description: 'Enterprise security controls' },
-    { name: 'UK Data Residency', description: 'All data stored in the UK' },
+    { name: 'Audit Trail', description: 'Complete decision documentation' },
   ]
 
   return (
@@ -2376,66 +3004,6 @@ const ComplianceSection = () => {
 }
 
 // ============================================================================
-// TESTIMONIALS
-// ============================================================================
-
-const TestimonialsSection = () => {
-  const testimonials = [
-    {
-      quote: "Plannetic has transformed how we manage client suitability. What used to take hours now takes minutes.",
-      author: "Sarah Mitchell",
-      role: "Director, Mitchell Financial Planning",
-    },
-    {
-      quote: "The Monte Carlo simulations have revolutionised our retirement planning conversations with clients.",
-      author: "James Chen",
-      role: "Senior Planner, Horizon Wealth",
-    },
-    {
-      quote: "Moving from spreadsheets to Plannetic was seamless. We were up and running within a week.",
-      author: "Emma Thompson",
-      role: "Practice Manager, Thompson & Associates",
-    },
-  ]
-
-  return (
-    <section className="py-20 lg:py-28 bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
-            Trusted by Forward-Thinking Advisers
-          </h2>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {testimonials.map((testimonial, i) => (
-            <div key={i} className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
-              <div className="flex mb-4">
-                {[1, 2, 3, 4, 5].map(star => (
-                  <svg key={star} className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-              <p className="text-gray-700 mb-6 leading-relaxed">"{testimonial.quote}"</p>
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-teal-600 rounded-full flex items-center justify-center text-white font-semibold mr-4">
-                  {testimonial.author.split(' ').map(n => n[0]).join('')}
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-900">{testimonial.author}</div>
-                  <div className="text-sm text-gray-500">{testimonial.role}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ============================================================================
 // CTA SECTION
 // ============================================================================
 
@@ -2477,72 +3045,5 @@ const CTASection = () => {
         </div>
       </div>
     </section>
-  )
-}
-
-// ============================================================================
-// FOOTER
-// ============================================================================
-
-const Footer = () => {
-  return (
-    <footer className="bg-slate-900 text-gray-400 border-t border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-          {/* Brand */}
-          <div className="col-span-2 md:col-span-1">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-lg">P</span>
-              </div>
-              <span className="text-xl font-bold text-white">plannetic</span>
-            </div>
-            <p className="text-sm">Turning Plans into Performance</p>
-          </div>
-
-          {/* Product */}
-          <div>
-            <h4 className="text-white font-semibold mb-4">Product</h4>
-            <ul className="space-y-2 text-sm">
-              <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-              <li><a href="#demo" className="hover:text-white transition-colors">Demo</a></li>
-              <li><a href="#security" className="hover:text-white transition-colors">Security</a></li>
-            </ul>
-          </div>
-
-          {/* Company */}
-          <div>
-            <h4 className="text-white font-semibold mb-4">Company</h4>
-            <ul className="space-y-2 text-sm">
-              <li><a href="#" className="hover:text-white transition-colors">About</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div>
-            <h4 className="text-white font-semibold mb-4">Legal</h4>
-            <ul className="space-y-2 text-sm">
-              <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">GDPR</a></li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-800 mt-12 pt-8 flex flex-col md:flex-row items-center justify-between">
-          <p className="text-sm">&copy; {new Date().getFullYear()} Plannetic. All rights reserved.</p>
-          <div className="flex items-center gap-4 mt-4 md:mt-0">
-            <span className="text-xs flex items-center">
-              <svg className="w-4 h-4 text-green-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              Cyber Essentials Certified
-            </span>
-          </div>
-        </div>
-      </div>
-    </footer>
   )
 }

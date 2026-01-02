@@ -16,7 +16,7 @@ export function FinancialProfileStep({
       <CardHeader>
         <CardTitle>Financial Profile</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5 sm:space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Annual Income (£)</label>
@@ -30,7 +30,8 @@ export function FinancialProfileStep({
                   annualIncome: parseNumericValue(e.target.value)
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              inputMode="numeric"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="50000"
             />
           </div>
@@ -47,7 +48,8 @@ export function FinancialProfileStep({
                   netWorth: parseNumericValue(e.target.value)
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              inputMode="numeric"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="100000"
             />
           </div>
@@ -66,7 +68,8 @@ export function FinancialProfileStep({
                   liquidAssets: parseNumericValue(e.target.value)
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              inputMode="numeric"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="25000"
             />
           </div>
@@ -83,7 +86,8 @@ export function FinancialProfileStep({
                   monthlyExpenses: parseNumericValue(e.target.value)
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              inputMode="numeric"
+              className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="3000"
             />
           </div>
@@ -94,7 +98,7 @@ export function FinancialProfileStep({
           <select
             value={formData.financialProfile?.investmentTimeframe || ''}
             onChange={(e) => onUpdateFinancialProfile({ investmentTimeframe: e.target.value })}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">Select timeframe</option>
             <option value="short_term">Short term (1-3 years)</option>
