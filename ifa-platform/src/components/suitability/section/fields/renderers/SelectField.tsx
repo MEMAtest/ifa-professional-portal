@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -7,6 +7,7 @@ import { hasValue } from '../../utils'
 import type { FieldProps } from '../types'
 
 import { Label } from '@/components/ui/Label'
+import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 
 import { AlertCircle, Database, HelpCircle } from 'lucide-react'
@@ -16,6 +17,45 @@ export function SelectField(props: FieldProps) {
   const showHelp = Boolean(props.showHelp ?? props.field.helpText)
   const isRequired = Boolean(props.isRequired ?? props.field.required)
   const showPulledIndicator = hasValue(props.pulledValue) && hasValue(props.value)
+  const allowCustom = Boolean((props.field as any).allowCustom)
+  const customOptionLabel = (props.field as any).customOptionLabel || 'Add custom...'
+  const valueString = typeof props.value === 'string' ? props.value : ''
+  const baseOptions = props.field.options || []
+  const isCustomValue = allowCustom && valueString && !baseOptions.includes(valueString)
+  const [customSelected, setCustomSelected] = useState(false)
+  const [customValue, setCustomValue] = useState('')
+
+  const options = useMemo(() => {
+    return baseOptions
+  }, [baseOptions])
+
+  useEffect(() => {
+    if (!allowCustom) {
+      setCustomSelected(false)
+      setCustomValue('')
+      return
+    }
+    if (isCustomValue) {
+      setCustomSelected(true)
+      setCustomValue(valueString)
+    }
+  }, [allowCustom, isCustomValue, valueString])
+
+  const selectValue = allowCustom && (customSelected || isCustomValue) ? '__custom__' : valueString
+
+  const handleValueChange = (nextValue: string) => {
+    if (allowCustom && nextValue === '__custom__') {
+      setCustomSelected(true)
+      if (!isCustomValue) {
+        setCustomValue('')
+        props.onChange('')
+      }
+      return
+    }
+    setCustomSelected(false)
+    setCustomValue('')
+    props.onChange(nextValue)
+  }
 
   return (
     <div className={cn('space-y-2', props.className)}>
@@ -40,8 +80,8 @@ export function SelectField(props: FieldProps) {
       </div>
 
       <Select
-        value={props.value || ''}
-        onValueChange={props.onChange}
+        value={selectValue || ''}
+        onValueChange={handleValueChange}
         disabled={!!props.isReadOnly || isCalculated || !!props.isLoading}
       >
         <SelectTrigger
@@ -51,16 +91,40 @@ export function SelectField(props: FieldProps) {
             props.warning && 'border-yellow-500 focus:ring-yellow-500'
           )}
         >
-          <SelectValue placeholder={`Select ${props.field.label}`} />
+          <SelectValue placeholder={props.field.placeholder || `Select ${props.field.label}`} />
         </SelectTrigger>
         <SelectContent>
-          {props.field.options?.map((option) => (
+          {options.map((option) => (
             <SelectItem key={option} value={option}>
               {option}
             </SelectItem>
           ))}
+          {allowCustom && (
+            <SelectItem value="__custom__">
+              {customValue ? `Custom: ${customValue}` : customOptionLabel}
+            </SelectItem>
+          )}
         </SelectContent>
       </Select>
+
+      {allowCustom && (customSelected || isCustomValue) && (
+        <Input
+          id={`${props.field.id}-custom`}
+          value={customValue}
+          onChange={(event) => {
+            const next = event.target.value
+            setCustomValue(next)
+            props.onChange(next)
+          }}
+          placeholder="Enter custom value"
+          disabled={!!props.isReadOnly || isCalculated || !!props.isLoading}
+          className={cn(
+            'w-full',
+            props.error && 'border-red-500 focus:ring-red-500',
+            props.warning && 'border-yellow-500 focus:ring-yellow-500'
+          )}
+        />
+      )}
 
       {props.error && (
         <p className="text-xs text-red-600 flex items-center gap-1">
@@ -71,4 +135,3 @@ export function SelectField(props: FieldProps) {
     </div>
   )
 }
-

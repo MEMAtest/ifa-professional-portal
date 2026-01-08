@@ -1,7 +1,7 @@
 import type { DbRow } from '@/types/db'
 import type { ReportContext } from '@/services/AdvisorContextService'
 import type { PulledPlatformData, SuitabilityFormData } from '@/types/suitability'
-import type { SuitabilityReportData, SuitabilityReportFacts } from './types'
+import type { SuitabilityReportAIContent, SuitabilityReportData, SuitabilityReportFacts } from './types'
 import { buildCostsCharges } from './builders/costsCharges'
 import { buildDisadvantagesRisks } from './builders/disadvantagesRisks'
 import { buildInvestorPersona } from './builders/investorPersona'
@@ -23,6 +23,7 @@ import { buildFinancialSummary } from './builders/financial'
 import {
   asObject,
   asTrimmedString,
+  calculateAge,
   buildReportRef,
   calculateNextReviewDateISO,
   formatAddress,
@@ -53,6 +54,7 @@ export function buildSuitabilityReportModel(params: {
   mode?: 'draft' | 'final'
   pulledDataOverride?: PulledPlatformData
   persona?: PersonaRow | null
+  aiContent?: SuitabilityReportAIContent
 }): SuitabilityReportData {
   const { client, formData, reportContext } = params
   const mode = params.mode || 'draft'
@@ -109,6 +111,19 @@ export function buildSuitabilityReportModel(params: {
 
   const firstName = pickFirstString(personalDetails.firstName, personalDetails.first_name, formPI.first_name)
   const lastName = pickFirstString(personalDetails.lastName, personalDetails.last_name, formPI.last_name)
+  const dateOfBirth = pickFirstString(
+    personalDetails.dateOfBirth,
+    personalDetails.date_of_birth,
+    formPI.date_of_birth
+  )
+  const age = parseOptionalNumber(formPI.age) ?? calculateAge(dateOfBirth)
+  const occupation = pickFirstString(
+    formPI.occupation,
+    personalDetails.occupation,
+    (personalDetails as any).jobTitle,
+    (personalDetails as any).job_title,
+    (personalDetails as any).profession
+  )
 
   const fullName = pickFirstString(
     formPI.client_name,
@@ -243,6 +258,11 @@ export function buildSuitabilityReportModel(params: {
   const { hasVulnerability, vulnerabilityFlags, accommodations } = buildVulnerabilitySummary(formData)
 
   const reportRef = params.reportRef || buildReportRef(clientRef)
+  const monthlyExpenditure =
+    parseOptionalNumber((formFinancial as any).monthly_expenditure) ??
+    parseOptionalNumber((formFinancial as any).monthly_expenses) ??
+    parseOptionalNumber((formFinancial as any).monthlyExpenses) ??
+    (essentialAnnual !== undefined ? Math.round(essentialAnnual / 12) : undefined)
 
   const dataQuality: SuitabilityReportData['dataQuality'] = {
     mode,
@@ -401,7 +421,9 @@ export function buildSuitabilityReportModel(params: {
 	    financialAnalysis,
 	    objectives: {
 	      primaryObjective: asTrimmedString(formObjectives.primary_objective),
+	      secondaryObjectives: splitLines(formObjectives.secondary_objectives),
 	      investmentTimeline: asTrimmedString(formObjectives.investment_timeline),
+	      timeHorizonYears,
 	      incomeRequirement: (() => {
 	        const requiresIncome = asTrimmedString((formObjectives as any).requires_investment_income)
 	        const requiredMonthly =
@@ -435,6 +457,7 @@ export function buildSuitabilityReportModel(params: {
 	      )
 	    },
 	    investorPersona,
+	    aiGenerated: params.aiContent,
 	    client: {
 	      id: client.id,
 	      clientRef,
@@ -443,7 +466,9 @@ export function buildSuitabilityReportModel(params: {
         firstName: firstName,
         lastName: lastName,
         fullName,
-        dateOfBirth: pickFirstString(personalDetails.dateOfBirth, personalDetails.date_of_birth, formPI.date_of_birth),
+        age,
+        occupation,
+        dateOfBirth,
         niNumber: pickFirstString(formPI.ni_number, formPI.national_insurance, personalDetails.niNumber, personalDetails.ni_number),
         maritalStatus: pickFirstString(formPI.marital_status, personalDetails.maritalStatus),
         employmentStatus: pickFirstString(formPI.employment_status, personalDetails.employmentStatus),
@@ -462,6 +487,7 @@ export function buildSuitabilityReportModel(params: {
         annualIncome: incomeTotal,
         essentialExpenses: essentialAnnual,
         discretionaryIncome,
+        monthlyExpenditure,
         totalAssets,
         totalLiabilities,
         emergencyFund,

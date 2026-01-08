@@ -3,14 +3,14 @@
 // FIXED: Corrected assessment ID access from autoSaveAssessment result
 // =====================================================
 
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import React from 'react'
 import { useRouter } from 'next/navigation'
 import { MotionConfig } from 'framer-motion'
 import { format } from 'date-fns'
 
 // Component imports
 import { NavigationControls } from '../NavigationControls'
-import { NotificationDisplay, type NotificationOptions } from '../SuitabilityFormModals'
+import { NotificationDisplay } from '../SuitabilityFormModals'
 import { SuitabilityFinancialDashboardToggleCard } from '../SuitabilityFinancialDashboardToggleCard'
 import { SuitabilityHeaderBar } from '../SuitabilityHeaderBar'
 import { SuitabilityFormDialogs } from '../SuitabilityFormDialogs'
@@ -28,7 +28,6 @@ import { useSuitabilityFormController } from './useSuitabilityFormController'
 import { validationEngine } from '@/lib/suitability/validationEngine'
 import { calculateSuitabilityCompletion } from '@/lib/suitability/completion'
 import { getMissingRequiredFieldErrors } from '@/lib/suitability/requiredFields'
-import type { SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
 import { aiAssistantService } from '@/services/aiAssistantService'
 import type { SaveStatus } from '@/hooks/suitability/useSaveMutex'
 import { canGenerateAISuggestions, formatSectionLabel, isValidAISuggestion } from '@/lib/suitability/ui/aiHelpers'
@@ -105,7 +104,6 @@ import { cn, safeWriteToClipboard } from '@/lib/utils'
 // =====================================================
 // TYPE DEFINITIONS
 // Note: SectionDefinition imported from SuitabilityFormProgress
-// Note: NotificationOptions imported from SuitabilityFormModals
 // =====================================================
 
 interface SuitabilityFormProps {
@@ -181,6 +179,9 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     saveState,
     saveStatus,
     notifications,
+  servicesSelected,
+  productHoldings,
+  isGeneratingReport,
     reconciledRisk,
     formState,
     setFormState,
@@ -210,7 +211,7 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     handleSectionNavigation,
     handleSubmit,
     handleGenerateDraftReport,
-    handleGeneratePDFReport,
+    handleGeneratePdfWithLoading,
     toggleExpandedSection,
     handleSaveDraftClick,
     openVersionHistory,
@@ -228,20 +229,50 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
   })
   
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+  const resolvedAssessmentId = activeAssessmentId || assessmentId
 
   if (isLoading) {
     return (
       <div className="space-y-4 p-6">
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+          <div className="flex items-center justify-between text-xs text-blue-700">
+            <span>Loading assessment data</span>
+            <span>Working...</span>
+          </div>
+          <div className="mt-2 h-2 w-full rounded-full bg-blue-100">
+            <div className="h-2 w-1/2 animate-pulse rounded-full bg-blue-600" />
+          </div>
+        </div>
         <Skeleton className="h-20 w-full" />
         <Skeleton className="h-96 w-full" />
         <Skeleton className="h-96 w-full" />
       </div>
     )
   }
-  
+
   return (
     <MotionConfig reducedMotion="always">
       <div className="min-h-screen bg-gray-50">
+        {(formState.isSubmitting || isGeneratingReport) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white px-5 py-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">
+                    {formState.isSubmitting ? 'Submitting suitability assessment...' : 'Generating report...'}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {formState.isSubmitting ? 'Finalizing data and generating your report.' : 'Building your PDF report.'}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 h-2 w-full rounded-full bg-blue-100">
+                <div className="h-2 w-1/2 animate-pulse rounded-full bg-blue-600" />
+              </div>
+            </div>
+          </div>
+        )}
       {/* Notifications */}
       <NotificationDisplay notifications={notifications} />
       
@@ -292,6 +323,7 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
                 isCFLComplete={isCFLComplete}
                 isPersonaComplete={isPersonaComplete}
                 reconciledRisk={reconciledRisk}
+                onReviewRisk={() => navigateToSection('risk_assessment')}
               />
 
               {(completionScore < 80 ||
@@ -318,18 +350,22 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
 	              />
 	            )}
 
-	            {SECTIONS.map((section) => (
-	              <SuitabilitySectionRenderer
-	                key={section.id}
-	                section={section}
-	                formData={formData}
-	                pulledData={pulledData}
-	                mode={mode}
-	                isProspect={isProspect}
-	                allowAI={allowAI}
-	                collaborators={collaborators}
-	                saveState={saveState}
-	                expandedSections={formState.expandedSections}
+            {SECTIONS.map((section) => (
+              <SuitabilitySectionRenderer
+                key={section.id}
+                section={section}
+                formData={formData}
+                pulledData={pulledData}
+                clientId={clientId}
+                assessmentId={resolvedAssessmentId}
+                mode={mode}
+                isProspect={isProspect}
+                allowAI={allowAI}
+                collaborators={collaborators}
+                saveState={saveState}
+                servicesSelected={servicesSelected}
+                productHoldings={productHoldings}
+                expandedSections={formState.expandedSections}
 	                showFinancialDashboard={formState.showFinancialDashboard}
 	                combinedValidationErrors={combinedValidationErrors}
 	                aiSuggestions={aiSuggestions}
@@ -365,7 +401,7 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
 	            canGenerateReports={Boolean(activeAssessmentId || assessmentId)}
 	            onSubmit={handleSubmit}
 	            onPreviewHtml={handleGenerateDraftReport}
-	            onGeneratePdf={handleGeneratePDFReport}
+	            onGeneratePdf={handleGeneratePdfWithLoading}
 	            onShowHistory={openVersionHistory}
 	            onShare={handleShareLink}
 	            autoSaveIntervalMs={autoSaveInterval}

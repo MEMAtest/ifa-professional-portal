@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import {
@@ -18,6 +18,7 @@ import {
 
 import { CreateNewVersionButton } from '@/components/suitability/CreateNewVersionButton'
 import { deriveSuitabilityCompletionState } from '@/lib/assessments/suitabilityStatus'
+import { createReportWindow, openPdfFromBase64, openReportUrl } from '@/lib/documents/openPdf'
 
 type SuitabilityAssessmentSummary = {
   id: string
@@ -112,6 +113,9 @@ export default function SuitabilityResultsPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [includeWarnings, setIncludeWarnings] = useState(false)
   const [reportNotice, setReportNotice] = useState<string | null>(null)
+  const [generationProgress, setGenerationProgress] = useState(0)
+  const [generationStage, setGenerationStage] = useState('Preparing report')
+  const progressTimerRef = useRef<number | null>(null)
 
   const assessmentId = assessment?.id || assessmentIdFromQuery
 
@@ -183,6 +187,39 @@ export default function SuitabilityResultsPage() {
     void run()
   }, [clientId, loadClient, loadAssessment])
 
+  useEffect(() => {
+    if (!isGenerating) {
+      if (progressTimerRef.current) {
+        window.clearInterval(progressTimerRef.current)
+        progressTimerRef.current = null
+      }
+      setGenerationProgress(0)
+      setGenerationStage('Preparing report')
+      return
+    }
+
+    setGenerationProgress(8)
+    setGenerationStage('Preparing data')
+
+    progressTimerRef.current = window.setInterval(() => {
+      setGenerationProgress((current) => {
+        const next = current >= 90 ? 90 : current + (current < 50 ? 7 : 4)
+        if (next < 25) setGenerationStage('Preparing data')
+        else if (next < 60) setGenerationStage('Building report')
+        else if (next < 80) setGenerationStage('Rendering PDF')
+        else setGenerationStage('Finalizing')
+        return next
+      })
+    }, 600)
+
+    return () => {
+      if (progressTimerRef.current) {
+        window.clearInterval(progressTimerRef.current)
+        progressTimerRef.current = null
+      }
+    }
+  }, [isGenerating])
+
   const handleGeneratePDFReport = useCallback(
     async (
       reportType: 'clientLetter' | 'advisorReport' | 'executiveSummary' | 'fullReport' | 'complianceReport' = 'fullReport'
@@ -192,17 +229,21 @@ export default function SuitabilityResultsPage() {
         return
       }
 
+      let reportWindow: Window | null = null
+
       try {
         setIsGenerating(true)
         setReportNotice(null)
         setError(null)
+        reportWindow = createReportWindow('Generating report')
 
         const requestBody = {
           assessmentType: 'suitability',
           assessmentId,
           clientId,
           reportType,
-          includeWarnings
+          includeWarnings,
+          includeAI: true
         }
 
         let response = await fetch('/api/documents/generate-assessment-report', {
@@ -251,18 +292,30 @@ export default function SuitabilityResultsPage() {
         }
 
         if (result.inlinePdf) {
-          const pdfBytes = Uint8Array.from(atob(result.inlinePdf), (c) => c.charCodeAt(0))
-          const blob = new Blob([pdfBytes], { type: 'application/pdf' })
-          const url = URL.createObjectURL(blob)
-          window.open(url, '_blank')
+          setGenerationProgress(100)
+          setGenerationStage('Report ready')
+          openPdfFromBase64(result.inlinePdf, {
+            filename: result?.fileName || `${reportType}-report.pdf`,
+            targetWindow: reportWindow
+          })
           return
         }
 
         if (result.signedUrl) {
-          window.open(result.signedUrl, '_blank')
+          setGenerationProgress(100)
+          setGenerationStage('Report ready')
+          openReportUrl(result.signedUrl, { targetWindow: reportWindow })
           return
         }
+
+        if (reportWindow) {
+          reportWindow.close()
+        }
+        setError('Report generated but no download link was returned.')
       } catch (e) {
+        if (reportWindow) {
+          reportWindow.close()
+        }
         setError(e instanceof Error ? e.message : 'Report generation failed')
       } finally {
         setIsGenerating(false)
@@ -289,8 +342,15 @@ export default function SuitabilityResultsPage() {
   if (isLoading) {
     return (
       <div className="p-8 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
-        <span className="text-gray-600">Loading suitability results…</span>
+        <div className="w-full max-w-md rounded-lg border border-blue-100 bg-blue-50 p-4">
+          <div className="flex items-center justify-between text-xs text-blue-700">
+            <span>Loading suitability results</span>
+            <span>Working...</span>
+          </div>
+          <div className="mt-2 h-2 w-full rounded-full bg-blue-100">
+            <div className="h-2 w-1/2 animate-pulse rounded-full bg-blue-600" />
+          </div>
+        </div>
       </div>
     )
   }
@@ -480,6 +540,20 @@ export default function SuitabilityResultsPage() {
               FCA
             </Button>
           </div>
+          {isGenerating && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <div className="flex items-center justify-between text-xs text-blue-700">
+                <span>{generationStage}</span>
+                <span>{generationProgress}%</span>
+              </div>
+              <div className="mt-2 h-2 w-full rounded-full bg-blue-100">
+                <div
+                  className="h-2 rounded-full bg-blue-600 transition-all duration-300"
+                  style={{ width: `${generationProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

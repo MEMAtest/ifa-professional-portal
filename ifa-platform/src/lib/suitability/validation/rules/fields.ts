@@ -38,7 +38,7 @@ export const fieldValidationRules: ValidationRule[] = [
     field: 'email',
     severity: 'error',
     validate: (value) => {
-      const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       const stringValue = ensureString(value)
       const isValid = !stringValue || emailRegex.test(stringValue)
       return {
@@ -65,9 +65,9 @@ export const fieldValidationRules: ValidationRule[] = [
     field: 'phone',
     severity: 'warning',
     validate: (value) => {
-      const ukPhoneRegex = /^(\\+44|0)[1-9]\\d{8,9}$/
+      const ukPhoneRegex = /^(\+44|0)[1-9]\d{8,9}$/
       const stringValue = ensureString(value)
-      const cleaned = stringValue.replace(/\\s/g, '')
+      const cleaned = stringValue.replace(/\s/g, '')
       const isValid = !cleaned || ukPhoneRegex.test(cleaned)
       return {
         isValid,
@@ -231,4 +231,3 @@ export const fieldValidationRules: ValidationRule[] = [
     }
   }
 ]
-

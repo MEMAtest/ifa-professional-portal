@@ -1,5 +1,23 @@
 import type { ConditionalRule } from '../types'
 
+const resolveTimeHorizonYears = (formData: any): number | undefined => {
+  const numeric = formData.objectives?.time_horizon
+  if (typeof numeric === 'number' && Number.isFinite(numeric)) return numeric
+
+  const timeline = String(formData.objectives?.investment_timeline || '').trim()
+  if (!timeline) return undefined
+
+  const mapping: Record<string, number> = {
+    'Less than 3': 2,
+    '3-5': 4,
+    '5-10': 7.5,
+    '10-15': 12.5,
+    'More than 15': 25
+  }
+
+  return mapping[timeline]
+}
+
 export const objectiveRules: ConditionalRule[] = [
   // ===== INVESTMENT OBJECTIVES INTELLIGENCE (Rules 11-20) =====
   {
@@ -105,7 +123,10 @@ export const objectiveRules: ConditionalRule[] = [
     name: 'Limit products for short timeframe',
     sections: ['objectives', 'recommendation'],
     priority: 14,
-    condition: (formData) => (formData.objectives?.time_horizon || 0) < 5,
+    condition: (formData) => {
+      const horizon = resolveTimeHorizonYears(formData)
+      return typeof horizon === 'number' && horizon < 5
+    },
     actions: [
       {
         type: 'set_value',
@@ -116,7 +137,7 @@ export const objectiveRules: ConditionalRule[] = [
       {
         type: 'validate',
         sectionId: 'objectives',
-        message: 'Note: Investment horizon under 5 years limits growth potential'
+        message: 'Short time horizon (<5 years) increases equity risk. Consider more defensive allocations.'
       }
     ]
   },
@@ -126,7 +147,10 @@ export const objectiveRules: ConditionalRule[] = [
     name: 'Unlock aggressive strategies for long timeframe',
     sections: ['objectives', 'recommendation'],
     priority: 15,
-    condition: (formData) => (formData.objectives?.time_horizon || 0) > 20,
+    condition: (formData) => {
+      const horizon = resolveTimeHorizonYears(formData)
+      return typeof horizon === 'number' && horizon > 20
+    },
     actions: [
       {
         type: 'show_field',
@@ -242,7 +266,7 @@ export const objectiveRules: ConditionalRule[] = [
     priority: 18,
     condition: (formData) => {
       const hasDependants = (formData.personal_information?.dependents || 0) > 0
-      const needsEducation = formData.dependants_information?.education_planning_required === 'Yes'
+      const needsEducation = formData.personal_information?.education_planning_required === 'Yes'
       return hasDependants && needsEducation
     },
     actions: [
@@ -279,4 +303,3 @@ export const objectiveRules: ConditionalRule[] = [
     ]
   }
 ]
-

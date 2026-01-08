@@ -447,8 +447,9 @@ export const personalRules: ConditionalRule[] = [
         fieldId: 'income_replacement_ratio',
         value: (formData: SuitabilityFormData) => {
           const financial = formData.financial_situation as any
-          const current = financial?.pension_income || 0
-          const previous = financial?.pre_retirement_income || 1
+          const current = Number(financial?.pension_income || 0)
+          const previous = Number(financial?.pre_retirement_income)
+          if (!Number.isFinite(previous) || previous <= 0) return undefined
           return Math.round((current / previous) * 100)
         }
       }
@@ -564,4 +565,3 @@ export const personalRules: ConditionalRule[] = [
     ]
   }
 ]
-

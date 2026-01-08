@@ -1,5 +1,6 @@
 import type { NotificationOptions } from '@/components/suitability/SuitabilityFormModals'
 import { requestAssessmentReport, type SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
+import { createReportWindow, openPdfFromBase64, openReportUrl } from '@/lib/documents/openPdf'
 import { buildSuitabilityDraftHtml } from '@/lib/suitability/draftHtmlReport'
 import type { SuitabilityFormData } from '@/types/suitability'
 
@@ -63,6 +64,8 @@ export async function generateSuitabilityPdfReport(args: {
   assessmentId?: string
   clientId: string
   showNotification: ShowNotification
+  includeAI?: boolean
+  targetWindow?: Window | null
 }) {
   const reportType = args.reportType ?? 'fullReport'
   const effectiveAssessmentId = args.activeAssessmentId || args.assessmentId
@@ -76,6 +79,8 @@ export async function generateSuitabilityPdfReport(args: {
     return
   }
 
+  let reportWindow: Window | null = args.targetWindow ?? null
+
   try {
     args.showNotification({
       title: 'Generating PDF Report',
@@ -83,12 +88,15 @@ export async function generateSuitabilityPdfReport(args: {
       type: 'info'
     })
 
+    reportWindow = reportWindow ?? createReportWindow('Generating report')
+
     const result = await requestAssessmentReport({
       assessmentType: 'suitability',
       assessmentId: effectiveAssessmentId,
       clientId: args.clientId,
       reportType,
-      allowAutoFallbackToWarnings: true
+      allowAutoFallbackToWarnings: true,
+      includeAI: args.includeAI ?? true
     })
 
     if (result.fallbackToWarningsUsed) {
@@ -104,10 +112,10 @@ export async function generateSuitabilityPdfReport(args: {
     }
 
     if (result.inlinePdf) {
-      const pdfBlob = Uint8Array.from(atob(result.inlinePdf), (c) => c.charCodeAt(0))
-      const blob = new Blob([pdfBlob], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
+      openPdfFromBase64(result.inlinePdf, {
+        filename: result.fileName || `suitability-${reportType}.pdf`,
+        targetWindow: reportWindow
+      })
 
       args.showNotification({
         title: 'Report Generated',
@@ -118,13 +126,28 @@ export async function generateSuitabilityPdfReport(args: {
     }
 
     if (result.signedUrl) {
-      window.open(result.signedUrl, '_blank')
+      openReportUrl(result.signedUrl, { targetWindow: reportWindow })
       args.showNotification({
         title: 'Report Generated',
         description: 'PDF report opened in new tab',
         type: 'success'
       })
       return
+    }
+
+    if (result.documentId) {
+      const downloadUrl = `/api/documents/download/${result.documentId}`
+      openReportUrl(downloadUrl, { targetWindow: reportWindow })
+      args.showNotification({
+        title: 'Report Generated',
+        description: 'PDF report downloaded',
+        type: 'success'
+      })
+      return
+    }
+
+    if (reportWindow) {
+      reportWindow.close()
     }
 
     args.showNotification({
@@ -134,6 +157,9 @@ export async function generateSuitabilityPdfReport(args: {
     })
   } catch (error) {
     console.error('PDF report generation error:', error)
+    if (reportWindow) {
+      reportWindow.close()
+    }
     args.showNotification({
       title: 'Report Generation Failed',
       description: error instanceof Error ? error.message : 'Could not generate PDF report',
@@ -141,4 +167,3 @@ export async function generateSuitabilityPdfReport(args: {
     })
   }
 }
-

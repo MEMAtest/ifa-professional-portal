@@ -56,7 +56,10 @@ export interface FinancialSituation {
   monthly_expenditure?: number
   disposable_income?: number
   liquid_assets?: number
+  has_property?: string
   property_value?: number
+  has_mortgage?: string
+  mortgage_outstanding?: number
   outstanding_mortgage?: number
   other_liabilities?: number
   net_worth?: number
@@ -79,11 +82,16 @@ export interface FinancialSituation {
   exp_food?: number
   exp_transport?: number
   exp_healthcare?: number
+  exp_childcare?: number
   exp_leisure?: number
   exp_holidays?: number
   exp_other?: number
   exp_total_essential?: number
   exp_total_discretionary?: number
+  projection_income_growth?: number
+  projection_expense_inflation?: number
+  projection_investment_return?: number
+  projection_surplus_savings_rate?: number
 }
 
 export interface RiskAssessment {
@@ -114,7 +122,8 @@ export interface KnowledgeExperience {
 
 export interface ExistingArrangements {
   has_pension?: string
-  has_protection?: string
+  has_existing_protection?: string
+  has_protection?: string[] | string
   has_mortgage_protection?: string
   has_will?: string
   has_lpa?: string
@@ -275,6 +284,7 @@ export interface PersonalInformation {
   age?: number
   national_insurance?: string
   marital_status?: string
+  has_dependents?: string
   dependents?: number
   employment_status?: string
   target_retirement_age?: number
@@ -495,6 +505,8 @@ export interface SuitabilityField {
   type: 'text' | 'number' | 'select' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'email' | 'tel' | 'address'
   required?: boolean
   options?: string[]
+  allowCustom?: boolean
+  customOptionLabel?: string
   placeholder?: string
   validation?: string
   autoGenerate?: boolean

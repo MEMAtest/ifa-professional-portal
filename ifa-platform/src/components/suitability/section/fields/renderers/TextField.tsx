@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 
-import { AlertCircle, Check, Copy, Database, HelpCircle, Info, Sparkles } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Copy, Database, HelpCircle, Info, Sparkles } from 'lucide-react'
 
 export const TextField = memo<FieldProps>(
   ({ field, value, onChange, onBlur, onFocus, error, warning, isReadOnly, isRequired, aiSuggestion, pulledValue, showHelp, className }) => {
@@ -107,6 +107,9 @@ export const TextField = memo<FieldProps>(
           )}
 
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {datalistId && (
+              <ChevronDown className="h-4 w-4 text-gray-400" aria-hidden="true" />
+            )}
             {value && (
               <Button type="button" size="sm" variant="ghost" onClick={handleCopy} className="h-8 w-8 p-0">
                 {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}

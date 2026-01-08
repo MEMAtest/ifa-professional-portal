@@ -9,16 +9,19 @@ import { CardContent, CardFooter } from '@/components/ui/Card'
 
 import { AlertCircle, Check, ChevronDown, ChevronUp, Copy, HelpCircle, Info, Sparkles } from 'lucide-react'
 
-import type { AISuggestion, PulledPlatformData, ValidationError } from '@/types/suitability'
+import type { AISuggestion, PulledPlatformData, SuitabilityFormData, ValidationError } from '@/types/suitability'
 import type { ExtendedSuitabilityField } from '../types'
 
 import { FieldRenderer } from '../fields/FieldRenderer'
+import { isAIGeneratableField } from '@/lib/suitability/ai/fieldRegistry'
 
 interface DefaultSectionContentProps {
   baseFields: ExtendedSuitabilityField[]
   allFields: ExtendedSuitabilityField[]
   visibleFields: ExtendedSuitabilityField[]
   sectionData: Record<string, any>
+  sectionId: string
+  formData: SuitabilityFormData
   pulledData: PulledPlatformData
   validationErrors: ValidationError[]
   aiSuggestion?: AISuggestion
@@ -36,6 +39,8 @@ interface DefaultSectionContentProps {
     lastError: string | null
   }
   helpUrl?: string
+  clientId?: string
+  assessmentId?: string
 }
 
 export function DefaultSectionContent(props: DefaultSectionContentProps) {
@@ -133,6 +138,18 @@ export function DefaultSectionContent(props: DefaultSectionContentProps) {
                     props.pulledData && field.pullFrom ? (props.pulledData as Record<string, unknown>)[field.pullFrom] : undefined
                   }
                   isLoading={props.isLoadingAI}
+                  aiContext={
+                    isAIGeneratableField(field.id) && field.type === 'textarea'
+                      ? {
+                          clientId: props.clientId,
+                          assessmentId: props.assessmentId,
+                          sectionId: props.sectionId,
+                          formData: props.formData as any,
+                          pulledData: props.pulledData,
+                          onGenerated: (text: string) => props.onFieldUpdate(field.id, text)
+                        }
+                      : undefined
+                  }
                 />
 
                 {fieldValue && field.type !== 'checkbox' && field.type !== 'radio' && (
@@ -190,4 +207,3 @@ export function DefaultSectionContent(props: DefaultSectionContentProps) {
     </>
   )
 }
-

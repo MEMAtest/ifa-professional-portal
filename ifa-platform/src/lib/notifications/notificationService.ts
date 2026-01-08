@@ -596,11 +596,21 @@ export async function notifyProfileUpdated(
   clientName: string
 ): Promise<void> {
   console.log('[Notification] Creating profile_updated notification', { userId, clientId, clientName })
-  const firmId = await getUserFirmId(userId)
+  const supabase = getSupabaseServiceClient()
+  let firmId = await getUserFirmId(userId)
+
+  if (!firmId) {
+    const { data: clientFirm } = await supabase
+      .from('clients')
+      .select('firm_id')
+      .eq('id', clientId)
+      .maybeSingle()
+    firmId = clientFirm?.firm_id ?? undefined
+  }
+
   console.log('[Notification] Got firm_id:', firmId)
-  const result = await NotificationService.create({
+  const input: CreateNotificationInput = {
     user_id: userId,
-    firm_id: firmId,
     client_id: clientId,
     entity_type: 'client',
     entity_id: clientId,
@@ -609,7 +619,13 @@ export async function notifyProfileUpdated(
     message: `Client profile has been updated`,
     action_url: `/clients/${clientId}`,
     priority: 'low'
-  })
+  }
+
+  if (firmId) {
+    input.firm_id = firmId
+  }
+
+  const result = await NotificationService.create(input)
   console.log('[Notification] Result:', result ? 'created' : 'deduplicated or failed')
 }
 

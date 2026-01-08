@@ -10,6 +10,17 @@ export const ExecutiveSummaryPage: React.FC<{ data: SuitabilityReportData; style
   brand
 }) => {
   const adviceInScope = data.scope.includeInvestments || data.scope.includePensions || data.scope.includeProtection
+  const aiSummary = data.aiGenerated?.executiveSummary
+  const fallbackSummary = [
+    `${data.client.personalDetails.fullName || 'The client'} sought advice in relation to ${data.objectives.primaryObjective || 'their financial objectives'}.`,
+    `Their risk profile is ${data.riskAssessment.combinedRiskCategory}, with ATR ${data.riskAssessment.attitudeToRisk ?? 'Not assessed'}/10 and CFL ${data.riskAssessment.capacityForLoss ?? 'Not assessed'}/10.`,
+    adviceInScope
+      ? `We recommend ${data.recommendation.products.length > 0 ? data.recommendation.products.map((p) => p.name).join(', ') : 'a suitable investment portfolio'} with a total investment of ${formatCurrency(data.client.financialDetails.investmentAmount)}.`
+      : 'No investment, pension, or protection advice has been selected for this report.',
+    `Next review is scheduled for ${formatDate(data.ongoingService.nextReviewDateISO)}.`
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <Page size="A4" style={styles.page}>
@@ -76,6 +87,21 @@ export const ExecutiveSummaryPage: React.FC<{ data: SuitabilityReportData; style
           ))}
         </View>
       )}
+    </View>
+
+    <View style={styles.subsection}>
+      <Text style={styles.subsectionTitle}>Executive Summary Narrative</Text>
+      {(aiSummary || fallbackSummary)
+        .split(/\n+/)
+        .map((paragraph, idx) => {
+          const trimmed = paragraph.trim()
+          if (!trimmed) return null
+          return (
+            <Text key={idx} style={styles.text}>
+              {trimmed}
+            </Text>
+          )
+        })}
     </View>
 
     <PageFooter styles={styles} brand={brand} />

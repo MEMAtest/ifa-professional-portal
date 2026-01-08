@@ -15,7 +15,7 @@ type SaveSuitabilityDraftArgs = {
   source?: string
 }
 
-const MAX_VERSION_RETRIES = 3
+const MAX_VERSION_RETRIES = 10
 
 export async function saveSuitabilityDraft({
   supabase,
@@ -29,12 +29,28 @@ export async function saveSuitabilityDraft({
 }: SaveSuitabilityDraftArgs) {
   const now = nowISO || new Date().toISOString()
 
-  const effectiveAssessmentId = assessmentId && isUUID(assessmentId) ? assessmentId : undefined
+  let effectiveAssessmentId = assessmentId && isUUID(assessmentId) ? assessmentId : undefined
 
   // Find next version if inserting.
   // Uses retry loop to handle race conditions where concurrent requests
   // calculate the same version number. DB constraint (client_id, version_number)
   // ensures uniqueness - on conflict we retry with refreshed version.
+  if (!effectiveAssessmentId) {
+    const { data: latestDraft, error: latestDraftError } = await supabase
+      .from('suitability_assessments')
+      .select('id')
+      .eq('client_id', clientId)
+      .or('is_draft.eq.true,status.ilike.in_progress,status.ilike.draft')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latestDraftError && latestDraftError.code !== 'PGRST116') throw latestDraftError
+    if (latestDraft?.id) {
+      effectiveAssessmentId = latestDraft.id
+    }
+  }
+
   let versionNumber = 1
   if (!effectiveAssessmentId) {
     const { data: latest, error: latestError } = await supabase
@@ -83,6 +99,68 @@ export async function saveSuitabilityDraft({
     }
   }
 
+  const insertWithRetries = async (initialVersion: number) => {
+    let version = initialVersion
+    let retries = 0
+    let insertSuccess = false
+    let insertResult: any
+
+    while (!insertSuccess && retries < MAX_VERSION_RETRIES) {
+      // Mark existing current as not current
+      await supabase
+        .from('suitability_assessments')
+        .update({ is_current: false } as any)
+        .eq('client_id', clientId)
+        .eq('is_current', true)
+
+      insertResult = await supabase
+        .from('suitability_assessments')
+        .insert({
+          ...(mapped as any),
+          version_number: version
+        })
+        .select('id,version_number,completion_percentage')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const uniqueCode = insertResult.error?.code
+      const isUniqueViolation = uniqueCode === '23505' || uniqueCode === 23505
+
+      if (isUniqueViolation) {
+        retries++
+        const { data: refreshed, error: refreshedError } = await supabase
+          .from('suitability_assessments')
+          .select('version_number')
+          .eq('client_id', clientId)
+          .order('version_number', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (refreshedError && refreshedError.code !== 'PGRST116') {
+          throw refreshedError
+        }
+
+        const delayMs = Math.min(2000, Math.pow(2, retries) * 50 + Math.random() * 50)
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+
+        version = (refreshed?.version_number || 0) + 1
+        continue
+      }
+
+      insertSuccess = true
+    }
+
+    const finalCode = insertResult?.error?.code
+    if (!insertSuccess && (finalCode === '23505' || finalCode === 23505)) {
+      const err = new Error('Failed to create assessment after max retries (version conflict)')
+      ;(err as any).status = 409
+      throw err
+    }
+
+    return insertResult
+  }
+
   let result: any
 
   if (effectiveAssessmentId) {
@@ -96,47 +174,30 @@ export async function saveSuitabilityDraft({
       .maybeSingle()
 
     if ((result.error && result.error.code === 'PGRST116') || (!result.error && !result.data)) {
-      result = await supabase
+      const { data: latestDraft, error: latestDraftError } = await supabase
         .from('suitability_assessments')
-        .insert({
-          ...(mapped as any),
-          version_number: versionNumber
-        })
-        .select('id,version_number,completion_percentage')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    }
-  } else {
-    // New draft/version becomes the current one.
-    // Retry loop handles version number race conditions.
-    let retries = 0
-    let insertSuccess = false
-
-    while (!insertSuccess && retries < MAX_VERSION_RETRIES) {
-      // Mark existing current as not current
-      await supabase
-        .from('suitability_assessments')
-        .update({ is_current: false } as any)
+        .select('id')
         .eq('client_id', clientId)
-        .eq('is_current', true)
-
-      result = await supabase
-        .from('suitability_assessments')
-        .insert({
-          ...(mapped as any),
-          version_number: versionNumber
-        })
-        .select('id,version_number,completion_percentage')
-        .order('created_at', { ascending: false })
+        .or('is_draft.eq.true,status.ilike.in_progress,status.ilike.draft')
+        .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
-      // Check for unique constraint violation on (client_id, version_number)
-      if (result.error?.code === '23505') {
-        retries++
-        // Re-fetch latest version number and increment
-        const { data: refreshed } = await supabase
+      if (latestDraftError && latestDraftError.code !== 'PGRST116') throw latestDraftError
+
+      if (latestDraft?.id) {
+        result = await supabase
+          .from('suitability_assessments')
+          .update(mapped as any)
+          .eq('id', latestDraft.id)
+          .select('id,version_number,completion_percentage')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      }
+
+      if ((result.error && result.error.code === 'PGRST116') || (!result.error && !result.data)) {
+        const { data: latest, error: latestError } = await supabase
           .from('suitability_assessments')
           .select('version_number')
           .eq('client_id', clientId)
@@ -144,18 +205,14 @@ export async function saveSuitabilityDraft({
           .limit(1)
           .maybeSingle()
 
-        versionNumber = (refreshed?.version_number || 0) + 1
-        continue
+        if (latestError && latestError.code !== 'PGRST116') throw latestError
+
+        const nextVersion = (latest?.version_number || 0) + 1
+        result = await insertWithRetries(nextVersion)
       }
-
-      insertSuccess = true
     }
-
-    if (!insertSuccess && result?.error?.code === '23505') {
-      const err = new Error('Failed to create assessment after max retries (version conflict)')
-      ;(err as any).status = 409
-      throw err
-    }
+  } else {
+    result = await insertWithRetries(versionNumber)
   }
 
   if (result.error) {

@@ -34,20 +34,24 @@ export const financialSituationSection = {
       pullFrom: 'client.financialProfile.liquidAssets' // ✅ AUTO-GENERATION: Pull savings
     },
     {
-      id: 'property_value',
-      label: 'Property Value (£)',
-      type: 'number',
-      placeholder: '300000',
-      min: 0,
-      pullFrom: 'client.financialProfile.propertyValue' // ✅ AUTO-GENERATION: Pull property
+      id: 'has_property',
+      label: 'Do you own property?',
+      type: 'radio',
+      options: ['Yes', 'No'],
+      autoGenerate: true,
+      smartDefault: (formData: any) => {
+        const propertyValue = Number(formData.financial_situation?.property_value ?? 0)
+        if (Number.isFinite(propertyValue) && propertyValue > 0) return 'Yes'
+        if (propertyValue === 0) return 'No'
+        return undefined
+      }
     },
     {
-      id: 'mortgage_outstanding',
-      label: 'Outstanding Mortgage (£)',
-      type: 'number',
-      placeholder: '150000',
-      min: 0,
-      pullFrom: 'client.financialProfile.mortgageBalance' // ✅ AUTO-GENERATION: Pull mortgage
+      id: 'has_mortgage',
+      label: 'Do you have a mortgage?',
+      type: 'radio',
+      options: ['Yes', 'No'],
+      autoGenerate: true
     },
     {
       id: 'other_debts',
@@ -107,14 +111,6 @@ export const financialSituationSection = {
       calculate: 'net_worth' // ✅ AUTO-GENERATION: Calculate net worth
     },
     {
-      id: 'income_employment',
-      label: 'Employment Income (Current, £ p.a.)',
-      type: 'number',
-      placeholder: 'e.g. 60000',
-      min: 0,
-      helpText: 'Current gross annual employment/self-employment income.'
-    },
-    {
       id: 'income_state_pension',
       label: 'State Pension (At Retirement, £ p.a.)',
       type: 'number',
@@ -129,13 +125,6 @@ export const financialSituationSection = {
       placeholder: 'e.g. 12000',
       min: 0,
       helpText: 'Expected annual income from DB pensions at retirement.'
-    },
-    {
-      id: 'income_rental',
-      label: 'Rental Income (Current, £ p.a.)',
-      type: 'number',
-      placeholder: 'e.g. 9000',
-      min: 0
     },
     {
       id: 'income_dividends',
@@ -230,6 +219,103 @@ export const financialSituationSection = {
       placeholder: 'Auto-calculated',
       calculate: 'exp_total_discretionary'
     }
+  ],
+  conditionalFields: [
+    {
+      condition: (formData) => {
+        const hasProperty = formData.financial_situation?.has_property
+        if (typeof hasProperty === 'string') return hasProperty === 'Yes'
+        if (typeof hasProperty === 'boolean') return hasProperty
+        const value = Number((formData.financial_situation as any)?.property_value ?? 0)
+        return Number.isFinite(value) && value > 0
+      },
+      fields: [
+        {
+          id: 'property_value',
+          label: 'Property Value (£)',
+          type: 'number',
+          placeholder: '300000',
+          min: 0,
+          pullFrom: 'client.financialProfile.propertyValue' // ✅ AUTO-GENERATION: Pull property
+        }
+      ]
+    },
+    {
+      condition: (formData) => {
+        const mortgageFlag = formData.financial_situation?.has_mortgage
+        if (typeof mortgageFlag === 'string') return mortgageFlag === 'Yes'
+        if (typeof mortgageFlag === 'boolean') return mortgageFlag
+        const mortgageValue = Number(
+          (formData.financial_situation as any)?.mortgage_outstanding ??
+            (formData.financial_situation as any)?.outstanding_mortgage ??
+            0
+        )
+        return Number.isFinite(mortgageValue) && mortgageValue > 0
+      },
+      fields: [
+        {
+          id: 'mortgage_outstanding',
+          label: 'Outstanding Mortgage (£)',
+          type: 'number',
+          placeholder: '150000',
+          min: 0,
+          pullFrom: 'client.financialProfile.mortgageBalance' // ✅ AUTO-GENERATION: Pull mortgage
+        }
+      ]
+    },
+    {
+      condition: (formData) => {
+        const status = formData.personal_information?.employment_status
+        const hasEmployment = status === 'Employed' || status === 'Self-Employed'
+        const existing = (formData.financial_situation as any)?.income_employment
+        return Boolean(hasEmployment || existing !== undefined)
+      },
+      fields: [
+        {
+          id: 'income_employment',
+          label: 'Employment Income (Current, £ p.a.)',
+          type: 'number',
+          placeholder: 'e.g. 60000',
+          min: 0,
+          helpText: 'Current gross annual employment/self-employment income.'
+        }
+      ]
+    },
+    {
+      condition: (formData) => {
+        const propertyFlag = formData.financial_situation?.has_property
+        const hasProperty = typeof propertyFlag === 'string' ? propertyFlag === 'Yes' : Boolean(propertyFlag)
+        const propertyValue = Number((formData.financial_situation as any)?.property_value ?? 0)
+        const rental = (formData.financial_situation as any)?.income_rental
+        return hasProperty || (Number.isFinite(propertyValue) && propertyValue > 0) || rental !== undefined
+      },
+      fields: [
+        {
+          id: 'income_rental',
+          label: 'Rental Income (Current, £ p.a.)',
+          type: 'number',
+          placeholder: 'e.g. 9000',
+          min: 0
+        }
+      ]
+    },
+    {
+      condition: (formData) => {
+        const hasDependents = formData.personal_information?.has_dependents
+        if (typeof hasDependents === 'string' && hasDependents === 'Yes') return true
+        if (typeof hasDependents === 'boolean' && hasDependents) return true
+        const dependents = Number(formData.personal_information?.dependents ?? 0)
+        return Number.isFinite(dependents) && dependents > 0
+      },
+      fields: [
+        {
+          id: 'exp_childcare',
+          label: 'Childcare (Essential, £ p.a.)',
+          type: 'number',
+          placeholder: 'e.g. 2400',
+          min: 0
+        }
+      ]
+    }
   ]
 }
-

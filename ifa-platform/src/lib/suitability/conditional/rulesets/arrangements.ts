@@ -7,7 +7,12 @@ export const arrangementsRules: ConditionalRule[] = [
     name: 'Show pension arrangement details',
     sections: ['existing_arrangements'],
     priority: 31,
-    condition: (formData) => formData.existing_arrangements?.has_pension === 'Yes',
+    condition: (formData) => {
+      const value = formData.existing_arrangements?.has_pension
+      if (typeof value === 'boolean') return value
+      if (typeof value === 'string') return value.toLowerCase() === 'yes'
+      return false
+    },
     actions: [
       {
         type: 'show_field',
@@ -40,13 +45,44 @@ export const arrangementsRules: ConditionalRule[] = [
       }
     ]
   },
+  {
+    id: 'pension_contribution_review',
+    name: 'Prompt review when pension contributions are zero',
+    sections: ['existing_arrangements'],
+    priority: 32,
+    condition: (formData) => {
+      const hasPension = formData.existing_arrangements?.has_pension === 'Yes'
+      if (!hasPension) return false
+      const raw = (formData.existing_arrangements as any)?.pension_contributions
+      if (raw === null || raw === undefined || raw === '') return false
+      const contributions = Number(raw)
+      return Number.isFinite(contributions) && contributions <= 0
+    },
+    actions: [
+      {
+        type: 'validate',
+        sectionId: 'existing_arrangements',
+        message: 'No ongoing pension contributions recorded. Consider reviewing retirement funding.'
+      }
+    ]
+  },
 
   {
     id: 'protection_details',
     name: 'Show protection arrangement details',
     sections: ['existing_arrangements'],
-    priority: 32,
-    condition: (formData) => formData.existing_arrangements?.has_protection === 'Yes',
+    priority: 33,
+    condition: (formData) => {
+      const protection = formData.existing_arrangements?.has_protection
+      if (Array.isArray(protection)) {
+        return protection.some((option) => option && option !== 'None')
+      }
+      if (typeof protection === 'string') {
+        return protection !== 'None' && protection.toLowerCase() !== 'no'
+      }
+      if (typeof protection === 'boolean') return protection
+      return false
+    },
     actions: [
       {
         type: 'show_field',
@@ -78,4 +114,3 @@ export const arrangementsRules: ConditionalRule[] = [
     ]
   }
 ]
-

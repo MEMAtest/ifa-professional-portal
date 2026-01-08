@@ -9,24 +9,44 @@ import { Label } from '@/components/ui/Label'
 import { Textarea } from '@/components/ui/Textarea'
 
 import { AlertCircle, HelpCircle } from 'lucide-react'
+import { AIGenerateButton } from '@/components/suitability/ai/AIGenerateButton'
+import { isAIGeneratableField } from '@/lib/suitability/ai/fieldRegistry'
 
 export function TextareaField(props: FieldProps) {
   const isCalculated = Boolean(props.field.calculate)
   const showHelp = Boolean(props.showHelp ?? props.field.helpText)
   const isRequired = Boolean(props.isRequired ?? props.field.required)
+  const canGenerateAI =
+    Boolean(props.aiContext) &&
+    isAIGeneratableField(props.field.id) &&
+    !props.isReadOnly &&
+    !props.isLoading &&
+    !isCalculated
 
   return (
     <div className={cn('space-y-2', props.className)}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <Label htmlFor={props.field.id} className={cn('text-sm font-medium', props.error && 'text-red-600')}>
           {props.field.label}
           {isRequired && <span className="text-red-500 ml-1">*</span>}
         </Label>
-        {showHelp && props.field.helpText && (
-          <Tooltip content={props.field.helpText}>
-            <HelpCircle className="h-4 w-4 text-gray-400" />
-          </Tooltip>
-        )}
+        <div className="flex items-center gap-2">
+          {showHelp && props.field.helpText && (
+            <Tooltip content={props.field.helpText}>
+              <HelpCircle className="h-4 w-4 text-gray-400" />
+            </Tooltip>
+          )}
+          {canGenerateAI && props.aiContext && (
+            <AIGenerateButton
+              clientId={props.aiContext.clientId}
+              assessmentId={props.aiContext.assessmentId}
+              fieldId={props.field.id}
+              formData={props.aiContext.formData}
+              pulledData={props.aiContext.pulledData}
+              onGenerated={props.aiContext.onGenerated}
+            />
+          )}
+        </div>
       </div>
 
       <Textarea
@@ -58,4 +78,3 @@ export function TextareaField(props: FieldProps) {
     </div>
   )
 }
-

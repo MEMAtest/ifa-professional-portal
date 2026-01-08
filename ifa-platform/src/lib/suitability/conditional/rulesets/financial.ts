@@ -76,6 +76,27 @@ export const financialRules: ConditionalRule[] = [
       }
     ]
   },
+  {
+    id: 'emergency_fund_critical',
+    name: 'Warn when emergency fund is under 3 months',
+    sections: ['financial_situation'],
+    priority: 21.5,
+    condition: (formData) => {
+      const financial = formData.financial_situation as any
+      const monthly = Number(financial?.monthly_expenses ?? financial?.monthly_expenditure ?? 0)
+      const fund = Number(financial?.emergency_fund ?? financial?.liquid_assets ?? 0)
+      if (!Number.isFinite(monthly) || monthly <= 0) return false
+      if (!Number.isFinite(fund)) return false
+      return fund / monthly < 3
+    },
+    actions: [
+      {
+        type: 'validate',
+        sectionId: 'financial_situation',
+        message: 'Emergency fund covers less than 3 months of expenses. Prioritise building cash reserves.'
+      }
+    ]
+  },
 
   {
     id: 'high_net_worth_options',
@@ -129,6 +150,27 @@ export const financialRules: ConditionalRule[] = [
         }
       }
     ]
+  },
+  {
+    id: 'debt_ratio_warning',
+    name: 'Warn when total debt exceeds 50% of income',
+    sections: ['financial_situation'],
+    priority: 24,
+    condition: (formData) => {
+      const financial = formData.financial_situation as any
+      const income = Number(financial?.income_total ?? financial?.annual_income ?? 0)
+      if (!Number.isFinite(income) || income <= 0) return false
+      const mortgage = Number(financial?.mortgage_outstanding ?? financial?.outstanding_mortgage ?? 0)
+      const otherDebts = Number(financial?.other_debts ?? financial?.other_liabilities ?? 0)
+      const totalDebt = (Number.isFinite(mortgage) ? mortgage : 0) + (Number.isFinite(otherDebts) ? otherDebts : 0)
+      return totalDebt / income > 0.5
+    },
+    actions: [
+      {
+        type: 'validate',
+        sectionId: 'financial_situation',
+        message: 'Total debts exceed 50% of annual income. Review affordability before recommending risk assets.'
+      }
+    ]
   }
 ]
-

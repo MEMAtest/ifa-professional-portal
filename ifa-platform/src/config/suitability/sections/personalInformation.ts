@@ -110,13 +110,37 @@ export const personalInformationSection = {
       options: ['Yes', 'No', 'Former']
     },
     {
-      id: 'dependents',
-      label: 'Number of Financial Dependents',
-      type: 'number',
-      min: 0,
-      max: 10,
-      pullFrom: 'client.personalDetails.dependents' // ✅ AUTO-GENERATION: Pull dependents
+      id: 'has_dependents',
+      label: 'Any financial dependents?',
+      type: 'radio',
+      options: ['Yes', 'No'],
+      autoGenerate: true,
+      smartDefault: (formData: any) => {
+        const dependents = formData.personal_information?.dependents
+        if (typeof dependents === 'number') return dependents > 0 ? 'Yes' : 'No'
+        return undefined
+      }
+    }
+  ],
+  conditionalFields: [
+    {
+      condition: (formData) => {
+        const value = formData.personal_information?.has_dependents
+        if (typeof value === 'boolean') return value
+        if (typeof value === 'string') return value.toLowerCase() === 'yes'
+        const dependents = Number(formData.personal_information?.dependents ?? 0)
+        return Number.isFinite(dependents) && dependents > 0
+      },
+      fields: [
+        {
+          id: 'dependents',
+          label: 'Number of Financial Dependents',
+          type: 'number',
+          min: 0,
+          max: 10,
+          pullFrom: 'client.personalDetails.dependents' // ✅ AUTO-GENERATION: Pull dependents
+        }
+      ]
     }
   ]
 }
-

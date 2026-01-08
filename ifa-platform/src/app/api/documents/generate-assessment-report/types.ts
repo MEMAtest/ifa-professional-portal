@@ -4,6 +4,7 @@ export interface GenerateAssessmentReportRequest {
   clientId: string
   reportType?: string
   includeWarnings?: boolean
+  includeAI?: boolean
   missingFieldsReport?: unknown
 }
 
@@ -33,4 +34,3 @@ export function normalizeSuitabilityReportVariant(value: string | undefined): Su
 
   return 'fullReport'
 }
-

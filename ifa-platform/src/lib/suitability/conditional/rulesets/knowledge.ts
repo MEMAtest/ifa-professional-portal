@@ -3,6 +3,20 @@ import type { ConditionalRule } from '../types'
 export const knowledgeRules: ConditionalRule[] = [
   // ===== KNOWLEDGE & EXPERIENCE INTELLIGENCE (Rules 28-35) =====
   {
+    id: 'no_experience_warning',
+    name: 'Warn when investment experience is none',
+    sections: ['knowledge_experience'],
+    priority: 27,
+    condition: (formData) => formData.knowledge_experience?.investment_experience === 'None',
+    actions: [
+      {
+        type: 'validate',
+        sectionId: 'knowledge_experience',
+        message: 'Client reports no prior investment experience. Consider simpler products and additional education.'
+      }
+    ]
+  },
+  {
     id: 'novice_limitations',
     name: 'Limit products for novice investors',
     sections: ['knowledge_experience', 'recommendation'],
@@ -102,4 +116,3 @@ export const knowledgeRules: ConditionalRule[] = [
     ]
   }
 ]
-

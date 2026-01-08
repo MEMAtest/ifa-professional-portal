@@ -90,24 +90,22 @@ export class AutoGenerationService {
       })
     }
     
+    let workingFormData = { ...formData } as SuitabilityFormData
+
     sections.forEach(section => {
       if (!section.fields) return
-      
+
       const sectionUpdates: Record<string, any> = {}
       debugLog(`\n📋 Processing section: ${section.id}`)
-      
-      section.fields.forEach(field => {
-        const existingValue = (formData as any)[section.id]?.[field.id]
-        
-        // Skip if value exists and we're not overriding
-        if (skipExistingValues && existingValue !== undefined && existingValue !== null && existingValue !== '') {
-          debugLog(`⏭️ Skipping ${field.id} - already has value:`, existingValue)
+
+      const applyField = (field: any, currentValue: any, workingFormData: SuitabilityFormData) => {
+        if (skipExistingValues && currentValue !== undefined && currentValue !== null && currentValue !== '') {
+          debugLog(`⏭️ Skipping ${field.id} - already has value:`, currentValue)
           return
         }
-        
+
         let generatedValue: any = undefined
-        
-        // 1. PULL FROM CLIENT DATA
+
         if (field.pullFrom && client) {
           generatedValue = this.executePullFrom(field.pullFrom, client)
           if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
@@ -116,19 +114,17 @@ export class AutoGenerationService {
             debugLog(`❌ Pull failed for ${field.pullFrom} - got:`, generatedValue)
           }
         }
-        
-        // 2. AUTO-GENERATE
+
         if (field.autoGenerate && (generatedValue === undefined || generatedValue === null || generatedValue === '')) {
           generatedValue = this.executeAutoGenerate(field.id, field, client)
           if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
             debugLog(`🤖 Auto-generated ${section.id}.${field.id}:`, generatedValue)
           }
         }
-        
-        // 3. SMART DEFAULT
+
         if (field.smartDefault && (generatedValue === undefined || generatedValue === null || generatedValue === '')) {
           try {
-            generatedValue = field.smartDefault(formData, pulledData)
+            generatedValue = field.smartDefault(workingFormData, pulledData)
             if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
               debugLog(`🧠 Smart default ${section.id}.${field.id}:`, generatedValue)
             }
@@ -136,26 +132,56 @@ export class AutoGenerationService {
             debugWarn(`Smart default failed for ${section.id}.${field.id}:`, error)
           }
         }
-        
-        // 4. CALCULATE (depends on other fields)
+
         if (field.calculate && (generatedValue === undefined || generatedValue === null || generatedValue === '')) {
-          generatedValue = this.executeCalculation(field.calculate, formData, section.id, field.id)
+          generatedValue = this.executeCalculation(field.calculate, workingFormData, section.id, field.id)
           if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
             debugLog(`🧮 Calculated ${section.id}.${field.id}:`, generatedValue)
           }
         }
-        
-        // Apply the generated value
+
         if (generatedValue !== undefined && generatedValue !== null && generatedValue !== '') {
           sectionUpdates[field.id] = generatedValue
         }
+      }
+
+      section.fields.forEach(field => {
+        const existingValue = (workingFormData as any)[section.id]?.[field.id]
+        applyField(field, existingValue, workingFormData)
       })
-      
-      // Add section updates if any
+
+      let updatedSectionData = {
+        ...(workingFormData as any)[section.id],
+        ...sectionUpdates
+      }
+      let nextWorkingFormData = {
+        ...workingFormData,
+        [section.id]: updatedSectionData
+      } as SuitabilityFormData
+
+      section.conditionalFields?.forEach((group) => {
+        if (!group.condition(nextWorkingFormData, pulledData)) return
+        group.fields.forEach((field) => {
+          const existingValue = (updatedSectionData as any)?.[field.id]
+          applyField(field, existingValue, nextWorkingFormData)
+        })
+      })
+
       if (Object.keys(sectionUpdates).length > 0) {
         debugLog(`✅ Section ${section.id} updates:`, sectionUpdates)
         updates[section.id as keyof SuitabilityFormData] = sectionUpdates as any
       }
+
+      updatedSectionData = {
+        ...(workingFormData as any)[section.id],
+        ...sectionUpdates
+      }
+      nextWorkingFormData = {
+        ...workingFormData,
+        [section.id]: updatedSectionData
+      } as SuitabilityFormData
+
+      workingFormData = nextWorkingFormData
     })
     
     debugLog('✅ Auto-generation complete, updated sections:', Object.keys(updates))
@@ -250,18 +276,20 @@ export class AutoGenerationService {
       'address': (c) => this.formatAddress(c.contactInfo?.address),
       
       // Financial Profile Mappings
-      'financialProfile.annualIncome': (c) => c.financialProfile?.annualIncome,
-      'financialProfile.monthlyExpenses': (c) => c.financialProfile?.monthlyExpenses,
-      'financialProfile.netWorth': (c) => c.financialProfile?.netWorth,
-      'financialProfile.totalAssets': (c) => c.financialProfile?.totalAssets,
-      'financialProfile.totalLiabilities': (c) => c.financialProfile?.totalLiabilities || c.financialProfile?.otherDebts,
-      'financialProfile.liquidAssets': (c) => c.financialProfile?.liquidAssets,
-      'financialProfile.propertyValue': (c) => c.financialProfile?.propertyValue,
-      'financialProfile.mortgageBalance': (c) => c.financialProfile?.mortgageBalance,
-      'financialProfile.otherDebts': (c) => c.financialProfile?.otherDebts,
-      'financialProfile.emergencyFund': (c) => c.financialProfile?.emergencyFund,
-      'financialProfile.pensionValue': (c) => c.financialProfile?.pensionValue,
-      'financialProfile.existingInvestments': (c) => c.financialProfile?.existingInvestments,
+      'financialProfile.annualIncome': (c) => (c.financialProfile || c.financial_profile)?.annualIncome,
+      'financialProfile.monthlyExpenses': (c) => (c.financialProfile || c.financial_profile)?.monthlyExpenses,
+      'financialProfile.netWorth': (c) => (c.financialProfile || c.financial_profile)?.netWorth,
+      'financialProfile.totalAssets': (c) => (c.financialProfile || c.financial_profile)?.totalAssets,
+      'financialProfile.totalLiabilities': (c) =>
+        (c.financialProfile || c.financial_profile)?.totalLiabilities ||
+        (c.financialProfile || c.financial_profile)?.otherDebts,
+      'financialProfile.liquidAssets': (c) => (c.financialProfile || c.financial_profile)?.liquidAssets,
+      'financialProfile.propertyValue': (c) => (c.financialProfile || c.financial_profile)?.propertyValue,
+      'financialProfile.mortgageBalance': (c) => (c.financialProfile || c.financial_profile)?.mortgageBalance,
+      'financialProfile.otherDebts': (c) => (c.financialProfile || c.financial_profile)?.otherDebts,
+      'financialProfile.emergencyFund': (c) => (c.financialProfile || c.financial_profile)?.emergencyFund,
+      'financialProfile.pensionValue': (c) => (c.financialProfile || c.financial_profile)?.pensionValue,
+      'financialProfile.existingInvestments': (c) => (c.financialProfile || c.financial_profile)?.existingInvestments,
       
       // Risk Profile Mappings
       'riskProfile.attitudeToRisk': (c) => {
@@ -377,6 +405,41 @@ export class AutoGenerationService {
           return targetAge
         }
         return 65
+
+      case 'has_mortgage': {
+        const mortgageBalance =
+          client?.financialProfile?.mortgageBalance ??
+          client?.financialProfile?.outstandingMortgage
+        const properties = client?.financialProfile?.properties
+        const hasPropertyMortgage = Array.isArray(properties)
+          ? properties.some((property: any) => Number(property?.mortgage ?? 0) > 0)
+          : false
+
+        if (Number(mortgageBalance || 0) > 0 || hasPropertyMortgage) return 'Yes'
+        if (mortgageBalance === 0) return 'No'
+        return undefined
+      }
+
+      case 'has_property': {
+        const propertyValue = client?.financialProfile?.propertyValue
+        if (propertyValue !== undefined && propertyValue !== null) {
+          return Number(propertyValue) > 0 ? 'Yes' : 'No'
+        }
+
+        const properties = client?.financialProfile?.properties
+        if (Array.isArray(properties)) {
+          const hasProperty = properties.some((property: any) => Number(property?.value ?? 0) > 0)
+          return hasProperty ? 'Yes' : 'No'
+        }
+
+        return undefined
+      }
+
+      case 'has_dependents': {
+        const dependents = client?.personalDetails?.dependents
+        if (typeof dependents === 'number') return dependents > 0 ? 'Yes' : 'No'
+        return undefined
+      }
         
       default:
         return undefined
@@ -492,7 +555,8 @@ export class AutoGenerationService {
           (formData.financial_situation as any)?.exp_utilities,
           (formData.financial_situation as any)?.exp_food,
           (formData.financial_situation as any)?.exp_transport,
-          (formData.financial_situation as any)?.exp_healthcare
+          (formData.financial_situation as any)?.exp_healthcare,
+          (formData.financial_situation as any)?.exp_childcare
         ]
 
         const hasAny = essentialFields.some((v) => v !== null && v !== undefined && v !== '')
@@ -645,6 +709,7 @@ export class AutoGenerationService {
       'financial_situation.exp_food',
       'financial_situation.exp_transport',
       'financial_situation.exp_healthcare',
+      'financial_situation.exp_childcare',
       'financial_situation.exp_leisure',
       'financial_situation.exp_holidays',
       'financial_situation.exp_other'

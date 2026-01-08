@@ -76,6 +76,8 @@ export interface SuitabilityClientDetails {
   firstName?: string
   lastName?: string
   fullName?: string
+  age?: number
+  occupation?: string
   dateOfBirth?: string
   niNumber?: string
   maritalStatus?: string
@@ -97,6 +99,7 @@ export interface SuitabilityFinancialDetails {
   annualIncome?: number
   essentialExpenses?: number
   discretionaryIncome?: number
+  monthlyExpenditure?: number
   totalAssets?: number
   totalLiabilities?: number
   emergencyFund?: number
@@ -106,7 +109,9 @@ export interface SuitabilityFinancialDetails {
 
 export interface SuitabilityObjectivesSummary {
   primaryObjective?: string
+  secondaryObjectives?: string[]
   investmentTimeline?: string
+  timeHorizonYears?: number
   incomeRequirement?: string
   incomeFrequency?: string
   ethicalInvesting?: string
@@ -267,6 +272,15 @@ export interface SuitabilityInvestorPersona {
   assessedAtISO?: string
 }
 
+export interface SuitabilityReportAIContent {
+  executiveSummary?: string
+  whySuitable?: string
+  alternativeRejections?: Array<{ option: string; reason: string }>
+  objectiveAlignments?: Array<{ objective: string; narrative: string; products?: string[] }>
+  productJustifications?: Array<{ product: string; narrative: string }>
+  riskReconciliation?: string
+}
+
 export interface SuitabilityReportData {
   scope: SuitabilityReportScope
   facts: SuitabilityReportFacts
@@ -277,6 +291,7 @@ export interface SuitabilityReportData {
   objectives: SuitabilityObjectivesSummary
   existingArrangements: SuitabilityExistingArrangementsSummary
   investorPersona?: SuitabilityInvestorPersona
+  aiGenerated?: SuitabilityReportAIContent
   client: {
     id: string
     clientRef: string

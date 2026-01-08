@@ -14,6 +14,7 @@ import { getCompletionGate, getComplianceGate, getValidationGate } from '@/lib/s
 import { finalizeSuitabilityAndBuildRedirect } from '@/lib/suitability/ui/finalizeFlow'
 import { calculateReconciledRisk } from '@/lib/assessments/riskReconciliation'
 import { generateSuitabilityDraftHtmlReport, generateSuitabilityPdfReport } from './reportActions'
+import { createReportWindow } from '@/lib/documents/openPdf'
 
 import { SECTIONS } from '@/lib/suitability/ui/sectionsMeta'
 
@@ -33,7 +34,36 @@ type FormState = {
   lastActivity: Date
 }
 
+type ProductHolding = {
+  product_name?: string | null
+  product_provider?: string | null
+  service_id?: string | null
+}
+
 export type SuitabilityFormController = ReturnType<typeof useSuitabilityFormController>
+
+const RECOMMENDATION_ALLOCATION_PRESETS: Record<
+  string,
+  { equities: number; bonds: number; cash: number; alternatives: number }
+> = {
+  conservative: { equities: 30, bonds: 55, cash: 10, alternatives: 5 },
+  cautious: { equities: 30, bonds: 55, cash: 10, alternatives: 5 },
+  balanced: { equities: 60, bonds: 30, cash: 5, alternatives: 5 },
+  growth: { equities: 75, bonds: 15, cash: 5, alternatives: 5 },
+  aggressive: { equities: 85, bonds: 10, cash: 2, alternatives: 3 }
+}
+
+const getRecommendationPreset = (portfolio: string | null | undefined) => {
+  const normalized = (portfolio || '').toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes('aggressive')) return RECOMMENDATION_ALLOCATION_PRESETS.aggressive
+  if (normalized.includes('growth')) return RECOMMENDATION_ALLOCATION_PRESETS.growth
+  if (normalized.includes('balanced')) return RECOMMENDATION_ALLOCATION_PRESETS.balanced
+  if (normalized.includes('conservative') || normalized.includes('cautious')) {
+    return RECOMMENDATION_ALLOCATION_PRESETS.conservative
+  }
+  return RECOMMENDATION_ALLOCATION_PRESETS.balanced
+}
 
 export function useSuitabilityFormController(params: {
   clientId: string
@@ -84,6 +114,9 @@ export function useSuitabilityFormController(params: {
   })
 
   const { notifications, showNotification } = useSuitabilityNotifications()
+  const [servicesSelected, setServicesSelected] = useState<string[]>([])
+  const [productHoldings, setProductHoldings] = useState<ProductHolding[]>([])
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
 
   const reconciledRisk = useMemo(() => {
     return calculateReconciledRisk({
@@ -146,6 +179,60 @@ export function useSuitabilityFormController(params: {
     return getIncompleteRequiredSections(SECTIONS, completion.sectionProgress)
   }, [completion.sectionProgress])
 
+  useEffect(() => {
+    if (!params.clientId) return
+    const controller = new AbortController()
+
+    const loadServicesSelected = async () => {
+      try {
+        const response = await fetch(`/api/clients/${params.clientId}/services`, { signal: controller.signal })
+        if (!response.ok) {
+          throw new Error(`Failed to load client services (${response.status})`)
+        }
+        const result = await response.json()
+        const selected = Array.isArray(result?.data?.services_selected) ? result.data.services_selected : []
+        setServicesSelected(selected)
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return
+        console.warn('Failed to load client services selection', error)
+        setServicesSelected([])
+      }
+    }
+
+    void loadServicesSelected()
+    return () => controller.abort()
+  }, [params.clientId])
+
+  useEffect(() => {
+    if (!params.clientId) return
+    const controller = new AbortController()
+    let isActive = true
+
+    const loadHoldings = async () => {
+      try {
+        const response = await fetch(`/api/clients/${params.clientId}/holdings`, {
+          signal: controller.signal,
+          credentials: 'include'
+        })
+        if (!response.ok) return
+        const payload = await response.json().catch(() => ({}))
+        if (!isActive) return
+        const holdings = Array.isArray(payload?.holdings) ? payload.holdings : []
+        setProductHoldings(holdings)
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return
+        console.warn('Failed to load product holdings', error)
+        setProductHoldings([])
+      }
+    }
+
+    void loadHoldings()
+    return () => {
+      isActive = false
+      controller.abort()
+    }
+  }, [params.clientId])
+
   const submissionErrorsBySection = useMemo(() => {
     const bySection = new Map<string, ValidationError[]>()
     for (const error of submissionValidationErrors) {
@@ -166,9 +253,87 @@ export function useSuitabilityFormController(params: {
   const handleFieldUpdate = useCallback(
     (sectionId: string, fieldId: string, value: any, options?: any) => {
       const allowBroadcast = realtimeEnabled && options?.broadcast !== false
+      const allocationFields = new Set([
+        'allocation_equities',
+        'allocation_bonds',
+        'allocation_cash',
+        'allocation_alternatives'
+      ])
+
+      const parseAllocation = (raw: any): number | null => {
+        if (raw === null || raw === undefined || raw === '') return null
+        const parsed = typeof raw === 'number' ? raw : Number(raw)
+        return Number.isFinite(parsed) ? parsed : null
+      }
+
+      if (sectionId === 'recommendation' && fieldId === 'recommended_portfolio') {
+        const preset = getRecommendationPreset(typeof value === 'string' ? value : '')
+        if (preset) {
+          updateSection(
+            'recommendation',
+            {
+              recommended_portfolio: value,
+              allocation_equities: preset.equities,
+              allocation_bonds: preset.bonds,
+              allocation_cash: preset.cash,
+              allocation_alternatives: preset.alternatives
+            },
+            { ...options, broadcast: allowBroadcast }
+          )
+          return
+        }
+      }
+
+      if (sectionId === 'recommendation' && allocationFields.has(fieldId)) {
+        const nextValue = parseAllocation(value)
+        if (nextValue !== null) {
+          const current = formData?.recommendation || {}
+          const currentAllocations = {
+            allocation_equities: parseAllocation(current.allocation_equities) ?? 0,
+            allocation_bonds: parseAllocation(current.allocation_bonds) ?? 0,
+            allocation_cash: parseAllocation(current.allocation_cash) ?? 0,
+            allocation_alternatives: parseAllocation(current.allocation_alternatives) ?? 0
+          }
+
+          const clampedValue = Math.min(100, Math.max(0, nextValue))
+          const nextAllocations = {
+            ...currentAllocations,
+            [fieldId]: clampedValue
+          } as Record<string, number>
+
+          const remainingFields = Object.keys(currentAllocations).filter((key) => key !== fieldId)
+          const remainingTotal = remainingFields.reduce((sum, key) => sum + (currentAllocations as any)[key], 0)
+          const targetRemaining = Math.max(0, 100 - clampedValue)
+
+          if (remainingFields.length > 0) {
+            if (remainingTotal <= 0) {
+              remainingFields.forEach((key, index) => {
+                nextAllocations[key] = index === 0 ? targetRemaining : 0
+              })
+            } else {
+              const scale = targetRemaining / remainingTotal
+              let runningTotal = 0
+              remainingFields.forEach((key, index) => {
+                if (index === remainingFields.length - 1) {
+                  const remainder = Math.max(0, targetRemaining - runningTotal)
+                  nextAllocations[key] = Math.round(remainder * 100) / 100
+                } else {
+                  const scaled = Math.round(((currentAllocations as any)[key] * scale) * 100) / 100
+                  nextAllocations[key] = Math.max(0, scaled)
+                  runningTotal += nextAllocations[key]
+                }
+              })
+            }
+          }
+
+          updateSection('recommendation', nextAllocations, { ...options, broadcast: allowBroadcast })
+          return
+        }
+      }
+
       updateField(sectionId, fieldId, value, { ...options, broadcast: allowBroadcast })
     },
-    [realtimeEnabled, updateField]
+    [formData?.recommendation, realtimeEnabled, updateField, updateSection]
   )
 
   const handleSectionUpdate = useCallback((sectionId: string, data: any, options?: any) => {
@@ -273,10 +438,12 @@ export function useSuitabilityFormController(params: {
       return
     }
 
+    const reportWindow = createReportWindow('Generating report')
+
     setFormState((prev) => ({ ...prev, isSubmitting: true }))
 
     try {
-      const { destination } = await finalizeSuitabilityAndBuildRedirect({
+      const { destination, finalAssessmentId } = await finalizeSuitabilityAndBuildRedirect({
         clientId: params.clientId,
         assessmentId: activeAssessmentId || params.assessmentId,
         fallbackAssessmentId: activeAssessmentId || params.assessmentId,
@@ -285,6 +452,19 @@ export function useSuitabilityFormController(params: {
         onSaved: params.onSaved,
         onComplete: params.onComplete
       })
+
+      if (finalAssessmentId) {
+        await generateSuitabilityPdfReport({
+          reportType: 'fullReport',
+          assessmentId: finalAssessmentId,
+          clientId: params.clientId,
+          showNotification,
+          includeAI: true,
+          targetWindow: reportWindow
+        })
+      } else if (reportWindow) {
+        reportWindow.close()
+      }
 
       showNotification({
         title: 'Assessment Complete',
@@ -297,6 +477,9 @@ export function useSuitabilityFormController(params: {
       const errorMessage = getSubmissionErrorMessage(error)
       showNotification({ title: 'Submission Failed', description: errorMessage, type: 'error', duration: 10000 })
       console.error('Detailed submission error:', { error, clientId: params.clientId, completionScore })
+      if (reportWindow) {
+        reportWindow.close()
+      }
     } finally {
       setFormState((prev) => ({ ...prev, isSubmitting: false }))
     }
@@ -334,6 +517,18 @@ export function useSuitabilityFormController(params: {
       })
     },
     [activeAssessmentId, params.assessmentId, params.clientId, showNotification]
+  )
+
+  const handleGeneratePdfWithLoading = useCallback(
+    async (reportType: SuitabilityReportVariant) => {
+      setIsGeneratingReport(true)
+      try {
+        await handleGeneratePDFReport(reportType)
+      } finally {
+        setIsGeneratingReport(false)
+      }
+    },
+    [handleGeneratePDFReport]
   )
 
   const toggleExpandedSection = useCallback((sectionId: string) => {
@@ -399,6 +594,9 @@ export function useSuitabilityFormController(params: {
     },
     notifications,
     showNotification,
+    servicesSelected,
+    productHoldings,
+    isGeneratingReport,
     reconciledRisk,
     formState,
     setFormState,
@@ -429,6 +627,7 @@ export function useSuitabilityFormController(params: {
     handleSubmit,
     handleGenerateDraftReport,
     handleGeneratePDFReport,
+    handleGeneratePdfWithLoading,
     toggleExpandedSection,
     handleSaveDraftClick,
     openVersionHistory,

@@ -21,7 +21,7 @@ function filterOccupations(query: string): string[] {
   const base = q
     ? OCCUPATION_SUGGESTIONS.filter((o) => o.toLowerCase().includes(q))
     : OCCUPATION_SUGGESTIONS
-  const trimmed = base.slice(0, 11)
+  const trimmed = base.slice()
   if (!trimmed.includes('Other')) {
     trimmed.push('Other')
   }

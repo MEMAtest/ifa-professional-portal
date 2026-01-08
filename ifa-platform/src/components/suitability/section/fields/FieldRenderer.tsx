@@ -16,6 +16,21 @@ export const FieldRenderer = memo<FieldProps>((props) => {
   const isRequired = Boolean(props.isRequired ?? props.field.required)
   const showHelp = Boolean(props.showHelp ?? props.field.helpText)
   const rendererProps = { ...props, isRequired, showHelp }
+  const hasOptions = Array.isArray(props.field.options) && props.field.options.length > 0
+
+  if (props.field.type === 'text' && hasOptions) {
+    return (
+      <SelectField
+        {...rendererProps}
+        field={{
+          ...props.field,
+          type: 'select',
+          allowCustom: props.field.allowCustom ?? true,
+          customOptionLabel: props.field.customOptionLabel ?? 'Add custom...'
+        }}
+      />
+    )
+  }
 
   switch (props.field.type) {
     case 'text':

@@ -11,12 +11,16 @@ type RequestArgs = {
   clientId: string
   reportType: SuitabilityReportVariant
   includeWarnings?: boolean
+  includeAI?: boolean
   allowAutoFallbackToWarnings?: boolean
 }
 
 type RequestResult = {
   inlinePdf?: string
   signedUrl?: string
+  fileName?: string
+  documentId?: string
+  filePath?: string
   fallbackToWarningsUsed?: boolean
   missingFields?: string[]
 }
@@ -45,7 +49,8 @@ export async function requestAssessmentReport(args: RequestArgs): Promise<Reques
     assessmentId: args.assessmentId,
     clientId: args.clientId,
     reportType: args.reportType,
-    includeWarnings: args.includeWarnings
+    includeWarnings: args.includeWarnings,
+    includeAI: args.includeAI
   }
 
   let response = await fetch('/api/documents/generate-assessment-report', {
@@ -75,6 +80,9 @@ export async function requestAssessmentReport(args: RequestArgs): Promise<Reques
       return {
         inlinePdf: result?.inlinePdf,
         signedUrl: result?.signedUrl,
+        fileName: result?.fileName,
+        documentId: result?.documentId,
+        filePath: result?.filePath,
         fallbackToWarningsUsed: true,
         missingFields: missing
       }
@@ -90,6 +98,9 @@ export async function requestAssessmentReport(args: RequestArgs): Promise<Reques
   return {
     inlinePdf: result?.inlinePdf,
     signedUrl: result?.signedUrl,
+    fileName: result?.fileName,
+    documentId: result?.documentId,
+    filePath: result?.filePath,
     fallbackToWarningsUsed: downgradedToDraft || undefined,
     missingFields: downgradedToDraft ? missingForFinal : undefined
   }

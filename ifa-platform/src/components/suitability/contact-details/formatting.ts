@@ -34,12 +34,22 @@ export const validateUKPhone = (phone: string): boolean => {
 }
 
 export const validateEmail = (email: string): boolean => {
-  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/
-  return emailRegex.test(email)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const normalized = email.trim()
+  return emailRegex.test(normalized)
 }
 
 export const validateUKPostcode = (postcode: string): boolean => {
-  const postcodeRegex = /^([A-Z]{1,2}\\d{1,2}[A-Z]?\\s?\\d[A-Z]{2}|GIR\\s?0AA)$/i
-  return postcodeRegex.test(postcode)
+  const postcodeRegex = /^([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}|GIR\s?0AA)$/i
+  const normalized = postcode.trim()
+  return postcodeRegex.test(normalized)
 }
 
+export const formatUKPostcode = (postcode: string): string => {
+  const normalized = postcode.replace(/\s+/g, '').toUpperCase()
+  if (!normalized) return ''
+  if (normalized.length <= 3) return normalized
+  const outward = normalized.slice(0, -3)
+  const inward = normalized.slice(-3)
+  return `${outward} ${inward}`
+}

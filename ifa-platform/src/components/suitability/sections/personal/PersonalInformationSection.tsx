@@ -31,7 +31,7 @@ import {
   CheckCircle2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { OccupationAutocomplete } from './OccupationAutocomplete'
+import { OCCUPATION_SUGGESTIONS } from '@/lib/constants/occupations'
 import { EMPLOYMENT_STATUS_OPTIONS, FIELD_ICONS, MARITAL_STATUS_OPTIONS, REQUIRED_FIELDS } from './constants'
 import { PersonalInformationHeader } from './components/PersonalInformationHeader'
 import { PersonalInformationConditionalFields } from './components/PersonalInformationConditionalFields'
@@ -111,6 +111,7 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
   // =====================================================
   
   const [fieldStates, setFieldStates] = useState<Record<string, FieldState>>({})
+  const [customSelectValues, setCustomSelectValues] = useState<Record<string, string>>({})
   const [showSensitiveData, setShowSensitiveData] = useState(!isProspect)
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion | null>(null)
   const [isLoadingAI, setIsLoadingAI] = useState(false)
@@ -147,6 +148,13 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
       pulledData
     )
   }, [formData, pulledData])
+
+  const occupationOptions = useMemo(() => {
+    return OCCUPATION_SUGGESTIONS.map((occupation) => ({
+      value: occupation,
+      label: occupation
+    }))
+  }, [OCCUPATION_SUGGESTIONS])
   
   // =====================================================
   // AI SUGGESTIONS
@@ -310,14 +318,20 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
     type: 'text' | 'date' | 'select' | 'number' | 'email' | 'tel',
     options?: { value: string; label: string; disabled?: boolean }[],
     required?: boolean,
-    helpText?: string
+    helpText?: string,
+    allowCustom?: boolean,
+    customOptionLabel?: string
   ) => {
-    const value = data?.[fieldId] || ''
+    const value = data?.[fieldId] ?? ''
     const fieldErrors = errors.filter(e => e.fieldId === fieldId)
     const fieldWarnings = warnings.filter(w => w.fieldId === fieldId)
     const fieldState = fieldStates[fieldId] || {}
     const Icon = FIELD_ICONS[fieldId as keyof typeof FIELD_ICONS]
     const aiSuggestion = aiSuggestions?.fieldSuggestions?.[fieldId]
+    const optionValues = options?.map((opt) => opt.value) || []
+    const isCustomValue = allowCustom && value && !optionValues.includes(value)
+    const selectValue = isCustomValue ? '__custom__' : value
+    const customValue = customSelectValues[fieldId] ?? (isCustomValue ? value : '')
     
     // Check if field should be hidden in prospect mode
     const isSensitive = ['date_of_birth', 'ni_number'].includes(fieldId)
@@ -371,8 +385,17 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
         {type === 'select' ? (
           <select
             id={fieldId}
-            value={value}
-            onChange={(e) => handleFieldChange(fieldId, e.target.value)}
+            value={selectValue}
+            onChange={(e) => {
+              const nextValue = e.target.value
+              if (allowCustom && nextValue === '__custom__') {
+                setCustomSelectValues((prev) => ({ ...prev, [fieldId]: customValue }))
+                handleFieldChange(fieldId, customValue)
+                return
+              }
+              setCustomSelectValues((prev) => ({ ...prev, [fieldId]: '' }))
+              handleFieldChange(fieldId, nextValue)
+            }}
             disabled={isReadOnly || fieldState.isLoading}
             className={cn(
               "w-full p-2 border rounded-md transition-colors",
@@ -406,86 +429,71 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
                 {opt.label}
               </option>
             ))}
+            {allowCustom && (
+              <option value="__custom__">{customOptionLabel || 'Add custom...'}</option>
+            )}
           </select>
         ) : (
-          fieldId === 'occupation' && type === 'text' ? (
-            <OccupationAutocomplete
-              id={fieldId}
-              value={value}
-              onChange={(next) => handleFieldChange(fieldId, next)}
-              disabled={isReadOnly || fieldState.isLoading}
-              placeholder={helpText || 'Start typing to see suggestions…'}
-              ariaInvalid={fieldErrors.length > 0 || !!fieldState.error}
-              ariaDescribedBy={
-                fieldErrors.length > 0 || fieldState.error
-                  ? `${fieldId}-error`
-                  : helpText
-                    ? `${fieldId}-help`
-                    : undefined
-              }
-              onFocus={() => {
-                setFieldStates(prev => ({
-                  ...prev,
-                  [fieldId]: { ...prev[fieldId], isFocused: true }
-                }))
-                onFieldFocus?.(fieldId)
-              }}
-              onBlur={() => {
-                setFieldStates(prev => ({
-                  ...prev,
-                  [fieldId]: { ...prev[fieldId], isFocused: false }
-                }))
-                onFieldBlur?.(fieldId)
-              }}
-              className={cn(
-                "transition-colors",
-                fieldErrors.length > 0 && "border-red-500 bg-red-50",
-                fieldWarnings.length > 0 && "border-yellow-500 bg-yellow-50",
-                fieldState.error && "border-red-500",
-                fieldState.hasChanges && "border-blue-500",
-                fieldState.isFocused && "ring-2 ring-blue-500"
-              )}
-            />
-          ) : (
-            <Input
-              id={fieldId}
-              type={type}
-              value={value}
-              onChange={(e) => handleFieldChange(fieldId, e.target.value)}
-              disabled={isReadOnly || fieldState.isLoading}
-              placeholder={helpText || ''}
-              aria-invalid={fieldErrors.length > 0 || !!fieldState.error}
-              aria-describedby={
-                fieldErrors.length > 0 || fieldState.error
-                  ? `${fieldId}-error`
-                  : helpText
-                    ? `${fieldId}-help`
-                    : undefined
-              }
-              onFocus={() => {
-                setFieldStates(prev => ({
-                  ...prev,
-                  [fieldId]: { ...prev[fieldId], isFocused: true }
-                }))
-                onFieldFocus?.(fieldId)
-              }}
-              onBlur={() => {
-                setFieldStates(prev => ({
-                  ...prev,
-                  [fieldId]: { ...prev[fieldId], isFocused: false }
-                }))
-                onFieldBlur?.(fieldId)
-              }}
-              className={cn(
-                "transition-colors",
-                fieldErrors.length > 0 && "border-red-500 bg-red-50",
-                fieldWarnings.length > 0 && "border-yellow-500 bg-yellow-50",
-                fieldState.error && "border-red-500",
-                fieldState.hasChanges && "border-blue-500",
-                fieldState.isFocused && "ring-2 ring-blue-500"
-              )}
-            />
-          )
+          <Input
+            id={fieldId}
+            type={type}
+            value={value}
+            onChange={(e) => handleFieldChange(fieldId, e.target.value)}
+            disabled={isReadOnly || fieldState.isLoading}
+            placeholder={helpText || ''}
+            aria-invalid={fieldErrors.length > 0 || !!fieldState.error}
+            aria-describedby={
+              fieldErrors.length > 0 || fieldState.error
+                ? `${fieldId}-error`
+                : helpText
+                  ? `${fieldId}-help`
+                  : undefined
+            }
+            onFocus={() => {
+              setFieldStates(prev => ({
+                ...prev,
+                [fieldId]: { ...prev[fieldId], isFocused: true }
+              }))
+              onFieldFocus?.(fieldId)
+            }}
+            onBlur={() => {
+              setFieldStates(prev => ({
+                ...prev,
+                [fieldId]: { ...prev[fieldId], isFocused: false }
+              }))
+              onFieldBlur?.(fieldId)
+            }}
+            className={cn(
+              "transition-colors",
+              fieldErrors.length > 0 && "border-red-500 bg-red-50",
+              fieldWarnings.length > 0 && "border-yellow-500 bg-yellow-50",
+              fieldState.error && "border-red-500",
+              fieldState.hasChanges && "border-blue-500",
+              fieldState.isFocused && "ring-2 ring-blue-500"
+            )}
+          />
+        )}
+
+        {type === 'select' && allowCustom && selectValue === '__custom__' && (
+          <Input
+            id={`${fieldId}-custom`}
+            type="text"
+            value={customValue}
+            onChange={(e) => {
+              const next = e.target.value
+              setCustomSelectValues((prev) => ({ ...prev, [fieldId]: next }))
+              handleFieldChange(fieldId, next)
+            }}
+            disabled={isReadOnly || fieldState.isLoading}
+            placeholder="Enter custom value"
+            className={cn(
+              "transition-colors mt-2",
+              fieldErrors.length > 0 && "border-red-500 bg-red-50",
+              fieldWarnings.length > 0 && "border-yellow-500 bg-yellow-50",
+              fieldState.error && "border-red-500",
+              fieldState.hasChanges && "border-blue-500"
+            )}
+          />
         )}
         
         {helpText && !fieldState.error && (
@@ -589,7 +597,16 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
           {renderField('age', 'Age', 'number', undefined, false, 'Auto-calculated from date of birth')}
           {renderField('marital_status', 'Marital Status', 'select', MARITAL_STATUS_OPTIONS, true)}
           {renderField('employment_status', 'Employment Status', 'select', EMPLOYMENT_STATUS_OPTIONS, true)}
-          {renderField('occupation', 'Occupation', 'text', undefined, false, 'Current occupation or profession')}
+          {renderField(
+            'occupation',
+            'Occupation',
+            'select',
+            occupationOptions,
+            false,
+            'Current occupation or profession',
+            true,
+            'Add a new occupation...'
+          )}
           {renderField('dependents', 'Number of Dependents', 'number', undefined, false, 'Number of financial dependents')}
           {renderField('target_retirement_age', 'Target Retirement Age', 'number', undefined, false, 'Desired retirement age')}
           {renderField('ni_number', 'National Insurance Number', 'text', undefined, false, 'Format: AA 12 34 56 B')}

@@ -9,6 +9,29 @@ import { SmartAddressLookupResult } from '@/types/suitability'
 import { debounce } from 'lodash'
 import { cn } from '@/lib/utils'
 
+const UK_POSTCODE_PATTERN = /([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}|GIR\s?0AA)/i
+
+const normalizeAddressText = (rawValue: string) => {
+  const trimmed = rawValue.trim()
+  if (!trimmed) return ''
+  let value = trimmed.replace(/\s*,\s*/g, ', ').replace(/\s{2,}/g, ' ')
+
+  if (!value.includes(',')) {
+    const match = value.match(UK_POSTCODE_PATTERN)
+    if (match && match.index !== undefined) {
+      const postcode = match[0].toUpperCase()
+      const before = value.slice(0, match.index).trim()
+      const after = value.slice(match.index + match[0].length).trim()
+      const countryMatch = after.match(/\b(United Kingdom|UK)\b/i)
+      const country = countryMatch ? countryMatch[0] : ''
+      const afterRest = country ? after.replace(countryMatch[0], '').trim() : after
+      value = [before, postcode, afterRest, country].filter(Boolean).join(', ')
+    }
+  }
+
+  return value
+}
+
 interface SmartAddressFieldProps {
   value: string
   onChange: (value: string, components?: any) => void
@@ -32,8 +55,15 @@ export const SmartAddressField: React.FC<SmartAddressFieldProps> = ({
   const [suggestions, setSuggestions] = useState<any[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
+  const normalizedValue = useMemo(() => {
+    if (typeof value !== 'string') return value as any
+    if (isFocused) return value
+    const base = value.replace(/\s*\n+\s*/g, ', ')
+    return normalizeAddressText(base)
+  }, [isFocused, value])
   
   const searchAddress = useCallback(async (query: string) => {
     if (query.length < 3) {
@@ -70,6 +100,13 @@ export const SmartAddressField: React.FC<SmartAddressFieldProps> = ({
       debouncedSearch.cancel()
     }
   }, [debouncedSearch])
+
+  useEffect(() => {
+    if (typeof value !== 'string') return
+    if (!isFocused && normalizedValue && normalizedValue !== value) {
+      onChange(normalizedValue)
+    }
+  }, [isFocused, normalizedValue, onChange, value])
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
@@ -78,10 +115,28 @@ export const SmartAddressField: React.FC<SmartAddressFieldProps> = ({
   }
   
   const handleSelectSuggestion = (suggestion: any) => {
-    const formatted = suggestion.fullAddress || suggestion.displayName
+    const formatSuggestion = (record: any) => {
+      const components = record?.components
+      if (components) {
+        const parts = [
+          components.line1,
+          components.line2,
+          components.city,
+          components.county,
+          components.postcode,
+          components.country
+        ]
+          .map((part: unknown) => (typeof part === 'string' ? part.trim() : ''))
+          .filter(Boolean)
+        if (parts.length > 0) return normalizeAddressText(parts.join(', '))
+      }
+      return normalizeAddressText(record?.fullAddress || record?.displayName || '')
+    }
+    const formatted = formatSuggestion(suggestion)
     onChange(formatted, {
       postcode: suggestion.postcode,
-      coordinates: suggestion.coordinates
+      coordinates: suggestion.coordinates,
+      components: suggestion.components
     })
     
     if (suggestion.coordinates && onCoordinatesFound) {
@@ -141,10 +196,14 @@ export const SmartAddressField: React.FC<SmartAddressFieldProps> = ({
         <input
           ref={inputRef}
           type="text"
-          value={value || ''} // ✅ FIX: Always provide defined value
+          value={normalizedValue || ''} // ✅ FIX: Always provide defined value
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+          onFocus={() => {
+            setIsFocused(true)
+            if (suggestions.length > 0) setShowSuggestions(true)
+          }}
+          onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
           required={required}
           className={cn(

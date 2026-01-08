@@ -789,6 +789,22 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
 	      })
 	      nextData = mergeSectionUpdates(nextData, generated)
 
+	      if (generated && Object.keys(generated).length > 0) {
+	        for (const [sectionId, updates] of Object.entries(generated)) {
+	          if (!updates || typeof updates !== 'object') continue
+	          const fieldIds = Object.keys(updates as Record<string, unknown>)
+	          for (const fieldId of fieldIds) {
+	            const recalculated = AutoGenerationService.recalculateFields(
+	              suitabilitySections as any,
+	              nextData,
+	              sectionId,
+	              fieldId
+	            )
+	            nextData = mergeSectionUpdates(nextData, recalculated)
+	          }
+	        }
+	      }
+
 	      if (enableConditionalLogic) {
 	        nextData = processConditionalLogic(nextData)
 	      }

@@ -29,9 +29,12 @@ interface AssessmentStatusCardProps {
   isCFLComplete: boolean
   isPersonaComplete: boolean
   reconciledRisk: RiskReconciliationResult
+  onReviewRisk?: () => void
 }
 
 export function AssessmentStatusCard(props: AssessmentStatusCardProps) {
+  const showReviewAction = typeof props.onReviewRisk === 'function'
+
   return (
     <Card className="mb-4">
       <CardHeader className="py-3">
@@ -108,11 +111,28 @@ export function AssessmentStatusCard(props: AssessmentStatusCardProps) {
                 Reconciled risk: {props.reconciledRisk.finalRiskScore ?? '—'}/10 • {props.reconciledRisk.finalRiskCategory}
               </div>
               <div className="text-xs mt-1">{props.reconciledRisk.flags.map((f) => f.message).join(' ')}</div>
+              <div className="text-xs mt-2 text-gray-700">
+                Review ATR/CFL/Persona results or update the Risk Assessment section if this mismatch doesn't reflect the client's profile.
+              </div>
+              {showReviewAction && (
+                <div className="mt-2">
+                  <Button size="sm" variant="outline" onClick={props.onReviewRisk}>
+                    Review risk assessment
+                  </Button>
+                </div>
+              )}
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="mt-3 text-xs text-gray-600">
-            Reconciled risk: {props.reconciledRisk.finalRiskScore ?? '—'}/10 • {props.reconciledRisk.finalRiskCategory}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+            <span>
+              Reconciled risk: {props.reconciledRisk.finalRiskScore ?? '—'}/10 • {props.reconciledRisk.finalRiskCategory}
+            </span>
+            {showReviewAction && (
+              <Button size="sm" variant="outline" onClick={props.onReviewRisk}>
+                Review risk assessment
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

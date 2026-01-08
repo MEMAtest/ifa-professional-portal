@@ -10,6 +10,7 @@ export const OptionsConsideredPage: React.FC<{ data: SuitabilityReportData; styl
 }) => {
   const adviceInScope = data.scope.includeInvestments || data.scope.includePensions || data.scope.includeProtection
   const adviceAreasLabel = data.scope.selected.length ? data.scope.selected.join(', ') : 'Advice scope not selected'
+  const alternativeRejections = data.aiGenerated?.alternativeRejections || []
 
   return (
     <Page size="A4" style={styles.page}>
@@ -83,6 +84,18 @@ export const OptionsConsideredPage: React.FC<{ data: SuitabilityReportData; styl
                     <Text style={styles.text}>{option.reason}</Text>
                   </View>
                 )}
+
+                {(() => {
+                  if (option.selected || alternativeRejections.length === 0) return null
+                  const reason = alternativeRejections.find((rejection) => rejection.option === option.name)?.reason
+                  if (!reason) return null
+                  return (
+                    <View style={{ marginTop: 8, padding: 8, backgroundColor: '#fef3c7', borderRadius: 4 }}>
+                      <Text style={[styles.text, { fontWeight: 'bold' }]}>Why not selected:</Text>
+                      <Text style={styles.text}>{reason}</Text>
+                    </View>
+                  )
+                })()}
               </View>
             ))}
           </>

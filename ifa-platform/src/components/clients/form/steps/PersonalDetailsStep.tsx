@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { OccupationAutocomplete } from '@/components/suitability/sections/personal/OccupationAutocomplete';
 import { CLIENT_STATUS_OPTIONS } from '@/components/clients/form/constants';
 import { ISO_COUNTRIES, DEFAULT_NATIONALITY_CODE, getCountryLabel } from '@/lib/isoCountries';
 import type { ClientFormData, ClientStatus, PersonalDetails } from '@/types/client';
+
+const normalizeNationalityQuery = (value: string) =>
+  value.trim().toLowerCase().replace(/[^a-z]/g, '');
 
 interface PersonalDetailsStepProps {
   formData: ClientFormData;
@@ -22,12 +25,14 @@ export function PersonalDetailsStep({
   const [nationalitySearch, setNationalitySearch] = useState('');
 
   const filteredNationalities = useMemo(() => {
-    const query = nationalitySearch.trim().toLowerCase();
+    const query = normalizeNationalityQuery(nationalitySearch);
     if (!query) return ISO_COUNTRIES;
     return ISO_COUNTRIES.filter(
-      (country) =>
-        country.name.toLowerCase().includes(query) ||
-        country.code.toLowerCase().includes(query)
+      (country) => {
+        const name = normalizeNationalityQuery(country.name);
+        const code = normalizeNationalityQuery(country.code);
+        return name.includes(query) || code.includes(query);
+      }
     );
   }, [nationalitySearch]);
 
@@ -37,6 +42,38 @@ export function PersonalDetailsStep({
     filteredNationalities.length > 0
       ? filteredNationalities
       : [{ code: selectedNationalityCode, name: selectedNationalityLabel }];
+  const resolveNationalitySelection = (query: string) => {
+    const normalized = normalizeNationalityQuery(query);
+    if (!normalized) return null;
+    const exact = ISO_COUNTRIES.find(
+      (country) => {
+        const name = normalizeNationalityQuery(country.name);
+        const code = normalizeNationalityQuery(country.code);
+        return code === normalized || name === normalized;
+      }
+    );
+    if (exact) return exact;
+    if (filteredNationalities.length === 1) {
+      return filteredNationalities[0];
+    }
+    const prefixMatch = filteredNationalities.find((country) =>
+      normalizeNationalityQuery(country.name).startsWith(normalized)
+    );
+    if (prefixMatch) return prefixMatch;
+    return null;
+  };
+
+  useEffect(() => {
+    if (!nationalitySearch) {
+      setNationalitySearch(selectedNationalityLabel);
+      return;
+    }
+    const normalizedSearch = normalizeNationalityQuery(nationalitySearch);
+    const normalizedLabel = normalizeNationalityQuery(selectedNationalityLabel);
+    if (normalizedSearch === normalizedLabel && nationalitySearch !== selectedNationalityLabel) {
+      setNationalitySearch(selectedNationalityLabel);
+    }
+  }, [nationalitySearch, selectedNationalityLabel]);
 
   return (
     <Card>
@@ -127,13 +164,42 @@ export function PersonalDetailsStep({
             <input
               type="text"
               value={nationalitySearch}
-              onChange={(e) => setNationalitySearch(e.target.value)}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setNationalitySearch(nextValue);
+                const match = resolveNationalitySelection(nextValue);
+                if (match) {
+                  onUpdatePersonalDetails({ nationality: match.code });
+                }
+              }}
+              onBlur={() => {
+                const match = resolveNationalitySelection(nationalitySearch);
+                if (match) {
+                  onUpdatePersonalDetails({ nationality: match.code });
+                  setNationalitySearch(match.name);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const match = resolveNationalitySelection(nationalitySearch);
+                  if (match) {
+                    onUpdatePersonalDetails({ nationality: match.code });
+                    setNationalitySearch(match.name);
+                  }
+                  e.preventDefault();
+                }
+              }}
               placeholder="Search nationality..."
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm mb-2"
             />
             <select
               value={selectedNationalityCode}
-              onChange={(e) => onUpdatePersonalDetails({ nationality: e.target.value })}
+              onChange={(e) => {
+                const nextCode = e.target.value;
+                const nextLabel = getCountryLabel(nextCode) || nextCode;
+                onUpdatePersonalDetails({ nationality: nextCode });
+                setNationalitySearch(nextLabel);
+              }}
               className="w-full p-2 border border-gray-300 rounded-md text-base sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               {nationalityOptions.map((country) => (

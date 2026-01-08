@@ -140,7 +140,7 @@ export default function AssessmentDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card
           className="cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all"
-          onClick={() => router.push('/clients')}
+          onClick={() => router.push('/assessments')}
         >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -156,7 +156,7 @@ export default function AssessmentDashboard() {
               </div>
             </div>
             <p className="text-xs text-blue-600 mt-3 flex items-center">
-              View all clients <ArrowRight className="h-3 w-3 ml-1" />
+              View client assessments <ArrowRight className="h-3 w-3 ml-1" />
             </p>
           </CardContent>
         </Card>

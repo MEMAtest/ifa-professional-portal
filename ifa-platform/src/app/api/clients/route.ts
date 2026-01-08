@@ -54,12 +54,11 @@ export async function GET(request: NextRequest) {
     }
     
     if (search) {
-      query = query.or(`
-        personal_details->first_name.ilike.%${search}%,
-        personal_details->last_name.ilike.%${search}%,
-        client_ref.ilike.%${search}%,
-        contact_info->email.ilike.%${search}%
-      `);
+      // Sanitize search input - escape SQL LIKE special characters
+      const sanitizedSearch = search.replace(/[%_\\]/g, '\\$&')
+      // Note: .or() query must be on a single line without newlines
+      // Search both camelCase and snake_case field names for compatibility
+      query = query.or(`personal_details->>firstName.ilike.%${sanitizedSearch}%,personal_details->>lastName.ilike.%${sanitizedSearch}%,personal_details->>first_name.ilike.%${sanitizedSearch}%,personal_details->>last_name.ilike.%${sanitizedSearch}%,client_ref.ilike.%${sanitizedSearch}%`);
     }
     
     // Apply sorting and pagination

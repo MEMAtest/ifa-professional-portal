@@ -1,4 +1,9 @@
 import { FileText } from 'lucide-react'
+import {
+  OPTION_CONS_SUGGESTIONS,
+  OPTION_PROS_SUGGESTIONS,
+  OPTIONS_CONSIDERED_SUGGESTIONS
+} from '@/lib/constants/recommendationOptions'
 
 export const optionsConsideredSection = {
   id: 'options_considered',
@@ -9,9 +14,12 @@ export const optionsConsideredSection = {
     {
       id: 'option_1_name',
       label: 'Option 1 - Name',
-      type: 'text',
+      type: 'select',
       required: true,
-      placeholder: 'e.g. Balanced Portfolio (Recommended)'
+      placeholder: 'e.g. Balanced Portfolio (Recommended)',
+      options: OPTIONS_CONSIDERED_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new option...'
     },
     {
       id: 'option_1_description',
@@ -23,19 +31,30 @@ export const optionsConsideredSection = {
     },
     {
       id: 'option_1_pros',
-      label: 'Option 1 - Pros (one per line)',
-      type: 'textarea',
+      label: 'Option 1 - Pros (select all that apply)',
+      type: 'checkbox',
       required: true,
-      placeholder: 'e.g.\\nAligned to objectives\\nDiversified',
-      rows: 4
+      options: OPTION_PROS_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a custom pro...'
     },
     {
       id: 'option_1_cons',
-      label: 'Option 1 - Cons (one per line)',
-      type: 'textarea',
+      label: 'Option 1 - Cons (select all that apply)',
+      type: 'checkbox',
       required: true,
-      placeholder: 'e.g.\\nMarket risk\\nValues can fall',
-      rows: 4
+      options: OPTION_CONS_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a custom con...'
+    },
+    {
+      id: 'option_1_score',
+      label: 'Option 1 - Score',
+      type: 'number',
+      placeholder: '8',
+      min: 0,
+      max: 10,
+      helpText: 'Score from 0-10 to compare options.'
     },
     {
       id: 'option_1_selected',
@@ -54,9 +73,12 @@ export const optionsConsideredSection = {
     {
       id: 'option_2_name',
       label: 'Option 2 - Name',
-      type: 'text',
+      type: 'select',
       required: true,
-      placeholder: 'e.g. Cash / Deposit-based approach'
+      placeholder: 'e.g. Cash / Deposit-based approach',
+      options: OPTIONS_CONSIDERED_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new option...'
     },
     {
       id: 'option_2_description',
@@ -68,17 +90,30 @@ export const optionsConsideredSection = {
     },
     {
       id: 'option_2_pros',
-      label: 'Option 2 - Pros (one per line)',
-      type: 'textarea',
+      label: 'Option 2 - Pros (select all that apply)',
+      type: 'checkbox',
       required: true,
-      rows: 4
+      options: OPTION_PROS_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a custom pro...'
     },
     {
       id: 'option_2_cons',
-      label: 'Option 2 - Cons (one per line)',
-      type: 'textarea',
+      label: 'Option 2 - Cons (select all that apply)',
+      type: 'checkbox',
       required: true,
-      rows: 4
+      options: OPTION_CONS_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a custom con...'
+    },
+    {
+      id: 'option_2_score',
+      label: 'Option 2 - Score',
+      type: 'number',
+      placeholder: '6',
+      min: 0,
+      max: 10,
+      helpText: 'Score from 0-10 to compare options.'
     },
     {
       id: 'option_2_selected',
@@ -97,7 +132,10 @@ export const optionsConsideredSection = {
     {
       id: 'option_3_name',
       label: 'Option 3 - Name (optional)',
-      type: 'text'
+      type: 'select',
+      options: OPTIONS_CONSIDERED_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new option...'
     },
     {
       id: 'option_3_description',
@@ -107,15 +145,28 @@ export const optionsConsideredSection = {
     },
     {
       id: 'option_3_pros',
-      label: 'Option 3 - Pros (one per line, optional)',
-      type: 'textarea',
-      rows: 4
+      label: 'Option 3 - Pros (select all that apply, optional)',
+      type: 'checkbox',
+      options: OPTION_PROS_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a custom pro...'
     },
     {
       id: 'option_3_cons',
-      label: 'Option 3 - Cons (one per line, optional)',
-      type: 'textarea',
-      rows: 4
+      label: 'Option 3 - Cons (select all that apply, optional)',
+      type: 'checkbox',
+      options: OPTION_CONS_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a custom con...'
+    },
+    {
+      id: 'option_3_score',
+      label: 'Option 3 - Score (optional)',
+      type: 'number',
+      placeholder: '5',
+      min: 0,
+      max: 10,
+      helpText: 'Score from 0-10 to compare options.'
     },
     {
       id: 'option_3_selected',
@@ -131,4 +182,3 @@ export const optionsConsideredSection = {
     }
   ]
 }
-

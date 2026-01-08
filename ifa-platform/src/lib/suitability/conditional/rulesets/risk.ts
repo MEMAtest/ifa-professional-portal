@@ -55,7 +55,7 @@ export const riskRules: ConditionalRule[] = [
     priority: 25,
     condition: (formData) => {
       const age = formData.personal_information?.age || 0
-      const riskLevel = parseInt(formData.risk_assessment?.attitude_to_risk?.match(/\\d/)?.[0] || '0')
+      const riskLevel = parseInt(formData.risk_assessment?.attitude_to_risk?.match(/\d+/)?.[0] || '0')
       return age > 65 && riskLevel > 5
     },
     actions: [
@@ -111,7 +111,7 @@ export const riskRules: ConditionalRule[] = [
     priority: 27,
     condition: (formData, pulledData) => {
       const cfl = pulledData.cflScore || 100
-      const stated = parseInt(formData.risk_assessment?.attitude_to_risk?.match(/\\d/)?.[0] || '0')
+      const stated = parseInt(formData.risk_assessment?.attitude_to_risk?.match(/\d+/)?.[0] || '0')
       return cfl < 30 && stated > 4
     },
     actions: [
@@ -124,4 +124,3 @@ export const riskRules: ConditionalRule[] = [
     ]
   }
 ]
-

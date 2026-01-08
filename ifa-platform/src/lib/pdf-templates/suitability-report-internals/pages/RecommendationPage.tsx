@@ -2,7 +2,7 @@ import React from 'react'
 import { Page, Text, View } from '@react-pdf/renderer'
 import type { SuitabilityReportData } from '@/lib/suitability/reporting/types'
 import { PieChart, chartColors } from '@/lib/pdf/PDFCharts'
-import { formatCurrency, formatPercentage } from '@/lib/pdf-templates/suitability-report-internals/formatters'
+import { formatCurrency } from '@/lib/pdf-templates/suitability-report-internals/formatters'
 import { PageFooter } from '@/lib/pdf-templates/suitability-report-internals/components/PageFooter'
 
 export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles: any; brand: any; charts?: any }> = ({
@@ -13,6 +13,28 @@ export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles:
 }) => {
   const adviceInScope = data.scope.includeInvestments || data.scope.includePensions || data.scope.includeProtection
   const adviceAreasLabel = data.scope.selected.length ? data.scope.selected.join(', ') : 'Advice scope not selected'
+  const suitabilityNarrative = data.aiGenerated?.whySuitable || data.recommendation.rationale
+  const narrativeParagraphs =
+    suitabilityNarrative?.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean) || []
+  const objectives = [
+    data.objectives.primaryObjective,
+    ...(data.objectives.secondaryObjectives || [])
+  ].filter(Boolean) as string[]
+  const objectiveAlignments =
+    data.aiGenerated?.objectiveAlignments ||
+    objectives.map((objective) => ({
+      objective,
+      narrative: data.recommendation.products.length
+        ? `This objective is supported by the recommended products: ${data.recommendation.products.map((p) => p.name).join(', ')}.`
+        : 'This objective will be addressed through the recommended portfolio.',
+      products: data.recommendation.products.map((p) => p.name)
+    }))
+  const productJustifications =
+    data.aiGenerated?.productJustifications ||
+    data.recommendation.products.map((product) => ({
+      product: product.name,
+      narrative: product.reason || 'Selected to meet your objectives and align with your risk profile.'
+    }))
 
   return (
     <Page size="A4" style={styles.page}>
@@ -125,9 +147,17 @@ export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles:
 
             <View style={styles.subsection}>
               <Text style={styles.subsectionTitle}>Why This Recommendation is Suitable</Text>
-              {data.recommendation.rationale ? (
+              {suitabilityNarrative ? (
                 <View style={styles.card}>
-                  <Text style={styles.text}>{data.recommendation.rationale}</Text>
+                  {narrativeParagraphs.length > 0 ? (
+                    narrativeParagraphs.map((paragraph, idx) => (
+                      <Text key={idx} style={styles.text}>
+                        {paragraph}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text style={styles.text}>{suitabilityNarrative}</Text>
+                  )}
                 </View>
               ) : (
                 <View style={styles.warningCard}>
@@ -136,6 +166,37 @@ export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles:
                     Add a personalised rationale linking the recommendation to objectives and risk profile.
                   </Text>
                 </View>
+              )}
+            </View>
+
+            <View style={styles.subsection}>
+              <Text style={styles.subsectionTitle}>Objective Alignment</Text>
+              {objectiveAlignments.length === 0 ? (
+                <Text style={styles.text}>No objectives have been recorded.</Text>
+              ) : (
+                objectiveAlignments.map((alignment, idx) => (
+                  <View key={idx} style={styles.card}>
+                    <Text style={styles.boldText}>Objective: {alignment.objective}</Text>
+                    <Text style={styles.text}>{alignment.narrative}</Text>
+                    {alignment.products && alignment.products.length > 0 && (
+                      <Text style={styles.text}>Products: {alignment.products.join(', ')}</Text>
+                    )}
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={styles.subsection}>
+              <Text style={styles.subsectionTitle}>Product Justification</Text>
+              {productJustifications.length === 0 ? (
+                <Text style={styles.text}>No product justifications available.</Text>
+              ) : (
+                productJustifications.map((justification, idx) => (
+                  <View key={idx} style={styles.card}>
+                    <Text style={styles.boldText}>{justification.product}</Text>
+                    <Text style={styles.text}>{justification.narrative}</Text>
+                  </View>
+                ))
               )}
             </View>
           </>

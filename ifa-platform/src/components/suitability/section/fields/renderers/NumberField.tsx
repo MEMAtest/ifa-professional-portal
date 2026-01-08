@@ -28,7 +28,7 @@ export const NumberField = memo<FieldProps>(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const inputValue = e.target.value
 
-        if (inputValue === '' || /^-?\\d*\\.?\\d*$/.test(inputValue)) {
+        if (inputValue === '' || /^-?\d*\.?\d*$/.test(inputValue)) {
           setLocalValue(inputValue)
 
           if (inputValue === '') {
@@ -161,4 +161,3 @@ export const NumberField = memo<FieldProps>(
 )
 
 NumberField.displayName = 'NumberField'
-

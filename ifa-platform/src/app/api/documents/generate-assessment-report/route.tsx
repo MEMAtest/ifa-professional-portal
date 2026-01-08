@@ -14,6 +14,7 @@ import type { PulledPlatformData } from '@/types/suitability'
 import { buildSuitabilityReportModel } from '@/lib/suitability/reporting/buildSuitabilityReportModel'
 import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
+import { generateSuitabilityReportAIContent } from '@/services/reportAIService'
 
 import type { GenerateAssessmentReportRequest } from './types'
 import { normalizeSuitabilityReportVariant } from './types'
@@ -232,6 +233,23 @@ export async function POST(request: NextRequest) {
       }
       reportModeUsed = mode
       reportDowngradedToDraft = downgradedToDraft
+
+      try {
+        const aiContent = await generateSuitabilityReportAIContent({
+          reportData,
+          baseUrl: request.url,
+          clientId: ctx.userId,
+          useAI: body.includeAI
+        })
+        if (Object.keys(aiContent).length > 0) {
+          reportData = { ...reportData, aiGenerated: aiContent }
+        }
+      } catch (aiError: unknown) {
+        const errorMessage = aiError instanceof Error ? aiError.message : 'Unknown error'
+        log.warn('[generate-assessment-report] AI personalization failed, continuing without AI', {
+          error: errorMessage
+        })
+      }
 
       try {
         // Dynamic import so a React-PDF failure cannot prevent fallback rendering.

@@ -2,6 +2,7 @@ import React from 'react'
 import { Page, Text, View } from '@react-pdf/renderer'
 import type { SuitabilityReportData } from '@/lib/suitability/reporting/types'
 import { PageFooter } from '@/lib/pdf-templates/suitability-report-internals/components/PageFooter'
+import { reportTemplates } from '@/lib/suitability/reporting/templates/reportContent'
 
 export const ComplianceReportPage: React.FC<{ data: SuitabilityReportData; styles: any; brand: any }> = ({
   data,
@@ -76,9 +77,20 @@ export const ComplianceReportPage: React.FC<{ data: SuitabilityReportData; style
           )}
         </View>
       )}
+
+      <View style={styles.subsection}>
+        <Text style={styles.subsectionTitle}>Consumer Duty Statement</Text>
+        <Text style={styles.text}>{reportTemplates.consumerDuty.standard}</Text>
+      </View>
+
+      {data.aiGenerated?.riskReconciliation && (
+        <View style={styles.infoCard}>
+          <Text style={styles.boldText}>Risk Reconciliation Narrative</Text>
+          <Text style={styles.text}>{data.aiGenerated.riskReconciliation}</Text>
+        </View>
+      )}
     </View>
 
     <PageFooter styles={styles} brand={brand} />
   </Page>
 )
-

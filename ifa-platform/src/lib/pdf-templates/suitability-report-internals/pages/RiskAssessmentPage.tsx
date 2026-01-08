@@ -3,13 +3,22 @@ import { Page, Text, View } from '@react-pdf/renderer'
 import type { SuitabilityReportData } from '@/lib/suitability/reporting/types'
 import { GaugeChart, chartColors } from '@/lib/pdf/PDFCharts'
 import { PageFooter } from '@/lib/pdf-templates/suitability-report-internals/components/PageFooter'
+import {
+  getRiskAllocationGuidance,
+  getRiskCategoryDescription
+} from '@/lib/suitability/reporting/templates/reportContent'
 
 export const RiskAssessmentPage: React.FC<{ data: SuitabilityReportData; styles: any; brand: any; charts?: any }> = ({
   data,
   styles,
   brand,
   charts
-}) => (
+}) => {
+  const riskDescription = getRiskCategoryDescription(data.riskAssessment.combinedRiskCategory)
+  const riskGuidance = getRiskAllocationGuidance(data.riskAssessment.combinedRiskCategory)
+  const riskReconciliation = data.aiGenerated?.riskReconciliation
+
+  return (
   <Page size="A4" style={styles.page}>
     <View style={styles.header}>
       <View style={styles.headerRow}>
@@ -153,9 +162,23 @@ export const RiskAssessmentPage: React.FC<{ data: SuitabilityReportData; styles:
             )}
         </View>
       </View>
+
+      {(riskDescription || riskGuidance || riskReconciliation) && (
+        <View style={styles.subsection}>
+          <Text style={styles.subsectionTitle}>Risk Alignment</Text>
+          {riskDescription && <Text style={styles.text}>{riskDescription}</Text>}
+          {riskGuidance && <Text style={styles.text}>{riskGuidance}</Text>}
+          {riskReconciliation && (
+            <View style={[styles.infoCard, { marginTop: 8 }]}>
+              <Text style={styles.boldText}>Risk reconciliation</Text>
+              <Text style={styles.text}>{riskReconciliation}</Text>
+            </View>
+          )}
+        </View>
+      )}
     </View>
 
     <PageFooter styles={styles} brand={brand} />
   </Page>
-)
-
+  )
+}

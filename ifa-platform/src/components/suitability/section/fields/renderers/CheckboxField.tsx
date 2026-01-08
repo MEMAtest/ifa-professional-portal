@@ -1,10 +1,12 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 
 import type { FieldProps } from '../types'
 
 import { Checkbox } from '@/components/ui/Checkbox'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 
 import { AlertCircle } from 'lucide-react'
@@ -12,8 +14,28 @@ import { AlertCircle } from 'lucide-react'
 export function CheckboxField(props: FieldProps) {
   const isCalculated = Boolean(props.field.calculate)
   const isRequired = Boolean(props.isRequired ?? props.field.required)
+  const allowCustom = Boolean((props.field as any).allowCustom)
+  const customOptionLabel = (props.field as any).customOptionLabel || 'Add custom...'
+  const [customValue, setCustomValue] = useState('')
+  const selectedValues = useMemo(() => {
+    if (Array.isArray(props.value)) return props.value
+    if (typeof props.value === 'string') {
+      return props.value
+        .split(/[\n,]+/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+    }
+    return []
+  }, [props.value])
 
-  if (props.field.options && props.field.options.length > 1) {
+  const options = useMemo(() => {
+    const base = props.field.options || []
+    if (!allowCustom) return base
+    const extras = selectedValues.filter((value: string) => !base.includes(value))
+    return [...base, ...extras]
+  }, [allowCustom, props.field.options, selectedValues])
+
+  if (options && options.length > 1) {
     return (
       <div className={cn('space-y-2', props.className)}>
         <Label className={cn('text-sm font-medium', props.error && 'text-red-600')}>
@@ -22,17 +44,16 @@ export function CheckboxField(props: FieldProps) {
         </Label>
 
         <div className="space-y-2">
-          {props.field.options.map((option) => (
+          {options.map((option) => (
             <label key={option} className="flex items-center gap-2 cursor-pointer">
               <Checkbox
-                checked={Array.isArray(props.value) ? props.value.includes(option) : false}
+                checked={selectedValues.includes(option)}
                 onCheckedChange={(checked) => {
-                  const currentValue = Array.isArray(props.value) ? props.value : []
                   if (checked) {
-                    props.onChange([...currentValue, option])
-                  } else {
-                    props.onChange(currentValue.filter((v: string) => v !== option))
+                    props.onChange([...selectedValues, option])
+                    return
                   }
+                  props.onChange(selectedValues.filter((v: string) => v !== option))
                 }}
                 disabled={!!props.isReadOnly || isCalculated || !!props.isLoading}
               />
@@ -40,6 +61,32 @@ export function CheckboxField(props: FieldProps) {
             </label>
           ))}
         </div>
+
+        {allowCustom && (
+          <div className="flex items-center gap-2 pt-1">
+            <Input
+              value={customValue}
+              onChange={(event) => setCustomValue(event.target.value)}
+              placeholder={customOptionLabel}
+              disabled={!!props.isReadOnly || isCalculated || !!props.isLoading}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const trimmed = customValue.trim()
+                if (!trimmed) return
+                if (!selectedValues.includes(trimmed)) {
+                  props.onChange([...selectedValues, trimmed])
+                }
+                setCustomValue('')
+              }}
+              disabled={!!props.isReadOnly || isCalculated || !!props.isLoading}
+            >
+              Add
+            </Button>
+          </div>
+        )}
 
         {props.error && (
           <p className="text-xs text-red-600 flex items-center gap-1">
@@ -67,4 +114,3 @@ export function CheckboxField(props: FieldProps) {
     </div>
   )
 }
-

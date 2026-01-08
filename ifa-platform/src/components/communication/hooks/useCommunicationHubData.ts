@@ -36,18 +36,31 @@ export const useCommunicationHubData = ({ supabase, userId }: UseCommunicationHu
   const [clients, setClients] = useState<CommunicationClient[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<CommunicationStats>(initialStats)
-  const [currentDate, setCurrentDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState(() => new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+
+  // Store refs for stable function references - prevents stale closures
+  const supabaseRef = useRef(supabase)
+  const userIdRef = useRef(userId)
+  const currentDateRef = useRef(currentDate)
+  const toastRef = useRef(toast)
+
+  // Update refs when values change
+  supabaseRef.current = supabase
+  userIdRef.current = userId
+  currentDateRef.current = currentDate
+  toastRef.current = toast
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       const [items, clientData] = await Promise.all([
-        fetchCommunications(supabase, signal),
-        fetchCommunicationClients(supabase, signal)
+        fetchCommunications(supabaseRef.current, signal),
+        fetchCommunicationClients(supabaseRef.current, signal)
       ])
 
-      if (signal?.aborted || !isMountedRef.current) return
+      // Check if request was aborted
+      if (signal?.aborted) return
 
       const statsUpdate = calculateCommunicationStats(items)
       setCommunications(items)
@@ -61,26 +74,28 @@ export const useCommunicationHubData = ({ supabase, userId }: UseCommunicationHu
         todayItems: statsUpdate.todayItems
       }))
     } catch (error) {
-      if ((error as Error).name === 'AbortError') return
-      if (!isMountedRef.current) return
+      // Don't process aborted requests
+      if ((error as Error).name === 'AbortError' || signal?.aborted) return
       console.error('Error loading data:', error)
-      toast({
+      toastRef.current({
         title: 'Error',
         description: 'Failed to load communication data',
         variant: 'destructive'
       })
     } finally {
-      if (isMountedRef.current) {
+      // Always set loading to false unless aborted
+      // React 18 safely handles setState on unmounted components
+      if (!signal?.aborted) {
         setLoading(false)
       }
     }
-  }, [supabase, toast])
+  }, []) // No dependencies - uses refs for stability
 
   const loadCalendarEventsForMonth = useCallback(async (monthDate: Date) => {
-    if (!userId || !isMountedRef.current) return
+    if (!userIdRef.current || !isMountedRef.current) return
 
     try {
-      const events = await fetchCalendarEventsForMonth(supabase, userId, monthDate)
+      const events = await fetchCalendarEventsForMonth(supabaseRef.current, userIdRef.current, monthDate)
       if (!isMountedRef.current) return
 
       setCalendarEvents(events)
@@ -92,23 +107,49 @@ export const useCommunicationHubData = ({ supabase, userId }: UseCommunicationHu
       if (!isMountedRef.current) return
       console.error('Error loading calendar events:', error)
     }
-  }, [supabase, userId])
+  }, [])
 
   const refresh = useCallback(async () => {
     await loadData()
-    await loadCalendarEventsForMonth(currentDate)
-  }, [currentDate, loadCalendarEventsForMonth, loadData])
+    await loadCalendarEventsForMonth(currentDateRef.current)
+  }, [loadCalendarEventsForMonth, loadData])
 
+  // Initial data load - runs when userId becomes available
+  // Uses AbortController to properly handle React Strict Mode double-invocation
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      // No user yet - ensure loading is false so we don't show spinner indefinitely
+      setLoading(false)
+      return
+    }
+
+    // Create abort controller for this effect instance
+    const controller = new AbortController()
     isMountedRef.current = true
 
-    refresh()
+    // Load data on mount
+    const init = async () => {
+      try {
+        await loadData(controller.signal)
+        // Only continue to calendar if not aborted
+        if (!controller.signal.aborted) {
+          await loadCalendarEventsForMonth(currentDateRef.current)
+        }
+      } catch (error) {
+        // Ignore abort errors
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error in init:', error)
+        }
+      }
+    }
+    init()
 
     return () => {
+      // Abort any in-flight requests when effect cleanup runs
+      controller.abort()
       isMountedRef.current = false
     }
-  }, [refresh, userId])
+  }, [userId, loadData, loadCalendarEventsForMonth])
 
   const handleMonthChange = useCallback(async (newDate: Date) => {
     setCurrentDate(newDate)

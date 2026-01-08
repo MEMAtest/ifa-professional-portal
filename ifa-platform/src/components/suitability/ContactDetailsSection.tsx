@@ -25,7 +25,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { ValidationError, PulledPlatformData } from '@/types/suitability'
 import { EnhancedInput } from './contact-details/EnhancedInput'
-import { formatPhoneNumber, validateEmail, validateUKPhone, validateUKPostcode } from './contact-details/formatting'
+import { formatPhoneNumber, formatUKPostcode, validateEmail, validateUKPhone, validateUKPostcode } from './contact-details/formatting'
 
 interface ContactDetailsProps {
   sectionData: {
@@ -38,6 +38,14 @@ interface ContactDetailsProps {
     county?: string
     postcode?: string
     country?: string
+    addressComponents?: {
+      line1?: string
+      line2?: string
+      city?: string
+      county?: string
+      postcode?: string
+      country?: string
+    }
     coordinates?: { lat: number; lng: number }
     preferred_contact?: string
     best_contact_time?: string
@@ -49,6 +57,46 @@ interface ContactDetailsProps {
   formData?: any
   isExpanded?: boolean
   onToggle?: () => void
+}
+
+const UK_POSTCODE_PATTERN = /([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}|GIR\s?0AA)/i
+
+const normalizeAddressText = (rawValue: string) => {
+  const trimmed = rawValue.trim()
+  if (!trimmed) return ''
+  let value = trimmed.replace(/\s*,\s*/g, ', ').replace(/\s{2,}/g, ' ')
+
+  if (!value.includes(',')) {
+    const match = value.match(UK_POSTCODE_PATTERN)
+    if (match && match.index !== undefined) {
+      const postcode = match[0].toUpperCase()
+      const before = value.slice(0, match.index).trim()
+      const after = value.slice(match.index + match[0].length).trim()
+      const countryMatch = after.match(/\b(United Kingdom|UK)\b/i)
+      const country = countryMatch ? countryMatch[0] : ''
+      const afterRest = country ? after.replace(countryMatch[0], '').trim() : after
+      value = [before, postcode, afterRest, country].filter(Boolean).join(', ')
+    }
+  }
+
+  return value
+}
+
+const formatAddressFromComponents = (components?: Record<string, unknown>, fallback?: string) => {
+  if (components) {
+    const parts = [
+      components.line1,
+      components.line2,
+      components.city,
+      components.county,
+      components.postcode,
+      components.country
+    ]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+    if (parts.length > 0) return parts.join(', ')
+  }
+  return normalizeAddressText(fallback || '')
 }
 
 // =====================================================
@@ -86,27 +134,32 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
   
   // Handle smart address selection
   const handleAddressSelection = useCallback((value: string, components?: any) => {
-    updateField('address', value)
+    if (!components) {
+      updateField('address', value)
+      return
+    }
+    const componentPayload = components?.components ?? components
+    const formattedAddress = formatAddressFromComponents(componentPayload, value)
+    updateField('address', formattedAddress || value)
     
-    if (components) {
-      // Parse the address components from smart search
-      const addressParts = value.split(',').map(part => part.trim())
-      
-      // Try to intelligently split the address
-      if (addressParts.length > 0) {
-        updateField('address_line_1', addressParts[0])
-      }
-      if (addressParts.length > 1) {
-        updateField('city', addressParts[addressParts.length - 2] || '')
-      }
-      if (components.postcode) {
-        updateField('postcode', components.postcode)
-      }
-      if (components.coordinates) {
-        updateField('coordinates', components.coordinates)
-      }
-      
-      // Default country to UK
+    if (componentPayload) {
+      if (componentPayload.line1) updateField('address_line_1', componentPayload.line1)
+      if (componentPayload.line2) updateField('address_line_2', componentPayload.line2)
+      if (componentPayload.city) updateField('city', componentPayload.city)
+      if (componentPayload.county) updateField('county', componentPayload.county)
+      if (componentPayload.postcode) updateField('postcode', formatUKPostcode(componentPayload.postcode))
+      if (componentPayload.country) updateField('country', componentPayload.country)
+      updateField('addressComponents', componentPayload)
+    }
+
+    if (components?.postcode && !componentPayload?.postcode) {
+      updateField('postcode', formatUKPostcode(components.postcode))
+    }
+    if (components?.coordinates) {
+      updateField('coordinates', components.coordinates)
+    }
+    
+    if (!componentPayload?.country) {
       updateField('country', 'United Kingdom')
     }
   }, [updateField])
@@ -133,8 +186,15 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
   
   // Format postcode
   const handlePostcodeChange = (value: string) => {
-    const formatted = value.toUpperCase()
-    updateField('postcode', formatted)
+    updateField('postcode', value.toUpperCase())
+  }
+
+  const handlePostcodeBlur = () => {
+    if (!sectionData.postcode) return
+    const formatted = formatUKPostcode(sectionData.postcode)
+    if (formatted && formatted !== sectionData.postcode) {
+      updateField('postcode', formatted)
+    }
   }
   
   // Validation
@@ -305,6 +365,7 @@ export const ContactDetailsSection: React.FC<ContactDetailsProps> = ({
               label="Postcode"
               value={sectionData.postcode || ''}
               onChange={handlePostcodeChange}
+              onBlur={handlePostcodeBlur}
               placeholder="e.g., SW1A 1AA"
               required={true}
               error={getFieldError('postcode') || 

@@ -1,4 +1,9 @@
 import { FileText } from 'lucide-react'
+import {
+  PRODUCT_NAME_SUGGESTIONS,
+  PROVIDER_SUGGESTIONS,
+  RECOMMENDATION_PORTFOLIOS
+} from '@/lib/constants/recommendationOptions'
 
 export const recommendationSection = {
   id: 'recommendation',
@@ -11,7 +16,7 @@ export const recommendationSection = {
       label: 'Recommended Portfolio',
       type: 'select',
       required: true,
-      options: ['Conservative', 'Cautious', 'Balanced', 'Growth', 'Aggressive Growth']
+      options: RECOMMENDATION_PORTFOLIOS
     },
     {
       id: 'allocation_equities',
@@ -52,16 +57,22 @@ export const recommendationSection = {
     {
       id: 'product_1_name',
       label: 'Product 1 - Name',
-      type: 'text',
+      type: 'select',
       required: true,
-      placeholder: 'e.g. Stocks & Shares ISA'
+      placeholder: 'e.g. Stocks & Shares ISA',
+      options: PRODUCT_NAME_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new product...'
     },
     {
       id: 'product_1_provider',
       label: 'Product 1 - Provider',
-      type: 'text',
+      type: 'select',
       required: true,
-      placeholder: 'e.g. Vanguard / AJ Bell'
+      placeholder: 'e.g. Vanguard / AJ Bell',
+      options: PROVIDER_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new provider...'
     },
     {
       id: 'product_1_amount',
@@ -82,13 +93,19 @@ export const recommendationSection = {
     {
       id: 'product_2_name',
       label: 'Product 2 - Name (optional)',
-      type: 'text',
-      placeholder: 'e.g. SIPP'
+      type: 'select',
+      placeholder: 'e.g. SIPP',
+      options: PRODUCT_NAME_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new product...'
     },
     {
       id: 'product_2_provider',
       label: 'Product 2 - Provider (optional)',
-      type: 'text'
+      type: 'select',
+      options: PROVIDER_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new provider...'
     },
     {
       id: 'product_2_amount',
@@ -107,12 +124,18 @@ export const recommendationSection = {
     {
       id: 'product_3_name',
       label: 'Product 3 - Name (optional)',
-      type: 'text'
+      type: 'select',
+      options: PRODUCT_NAME_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new product...'
     },
     {
       id: 'product_3_provider',
       label: 'Product 3 - Provider (optional)',
-      type: 'text'
+      type: 'select',
+      options: PROVIDER_SUGGESTIONS,
+      allowCustom: true,
+      customOptionLabel: 'Add a new provider...'
     },
     {
       id: 'product_3_amount',
@@ -161,4 +184,3 @@ export const recommendationSection = {
     }
   ]
 }
-

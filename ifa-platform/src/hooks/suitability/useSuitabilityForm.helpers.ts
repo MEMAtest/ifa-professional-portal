@@ -168,7 +168,7 @@ export const formatAddress = (address?: ClientAddress | string): string => {
   if (typeof address === 'string') return address
   return [address.line1, address.line2, address.city, address.county, address.postcode, address.country]
     .filter(Boolean)
-    .join('\n')
+    .join(', ')
 }
 
 export const mapClientFinancialData = (profile?: ClientFinancialProfile): MappedFinancialData => {
@@ -192,14 +192,29 @@ export const mapClientFinancialData = (profile?: ClientFinancialProfile): Mapped
     ? profile.pensionArrangements.reduce((sum, pension) => sum + (pension.currentValue || 0), 0)
     : 0
 
+  const propertyValueTotal = Array.isArray(profile.properties)
+    ? profile.properties.reduce((sum, property) => sum + (property.value || 0), 0)
+    : 0
+
+  const mortgageTotal = Array.isArray(profile.properties)
+    ? profile.properties.reduce((sum, property) => sum + (property.mortgage || 0), 0)
+    : 0
+
+  const liabilitiesTotal = Array.isArray(profile.liabilities)
+    ? profile.liabilities.reduce((sum, liability) => sum + (liability.amount || 0), 0)
+    : 0
+
+  const computedNetWorth =
+    (profile.liquidAssets || 0) + investmentTotal + pensionTotal + propertyValueTotal - mortgageTotal - liabilitiesTotal
+
   return {
     annual_income: profile.annualIncome || 0,
     monthly_expenditure: profile.monthlyExpenses || 0,
     liquid_assets: profile.liquidAssets || 0,
-    property_value: investmentTotal + pensionTotal,
-    outstanding_mortgage: 0,
-    other_liabilities: 0,
-    net_worth: profile.netWorth || 0
+    property_value: propertyValueTotal,
+    outstanding_mortgage: mortgageTotal,
+    other_liabilities: liabilitiesTotal,
+    net_worth: profile.netWorth ?? computedNetWorth
   }
 }
 
@@ -232,6 +247,7 @@ export const fillEmptyFieldsFromClient = (formData: SuitabilityFormData, client:
 
   const personal = { ...((formData.personal_information as any) || {}) }
   const contact = { ...((formData.contact_details as any) || {}) }
+  const financial = { ...((formData.financial_situation as any) || {}) }
   let changed = false
 
   // Personal info (fill + normalize to match Suitability select options)
@@ -344,11 +360,57 @@ export const fillEmptyFieldsFromClient = (formData: SuitabilityFormData, client:
     changed = true
   }
 
+  // Financials (fill from client profile where available)
+  const financialProfile =
+    client.financialProfile || client.financial_profile || client.financialProfileData || client.financial_profile_data || {}
+  const mappedFinancial = mapClientFinancialData(financialProfile as ClientFinancialProfile)
+
+  const shouldFillNumber = (current: unknown, next: number) => {
+    if (current === undefined || current === null || current === '') return next > 0
+    const parsed = typeof current === 'number' ? current : Number(current)
+    if (Number.isNaN(parsed)) return next > 0
+    return parsed === 0 && next > 0
+  }
+
+  if (shouldFillNumber(financial.annual_income, mappedFinancial.annual_income)) {
+    financial.annual_income = mappedFinancial.annual_income
+    changed = true
+  }
+  if (shouldFillNumber(financial.monthly_expenses, mappedFinancial.monthly_expenditure)) {
+    financial.monthly_expenses = mappedFinancial.monthly_expenditure
+    changed = true
+  }
+  if (shouldFillNumber(financial.savings, mappedFinancial.liquid_assets)) {
+    financial.savings = mappedFinancial.liquid_assets
+    changed = true
+  }
+  if (shouldFillNumber(financial.property_value, mappedFinancial.property_value)) {
+    financial.property_value = mappedFinancial.property_value
+    changed = true
+  }
+  if (shouldFillNumber(financial.mortgage_outstanding, mappedFinancial.outstanding_mortgage)) {
+    financial.mortgage_outstanding = mappedFinancial.outstanding_mortgage
+    changed = true
+  }
+  if (shouldFillNumber(financial.other_debts, mappedFinancial.other_liabilities)) {
+    financial.other_debts = mappedFinancial.other_liabilities
+    changed = true
+  }
+  if (shouldFillNumber(financial.net_worth, mappedFinancial.net_worth)) {
+    financial.net_worth = mappedFinancial.net_worth
+    changed = true
+  }
+  if ((financial.emergency_fund === undefined || financial.emergency_fund === null || financial.emergency_fund === '') && financialProfile?.emergencyFund) {
+    financial.emergency_fund = financialProfile.emergencyFund
+    changed = true
+  }
+
   if (!changed) return formData
 
   const result = { ...formData }
   result.personal_information = personal as any
   result.contact_details = contact as any
+  result.financial_situation = financial as any
 
   console.log('[fillEmptyFieldsFromClient] Result personal_information:', result.personal_information)
   return result

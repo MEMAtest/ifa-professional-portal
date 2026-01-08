@@ -6,10 +6,12 @@ import type { ExtendedSuitabilityField } from './types'
 import { hasValue } from './utils'
 import { calculateSectionCompletion, getSectionStatus, mergeSectionFields } from './sectionFieldUtils'
 
-import { Card } from '@/components/ui/Card'
+import { Card, CardContent } from '@/components/ui/Card'
 import { SuitabilitySectionHeader } from './components/SuitabilitySectionHeader'
 import { DefaultSectionContent } from './components/DefaultSectionContent'
 import { FinancialSectionContent } from './components/FinancialSectionContent'
+import { RecommendationAllocationChart } from './components/RecommendationAllocationChart'
+import { OptionsConsideredScoreChart } from './components/OptionsConsideredScoreChart'
 
 // Types
 import type {
@@ -50,6 +52,8 @@ interface SuitabilitySectionProps {
   isReadOnly?: boolean
   isProspect?: boolean
   collaborators?: string[]
+  clientId?: string
+  assessmentId?: string
   saveState?: {
     isSaving: boolean
     lastSaved: Date | null
@@ -80,6 +84,8 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
   isReadOnly,
   isProspect,
   collaborators,
+  clientId,
+  assessmentId,
   saveState,
   onApplyAISuggestion,
   showSmartComponents = true,
@@ -162,6 +168,23 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
   const hiddenFieldsCount = useMemo(() => {
     return Math.max(0, allFields.length - visibleFields.length)
   }, [allFields.length, visibleFields.length])
+
+  const optionScores = useMemo(() => {
+    if (section.id !== 'options_considered') return []
+
+    const toScore = (value: unknown): number | null => {
+      if (value === null || value === undefined) return null
+      if (typeof value === 'string' && value.trim() === '') return null
+      const parsed = typeof value === 'number' ? value : Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    return [
+      { label: sectionData?.option_1_name || 'Option 1', score: toScore(sectionData?.option_1_score) },
+      { label: sectionData?.option_2_name || 'Option 2', score: toScore(sectionData?.option_2_score) },
+      { label: sectionData?.option_3_name || 'Option 3', score: toScore(sectionData?.option_3_score) }
+    ]
+  }, [section.id, sectionData])
   
   // Special rendering for financial_situation with dashboard
   if (section.id === 'financial_situation' && showSmartComponents) {
@@ -248,11 +271,31 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
           >
+            {section.id === 'recommendation' && (
+              <CardContent className="border-b">
+                <RecommendationAllocationChart
+                  allocation={{
+                    equities: Number(sectionData?.allocation_equities) || 0,
+                    bonds: Number(sectionData?.allocation_bonds) || 0,
+                    cash: Number(sectionData?.allocation_cash) || 0,
+                    alternatives: Number(sectionData?.allocation_alternatives) || 0
+                  }}
+                  portfolioLabel={sectionData?.recommended_portfolio}
+                />
+              </CardContent>
+            )}
+            {section.id === 'options_considered' && (
+              <CardContent className="border-b">
+                <OptionsConsideredScoreChart options={optionScores} />
+              </CardContent>
+            )}
             <DefaultSectionContent
               baseFields={[...(section.fields || [])] as ExtendedSuitabilityField[]}
               allFields={allFields}
               visibleFields={visibleFields}
               sectionData={sectionData}
+              sectionId={section.id}
+              formData={formData}
               pulledData={pulledData}
               validationErrors={validationErrors}
               aiSuggestion={aiSuggestion}
@@ -266,6 +309,8 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
               onApplyAISuggestion={onApplyAISuggestion}
               saveState={saveState}
               helpUrl={section.helpUrl}
+              clientId={clientId}
+              assessmentId={assessmentId}
             />
           </motion.div>
         )}

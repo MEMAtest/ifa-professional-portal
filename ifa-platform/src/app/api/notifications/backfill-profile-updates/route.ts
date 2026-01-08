@@ -30,26 +30,42 @@ export async function POST(request: NextRequest) {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
     const service = getSupabaseServiceClient()
-    const { data: profile, error: profileError } = await service
+
+    // Type for profile data
+    type ProfileData = {
+      firm_id?: string | null
+      first_name?: string | null
+      last_name?: string | null
+    }
+
+    const { data: profileData, error: profileError } = await service
       .from('profiles')
       .select('firm_id, first_name, last_name')
       .eq('id', user.id)
       .maybeSingle()
+
+    // Cast to handle schema variations
+    const profile = profileData as ProfileData | null
 
     if (profileError) {
       logger.error('Backfill failed to fetch profile', profileError)
       return NextResponse.json({ success: false, error: profileError.message }, { status: 500 })
     }
 
-    if (!profile?.firm_id) {
-      return NextResponse.json({ success: false, error: 'Firm not found for user' }, { status: 400 })
-    }
-
-    const { data: clients, error: clientsError } = await service
+    const firmId = profile?.firm_id ?? null
+    let clientsQuery = service
       .from('clients')
       .select('id, personal_details, status, updated_at')
-      .eq('firm_id', profile.firm_id)
       .gte('updated_at', cutoff)
+
+    if (firmId) {
+      clientsQuery = clientsQuery.eq('firm_id', firmId)
+    } else {
+      logger.info('Backfill using advisor_id fallback', { userId: user.id })
+      clientsQuery = clientsQuery.eq('advisor_id', user.id)
+    }
+
+    const { data: clients, error: clientsError } = await clientsQuery
 
     if (clientsError) {
       logger.error('Backfill failed to fetch clients', clientsError)
@@ -162,7 +178,8 @@ export async function POST(request: NextRequest) {
       success: true,
       notifications: notificationsToInsert.length,
       activities: activitiesToInsert.length,
-      clients: clients.length
+      clients: clients.length,
+      scope: firmId ? 'firm' : 'advisor'
     })
   } catch (error) {
     logger.error('Backfill profile update notifications failed', error)

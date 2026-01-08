@@ -449,6 +449,110 @@ async function generateRealMetrics(supabase: any, firmId: string): Promise<Metri
   }
 }
 
+// Helper function to return empty metrics when firmId is not available
+function getEmptyMetrics(): MetricsResponse {
+  const now = new Date()
+  return {
+    overview: {
+      total_documents: 0,
+      documents_this_month: 0,
+      documents_last_month: 0,
+      documents_this_week: 0,
+      documents_last_week: 0,
+      monthly_growth: 0,
+      weekly_growth: 0
+    },
+    status_breakdown: {
+      active: 0,
+      pending: 0,
+      reviewed: 0,
+      archived: 0
+    },
+    signatures: {
+      total_requests: 0,
+      pending: 0,
+      completed: 0,
+      expired: 0,
+      cancelled: 0,
+      completion_rate: 0,
+      average_completion_time: 0
+    },
+    compliance: {
+      score: 0,
+      compliant: 0,
+      non_compliant: 0,
+      pending: 0,
+      under_review: 0,
+      exempt: 0,
+      compliance_rate: 0,
+      improvement_trend: 'stable'
+    },
+    storage: {
+      total_used_bytes: 0,
+      total_used_gb: 0,
+      average_file_size_bytes: 0,
+      average_file_size_mb: 0,
+      storage_limit_gb: 100,
+      usage_percentage: 0
+    },
+    performance: {
+      average_processing_time_hours: 0,
+      average_review_time_hours: 0,
+      document_velocity_per_day: 0,
+      efficiency_score: 0,
+      sla_compliance: 0
+    },
+    clients: {
+      total_clients: 0,
+      active_clients: 0,
+      new_clients_this_month: 0,
+      client_satisfaction: 0,
+      retention_rate: 0
+    },
+    users: {
+      total_users: 0,
+      active_today: 0,
+      active_this_week: 0,
+      engagement_score: 0,
+      most_active_time: 'N/A'
+    },
+    risk: {
+      score: 100,
+      level: 'low',
+      high_risk_documents: 0,
+      medium_risk_documents: 0,
+      low_risk_documents: 0,
+      risk_trend: 'stable'
+    },
+    category_performance: [],
+    time_analytics: {
+      hourly_distribution: Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        document_count: 0,
+        upload_count: 0
+      })),
+      daily_trend: Array.from({ length: 30 }, (_, i) => {
+        const date = new Date(now.getTime() - (29 - i) * 24 * 60 * 60 * 1000)
+        return {
+          date: date.toISOString().split('T')[0],
+          document_count: 0,
+          signature_count: 0,
+          compliance_issues: 0
+        }
+      })
+    },
+    system_health: {
+      uptime_percentage: 99.9,
+      response_time_ms: 100,
+      error_rate_percentage: 0,
+      last_backup: new Date().toISOString(),
+      system_status: 'healthy'
+    },
+    generated_at: now.toISOString(),
+    cache_expires_at: new Date(now.getTime() + 5 * 60 * 1000).toISOString()
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Verify authentication
@@ -462,11 +566,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient()
     const firmId = auth.context?.firmId
+
+    // If no firmId, return empty metrics instead of 403
     if (!firmId) {
-      return NextResponse.json(
-        { success: false, error: 'Firm ID not configured. Please contact support.' },
-        { status: 403 }
-      )
+      log.warn('Metrics requested without firmId', { userId: auth.context?.userId })
+      return NextResponse.json({
+        success: true,
+        metrics: getEmptyMetrics(),
+        warning: 'Firm not configured - showing empty metrics'
+      })
     }
 
     const { searchParams } = new URL(request.url)
@@ -561,11 +669,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
     const firmId = auth.context?.firmId
+
+    // If no firmId, return empty metrics for refresh/export actions
     if (!firmId) {
-      return NextResponse.json(
-        { success: false, error: 'Firm ID not configured. Please contact support.' },
-        { status: 403 }
-      )
+      log.warn('Metrics POST requested without firmId', { userId: auth.context?.userId })
+      return NextResponse.json({
+        success: true,
+        metrics: getEmptyMetrics(),
+        warning: 'Firm not configured - showing empty metrics'
+      })
     }
 
     const body = await request.json()
