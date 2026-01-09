@@ -10,6 +10,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyClientReassigned } from '@/lib/notifications/notificationService'
+import { rateLimit } from '@/lib/security/rateLimit'
 import type { Json } from '@/types/db'
 
 // UUID validation regex (RFC 4122 compliant)
@@ -49,6 +50,12 @@ interface ProfileRow {
  * Required permissions: supervisor or admin
  */
 export async function POST(request: NextRequest) {
+  // Rate limit: 20 reassignment requests per minute per IP
+  const rateLimitResponse = await rateLimit(request, 'api')
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   const logger = createRequestLogger(request)
 
   try {
@@ -140,7 +147,7 @@ export async function POST(request: NextRequest) {
     // Verify new advisor exists and is in the same firm
     const { data: newAdvisor, error: advisorError } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, firm_id, role')
+      .select('id, first_name, last_name, firm_id, role, status')
       .eq('id', newAdvisorId)
       .single()
 
@@ -154,6 +161,14 @@ export async function POST(request: NextRequest) {
     if (newAdvisor.firm_id !== profile.firm_id) {
       return NextResponse.json(
         { success: false, error: 'New advisor must be in the same firm' },
+        { status: 400 }
+      )
+    }
+
+    // Verify advisor is active
+    if (newAdvisor.status !== 'active') {
+      return NextResponse.json(
+        { success: false, error: 'Cannot reassign to inactive or deactivated user' },
         { status: 400 }
       )
     }

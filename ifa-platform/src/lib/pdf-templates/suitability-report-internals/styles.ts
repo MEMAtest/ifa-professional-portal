@@ -9,10 +9,18 @@ export const defaultSuitabilityBrand = {
 
 export type SuitabilityBranding = {
   firmName?: string
+  fcaNumber?: string
   logoUrl?: string
   primaryColor?: string
   accentColor?: string
   footerText?: string
+  /** Optional address for letterhead */
+  address?: {
+    line1: string
+    line2?: string
+    city: string
+    postcode: string
+  }
 }
 
 export const createSuitabilityStyles = (brand: SuitabilityBranding = defaultSuitabilityBrand) =>
