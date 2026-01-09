@@ -68,7 +68,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body: ReassignRequest = await request.json()
-    const { clientIds, newAdvisorId, transferAssessments = false, reason } = body
+    const { clientIds, newAdvisorId, transferAssessments = false, reason: rawReason } = body
+
+    // Sanitize reason field
+    const reason = rawReason?.trim().slice(0, 1000) || undefined
 
     // Validate request
     if (!clientIds || !Array.isArray(clientIds) || clientIds.length === 0) {
@@ -109,6 +112,15 @@ export async function POST(request: NextRequest) {
     if (newAdvisor.firm_id !== profile.firm_id) {
       return NextResponse.json(
         { success: false, error: 'New advisor must be in the same firm' },
+        { status: 400 }
+      )
+    }
+
+    // Validate new advisor has an advisor-capable role
+    const validAdvisorRoles = ['advisor', 'admin', 'senior_advisor', 'supervisor']
+    if (!newAdvisor.role || !validAdvisorRoles.includes(newAdvisor.role)) {
+      return NextResponse.json(
+        { success: false, error: 'Selected user does not have an advisor role' },
         { status: 400 }
       )
     }
@@ -172,6 +184,18 @@ export async function POST(request: NextRequest) {
       previousAdvisorName: string
     }> = []
 
+    const failedClients: Array<{
+      id: string
+      clientName: string
+      reason: string
+    }> = []
+
+    const skippedClients: Array<{
+      id: string
+      clientName: string
+      reason: string
+    }> = []
+
     // Update each client
     for (const client of clients) {
       const clientName = getClientDisplayName(client.personal_details) || 'Client'
@@ -183,6 +207,11 @@ export async function POST(request: NextRequest) {
       // Skip if already assigned to the new advisor
       if (previousAdvisorId === newAdvisorId) {
         logger.debug('Client already assigned to target advisor', { clientId: client.id })
+        skippedClients.push({
+          id: client.id,
+          clientName,
+          reason: 'Already assigned to this advisor'
+        })
         continue
       }
 
@@ -197,6 +226,11 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         logger.error('Error updating client advisor', { clientId: client.id, error: updateError })
+        failedClients.push({
+          id: client.id,
+          clientName,
+          reason: updateError.message || 'Database update failed'
+        })
         continue
       }
 
@@ -239,13 +273,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Optionally transfer assessments
+    let assessmentsTransferred = 0
+    let assessmentTransferError: string | null = null
+
     if (transferAssessments && reassignedClients.length > 0) {
       const reassignedIds = reassignedClients.map(c => c.id)
 
       // Update assessments table if it has an advisor field
-      // Note: This depends on your assessment schema
       try {
-        await supabaseService
+        const { data: assessmentData, error: assessmentErr } = await supabaseService
           .from('assessments')
           .update({
             advisor_id: newAdvisorId,
@@ -253,8 +289,18 @@ export async function POST(request: NextRequest) {
           })
           .in('client_id', reassignedIds)
           .is('completed_at', null) // Only transfer in-progress assessments
+          .select()
+
+        if (assessmentErr) {
+          logger.warn('Assessment transfer failed', { error: assessmentErr })
+          assessmentTransferError = assessmentErr.message
+        } else {
+          assessmentsTransferred = assessmentData?.length || 0
+          logger.info('Assessments transferred', { count: assessmentsTransferred })
+        }
       } catch (assessmentError) {
         logger.warn('Assessment transfer failed (table may not have advisor_id)', { error: assessmentError })
+        assessmentTransferError = assessmentError instanceof Error ? assessmentError.message : 'Unknown error'
       }
     }
 
@@ -300,19 +346,45 @@ export async function POST(request: NextRequest) {
     logger.info('Client reassignment completed', {
       total: clientIds.length,
       reassigned: reassignedClients.length,
-      skipped: clientIds.length - reassignedClients.length
+      skipped: skippedClients.length,
+      failed: failedClients.length,
+      assessmentsTransferred
     })
 
+    // Build response message
+    let message = `Successfully reassigned ${reassignedClients.length} client(s)`
+    if (failedClients.length > 0) {
+      message += `, ${failedClients.length} failed`
+    }
+    if (skippedClients.length > 0) {
+      message += `, ${skippedClients.length} skipped`
+    }
+
     return NextResponse.json({
-      success: true,
-      message: `Successfully reassigned ${reassignedClients.length} client(s)`,
+      success: failedClients.length === 0, // Only fully successful if no failures
+      message,
       reassigned: reassignedClients.length,
-      skipped: clientIds.length - reassignedClients.length,
-      details: reassignedClients.map(c => ({
-        id: c.id,
-        name: c.clientName,
-        previousAdvisor: c.previousAdvisorName
-      }))
+      skipped: skippedClients.length,
+      failed: failedClients.length,
+      assessmentsTransferred: transferAssessments ? assessmentsTransferred : undefined,
+      assessmentTransferError: assessmentTransferError || undefined,
+      details: {
+        reassigned: reassignedClients.map(c => ({
+          id: c.id,
+          name: c.clientName,
+          previousAdvisor: c.previousAdvisorName
+        })),
+        skipped: skippedClients.map(c => ({
+          id: c.id,
+          name: c.clientName,
+          reason: c.reason
+        })),
+        failed: failedClients.map(c => ({
+          id: c.id,
+          name: c.clientName,
+          reason: c.reason
+        }))
+      }
     })
 
   } catch (error) {

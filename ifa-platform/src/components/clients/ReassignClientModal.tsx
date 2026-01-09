@@ -112,12 +112,28 @@ export function ReassignClientModal({
       const selectedAdvisor = advisors.find(a => a.id === selectedAdvisorId)
       const advisorName = selectedAdvisor?.name || 'the selected advisor'
 
-      toast({
-        title: 'Clients Reassigned',
-        description: data.reassigned === 1
-          ? `${clients[0].name} has been reassigned to ${advisorName}`
-          : `${data.reassigned} client(s) have been reassigned to ${advisorName}`
-      })
+      // Show appropriate message based on results
+      if (data.failed > 0) {
+        toast({
+          title: 'Partial Success',
+          description: `${data.reassigned} reassigned, ${data.failed} failed, ${data.skipped} skipped`,
+          variant: 'destructive'
+        })
+      } else if (data.skipped > 0 && data.reassigned === 0) {
+        toast({
+          title: 'No Changes Made',
+          description: 'All selected clients are already assigned to this advisor',
+        })
+      } else {
+        toast({
+          title: 'Clients Reassigned',
+          description: data.reassigned === 1
+            ? `${clients[0].name} has been reassigned to ${advisorName}`
+            : `${data.reassigned} client(s) have been reassigned to ${advisorName}${
+                data.assessmentsTransferred ? ` (${data.assessmentsTransferred} assessments transferred)` : ''
+              }`
+        })
+      }
 
       onSuccess?.()
       onClose()
