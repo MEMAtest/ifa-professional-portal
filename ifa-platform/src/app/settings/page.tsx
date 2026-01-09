@@ -12,7 +12,8 @@ import {
   Eye,
   EyeOff,
   Users,
-  Building2
+  Building2,
+  BarChart3
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -28,6 +29,7 @@ import { useProdServicesSettings } from '@/components/settings/hooks/useProdServ
 import { useConsumerDutySettings } from '@/components/settings/hooks/useConsumerDutySettings'
 import { FirmSettingsPanel } from '@/modules/firm/components/FirmSettingsPanel'
 import { UserTable } from '@/modules/firm/components/UserManagement/UserTable'
+import { CaseloadDashboard } from '@/modules/firm/components/CaseloadDashboard/CaseloadDashboard'
 import { usePermissions } from '@/modules/firm/hooks/usePermissions'
 
 // Types based on actual database schema
@@ -65,7 +67,7 @@ export default function SettingsPage() {
   // State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users' | 'caseload'>('profile')
   const { isAdmin, canManageUsers } = usePermissions()
   const [showPassword, setShowPassword] = useState(false)
   const firmContext = useFirmContext({
@@ -182,6 +184,8 @@ export default function SettingsPage() {
       setActiveTab('firm')
     } else if (tab === 'users') {
       setActiveTab('users')
+    } else if (tab === 'caseload') {
+      setActiveTab('caseload')
     }
   }, [searchParams])
 
@@ -418,6 +422,7 @@ export default function SettingsPage() {
                 {[
                   ...(isAdmin ? [{ key: 'firm', label: 'Firm Settings', icon: Building2 }] : []),
                   ...(canManageUsers ? [{ key: 'users', label: 'User Management', icon: Users }] : []),
+                  ...(canManageUsers ? [{ key: 'caseload', label: 'Caseload Dashboard', icon: BarChart3 }] : []),
                   { key: 'services', label: 'Services & PROD', icon: Briefcase },
                   { key: 'consumer-duty', label: 'Consumer Duty', icon: Shield },
                   { key: 'personas', label: 'Investor Personas', icon: Users }
@@ -798,6 +803,10 @@ export default function SettingsPage() {
 
           {activeTab === 'users' && canManageUsers && (
             <UserTable />
+          )}
+
+          {activeTab === 'caseload' && canManageUsers && (
+            <CaseloadDashboard />
           )}
         </div>
       </div>
