@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 import { safeWriteToClipboard } from '@/lib/utils'
 import { validationEngine } from '@/lib/suitability/validationEngine'
 import { calculateSuitabilityCompletion } from '@/lib/suitability/completion'
 import { getMissingRequiredFieldErrors } from '@/lib/suitability/requiredFields'
-import type { SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
+import type { RequestResult, SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
 import { aiAssistantService } from '@/services/aiAssistantService'
 import type { SaveStatus } from '@/hooks/suitability/useSaveMutex'
 import { canGenerateAISuggestions, formatSectionLabel, isValidAISuggestion } from '@/lib/suitability/ui/aiHelpers'
@@ -13,8 +12,7 @@ import { getIncompleteRequiredSections, getSubmissionErrorMessage } from '@/lib/
 import { getCompletionGate, getComplianceGate, getValidationGate } from '@/lib/suitability/ui/submissionGates'
 import { finalizeSuitabilityAndBuildRedirect } from '@/lib/suitability/ui/finalizeFlow'
 import { calculateReconciledRisk } from '@/lib/assessments/riskReconciliation'
-import { generateSuitabilityDraftHtmlReport, generateSuitabilityPdfReport } from './reportActions'
-import { createReportWindow } from '@/lib/documents/openPdf'
+import { generateSuitabilityDraftHtmlReport, generateSuitabilityPdfReport, openGeneratedReport } from './reportActions'
 
 import { SECTIONS } from '@/lib/suitability/ui/sectionsMeta'
 
@@ -76,7 +74,6 @@ export function useSuitabilityFormController(params: {
   onSaved?: (assessmentId: string) => void
   onCancel?: () => void
 }) {
-  const router = useRouter()
   const realtimeEnabled = false
 
   const {
@@ -117,6 +114,11 @@ export function useSuitabilityFormController(params: {
   const [servicesSelected, setServicesSelected] = useState<string[]>([])
   const [productHoldings, setProductHoldings] = useState<ProductHolding[]>([])
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
+  const [reportReady, setReportReady] = useState<{
+    reportType: SuitabilityReportVariant
+    result: RequestResult
+    assessmentId: string
+  } | null>(null)
 
   const reconciledRisk = useMemo(() => {
     return calculateReconciledRisk({
@@ -438,12 +440,10 @@ export function useSuitabilityFormController(params: {
       return
     }
 
-    const reportWindow = createReportWindow('Generating report')
-
     setFormState((prev) => ({ ...prev, isSubmitting: true }))
 
     try {
-      const { destination, finalAssessmentId } = await finalizeSuitabilityAndBuildRedirect({
+      const { finalAssessmentId } = await finalizeSuitabilityAndBuildRedirect({
         clientId: params.clientId,
         assessmentId: activeAssessmentId || params.assessmentId,
         fallbackAssessmentId: activeAssessmentId || params.assessmentId,
@@ -454,16 +454,22 @@ export function useSuitabilityFormController(params: {
       })
 
       if (finalAssessmentId) {
-        await generateSuitabilityPdfReport({
+        const result = await generateSuitabilityPdfReport({
           reportType: 'fullReport',
           assessmentId: finalAssessmentId,
           clientId: params.clientId,
           showNotification,
           includeAI: true,
-          targetWindow: reportWindow
+          openWindow: false
         })
-      } else if (reportWindow) {
-        reportWindow.close()
+
+        if (result) {
+          setReportReady({
+            reportType: 'fullReport',
+            result,
+            assessmentId: finalAssessmentId
+          })
+        }
       }
 
       showNotification({
@@ -472,14 +478,10 @@ export function useSuitabilityFormController(params: {
         type: 'success',
         duration: 7000
       })
-      router.push(destination)
     } catch (error) {
       const errorMessage = getSubmissionErrorMessage(error)
       showNotification({ title: 'Submission Failed', description: errorMessage, type: 'error', duration: 10000 })
       console.error('Detailed submission error:', { error, clientId: params.clientId, completionScore })
-      if (reportWindow) {
-        reportWindow.close()
-      }
     } finally {
       setFormState((prev) => ({ ...prev, isSubmitting: false }))
     }
@@ -490,7 +492,6 @@ export function useSuitabilityFormController(params: {
     formData,
     navigateToSection,
     params,
-    router,
     showNotification,
     submissionValidationErrors,
     validationResult.compliance
@@ -507,17 +508,42 @@ export function useSuitabilityFormController(params: {
   }, [activeAssessmentId, completionScore, formData, params.assessmentId, showNotification])
 
   const handleGeneratePDFReport = useCallback(
-    (reportType: SuitabilityReportVariant = 'fullReport') => {
-      return generateSuitabilityPdfReport({
+    async (reportType: SuitabilityReportVariant = 'fullReport') => {
+      const effectiveAssessmentId = activeAssessmentId || params.assessmentId
+      const result = await generateSuitabilityPdfReport({
         reportType,
         activeAssessmentId,
         assessmentId: params.assessmentId,
         clientId: params.clientId,
-        showNotification
+        showNotification,
+        openWindow: false
       })
+
+      if (result && effectiveAssessmentId) {
+        setReportReady({
+          reportType,
+          result,
+          assessmentId: effectiveAssessmentId
+        })
+      }
+
+      return result
     },
-    [activeAssessmentId, params.assessmentId, params.clientId, showNotification]
+    [activeAssessmentId, params.assessmentId, params.clientId, showNotification, setReportReady]
   )
+
+  const handleOpenReadyReport = useCallback(() => {
+    if (!reportReady) return false
+    return openGeneratedReport({
+      result: reportReady.result,
+      reportType: reportReady.reportType,
+      allowSameTabFallback: false
+    })
+  }, [reportReady])
+
+  const handleDismissReadyReport = useCallback(() => {
+    setReportReady(null)
+  }, [])
 
   const handleGeneratePdfWithLoading = useCallback(
     async (reportType: SuitabilityReportVariant) => {
@@ -597,6 +623,7 @@ export function useSuitabilityFormController(params: {
     servicesSelected,
     productHoldings,
     isGeneratingReport,
+    reportReady,
     reconciledRisk,
     formState,
     setFormState,
@@ -628,6 +655,8 @@ export function useSuitabilityFormController(params: {
     handleGenerateDraftReport,
     handleGeneratePDFReport,
     handleGeneratePdfWithLoading,
+    handleOpenReadyReport,
+    handleDismissReadyReport,
     toggleExpandedSection,
     handleSaveDraftClick,
     openVersionHistory,

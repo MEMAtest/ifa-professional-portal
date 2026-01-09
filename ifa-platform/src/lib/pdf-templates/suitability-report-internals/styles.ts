@@ -53,8 +53,8 @@ export const createSuitabilityStyles = (brand: SuitabilityBranding = defaultSuit
       marginBottom: 20
     },
     section: {
-      marginTop: 16,
-      marginBottom: 8
+      marginTop: 12,
+      marginBottom: 6
     },
     sectionTitle: {
       fontSize: 14,
@@ -65,8 +65,8 @@ export const createSuitabilityStyles = (brand: SuitabilityBranding = defaultSuit
       paddingBottom: 4
     },
     subsection: {
-      marginTop: 10,
-      marginBottom: 6
+      marginTop: 8,
+      marginBottom: 4
     },
     subsectionTitle: {
       fontSize: 11,
@@ -99,29 +99,29 @@ export const createSuitabilityStyles = (brand: SuitabilityBranding = defaultSuit
     card: {
       border: '1pt solid #e0e0e0',
       borderRadius: 4,
-      padding: 12,
-      marginBottom: 10,
+      padding: 10,
+      marginBottom: 8,
       backgroundColor: '#fafafa'
     },
     warningCard: {
       border: '1pt solid #f59e0b',
       borderRadius: 4,
-      padding: 12,
-      marginBottom: 10,
+      padding: 10,
+      marginBottom: 8,
       backgroundColor: '#fef3c7'
     },
     successCard: {
       border: '1pt solid #10b981',
       borderRadius: 4,
-      padding: 12,
-      marginBottom: 10,
+      padding: 10,
+      marginBottom: 8,
       backgroundColor: '#d1fae5'
     },
     infoCard: {
       border: '1pt solid #3b82f6',
       borderRadius: 4,
-      padding: 12,
-      marginBottom: 10,
+      padding: 10,
+      marginBottom: 8,
       backgroundColor: '#dbeafe'
     },
     grid2: {

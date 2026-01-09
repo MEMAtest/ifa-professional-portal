@@ -9,7 +9,6 @@ import {
 } from './styles'
 
 import { CoverPage } from './pages/CoverPage'
-import { DataQualityPage } from './pages/DataQualityPage'
 import { ExecutiveSummaryPage } from './pages/ExecutiveSummaryPage'
 import { ClientLetterPage } from './pages/ClientLetterPage'
 import { ComplianceReportPage } from './pages/ComplianceReportPage'
@@ -52,24 +51,74 @@ export const SuitabilityReportDocument: React.FC<SuitabilityReportProps> = ({
   const includeAdviceModules =
     data.scope.includeInvestments || data.scope.includePensions || data.scope.includeProtection
 
+  const hasFinancialAnalysis =
+    data.financialAnalysis.income.rows.some((row) => row.current !== undefined || row.atRetirement !== undefined) ||
+    data.financialAnalysis.expenditure.rows.some((row) => row.essential !== undefined || row.discretionary !== undefined) ||
+    data.financialAnalysis.income.totalCurrent !== undefined ||
+    data.financialAnalysis.income.totalAtRetirement !== undefined ||
+    data.financialAnalysis.expenditure.totalEssential !== undefined ||
+    data.financialAnalysis.expenditure.totalDiscretionary !== undefined
+
+  const hasInvestorPersona =
+    Boolean(data.investorPersona?.personaType) ||
+    Boolean(data.investorPersona?.personaLevel) ||
+    Boolean(data.investorPersona?.confidence !== undefined) ||
+    Boolean(data.investorPersona?.motivations?.length) ||
+    Boolean(data.investorPersona?.fears?.length)
+
+  const hasVulnerabilityDetails =
+    data.vulnerabilityAssessment.hasVulnerability ||
+    Boolean(data.vulnerabilityAssessment.vulnerabilityFlags?.length) ||
+    Boolean(data.vulnerabilityAssessment.accommodations?.length) ||
+    Boolean(
+      data.vulnerabilityAssessment.texasAssessment &&
+        Object.values(data.vulnerabilityAssessment.texasAssessment).some((value) => Boolean(value))
+    )
+
+  const hasOptionsConsidered =
+    data.optionsConsidered.options.length > 0 ||
+    Boolean(data.aiGenerated?.alternativeRejections?.length)
+
+  const hasDisadvantagesRisks =
+    data.disadvantagesRisks.disadvantages.length > 0 ||
+    data.disadvantagesRisks.risks.length > 0 ||
+    data.disadvantagesRisks.mitigations.length > 0 ||
+    Boolean(data.disadvantagesRisks.notes)
+
+  const hasCostsCharges =
+    data.costsCharges.initialFee !== undefined ||
+    data.costsCharges.ongoingFee !== undefined ||
+    data.costsCharges.platformFee !== undefined ||
+    data.costsCharges.fundCharges !== undefined ||
+    data.costsCharges.totalFirstYearCost !== undefined
+
   const pages: React.ReactElement[] = []
 
   if (normalizedVariant === 'fullReport') {
     pages.push(<CoverPage key="cover" data={data} styles={styles} brand={brand} />)
-    if (data.dataQuality.mode === 'draft' && (data.dataQuality.warnings.length > 0 || data.dataQuality.missing.length > 0)) {
-      pages.push(<DataQualityPage key="dataQuality" data={data} styles={styles} brand={brand} />)
-    }
     pages.push(<PersonalCircumstancesPage key="personal" data={data} styles={styles} brand={brand} />)
-    pages.push(<FinancialAnalysisPage key="financial" data={data} styles={styles} brand={brand} />)
+    if (hasFinancialAnalysis) {
+      pages.push(<FinancialAnalysisPage key="financial" data={data} styles={styles} brand={brand} />)
+    }
     pages.push(<RiskAssessmentPage key="risk" data={data} styles={styles} brand={brand} charts={charts} />)
-    pages.push(<InvestorPersonaPage key="persona" data={data} styles={styles} brand={brand} />)
-    pages.push(<VulnerabilityPage key="vulnerability" data={data} styles={styles} brand={brand} />)
+    if (hasInvestorPersona) {
+      pages.push(<InvestorPersonaPage key="persona" data={data} styles={styles} brand={brand} />)
+    }
+    if (hasVulnerabilityDetails) {
+      pages.push(<VulnerabilityPage key="vulnerability" data={data} styles={styles} brand={brand} />)
+    }
 
     if (includeAdviceModules) {
-      pages.push(<OptionsConsideredPage key="options" data={data} styles={styles} brand={brand} />)
+      if (hasOptionsConsidered) {
+        pages.push(<OptionsConsideredPage key="options" data={data} styles={styles} brand={brand} />)
+      }
       pages.push(<RecommendationPage key="recommendation" data={data} styles={styles} brand={brand} charts={charts} />)
-      pages.push(<DisadvantagesRisksPage key="disadvantages" data={data} styles={styles} brand={brand} />)
-      pages.push(<CostsChargesPage key="costs" data={data} styles={styles} brand={brand} />)
+      if (hasDisadvantagesRisks) {
+        pages.push(<DisadvantagesRisksPage key="disadvantages" data={data} styles={styles} brand={brand} />)
+      }
+      if (hasCostsCharges) {
+        pages.push(<CostsChargesPage key="costs" data={data} styles={styles} brand={brand} />)
+      }
     }
 
     pages.push(<OngoingServicePage key="ongoing" data={data} styles={styles} brand={brand} />)
@@ -91,4 +140,3 @@ export const SuitabilityReportDocument: React.FC<SuitabilityReportProps> = ({
 }
 
 export default SuitabilityReportDocument
-

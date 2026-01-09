@@ -6,11 +6,10 @@
 import React from 'react'
 import { useRouter } from 'next/navigation'
 import { MotionConfig } from 'framer-motion'
-import { format } from 'date-fns'
 
 // Component imports
 import { NavigationControls } from '../NavigationControls'
-import { NotificationDisplay } from '../SuitabilityFormModals'
+import { Modal, NotificationDisplay } from '../SuitabilityFormModals'
 import { SuitabilityFinancialDashboardToggleCard } from '../SuitabilityFinancialDashboardToggleCard'
 import { SuitabilityHeaderBar } from '../SuitabilityHeaderBar'
 import { SuitabilityFormDialogs } from '../SuitabilityFormDialogs'
@@ -35,7 +34,7 @@ import { getIncompleteRequiredSections, getSubmissionErrorMessage } from '@/lib/
 import { getComplianceGate, getCompletionGate, getValidationGate } from '@/lib/suitability/ui/submissionGates'
 import { finalizeSuitabilityAndBuildRedirect } from '@/lib/suitability/ui/finalizeFlow'
 import { calculateReconciledRisk } from '@/lib/assessments/riskReconciliation'
-import { generateSuitabilityDraftHtmlReport, generateSuitabilityPdfReport } from './reportActions'
+import { buildReportLink } from '@/lib/documents/reportLinks'
 
 // Config imports
 import { SECTIONS } from '@/lib/suitability/ui/sectionsMeta'
@@ -115,6 +114,7 @@ interface SuitabilityFormProps {
   onSaved?: (assessmentId: string) => void
   onAssessmentIdChange?: (assessmentId: string) => void
   onCancel?: () => void
+  breadcrumbs?: Array<{ label: string; href?: string }>
   collaborators?: string[]
   allowAI?: boolean
   autoSaveInterval?: number
@@ -163,10 +163,12 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
   onSaved,
   onAssessmentIdChange,
   onCancel,
+  breadcrumbs,
   collaborators = [],
   allowAI = true,
   autoSaveInterval = 30000
 }) => {
+  const router = useRouter()
   // Realtime collaboration is intentionally disabled for suitability editing for stability.
   // (Supabase websockets are frequently blocked in some browsers/environments and can cause
   // noisy reconnect loops / UI “settling”.)
@@ -180,8 +182,9 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     saveStatus,
     notifications,
   servicesSelected,
-  productHoldings,
-  isGeneratingReport,
+    productHoldings,
+    isGeneratingReport,
+    reportReady,
     reconciledRisk,
     formState,
     setFormState,
@@ -212,6 +215,8 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     handleSubmit,
     handleGenerateDraftReport,
     handleGeneratePdfWithLoading,
+    handleOpenReadyReport,
+    handleDismissReadyReport,
     toggleExpandedSection,
     handleSaveDraftClick,
     openVersionHistory,
@@ -227,9 +232,35 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     onSaved,
     onCancel
   })
+
+  const reportLink = React.useMemo(() => {
+    if (!reportReady) return null
+    return buildReportLink({ result: reportReady.result, reportType: reportReady.reportType })
+  }, [reportReady])
+
+  React.useEffect(() => {
+    return () => {
+      if (reportLink?.isObjectUrl) {
+        const url = reportLink.url
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      }
+    }
+  }, [reportLink])
   
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
   const resolvedAssessmentId = activeAssessmentId || assessmentId
+  const loadingState = React.useMemo(() => {
+    if (formState.isSubmitting) {
+      return { message: 'Submitting assessment', hint: 'Finalizing data and generating report' }
+    }
+    if (isGeneratingReport) {
+      return { message: 'Generating report', hint: 'Building PDF output' }
+    }
+    if (isSaving || saveStatus.status === 'saving' || saveStatus.status === 'pending') {
+      return { message: 'Saving changes', hint: 'Auto-saving in the background' }
+    }
+    return undefined
+  }, [formState.isSubmitting, isGeneratingReport, isSaving, saveStatus.status])
 
   if (isLoading) {
     return (
@@ -273,24 +304,85 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
             </div>
           </div>
         )}
+
+        <Modal
+          isOpen={Boolean(reportReady)}
+          onClose={handleDismissReadyReport}
+          title="Report Ready"
+          maxWidth="max-w-lg"
+        >
+          <div className="space-y-4 text-sm text-gray-700">
+            <p>Your suitability report has been generated and is ready to open.</p>
+            {reportReady?.result.fallbackToWarningsUsed && (
+              <Alert>
+                <AlertDescription>
+                  Final report incomplete{reportReady.result.missingFields?.length ? ` (${reportReady.result.missingFields.length} missing)` : ''}.
+                  A draft PDF with warnings is ready.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {reportLink ? (
+                <a
+                  href={reportLink.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  onClick={() => {
+                    handleDismissReadyReport()
+                  }}
+                >
+                  Open report
+                </a>
+              ) : (
+                <Button
+                  onClick={() => {
+                    const opened = handleOpenReadyReport()
+                    if (opened) {
+                      handleDismissReadyReport()
+                    }
+                  }}
+                >
+                  Open report
+                </Button>
+              )}
+              {reportReady && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    router.push(`/assessments/suitability/results/${clientId}?assessmentId=${reportReady.assessmentId}`)
+                    handleDismissReadyReport()
+                  }}
+                >
+                  View assessment summary
+                </Button>
+              )}
+              <Button variant="ghost" onClick={handleDismissReadyReport}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
       {/* Notifications */}
       <NotificationDisplay notifications={notifications} />
       
-		      <SuitabilityHeaderBar
-		        mode={mode}
-		        isProspect={isProspect}
-		        isOnline={isOnline}
-		        allowAI={allowAI}
-		        onCancel={onCancel}
-		        saveStatus={saveStatus}
-		        isSaving={isSaving}
-		        onSaveDraft={handleSaveDraftClick}
-		        isSubmitting={formState.isSubmitting}
+	      <SuitabilityHeaderBar
+	        mode={mode}
+	        isProspect={isProspect}
+	        isOnline={isOnline}
+	        allowAI={allowAI}
+	        onCancel={onCancel}
+          breadcrumbs={breadcrumbs}
+	        saveStatus={saveStatus}
+	        isSaving={isSaving}
+	        onSaveDraft={handleSaveDraftClick}
+	        isSubmitting={formState.isSubmitting}
 	        completionScore={completionScore}
 	        onSubmit={handleSubmit}
 	        validationIssueCount={validationIssueCount}
 	        onToggleValidation={() => setFormState(prev => ({ ...prev, showValidation: !prev.showValidation }))}
 	        onToggleAI={() => setFormState(prev => ({ ...prev, showAIPanel: !prev.showAIPanel }))}
+	        loadingState={loadingState}
 	        progress={{
 	          sections: SECTIONS,
 	          currentSection: formState.currentSection,
@@ -391,17 +483,18 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
 	          </>
 	        }
 	        right={
-	          <SuitabilityRightSidebar
-	            mode={mode}
-	            completionScore={completionScore}
-	            completedSectionsCount={completion.completedSections.length}
-	            totalSectionsCount={SECTIONS.length}
-	            validationIssueCount={validationIssueCount}
-	            isSubmitting={formState.isSubmitting}
-	            canGenerateReports={Boolean(activeAssessmentId || assessmentId)}
-	            onSubmit={handleSubmit}
-	            onPreviewHtml={handleGenerateDraftReport}
-	            onGeneratePdf={handleGeneratePdfWithLoading}
+          <SuitabilityRightSidebar
+            mode={mode}
+            completionScore={completionScore}
+            completedSectionsCount={completion.completedSections.length}
+            totalSectionsCount={SECTIONS.length}
+            validationIssueCount={validationIssueCount}
+            formData={formData}
+            isSubmitting={formState.isSubmitting}
+            canGenerateReports={Boolean(activeAssessmentId || assessmentId)}
+            onSubmit={handleSubmit}
+            onPreviewHtml={handleGenerateDraftReport}
+            onGeneratePdf={handleGeneratePdfWithLoading}
 	            onShowHistory={openVersionHistory}
 	            onShare={handleShareLink}
 	            autoSaveIntervalMs={autoSaveInterval}

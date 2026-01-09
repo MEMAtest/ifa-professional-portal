@@ -81,7 +81,7 @@ export const RiskAssessmentPage: React.FC<{ data: SuitabilityReportData; styles:
         </View>
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }} wrap={false} minPresenceAhead={160}>
         <View style={{ width: 240 }}>
           {data.riskAssessment.attitudeToRisk !== undefined ? (
             <GaugeChart
@@ -132,7 +132,7 @@ export const RiskAssessmentPage: React.FC<{ data: SuitabilityReportData; styles:
         </View>
       </View>
 
-      <View style={styles.infoCard}>
+      <View style={styles.infoCard} wrap={false} minPresenceAhead={140}>
         <Text style={styles.subsectionTitle}>FCA Requirement (COBS 9.2)</Text>
         <Text style={styles.text}>
           The FCA requires that where a client&apos;s attitude to risk differs from their capacity for loss, we must give
@@ -141,7 +141,7 @@ export const RiskAssessmentPage: React.FC<{ data: SuitabilityReportData; styles:
         </Text>
       </View>
 
-      <View style={styles.subsection}>
+      <View style={styles.subsection} wrap={false} minPresenceAhead={120}>
         <Text style={styles.subsectionTitle}>Combined Risk Profile</Text>
         <View style={styles.card}>
           <Text style={styles.label}>Overall Risk Score</Text>
@@ -164,7 +164,7 @@ export const RiskAssessmentPage: React.FC<{ data: SuitabilityReportData; styles:
       </View>
 
       {(riskDescription || riskGuidance || riskReconciliation) && (
-        <View style={styles.subsection}>
+        <View style={styles.subsection} wrap={false} minPresenceAhead={140}>
           <Text style={styles.subsectionTitle}>Risk Alignment</Text>
           {riskDescription && <Text style={styles.text}>{riskDescription}</Text>}
           {riskGuidance && <Text style={styles.text}>{riskGuidance}</Text>}

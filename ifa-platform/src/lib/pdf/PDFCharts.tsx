@@ -716,7 +716,34 @@ export const PieChart: React.FC<PieChartProps> = ({
   formatValue = formatCurrency,
   formatTotal = formatCurrency,
 }) => {
-  const total = data.reduce((sum, d) => sum + d.value, 0);
+  const safeData = data.map((item) => ({
+    ...item,
+    value: Number.isFinite(item.value) ? item.value : 0
+  }))
+  const total = safeData.reduce((sum, d) => sum + d.value, 0);
+
+  if (!safeData.length || total <= 0) {
+    return (
+      <Svg width={dimensions.width} height={dimensions.height}>
+        {title && (
+          <Text
+            x={dimensions.width / 2}
+            y={15}
+            style={{ fontSize: 11, fontWeight: 'bold', textAnchor: 'middle' }}
+          >
+            {title}
+          </Text>
+        )}
+        <Text
+          x={dimensions.width / 2}
+          y={(dimensions.height + (title ? 20 : 0)) / 2}
+          style={{ fontSize: 9, textAnchor: 'middle', fill: chartColors.gray }}
+        >
+          No allocation data
+        </Text>
+      </Svg>
+    )
+  }
   const centerX = showLegend ? dimensions.width * 0.35 : dimensions.width / 2;
   const centerY = (dimensions.height + (title ? 20 : 0)) / 2;
   const radius = Math.min(centerX - 20, (dimensions.height - (title ? 40 : 20)) / 2) - 10;
@@ -725,7 +752,7 @@ export const PieChart: React.FC<PieChartProps> = ({
   // Generate pie slices
   let currentAngle = -90; // Start from top
 
-  const slices = data.map((item, i) => {
+  const slices = safeData.map((item, i) => {
     const sliceAngle = (item.value / total) * 360;
     const startAngle = currentAngle;
     const endAngle = currentAngle + sliceAngle;

@@ -163,31 +163,45 @@ async function getAssessmentsForDay(supabase: ReturnType<typeof createClient> ex
 }
 
 // Helper function to get documents for a specific day
-async function getDocumentsForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getDocumentsForDay(
+  supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
+  dayStart: Date,
+  dayEnd: Date
+): Promise<number> {
   try {
-    // Try generated_documents first, then documents
-    const { count, error } = await supabase
+    // Primary source: documents table (used by assessment report generation)
+    const { count: docsCount, error: docsError } = await supabase
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', dayStart.toISOString())
+      .lte('created_at', dayEnd.toISOString());
+
+    if (!docsError) {
+      const { count: generatedCount, error: generatedError } = await supabase
+        .from('generated_documents')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', dayStart.toISOString())
+        .lte('created_at', dayEnd.toISOString());
+
+      return (docsCount || 0) + (generatedError ? 0 : (generatedCount || 0));
+    }
+
+    // Fallback: generated_documents if documents table is unavailable
+    const { count: generatedCount, error: generatedError } = await supabase
       .from('generated_documents')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 
-    if (error) {
-      // Try alternative table name
-      const { count: altCount, error: altError } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', dayStart.toISOString())
-        .lte('created_at', dayEnd.toISOString());
-
-      if (altError) {
-        log.warn('Error fetching documents for day', { error: altError.message });
-        return 0;
-      }
-      return altCount || 0;
+    if (generatedError) {
+      log.warn('Error fetching documents for day', {
+        docsError: docsError.message,
+        generatedError: generatedError.message
+      });
+      return 0;
     }
 
-    return count || 0;
+    return generatedCount || 0;
   } catch (error) {
     log.warn('Error in getDocumentsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
     return 0;

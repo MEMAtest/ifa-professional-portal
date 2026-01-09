@@ -92,7 +92,7 @@ export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles:
             </View>
 
             {data.recommendation.assetAllocation && (
-              <View style={{ alignItems: 'center', marginVertical: 10 }}>
+              <View style={{ alignItems: 'center', marginVertical: 8 }} wrap={false} minPresenceAhead={180}>
                 <PieChart
                   title="Asset Allocation"
                   data={[
@@ -109,7 +109,7 @@ export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles:
                       color: chartColors.purple
                     }
                   ]}
-                  dimensions={{ width: 480, height: 220 }}
+                  dimensions={{ width: 420, height: 200 }}
                   donut={false}
                   showLabels={true}
                   showLegend={true}
@@ -120,7 +120,7 @@ export const RecommendationPage: React.FC<{ data: SuitabilityReportData; styles:
               </View>
             )}
 
-            <View style={styles.subsection}>
+            <View style={styles.subsection} wrap={false} minPresenceAhead={180}>
               <Text style={styles.subsectionTitle}>Recommended Products</Text>
               {data.recommendation.products.length === 0 ? (
                 <View style={styles.warningCard}>

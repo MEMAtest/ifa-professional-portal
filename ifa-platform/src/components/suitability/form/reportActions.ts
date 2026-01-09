@@ -1,5 +1,5 @@
 import type { NotificationOptions } from '@/components/suitability/SuitabilityFormModals'
-import { requestAssessmentReport, type SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
+import { requestAssessmentReport, type SuitabilityReportVariant, type RequestResult } from '@/lib/documents/requestAssessmentReport'
 import { createReportWindow, openPdfFromBase64, openReportUrl } from '@/lib/documents/openPdf'
 import { buildSuitabilityDraftHtml } from '@/lib/suitability/draftHtmlReport'
 import type { SuitabilityFormData } from '@/types/suitability'
@@ -66,9 +66,11 @@ export async function generateSuitabilityPdfReport(args: {
   showNotification: ShowNotification
   includeAI?: boolean
   targetWindow?: Window | null
-}) {
+  openWindow?: boolean
+}): Promise<RequestResult | undefined> {
   const reportType = args.reportType ?? 'fullReport'
   const effectiveAssessmentId = args.activeAssessmentId || args.assessmentId
+  const shouldOpenWindow = args.openWindow ?? false
 
   if (!effectiveAssessmentId) {
     args.showNotification({
@@ -88,7 +90,9 @@ export async function generateSuitabilityPdfReport(args: {
       type: 'info'
     })
 
-    reportWindow = reportWindow ?? createReportWindow('Generating report')
+    if (shouldOpenWindow) {
+      reportWindow = reportWindow ?? createReportWindow('Generating report')
+    }
 
     const result = await requestAssessmentReport({
       assessmentType: 'suitability',
@@ -102,19 +106,29 @@ export async function generateSuitabilityPdfReport(args: {
     if (result.fallbackToWarningsUsed) {
       const missingCount = result.missingFields?.length ?? 0
       args.showNotification({
-        title: 'Generated Draft PDF',
-        description:
-          missingCount > 0
-            ? `Final report incomplete (${missingCount} missing). Generated draft PDF with warnings.`
-            : 'Final report incomplete. Generated draft PDF with warnings.',
-        type: 'warning'
+        title: shouldOpenWindow ? 'Generated Draft PDF' : 'Draft Report Ready',
+        description: missingCount > 0
+          ? `Final report incomplete (${missingCount} missing). Generated draft PDF with warnings.`
+          : 'Final report incomplete. Generated draft PDF with warnings.',
+        type: shouldOpenWindow ? 'warning' : 'info'
       })
+    }
+
+    if (!shouldOpenWindow) {
+      if (!result.fallbackToWarningsUsed) {
+        args.showNotification({
+          title: 'Report Ready',
+          description: 'Your report is ready to open.',
+          type: 'success'
+        })
+      }
+      return result
     }
 
     if (result.inlinePdf) {
       openPdfFromBase64(result.inlinePdf, {
         filename: result.fileName || `suitability-${reportType}.pdf`,
-        targetWindow: reportWindow
+        targetWindow: reportWindow ?? undefined
       })
 
       args.showNotification({
@@ -126,7 +140,7 @@ export async function generateSuitabilityPdfReport(args: {
     }
 
     if (result.signedUrl) {
-      openReportUrl(result.signedUrl, { targetWindow: reportWindow })
+      openReportUrl(result.signedUrl, { targetWindow: reportWindow ?? undefined })
       args.showNotification({
         title: 'Report Generated',
         description: 'PDF report opened in new tab',
@@ -137,13 +151,13 @@ export async function generateSuitabilityPdfReport(args: {
 
     if (result.documentId) {
       const downloadUrl = `/api/documents/download/${result.documentId}`
-      openReportUrl(downloadUrl, { targetWindow: reportWindow })
+      openReportUrl(downloadUrl, { targetWindow: reportWindow ?? undefined })
       args.showNotification({
         title: 'Report Generated',
         description: 'PDF report downloaded',
         type: 'success'
       })
-      return
+      return result
     }
 
     if (reportWindow) {
@@ -155,6 +169,7 @@ export async function generateSuitabilityPdfReport(args: {
       description: 'Report has been generated and saved to documents',
       type: 'success'
     })
+    return result
   } catch (error) {
     console.error('PDF report generation error:', error)
     if (reportWindow) {
@@ -165,5 +180,38 @@ export async function generateSuitabilityPdfReport(args: {
       description: error instanceof Error ? error.message : 'Could not generate PDF report',
       type: 'error'
     })
+    return undefined
   }
+}
+
+export function openGeneratedReport(args: {
+  result: RequestResult
+  reportType: SuitabilityReportVariant
+  targetWindow?: Window | null
+  allowSameTabFallback?: boolean
+}): boolean {
+  if (args.result.inlinePdf) {
+    return openPdfFromBase64(args.result.inlinePdf, {
+      filename: args.result.fileName || `suitability-${args.reportType}.pdf`,
+      targetWindow: args.targetWindow ?? undefined,
+      allowSameTabFallback: args.allowSameTabFallback
+    })
+  }
+
+  if (args.result.signedUrl) {
+    return openReportUrl(args.result.signedUrl, {
+      targetWindow: args.targetWindow ?? undefined,
+      allowSameTabFallback: args.allowSameTabFallback
+    })
+  }
+
+  if (args.result.documentId) {
+    const downloadUrl = `/api/documents/download/${args.result.documentId}`
+    return openReportUrl(downloadUrl, {
+      targetWindow: args.targetWindow ?? undefined,
+      allowSameTabFallback: args.allowSameTabFallback
+    })
+  }
+
+  return false
 }
