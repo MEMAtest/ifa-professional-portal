@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (inviteError || !invitation) {
-      console.log('[Accept Invite] Token not found:', token.slice(0, 8) + '...')
+      // SECURITY: Never log tokens, even partially
+      console.log('[Accept Invite] Invalid or expired invitation token')
       return NextResponse.json(
         { error: 'Invalid invitation token' },
         { status: 404 }

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { createClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { randomBytes } from 'crypto'
 import type { UserInvitation, InviteUserInput } from '@/modules/firm/types/user.types'
 
@@ -60,7 +61,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch invitations' }, { status: 500 })
     }
 
-    const response: UserInvitation[] = (invitations ?? []).map((inv: {
+    // SECURITY: Never expose tokens in responses - they should only be in invitation emails
+  const response: Omit<UserInvitation, 'token'>[] = (invitations ?? []).map((inv: {
       id: string
       firm_id: string
       email: string
@@ -76,7 +78,7 @@ export async function GET(request: NextRequest) {
       email: inv.email,
       role: inv.role as UserInvitation['role'],
       invitedBy: inv.invited_by ?? undefined,
-      token: inv.token,
+      // token intentionally omitted for security
       expiresAt: new Date(inv.expires_at),
       acceptedAt: inv.accepted_at ? new Date(inv.accepted_at) : undefined,
       createdAt: new Date(inv.created_at),
@@ -112,8 +114,10 @@ export async function POST(request: NextRequest) {
 
     const body: InviteUserInput = await request.json()
 
-    if (!body.email || !body.email.includes('@')) {
-      return NextResponse.json({ error: 'Valid email is required' }, { status: 400 })
+    // Validate email with proper regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!body.email || !emailRegex.test(body.email) || body.email.length > 255) {
+      return NextResponse.json({ error: 'Valid email address is required' }, { status: 400 })
     }
 
     if (!body.role || !['advisor', 'supervisor', 'admin'].includes(body.role)) {
@@ -177,13 +181,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if email already exists in the firm
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('firm_id', firmIdResult.firmId)
-      // Would need to check auth.users for email - skipped for now
-      .limit(1)
+    // Check if email already exists in auth.users
+    // Note: This requires service client to check auth.users
+    const supabaseService = getSupabaseServiceClient()
+    const { data: existingUsers } = await supabaseService.auth.admin.listUsers({
+      perPage: 1000 // Paginate if needed for larger firms
+    })
+    const emailExists = existingUsers?.users?.some(
+      u => u.email?.toLowerCase() === body.email.toLowerCase()
+    )
+    if (emailExists) {
+      return NextResponse.json(
+        { error: 'A user with this email already exists' },
+        { status: 400 }
+      )
+    }
 
     // Create invitation
     const token = generateInviteToken()
@@ -268,13 +280,14 @@ export async function POST(request: NextRequest) {
       console.warn('[Invite API] Email sending failed:', emailErr)
     }
 
-    const response: UserInvitation & { inviteUrl: string; emailSent: boolean; emailError?: string } = {
+    // SECURITY: Don't expose raw token in response - only include inviteUrl
+    const response: Omit<UserInvitation, 'token'> & { inviteUrl: string; emailSent: boolean; emailError?: string } = {
       id: invitation.id,
       firmId: invitation.firm_id,
       email: invitation.email,
       role: invitation.role as UserInvitation['role'],
       invitedBy: invitation.invited_by ?? undefined,
-      token: invitation.token,
+      // token intentionally omitted for security - only exposed via inviteUrl in email
       expiresAt: new Date(invitation.expires_at),
       acceptedAt: undefined,
       createdAt: new Date(invitation.created_at),

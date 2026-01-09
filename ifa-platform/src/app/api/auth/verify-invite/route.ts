@@ -41,7 +41,8 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (error || !invitation) {
-      console.log('[Verify Invite] Token not found:', token.slice(0, 8) + '...')
+      // SECURITY: Never log tokens, even partially
+      console.log('[Verify Invite] Invalid or expired invitation token')
       return NextResponse.json(
         { error: 'Invalid invitation token', code: 'INVALID_TOKEN' },
         { status: 404 }
