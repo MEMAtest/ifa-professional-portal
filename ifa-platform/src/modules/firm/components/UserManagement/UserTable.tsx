@@ -5,7 +5,7 @@
 
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Users, UserPlus, MoreHorizontal, Mail, Shield, Clock, AlertCircle, Edit, RotateCcw, XCircle, RefreshCw } from 'lucide-react'
 import { useFirmUsers, useUserInvitations } from '../../hooks/useFirmUsers'
 import { usePermissions } from '../../hooks/usePermissions'
@@ -14,7 +14,16 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { InviteModal } from './InviteModal'
 import { EditUserSheet } from './EditUserSheet'
+import { ReassignClientsModal } from './ReassignClientsModal'
+import { useToast } from '@/hooks/use-toast'
 import type { FirmUser, UserInvitation } from '../../types/user.types'
+
+// State for tracking user with clients that need reassignment
+interface ReassignmentState {
+  user: FirmUser
+  clientCount: number
+  clientSamples: string[]
+}
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -86,13 +95,120 @@ function ActionMenu({ children, items }: { children: React.ReactNode; items: { l
 }
 
 export function UserTable() {
-  const { users, isLoading, deactivateUserAsync, updateUserAsync } = useFirmUsers()
+  const { users, isLoading, deactivateUserAsync, updateUserAsync, refetch } = useFirmUsers()
   const { invitations, isLoadingInvitations, cancelInviteAsync, resendInviteAsync } = useUserInvitations()
   const { canInviteUsers, canEditUsers, canDeleteUsers } = usePermissions()
   const { maxSeats, currentSeats, seatsRemaining } = useFirmSeats()
+  const { toast } = useToast()
 
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [editingUser, setEditingUser] = useState<FirmUser | null>(null)
+  const [reassignmentState, setReassignmentState] = useState<ReassignmentState | null>(null)
+
+  // Handle deactivation with client reassignment check
+  const handleDeactivate = useCallback(async (user: FirmUser) => {
+    try {
+      // First, try to deactivate - the API will return 409 if user has clients
+      const response = await fetch(`/api/firm/users/${user.id}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (response.status === 409 && result.code === 'HAS_CLIENTS') {
+        // User has clients - show reassignment modal
+        setReassignmentState({
+          user,
+          clientCount: result.clientCount,
+          clientSamples: result.clientSamples || [],
+        })
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to deactivate user')
+      }
+
+      toast({
+        title: 'User deactivated',
+        description: `${user.fullName} has been deactivated`,
+      })
+
+      refetch()
+    } catch (error) {
+      console.error('Deactivation error:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to deactivate user',
+        variant: 'destructive',
+      })
+    }
+  }, [toast, refetch])
+
+  // Handle deactivation after reassignment
+  const handleReassignComplete = useCallback(async () => {
+    if (!reassignmentState) return
+
+    try {
+      // Now deactivate the user (clients have been reassigned)
+      const response = await fetch(`/api/firm/users/${reassignmentState.user.id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to deactivate user')
+      }
+
+      toast({
+        title: 'User deactivated',
+        description: `${reassignmentState.user.fullName} has been deactivated and clients reassigned`,
+      })
+
+      setReassignmentState(null)
+      refetch()
+    } catch (error) {
+      console.error('Post-reassignment deactivation error:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to deactivate user',
+        variant: 'destructive',
+      })
+    }
+  }, [reassignmentState, toast, refetch])
+
+  // Handle skipping reassignment (leave clients orphaned)
+  const handleSkipReassignment = useCallback(async () => {
+    if (!reassignmentState) return
+
+    try {
+      // Deactivate with confirmOrphan flag
+      const response = await fetch(`/api/firm/users/${reassignmentState.user.id}?confirmOrphan=true`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Failed to deactivate user')
+      }
+
+      toast({
+        title: 'User deactivated',
+        description: `${reassignmentState.user.fullName} has been deactivated. ${reassignmentState.clientCount} client(s) are now unassigned.`,
+        variant: 'default',
+      })
+
+      setReassignmentState(null)
+      refetch()
+    } catch (error) {
+      console.error('Skip reassignment error:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to deactivate user',
+        variant: 'destructive',
+      })
+    }
+  }, [reassignmentState, toast, refetch])
 
   if (isLoading) {
     return (
@@ -163,11 +279,7 @@ export function UserTable() {
                 canEdit={canEditUsers}
                 canDelete={canDeleteUsers}
                 onEdit={() => setEditingUser(user)}
-                onDeactivate={async () => {
-                  if (confirm(`Deactivate ${user.fullName}? They will lose access to the platform.`)) {
-                    await deactivateUserAsync(user.id)
-                  }
-                }}
+                onDeactivate={() => handleDeactivate(user)}
               />
             ))}
             {activeUsers.length === 0 && (
@@ -257,6 +369,19 @@ export function UserTable() {
           user={editingUser}
           open={!!editingUser}
           onClose={() => setEditingUser(null)}
+        />
+      )}
+
+      {/* Reassign Clients Modal */}
+      {reassignmentState && (
+        <ReassignClientsModal
+          open={!!reassignmentState}
+          onClose={() => setReassignmentState(null)}
+          userToDeactivate={reassignmentState.user}
+          clientCount={reassignmentState.clientCount}
+          clientSamples={reassignmentState.clientSamples}
+          onReassignComplete={handleReassignComplete}
+          onSkipReassignment={handleSkipReassignment}
         />
       )}
     </div>

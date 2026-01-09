@@ -324,6 +324,44 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // ========================================
+    // ORPHAN CLIENT CHECK
+    // Check if user has active clients that need reassignment
+    // ========================================
+    const url = new URL(request.url)
+    const confirmOrphan = url.searchParams.get('confirmOrphan') === 'true'
+
+    // Check for clients assigned to this user
+    const { data: assignedClients, count: clientCount } = await supabase
+      .from('clients')
+      .select('id, personal_details', { count: 'exact' })
+      .eq('advisor_id', userId)
+      .eq('firm_id', firmIdResult.firmId)
+      .limit(5) // Just get a few for the response
+
+    if ((clientCount ?? 0) > 0 && !confirmOrphan) {
+      // Return 409 Conflict with client info so UI can prompt for reassignment
+      const clientNames = (assignedClients ?? []).map((c: { id: string; personal_details: Record<string, unknown> | null }) => {
+        const pd = c.personal_details
+        if (!pd) return 'Unknown'
+        const firstName = (pd.firstName || pd.first_name || '') as string
+        const lastName = (pd.lastName || pd.last_name || '') as string
+        return `${firstName} ${lastName}`.trim() || 'Unknown'
+      })
+
+      return NextResponse.json(
+        {
+          error: 'User has assigned clients',
+          code: 'HAS_CLIENTS',
+          message: `This user has ${clientCount} client(s) assigned. Reassign clients before deactivating or confirm to leave them orphaned.`,
+          clientCount,
+          clientSamples: clientNames,
+          requiresReassignment: true
+        },
+        { status: 409 }
+      )
+    }
+
     // Soft delete - set status to deactivated
     const { error } = await supabase
       .from('profiles')
