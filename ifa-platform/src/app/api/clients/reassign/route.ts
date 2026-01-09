@@ -12,6 +12,16 @@ import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyClientReassigned } from '@/lib/notifications/notificationService'
 import type { Json } from '@/types/db'
 
+// UUID validation regex (RFC 4122 compliant)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value)
+}
+
+// Maximum clients that can be reassigned in a single request
+const MAX_CLIENTS_PER_REQUEST = 100
+
 interface ReassignRequest {
   clientIds: string[]
   newAdvisorId: string
@@ -73,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Sanitize reason field
     const reason = rawReason?.trim().slice(0, 1000) || undefined
 
-    // Validate request
+    // Validate request - array presence and length
     if (!clientIds || !Array.isArray(clientIds) || clientIds.length === 0) {
       return NextResponse.json(
         { success: false, error: 'clientIds array is required' },
@@ -81,9 +91,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Prevent DoS with excessive array size
+    if (clientIds.length > MAX_CLIENTS_PER_REQUEST) {
+      return NextResponse.json(
+        { success: false, error: `Cannot reassign more than ${MAX_CLIENTS_PER_REQUEST} clients at once` },
+        { status: 400 }
+      )
+    }
+
+    // Validate all clientIds are strings
+    if (!clientIds.every((id) => typeof id === 'string')) {
+      return NextResponse.json(
+        { success: false, error: 'All client IDs must be strings' },
+        { status: 400 }
+      )
+    }
+
+    // Validate all clientIds are valid UUIDs
+    if (!clientIds.every(isValidUUID)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid client ID format' },
+        { status: 400 }
+      )
+    }
+
     if (!newAdvisorId) {
       return NextResponse.json(
         { success: false, error: 'newAdvisorId is required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate newAdvisorId is a valid UUID
+    if (!isValidUUID(newAdvisorId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid advisor ID format' },
         { status: 400 }
       )
     }

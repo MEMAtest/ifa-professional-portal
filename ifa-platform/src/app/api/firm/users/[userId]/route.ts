@@ -10,6 +10,13 @@ import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { createClient } from '@/lib/supabase/server'
 import type { FirmUser, UserRole, UserStatus } from '@/modules/firm/types/user.types'
 
+// UUID validation regex (RFC 4122 compliant)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value)
+}
+
 interface RouteParams {
   params: Promise<{ userId: string }>
 }
@@ -17,6 +24,12 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { userId } = await params
+
+    // Validate UUID format to prevent database errors
+    if (!isValidUUID(userId)) {
+      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 })
+    }
+
     const authResult = await getAuthContext(request)
 
     if (!authResult.success || !authResult.context) {
@@ -90,6 +103,12 @@ const VALID_STATUSES: UserStatus[] = ['active', 'invited', 'deactivated']
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { userId } = await params
+
+    // Validate UUID format to prevent database errors
+    if (!isValidUUID(userId)) {
+      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 })
+    }
+
     const authResult = await getAuthContext(request)
 
     if (!authResult.success || !authResult.context) {
@@ -264,6 +283,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { userId } = await params
+
+    // Validate UUID format to prevent database errors
+    if (!isValidUUID(userId)) {
+      return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 })
+    }
+
     const authResult = await getAuthContext(request)
 
     if (!authResult.success || !authResult.context) {

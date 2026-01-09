@@ -57,7 +57,10 @@ function ActionMenu({ children, items }: { children: React.ReactNode; items: { l
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
+  // Only add event listener when menu is open to prevent memory leaks
   useEffect(() => {
+    if (!open) return
+
     function handleClickOutside(event: MouseEvent) {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false)
@@ -65,7 +68,7 @@ function ActionMenu({ children, items }: { children: React.ReactNode; items: { l
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [open])
 
   return (
     <div className="relative" ref={ref}>
