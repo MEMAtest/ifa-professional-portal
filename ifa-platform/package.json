@@ -54,7 +54,9 @@
     "gen:types": "npx supabase gen types typescript --project-id maandodhonjolrmcxivo > src/types/database.types.ts",
     "type-check": "tsc --noEmit",
     "db:backfill-firm-id": "node scripts/backfill-firm-id.mjs",
-    "db:backfill-firm-id:dry": "node scripts/backfill-firm-id.mjs --dry-run"
+    "db:backfill-firm-id:dry": "node scripts/backfill-firm-id.mjs --dry-run",
+    "demo:seed": "node scripts/seed-demo.mjs",
+    "demo:reset": "node scripts/reset-demo.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

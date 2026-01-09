@@ -6,6 +6,7 @@ import './globals.css'
 import Providers from './providers'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SmartLayoutWrapper } from '@/components/layout/SmartLayoutWrapper'
+import { EnvironmentBanner } from '@/components/layout/EnvironmentBanner'
 
 // METADATA - Updated for Plannetic
 export const metadata: Metadata = {
@@ -77,6 +78,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className="h-full font-sans">
+        <EnvironmentBanner />
         <Providers>
           <AuthProvider>
             <SmartLayoutWrapper>

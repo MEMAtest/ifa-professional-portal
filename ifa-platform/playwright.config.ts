@@ -74,6 +74,31 @@ export default defineConfig({
 
   // Test projects for different browsers and devices
   projects: [
+    // ============================================
+    // OSO QA AGENT - BRUTAL TESTING
+    // ============================================
+    {
+      name: 'qa-brutal',
+      testDir: 'e2e/qa-agent/runners',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+        // Longer timeouts for stress tests
+        actionTimeout: 20_000,
+      },
+    },
+    {
+      name: 'qa-suitability',
+      testDir: 'e2e/suitability',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+
+    // ============================================
+    // STANDARD BROWSER TESTS
+    // ============================================
     // Desktop browsers
     {
       name: 'chromium',
