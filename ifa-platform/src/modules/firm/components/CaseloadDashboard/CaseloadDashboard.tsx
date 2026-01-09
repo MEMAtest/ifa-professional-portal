@@ -11,6 +11,7 @@ import { Users, Briefcase, TrendingUp, AlertTriangle, RefreshCw } from 'lucide-r
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useFirmUsers } from '../../hooks/useFirmUsers'
+import { usePermissions } from '../../hooks/usePermissions'
 import { createClient } from '@/lib/supabase/client'
 
 interface AdvisorCaseload {
@@ -31,14 +32,23 @@ interface CaseloadStats {
   unassignedClients: number
 }
 
+// UUID validation regex (RFC 4122 compliant)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value)
+}
+
 export function CaseloadDashboard() {
   const { users, isLoading: usersLoading } = useFirmUsers()
+  const { canManageUsers } = usePermissions()
   const [caseloads, setCaseloads] = useState<AdvisorCaseload[]>([])
   const [stats, setStats] = useState<CaseloadStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  // Memoize supabase client to prevent infinite re-render loop
+  const supabase = useMemo(() => createClient(), [])
 
   // Filter to only active advisors/supervisors/admins
   const activeAdvisors = useMemo(() => {
@@ -47,8 +57,15 @@ export function CaseloadDashboard() {
     ) ?? []
   }, [users])
 
-  // Fetch caseload data
+  // Fetch caseload data with parallel queries
   const fetchCaseloadData = useCallback(async () => {
+    // Authorization check - component should only be rendered for users with permission
+    if (!canManageUsers) {
+      setError('You do not have permission to view caseload data')
+      setIsLoading(false)
+      return
+    }
+
     if (!activeAdvisors.length) {
       setIsLoading(false)
       return
@@ -58,39 +75,58 @@ export function CaseloadDashboard() {
     setError(null)
 
     try {
-      const advisorIds = activeAdvisors.map(a => a.id)
+      // Validate all advisor IDs are valid UUIDs to prevent injection
+      const advisorIds = activeAdvisors.map(a => a.id).filter(isValidUUID)
 
-      // Fetch client counts per advisor
-      const { data: clientCounts, error: clientError } = await supabase
-        .from('clients')
-        .select('advisor_id')
-        .in('advisor_id', advisorIds)
+      if (advisorIds.length === 0) {
+        setIsLoading(false)
+        return
+      }
 
-      if (clientError) throw clientError
+      // Run all queries in parallel for better performance
+      const [
+        clientCountsResult,
+        unassignedCountResult,
+        assessmentsResult,
+        reviewsResult
+      ] = await Promise.all([
+        // Fetch client counts per advisor
+        supabase
+          .from('clients')
+          .select('advisor_id')
+          .in('advisor_id', advisorIds),
 
-      // Fetch unassigned clients count
-      const { count: unassignedCount, error: unassignedError } = await supabase
-        .from('clients')
-        .select('*', { count: 'exact', head: true })
-        .is('advisor_id', null)
+        // Fetch unassigned clients count
+        supabase
+          .from('clients')
+          .select('*', { count: 'exact', head: true })
+          .is('advisor_id', null),
 
-      if (unassignedError) throw unassignedError
+        // Fetch active assessments per advisor (status in_progress or draft)
+        supabase
+          .from('suitability_assessments')
+          .select('advisor_id, status')
+          .in('advisor_id', advisorIds)
+          .in('status', ['in_progress', 'draft']),
 
-      // Fetch active assessments per advisor (status in_progress or draft)
-      const { data: assessments, error: assessmentError } = await supabase
-        .from('suitability_assessments')
-        .select('advisor_id, status')
-        .in('advisor_id', advisorIds)
-        .in('status', ['in_progress', 'draft'])
+        // Fetch pending file reviews per advisor
+        supabase
+          .from('file_reviews')
+          .select('assigned_to, status')
+          .in('assigned_to', advisorIds)
+          .eq('status', 'pending')
+      ])
 
-      if (assessmentError) throw assessmentError
+      // Check for errors in all queries
+      if (clientCountsResult.error) throw clientCountsResult.error
+      if (unassignedCountResult.error) throw unassignedCountResult.error
+      if (assessmentsResult.error) throw assessmentsResult.error
+      if (reviewsResult.error) throw reviewsResult.error
 
-      // Fetch pending file reviews per advisor
-      const { data: reviews } = await supabase
-        .from('file_reviews')
-        .select('assigned_to, status')
-        .in('assigned_to', advisorIds)
-        .eq('status', 'pending')
+      const clientCounts = clientCountsResult.data
+      const unassignedCount = unassignedCountResult.count
+      const assessments = assessmentsResult.data
+      const reviews = reviewsResult.data
 
       // Count per advisor
       const clientCountMap = new Map<string, number>()
@@ -152,7 +188,7 @@ export function CaseloadDashboard() {
     } finally {
       setIsLoading(false)
     }
-  }, [activeAdvisors, supabase])
+  }, [activeAdvisors, supabase, canManageUsers])
 
   useEffect(() => {
     if (!usersLoading && activeAdvisors.length > 0) {
@@ -160,7 +196,7 @@ export function CaseloadDashboard() {
     } else if (!usersLoading) {
       setIsLoading(false)
     }
-  }, [usersLoading, activeAdvisors.length, fetchCaseloadData])
+  }, [usersLoading, activeAdvisors, fetchCaseloadData])
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'Never'
@@ -175,7 +211,7 @@ export function CaseloadDashboard() {
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center" role="status" aria-label="Loading caseload data">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
         </CardContent>
@@ -187,8 +223,8 @@ export function CaseloadDashboard() {
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center justify-center text-red-500">
-            <AlertTriangle className="h-5 w-5 mr-2" />
+          <div className="flex items-center justify-center text-red-500" role="alert">
+            <AlertTriangle className="h-5 w-5 mr-2" aria-hidden="true" />
             <span>{error}</span>
           </div>
         </CardContent>
@@ -199,12 +235,12 @@ export function CaseloadDashboard() {
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Caseload statistics">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-blue-50 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
+                <Users className="h-6 w-6 text-blue-600" aria-hidden="true" />
               </div>
               <div>
                 <div className="text-sm text-gray-500">Total Clients</div>
@@ -218,7 +254,7 @@ export function CaseloadDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-green-50 rounded-lg">
-                <Briefcase className="h-6 w-6 text-green-600" />
+                <Briefcase className="h-6 w-6 text-green-600" aria-hidden="true" />
               </div>
               <div>
                 <div className="text-sm text-gray-500">Active Assessments</div>
@@ -232,7 +268,7 @@ export function CaseloadDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-amber-50 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-amber-600" />
+                <TrendingUp className="h-6 w-6 text-amber-600" aria-hidden="true" />
               </div>
               <div>
                 <div className="text-sm text-gray-500">Avg Clients/Advisor</div>
@@ -246,7 +282,7 @@ export function CaseloadDashboard() {
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               <div className={`p-3 rounded-lg ${(stats?.unassignedClients ?? 0) > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
-                <AlertTriangle className={`h-6 w-6 ${(stats?.unassignedClients ?? 0) > 0 ? 'text-red-600' : 'text-gray-400'}`} />
+                <AlertTriangle className={`h-6 w-6 ${(stats?.unassignedClients ?? 0) > 0 ? 'text-red-600' : 'text-gray-400'}`} aria-hidden="true" />
               </div>
               <div>
                 <div className="text-sm text-gray-500">Unassigned Clients</div>
@@ -264,15 +300,15 @@ export function CaseloadDashboard() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Briefcase className="h-5 w-5" />
+              <Briefcase className="h-5 w-5" aria-hidden="true" />
               Advisor Caseloads
             </CardTitle>
             <CardDescription>
               Client distribution and workload across your team
             </CardDescription>
           </div>
-          <Button variant="outline" onClick={fetchCaseloadData} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          <Button variant="outline" onClick={fetchCaseloadData} disabled={isLoading} aria-label="Refresh caseload data">
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
             Refresh
           </Button>
         </CardHeader>
@@ -283,15 +319,15 @@ export function CaseloadDashboard() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full" aria-label="Advisor caseload distribution">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Advisor</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Role</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Clients</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Active Assessments</th>
-                    <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Pending Reviews</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Last Active</th>
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">Advisor</th>
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">Role</th>
+                    <th scope="col" className="px-4 py-3 text-center text-sm font-medium text-gray-500">Clients</th>
+                    <th scope="col" className="px-4 py-3 text-center text-sm font-medium text-gray-500">Active Assessments</th>
+                    <th scope="col" className="px-4 py-3 text-center text-sm font-medium text-gray-500">Pending Reviews</th>
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">Last Active</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -299,7 +335,7 @@ export function CaseloadDashboard() {
                     <tr key={advisor.advisorId} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center" aria-hidden="true">
                             <span className="text-sm font-medium text-blue-600">
                               {advisor.advisorName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </span>
@@ -351,17 +387,17 @@ export function CaseloadDashboard() {
             <CardDescription>Visual comparison of client assignments</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-3" role="img" aria-label="Bar chart showing client distribution across advisors">
               {caseloads.map(advisor => {
                 const maxClients = Math.max(...caseloads.map(c => c.clientCount), 1)
                 const percentage = (advisor.clientCount / maxClients) * 100
 
                 return (
                   <div key={advisor.advisorId} className="flex items-center gap-4">
-                    <div className="w-32 text-sm font-medium text-gray-700 truncate">
+                    <div className="w-32 text-sm font-medium text-gray-700 truncate" title={advisor.advisorName}>
                       {advisor.advisorName}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1" role="progressbar" aria-valuenow={advisor.clientCount} aria-valuemin={0} aria-valuemax={maxClients} aria-label={`${advisor.advisorName}: ${advisor.clientCount} clients`}>
                       <div className="h-6 bg-gray-100 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-blue-500 rounded-full transition-all duration-300"
