@@ -103,22 +103,102 @@ const rateLimitConfigs: Record<RateLimitType, RateLimitConfig> = {
 }
 
 /**
- * Get client IP from request headers
+ * Validate if a string looks like a valid IP address
+ */
+function isValidIP(ip: string): boolean {
+  // IPv4
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/
+  // IPv6 (simplified)
+  const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$|^::1$/
+
+  if (ipv4Regex.test(ip)) {
+    const parts = ip.split('.').map(Number)
+    return parts.every(p => p >= 0 && p <= 255)
+  }
+
+  return ipv6Regex.test(ip)
+}
+
+/**
+ * Check if IP is a private/internal address that shouldn't be trusted
+ */
+function isPrivateIP(ip: string): boolean {
+  // Private IPv4 ranges
+  const privateRanges = [
+    /^10\./,                          // 10.0.0.0/8
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0/12
+    /^192\.168\./,                    // 192.168.0.0/16
+    /^127\./,                         // 127.0.0.0/8 (loopback)
+    /^169\.254\./,                    // 169.254.0.0/16 (link-local)
+    /^0\./,                           // 0.0.0.0/8
+  ]
+
+  return privateRanges.some(regex => regex.test(ip))
+}
+
+/**
+ * Get client IP from request headers with security validation
+ *
+ * SECURITY NOTES:
+ * - Only trusts x-forwarded-for when behind Vercel (detected by x-vercel-id header)
+ * - Takes the rightmost non-private IP from x-forwarded-for (closest to the proxy)
+ * - Validates IP format to prevent injection
+ * - Falls back to a request-unique identifier instead of shared 127.0.0.1
  */
 export function getClientIP(request: NextRequest): string {
-  // Check various headers in order of preference
-  const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded) {
-    return forwarded.split(',')[0].trim()
+  // Check if we're behind Vercel (or another trusted proxy)
+  const vercelId = request.headers.get('x-vercel-id')
+  const isBehindTrustedProxy = !!vercelId || process.env.TRUST_PROXY === 'true'
+
+  if (isBehindTrustedProxy) {
+    // x-real-ip is set by Vercel to the actual client IP
+    const realIP = request.headers.get('x-real-ip')
+    if (realIP && isValidIP(realIP) && !isPrivateIP(realIP)) {
+      return realIP
+    }
+
+    // x-forwarded-for contains: client, proxy1, proxy2, ...
+    // Take the rightmost non-private IP (most reliable when behind multiple proxies)
+    const forwarded = request.headers.get('x-forwarded-for')
+    if (forwarded) {
+      const ips = forwarded.split(',').map(ip => ip.trim())
+
+      // Work backwards to find the first non-private, valid IP
+      for (let i = ips.length - 1; i >= 0; i--) {
+        const ip = ips[i]
+        if (isValidIP(ip) && !isPrivateIP(ip)) {
+          return ip
+        }
+      }
+
+      // If all IPs are private, take the leftmost (original client)
+      const firstIP = ips[0]
+      if (isValidIP(firstIP)) {
+        return firstIP
+      }
+    }
   }
 
-  const realIP = request.headers.get('x-real-ip')
-  if (realIP) {
-    return realIP
+  // NOT behind a trusted proxy - don't trust x-forwarded-for or x-real-ip
+  // as they can be spoofed by the client
+
+  // Try to get IP from the connection (only works in some environments)
+  const cfConnectingIP = request.headers.get('cf-connecting-ip') // Cloudflare
+  if (cfConnectingIP && isValidIP(cfConnectingIP)) {
+    return cfConnectingIP
   }
 
-  // Fallback to a default (shouldn't happen in production)
-  return '127.0.0.1'
+  // Generate a unique identifier for this request based on available data
+  // This prevents all unknown requests from sharing the same rate limit
+  const userAgent = request.headers.get('user-agent') || 'unknown'
+  const acceptLanguage = request.headers.get('accept-language') || 'unknown'
+
+  // Create a hash-like identifier from request characteristics
+  // This isn't perfect but is better than sharing 127.0.0.1 for all requests
+  const identifier = `unknown-${Buffer.from(userAgent + acceptLanguage).toString('base64').substring(0, 16)}`
+
+  console.warn('[RateLimit] Could not determine client IP, using request fingerprint:', identifier)
+  return identifier
 }
 
 /**

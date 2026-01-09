@@ -36,17 +36,25 @@ export function constantTimeCompare(a: string, b: string): boolean {
   const bufferA = Buffer.from(a)
   const bufferB = Buffer.from(b)
 
-  // If lengths differ, compare with same-length buffer to avoid timing leak
-  if (bufferA.length !== bufferB.length) {
-    // Create a buffer of same length as A to compare against
-    // This ensures constant time even for different lengths
-    const paddedB = Buffer.alloc(bufferA.length)
-    bufferB.copy(paddedB, 0, 0, Math.min(bufferA.length, bufferB.length))
-    timingSafeEqual(bufferA, paddedB)
-    return false
+  // Track if lengths match - but don't return early (timing leak)
+  const lengthsMatch = bufferA.length === bufferB.length
+
+  // Always compare against a buffer of the same length as bufferA
+  // This ensures constant time regardless of input lengths
+  const compareBuffer = lengthsMatch
+    ? bufferB
+    : Buffer.alloc(bufferA.length) // Zero-filled buffer for mismatched lengths
+
+  // Copy what we can from bufferB into compareBuffer for mismatched lengths
+  if (!lengthsMatch) {
+    bufferB.copy(compareBuffer, 0, 0, Math.min(bufferA.length, bufferB.length))
   }
 
-  return timingSafeEqual(bufferA, bufferB)
+  // Always perform the comparison (constant time)
+  const contentsMatch = timingSafeEqual(bufferA, compareBuffer)
+
+  // Both length AND contents must match
+  return lengthsMatch && contentsMatch
 }
 
 /**

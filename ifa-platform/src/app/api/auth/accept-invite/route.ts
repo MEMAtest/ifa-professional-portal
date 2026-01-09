@@ -34,26 +34,16 @@ interface SagaState {
 async function rollbackSaga(
   supabaseAdmin: ReturnType<typeof getSupabaseServiceClient>,
   state: SagaState,
-  invitationId?: string
+  invitationId?: string,
+  failureReason?: string
 ): Promise<void> {
-  console.log('[Accept Invite] Rolling back saga, state:', state)
+  console.log('[Accept Invite] Rolling back saga, state:', state, 'reason:', failureReason)
 
   // Rollback in reverse order of creation
+  // IMPORTANT: We do NOT revert invitation acceptance to prevent race conditions
+  // Once accepted_at is set, the token cannot be reused. Admin must create new invitation.
 
-  // 1. Revert invitation acceptance
-  if (state.invitationAccepted && invitationId) {
-    try {
-      await supabaseAdmin
-        .from('user_invitations' as any)
-        .update({ accepted_at: null })
-        .eq('id', invitationId)
-      console.log('[Accept Invite] Rolled back invitation acceptance')
-    } catch (err) {
-      console.error('[Accept Invite] Failed to rollback invitation:', err)
-    }
-  }
-
-  // 2. Delete profile
+  // 1. Delete profile first (depends on auth user)
   if (state.profileCreated && state.authUserId) {
     try {
       await supabaseAdmin
@@ -66,13 +56,35 @@ async function rollbackSaga(
     }
   }
 
-  // 3. Delete auth user (this is the most important cleanup)
+  // 2. Delete auth user (this is the most important cleanup)
   if (state.authUserId) {
     try {
       await supabaseAdmin.auth.admin.deleteUser(state.authUserId)
       console.log('[Accept Invite] Rolled back auth user creation')
     } catch (err) {
       console.error('[Accept Invite] Failed to rollback auth user:', err)
+    }
+  }
+
+  // 3. Log failure on invitation (but keep accepted_at set to prevent reuse)
+  // This helps with debugging while maintaining security
+  if (invitationId && failureReason) {
+    try {
+      await supabaseAdmin
+        .from('user_invitations' as any)
+        .update({
+          // Keep accepted_at set - NEVER revert to null (security)
+          // Add failure metadata for admin visibility
+          metadata: {
+            failed: true,
+            failure_reason: failureReason,
+            failed_at: new Date().toISOString()
+          }
+        })
+        .eq('id', invitationId)
+      console.log('[Accept Invite] Marked invitation as failed (token remains consumed)')
+    } catch (err) {
+      console.error('[Accept Invite] Failed to update invitation metadata:', err)
     }
   }
 }
@@ -108,9 +120,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!password || password.length < 8) {
+    // ========================================
+    // PASSWORD VALIDATION (Strong requirements for financial platform)
+    // ========================================
+    const MIN_PASSWORD_LENGTH = 12
+    const MAX_PASSWORD_LENGTH = 72 // bcrypt limit
+
+    if (!password) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters' },
+        { error: 'Password is required' },
+        { status: 400 }
+      )
+    }
+
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+        { status: 400 }
+      )
+    }
+
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: `Password must not exceed ${MAX_PASSWORD_LENGTH} characters` },
         { status: 400 }
       )
     }
@@ -119,9 +151,23 @@ export async function POST(request: NextRequest) {
     const hasUppercase = /[A-Z]/.test(password)
     const hasLowercase = /[a-z]/.test(password)
     const hasNumber = /[0-9]/.test(password)
-    if (!hasUppercase || !hasLowercase || !hasNumber) {
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)
+
+    if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecialChar) {
       return NextResponse.json(
-        { error: 'Password must contain uppercase, lowercase, and a number' },
+        { error: 'Password must contain uppercase, lowercase, number, and special character' },
+        { status: 400 }
+      )
+    }
+
+    // Check for common weak passwords
+    const commonPasswords = [
+      'password123!', 'Password123!', 'Qwerty123456!', 'Admin123456!',
+      'Welcome123!', 'Changeme123!', 'Password1234!', 'Letmein12345!'
+    ]
+    if (commonPasswords.some(common => password.toLowerCase() === common.toLowerCase())) {
+      return NextResponse.json(
+        { error: 'Password is too common. Please choose a stronger password.' },
         { status: 400 }
       )
     }
@@ -247,7 +293,7 @@ export async function POST(request: NextRequest) {
 
     if (createError) {
       console.error('[Accept Invite] Failed to create user:', createError)
-      await rollbackSaga(supabaseAdmin, sagaState, invitationId)
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Auth user creation failed: ${createError.message}`)
 
       if (createError.message?.includes('already registered')) {
         return NextResponse.json(
@@ -263,7 +309,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!newUser.user) {
-      await rollbackSaga(supabaseAdmin, sagaState, invitationId)
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId, 'Auth user creation returned null')
       return NextResponse.json(
         { error: 'Failed to create user account' },
         { status: 500 }
@@ -291,7 +337,7 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       console.error('[Accept Invite] Failed to create profile:', profileError)
-      await rollbackSaga(supabaseAdmin, sagaState, invitationId)
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Profile creation failed: ${profileError.message}`)
       return NextResponse.json(
         { error: 'Failed to create user profile' },
         { status: 500 }
@@ -303,61 +349,44 @@ export async function POST(request: NextRequest) {
     // ========================================
     // STEP 6: ALLOCATE SEAT ATOMICALLY
     // Uses database function with row-level lock on firms table
+    // NO FALLBACK - atomic operations are required for data integrity
     // ========================================
     type AllocateSeatResult = { success: boolean; error?: string; message?: string; currentSeats?: number; maxSeats?: number }
 
-    try {
-      const { data: seatResult, error: seatError } = await (supabaseAdmin as any)
-        .rpc('allocate_firm_seat', {
-          p_firm_id: invitation.firm_id,
-          p_user_id: newUser.user.id,
-          p_invitation_id: invitation.id
-        }) as { data: AllocateSeatResult | null; error: any }
+    const { data: seatResult, error: seatError } = await (supabaseAdmin as any)
+      .rpc('allocate_firm_seat', {
+        p_firm_id: invitation.firm_id,
+        p_user_id: newUser.user.id,
+        p_invitation_id: invitation.id
+      }) as { data: AllocateSeatResult | null; error: any }
 
-      if (seatError) {
-        console.warn('[Accept Invite] Atomic seat allocation failed, using fallback:', seatError)
-        // Fallback to manual update (less safe but functional)
-        const { data: firm } = await supabase
-          .from('firms')
-          .select('settings')
-          .eq('id', invitation.firm_id)
-          .single()
-
-        if (firm?.settings) {
-          const settings = firm.settings as any
-          await supabaseAdmin
-            .from('firms')
-            .update({
-              settings: {
-                ...settings,
-                billing: {
-                  ...settings.billing,
-                  currentSeats: (settings.billing?.currentSeats || 0) + 1
-                }
-              }
-            })
-            .eq('id', invitation.firm_id)
-        }
-      } else if (seatResult && !seatResult.success) {
-        // Seat limit reached - this is a hard failure
-        console.error('[Accept Invite] Seat limit reached:', seatResult)
-        await rollbackSaga(supabaseAdmin, sagaState, invitationId)
-        return NextResponse.json(
-          {
-            error: 'Seat limit reached',
-            message: seatResult.message,
-            currentSeats: seatResult.currentSeats,
-            maxSeats: seatResult.maxSeats
-          },
-          { status: 400 }
-        )
-      }
-
-      sagaState.seatAllocated = true
-    } catch (seatErr) {
-      console.warn('[Accept Invite] Failed to update seat count:', seatErr)
-      // Don't fail the entire operation for seat tracking issues
+    if (seatError) {
+      // Atomic seat allocation failed - this is a hard failure
+      // DO NOT use a non-atomic fallback as it creates race conditions
+      console.error('[Accept Invite] Atomic seat allocation failed:', seatError)
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Seat allocation failed: ${seatError.message}`)
+      return NextResponse.json(
+        { error: 'Failed to allocate seat. Please try again or contact support.' },
+        { status: 500 }
+      )
     }
+
+    if (seatResult && !seatResult.success) {
+      // Seat limit reached - this is a hard failure
+      console.error('[Accept Invite] Seat limit reached:', seatResult)
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Seat limit reached: ${seatResult.message}`)
+      return NextResponse.json(
+        {
+          error: 'Seat limit reached',
+          message: seatResult.message,
+          currentSeats: seatResult.currentSeats,
+          maxSeats: seatResult.maxSeats
+        },
+        { status: 400 }
+      )
+    }
+
+    sagaState.seatAllocated = true
 
     // ========================================
     // STEP 7: LOG ACTIVITY (non-critical)
@@ -402,7 +431,8 @@ export async function POST(request: NextRequest) {
     if (Object.keys(sagaState).length > 0) {
       try {
         const supabaseAdmin = getSupabaseServiceClient()
-        await rollbackSaga(supabaseAdmin, sagaState, invitationId)
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Unexpected error: ${errorMessage}`)
       } catch (rollbackErr) {
         console.error('[Accept Invite] Rollback failed:', rollbackErr)
       }
