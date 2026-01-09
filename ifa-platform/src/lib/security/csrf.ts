@@ -133,6 +133,8 @@ const CSRF_EXEMPT_PATHS = [
   '/api/signatures/webhook',
   '/api/assessments/share/', // Token-based auth
   '/api/cron/', // Server-to-server
+  '/api/auth/accept-invite', // Already protected by rate limiting + token validation
+  '/api/auth/verify-invite', // Read-only, protected by rate limiting
 ]
 
 /**

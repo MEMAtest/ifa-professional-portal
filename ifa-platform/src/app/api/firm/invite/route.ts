@@ -8,12 +8,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { randomBytes } from 'crypto'
+import { rateLimit } from '@/lib/security/rateLimit'
+import { generateTokenPair } from '@/lib/security/crypto'
+import { validateCsrfWithExemptions, csrfError } from '@/lib/security/csrf'
 import type { UserInvitation, InviteUserInput } from '@/modules/firm/types/user.types'
-
-function generateInviteToken(): string {
-  return randomBytes(32).toString('hex')
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -92,6 +90,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 10 invitations per hour per IP
+  const rateLimitResponse = await rateLimit(request, 'invite')
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
+  // CSRF protection for state-changing operation
+  const csrfValid = await validateCsrfWithExemptions(request)
+  if (!csrfValid) {
+    return csrfError()
+  }
+
   try {
     const authResult = await getAuthContext(request)
 
@@ -126,61 +136,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
 
-    // Check seat limit
-    const { data: firm } = await supabase
-      .from('firms')
-      .select('settings')
-      .eq('id', firmIdResult.firmId)
-      .single()
-
-    const settings = firm?.settings as { billing?: { maxSeats?: number } } | null
-    const maxSeats = settings?.billing?.maxSeats ?? 3
-
-    // Count current active users + pending invitations
-    const [{ count: activeUsers }, { count: pendingInvites }] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('firm_id', firmIdResult.firmId)
-        .neq('status', 'deactivated'),
-      supabase
-        .from('user_invitations')
-        .select('*', { count: 'exact', head: true })
-        .eq('firm_id', firmIdResult.firmId)
-        .is('accepted_at', null)
-        .gt('expires_at', new Date().toISOString()),
-    ])
-
-    const totalSeats = (activeUsers ?? 0) + (pendingInvites ?? 0)
-    if (totalSeats >= maxSeats) {
-      return NextResponse.json(
-        {
-          error: 'Seat limit reached',
-          message: `Your firm has ${maxSeats} seats. Contact support to upgrade.`,
-          currentSeats: totalSeats,
-          maxSeats,
-        },
-        { status: 400 }
-      )
-    }
-
-    // Check if email already has a pending invitation
-    const { data: existingInvite } = await supabase
-      .from('user_invitations')
-      .select('id')
-      .eq('firm_id', firmIdResult.firmId)
-      .eq('email', body.email.toLowerCase())
-      .is('accepted_at', null)
-      .gt('expires_at', new Date().toISOString())
-      .single()
-
-    if (existingInvite) {
-      return NextResponse.json(
-        { error: 'Invitation already pending for this email' },
-        { status: 400 }
-      )
-    }
-
     // Check if email already exists in auth.users
     // Note: This requires service client to check auth.users
     const supabaseService = getSupabaseServiceClient()
@@ -197,30 +152,149 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create invitation
-    const token = generateInviteToken()
+    // Create invitation with hashed token for timing attack protection
+    // The plain token goes in the email URL, the hash is stored in DB
+    const { token: plainToken, hashedToken } = generateTokenPair()
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 7) // 7 days expiry
 
-    const { data: invitation, error } = await supabase
-      .from('user_invitations')
-      .insert({
-        firm_id: firmIdResult.firmId,
-        email: body.email.toLowerCase(),
-        role: body.role,
-        invited_by: authResult.context.userId,
-        token,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select()
-      .single()
+    // ========================================
+    // ATOMIC SEAT CHECK + INVITATION CREATION
+    // Uses database function with row-level lock to prevent race conditions
+    // ========================================
+    type CreateInvitationResult = { success: boolean; error?: string; message?: string; invitationId?: string; currentSeats?: number; maxSeats?: number }
 
-    if (error) {
-      console.error('[Invite API] Error creating invitation:', error)
+    let invitation: { id: string; firm_id: string; email: string; role: string; invited_by: string | null; expires_at: string; created_at: string }
+
+    const { data: createResult, error: rpcError } = await (supabaseService as any)
+      .rpc('create_invitation_with_seat_check', {
+        p_firm_id: firmIdResult.firmId,
+        p_email: body.email.toLowerCase(),
+        p_role: body.role,
+        p_invited_by: authResult.context.userId,
+        p_hashed_token: hashedToken,
+        p_expires_at: expiresAt.toISOString()
+      }) as { data: CreateInvitationResult | null; error: any }
+
+    if (rpcError) {
+      console.warn('[Invite API] Atomic invitation creation failed, using fallback:', rpcError)
+
+      // Fallback to manual checks (less safe but functional)
+      const { data: firm } = await supabase
+        .from('firms')
+        .select('settings')
+        .eq('id', firmIdResult.firmId)
+        .single()
+
+      const settings = firm?.settings as { billing?: { maxSeats?: number } } | null
+      const maxSeats = settings?.billing?.maxSeats ?? 3
+
+      // Count current active users + pending invitations
+      const [{ count: activeUsers }, { count: pendingInvites }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('firm_id', firmIdResult.firmId)
+          .neq('status', 'deactivated'),
+        supabase
+          .from('user_invitations')
+          .select('*', { count: 'exact', head: true })
+          .eq('firm_id', firmIdResult.firmId)
+          .is('accepted_at', null)
+          .gt('expires_at', new Date().toISOString()),
+      ])
+
+      const totalSeats = (activeUsers ?? 0) + (pendingInvites ?? 0)
+      if (totalSeats >= maxSeats) {
+        return NextResponse.json(
+          {
+            error: 'Seat limit reached',
+            message: `Your firm has ${maxSeats} seats. Contact support to upgrade.`,
+            currentSeats: totalSeats,
+            maxSeats,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Check if email already has a pending invitation
+      const { data: existingInvite } = await supabase
+        .from('user_invitations')
+        .select('id')
+        .eq('firm_id', firmIdResult.firmId)
+        .eq('email', body.email.toLowerCase())
+        .is('accepted_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .single()
+
+      if (existingInvite) {
+        return NextResponse.json(
+          { error: 'Invitation already pending for this email' },
+          { status: 400 }
+        )
+      }
+
+      // Create invitation manually
+      const { data: manualInvitation, error } = await supabase
+        .from('user_invitations')
+        .insert({
+          firm_id: firmIdResult.firmId,
+          email: body.email.toLowerCase(),
+          role: body.role,
+          invited_by: authResult.context.userId,
+          token: hashedToken,
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single()
+
+      if (error || !manualInvitation) {
+        console.error('[Invite API] Error creating invitation:', error)
+        return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
+      }
+
+      invitation = manualInvitation
+    } else if (createResult && !createResult.success) {
+      // Atomic function returned an error
+      const errorMap: Record<string, number> = {
+        'SEAT_LIMIT_REACHED': 400,
+        'INVITATION_EXISTS': 400,
+        'FIRM_NOT_FOUND': 404,
+      }
+      const errorCode = createResult.error || 'UNKNOWN'
+      const statusCode = errorMap[errorCode] || 400
+
+      return NextResponse.json(
+        {
+          error: errorCode === 'SEAT_LIMIT_REACHED' ? 'Seat limit reached' : createResult.message,
+          message: createResult.message,
+          currentSeats: createResult.currentSeats,
+          maxSeats: createResult.maxSeats,
+        },
+        { status: statusCode }
+      )
+    } else if (createResult && createResult.success && createResult.invitationId) {
+      // Atomic creation succeeded - fetch the full invitation record
+      const { data: createdInvitation, error: fetchError } = await supabase
+        .from('user_invitations')
+        .select('id, firm_id, email, role, invited_by, expires_at, created_at')
+        .eq('id', createResult.invitationId)
+        .single()
+
+      if (fetchError || !createdInvitation) {
+        console.error('[Invite API] Error fetching created invitation:', fetchError)
+        return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
+      }
+
+      invitation = createdInvitation
+    } else {
+      // Unexpected response from RPC - should not happen
+      console.error('[Invite API] Unexpected RPC response:', createResult)
       return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
     }
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/auth/accept-invite?token=${token}`
+    // Use plain token in URL (user receives this in email)
+    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/auth/accept-invite?token=${plainToken}`
 
     // Get firm name and inviter name for the email
     const { data: firmData } = await supabase

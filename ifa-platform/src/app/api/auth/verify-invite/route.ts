@@ -8,8 +8,16 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { rateLimit } from '@/lib/security/rateLimit'
+import { hashToken } from '@/lib/security/crypto'
 
 export async function GET(request: NextRequest) {
+  // Rate limit: 5 requests per 15 minutes per IP
+  const rateLimitResponse = await rateLimit(request, 'auth')
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
   try {
     const token = request.nextUrl.searchParams.get('token')
 
@@ -22,7 +30,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient()
 
-    // Find the invitation by token
+    // Hash the incoming token for comparison (tokens are stored hashed in DB)
+    const hashedToken = hashToken(token)
+
+    // Find the invitation by hashed token
     const { data: invitation, error } = await supabase
       .from('user_invitations')
       .select(`
@@ -37,7 +48,7 @@ export async function GET(request: NextRequest) {
           name
         )
       `)
-      .eq('token', token)
+      .eq('token', hashedToken)
       .single()
 
     if (error || !invitation) {

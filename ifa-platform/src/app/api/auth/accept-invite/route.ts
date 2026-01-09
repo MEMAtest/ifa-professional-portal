@@ -2,6 +2,15 @@
  * Accept Invitation API
  * POST /api/auth/accept-invite
  * Creates user account from invitation token
+ *
+ * Uses saga pattern for transaction handling:
+ * 1. Validate & lock invitation atomically
+ * 2. Create auth user
+ * 3. Create profile
+ * 4. Allocate seat atomically
+ * 5. Log activity
+ *
+ * Each step has compensating actions for rollback on failure.
  */
 
 export const dynamic = 'force-dynamic'
@@ -9,14 +18,82 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { rateLimit } from '@/lib/security/rateLimit'
+import { hashToken } from '@/lib/security/crypto'
 import type { AcceptInviteInput } from '@/modules/firm/types/user.types'
 
+// Saga state for tracking completed steps and enabling rollback
+interface SagaState {
+  authUserId?: string
+  profileCreated?: boolean
+  invitationAccepted?: boolean
+  seatAllocated?: boolean
+}
+
+// Rollback function to undo completed steps on failure
+async function rollbackSaga(
+  supabaseAdmin: ReturnType<typeof getSupabaseServiceClient>,
+  state: SagaState,
+  invitationId?: string
+): Promise<void> {
+  console.log('[Accept Invite] Rolling back saga, state:', state)
+
+  // Rollback in reverse order of creation
+
+  // 1. Revert invitation acceptance
+  if (state.invitationAccepted && invitationId) {
+    try {
+      await supabaseAdmin
+        .from('user_invitations' as any)
+        .update({ accepted_at: null })
+        .eq('id', invitationId)
+      console.log('[Accept Invite] Rolled back invitation acceptance')
+    } catch (err) {
+      console.error('[Accept Invite] Failed to rollback invitation:', err)
+    }
+  }
+
+  // 2. Delete profile
+  if (state.profileCreated && state.authUserId) {
+    try {
+      await supabaseAdmin
+        .from('profiles')
+        .delete()
+        .eq('id', state.authUserId)
+      console.log('[Accept Invite] Rolled back profile creation')
+    } catch (err) {
+      console.error('[Accept Invite] Failed to rollback profile:', err)
+    }
+  }
+
+  // 3. Delete auth user (this is the most important cleanup)
+  if (state.authUserId) {
+    try {
+      await supabaseAdmin.auth.admin.deleteUser(state.authUserId)
+      console.log('[Accept Invite] Rolled back auth user creation')
+    } catch (err) {
+      console.error('[Accept Invite] Failed to rollback auth user:', err)
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
+  // Rate limit: 5 requests per 15 minutes per IP (strict for account creation)
+  const rateLimitResponse = await rateLimit(request, 'auth')
+  if (rateLimitResponse) {
+    return rateLimitResponse
+  }
+
+  const sagaState: SagaState = {}
+  let invitationId: string | undefined
+
   try {
     const body: AcceptInviteInput = await request.json()
     const { token, firstName, lastName, password } = body
 
-    // Validate input
+    // ========================================
+    // INPUT VALIDATION
+    // ========================================
     if (!token) {
       return NextResponse.json(
         { error: 'Token is required' },
@@ -52,15 +129,22 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
     const supabaseAdmin = getSupabaseServiceClient()
 
-    // Find and validate the invitation
+    // Hash the incoming token for comparison (tokens are stored hashed in DB)
+    const hashedToken = hashToken(token)
+
+    // ========================================
+    // STEP 1: ATOMICALLY VALIDATE & LOCK INVITATION
+    // Uses database function with FOR UPDATE lock
+    // ========================================
+
+    // First, get invitation details for validation
     const { data: invitation, error: inviteError } = await supabase
       .from('user_invitations')
       .select('id, email, role, firm_id, expires_at, accepted_at')
-      .eq('token', token)
+      .eq('token', hashedToken)
       .single()
 
     if (inviteError || !invitation) {
-      // SECURITY: Never log tokens, even partially
       console.log('[Accept Invite] Invalid or expired invitation token')
       return NextResponse.json(
         { error: 'Invalid invitation token' },
@@ -68,7 +152,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if already accepted
+    invitationId = invitation.id
+
+    // Check if already accepted (pre-check before atomic operation)
     if (invitation.accepted_at) {
       return NextResponse.json(
         { error: 'This invitation has already been accepted' },
@@ -85,14 +171,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if email already exists in auth
+    // ========================================
+    // STEP 2: CHECK FOR EXISTING USER
+    // ========================================
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
     const existingUser = existingUsers?.users?.find(
       u => u.email?.toLowerCase() === invitation.email.toLowerCase()
     )
 
     if (existingUser) {
-      // Check if they already have a profile in this firm
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
@@ -108,11 +195,49 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the user in Supabase Auth
+    // ========================================
+    // STEP 3: ATOMICALLY ACCEPT INVITATION
+    // Uses database function with row-level lock
+    // ========================================
+    type AcceptInvitationResult = { success: boolean; error?: string; message?: string; email?: string; role?: string; firmId?: string }
+
+    const { data: acceptResult, error: acceptError } = await (supabaseAdmin as any)
+      .rpc('accept_invitation', {
+        p_invitation_id: invitation.id,
+        p_hashed_token: hashedToken
+      }) as { data: AcceptInvitationResult | null; error: any }
+
+    if (acceptError) {
+      console.error('[Accept Invite] Failed to accept invitation atomically:', acceptError)
+      // Try fallback method
+      const { error: updateError } = await supabaseAdmin
+        .from('user_invitations' as any)
+        .update({ accepted_at: new Date().toISOString() })
+        .eq('id', invitation.id)
+        .is('accepted_at', null) // Only update if not already accepted
+
+      if (updateError) {
+        return NextResponse.json(
+          { error: 'Failed to process invitation' },
+          { status: 500 }
+        )
+      }
+    } else if (acceptResult && !acceptResult.success) {
+      return NextResponse.json(
+        { error: acceptResult.message || 'Invitation validation failed' },
+        { status: 400 }
+      )
+    }
+
+    sagaState.invitationAccepted = true
+
+    // ========================================
+    // STEP 4: CREATE AUTH USER
+    // ========================================
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: invitation.email,
       password,
-      email_confirm: true, // Auto-confirm since they have a valid invite
+      email_confirm: true,
       user_metadata: {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -122,8 +247,8 @@ export async function POST(request: NextRequest) {
 
     if (createError) {
       console.error('[Accept Invite] Failed to create user:', createError)
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId)
 
-      // Handle specific error cases
       if (createError.message?.includes('already registered')) {
         return NextResponse.json(
           { error: 'An account with this email already exists' },
@@ -138,13 +263,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (!newUser.user) {
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId)
       return NextResponse.json(
         { error: 'Failed to create user account' },
         { status: 500 }
       )
     }
 
-    // Create the profile
+    sagaState.authUserId = newUser.user.id
+
+    // ========================================
+    // STEP 5: CREATE PROFILE
+    // ========================================
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
@@ -161,45 +291,40 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       console.error('[Accept Invite] Failed to create profile:', profileError)
-
-      // Try to clean up the auth user if profile creation fails
-      try {
-        await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
-      } catch (deleteErr) {
-        console.error('[Accept Invite] Failed to cleanup auth user:', deleteErr)
-      }
-
+      await rollbackSaga(supabaseAdmin, sagaState, invitationId)
       return NextResponse.json(
         { error: 'Failed to create user profile' },
         { status: 500 }
       )
     }
 
-    // Mark the invitation as accepted
-    // Using raw query since user_invitations may not be in generated types
-    const { error: updateError } = await supabaseAdmin
-      .from('user_invitations' as any)
-      .update({
-        accepted_at: new Date().toISOString()
-      })
-      .eq('id', invitation.id)
+    sagaState.profileCreated = true
 
-    if (updateError) {
-      console.warn('[Accept Invite] Failed to mark invitation as accepted:', updateError)
-      // Don't fail the request for this - user is already created
-    }
+    // ========================================
+    // STEP 6: ALLOCATE SEAT ATOMICALLY
+    // Uses database function with row-level lock on firms table
+    // ========================================
+    type AllocateSeatResult = { success: boolean; error?: string; message?: string; currentSeats?: number; maxSeats?: number }
 
-    // Update firm seat count if tracking
     try {
-      const { data: firm } = await supabase
-        .from('firms')
-        .select('settings')
-        .eq('id', invitation.firm_id)
-        .single()
+      const { data: seatResult, error: seatError } = await (supabaseAdmin as any)
+        .rpc('allocate_firm_seat', {
+          p_firm_id: invitation.firm_id,
+          p_user_id: newUser.user.id,
+          p_invitation_id: invitation.id
+        }) as { data: AllocateSeatResult | null; error: any }
 
-      if (firm?.settings) {
-        const settings = firm.settings as any
-        if (settings.billing?.currentSeats !== undefined) {
+      if (seatError) {
+        console.warn('[Accept Invite] Atomic seat allocation failed, using fallback:', seatError)
+        // Fallback to manual update (less safe but functional)
+        const { data: firm } = await supabase
+          .from('firms')
+          .select('settings')
+          .eq('id', invitation.firm_id)
+          .single()
+
+        if (firm?.settings) {
+          const settings = firm.settings as any
           await supabaseAdmin
             .from('firms')
             .update({
@@ -207,18 +332,36 @@ export async function POST(request: NextRequest) {
                 ...settings,
                 billing: {
                   ...settings.billing,
-                  currentSeats: (settings.billing.currentSeats || 0) + 1
+                  currentSeats: (settings.billing?.currentSeats || 0) + 1
                 }
               }
             })
             .eq('id', invitation.firm_id)
         }
+      } else if (seatResult && !seatResult.success) {
+        // Seat limit reached - this is a hard failure
+        console.error('[Accept Invite] Seat limit reached:', seatResult)
+        await rollbackSaga(supabaseAdmin, sagaState, invitationId)
+        return NextResponse.json(
+          {
+            error: 'Seat limit reached',
+            message: seatResult.message,
+            currentSeats: seatResult.currentSeats,
+            maxSeats: seatResult.maxSeats
+          },
+          { status: 400 }
+        )
       }
+
+      sagaState.seatAllocated = true
     } catch (seatErr) {
       console.warn('[Accept Invite] Failed to update seat count:', seatErr)
+      // Don't fail the entire operation for seat tracking issues
     }
 
-    // Log activity (using type cast since activity_log may not have all fields in generated types)
+    // ========================================
+    // STEP 7: LOG ACTIVITY (non-critical)
+    // ========================================
     try {
       await supabaseAdmin
         .from('activity_log' as any)
@@ -254,6 +397,17 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[Accept Invite] Error:', error)
+
+    // Attempt rollback on unexpected errors
+    if (Object.keys(sagaState).length > 0) {
+      try {
+        const supabaseAdmin = getSupabaseServiceClient()
+        await rollbackSaga(supabaseAdmin, sagaState, invitationId)
+      } catch (rollbackErr) {
+        console.error('[Accept Invite] Rollback failed:', rollbackErr)
+      }
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
