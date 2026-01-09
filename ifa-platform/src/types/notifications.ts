@@ -6,6 +6,7 @@ import type { Json } from '@/types/db'
 
 export type NotificationType =
   | 'client_added'
+  | 'client_reassigned'
   | 'review_due'
   | 'review_overdue'
   | 'review_completed'
@@ -97,6 +98,7 @@ export interface NotificationTypeConfig {
 
 export const NOTIFICATION_CONFIG: Record<NotificationType, NotificationTypeConfig> = {
   client_added: { icon: 'UserPlus', defaultPriority: 'low', category: 'clients' },
+  client_reassigned: { icon: 'UserCheck', defaultPriority: 'normal', category: 'clients' },
   profile_updated: { icon: 'UserCog', defaultPriority: 'low', category: 'clients' },
   review_due: { icon: 'Calendar', defaultPriority: 'normal', category: 'reviews' },
   review_overdue: { icon: 'AlertTriangle', defaultPriority: 'high', category: 'reviews' },

@@ -9,6 +9,7 @@ import {
   CheckSquare,
   AlertTriangle,
   UserPlus,
+  UserCheck,
   Award,
   Shield,
   Clock,
@@ -27,6 +28,7 @@ import { cn } from '@/lib/utils'
 
 const ICONS: Record<NotificationType, React.ComponentType<{ className?: string }>> = {
   client_added: UserPlus,
+  client_reassigned: UserCheck,
   profile_updated: UserCog,
   review_due: Calendar,
   review_overdue: AlertTriangle,

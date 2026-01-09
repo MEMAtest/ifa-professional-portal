@@ -24,6 +24,7 @@ const DEDUPE_WINDOW_HOURS: Partial<Record<NotificationType, number>> = {
   review_completed: 12,
   review_overdue: 24,
   client_added: 24,
+  client_reassigned: 1,
   compliance_alert: 2
 }
 
@@ -712,5 +713,50 @@ export async function notifyDocumentDownloaded(
     message: `Document for ${clientName} was downloaded`,
     action_url: `/documents/${documentId}`,
     priority: 'low'
+  })
+}
+
+/**
+ * Notify advisor about client reassignment
+ * @param userId - The advisor to notify
+ * @param clientId - The client being reassigned
+ * @param clientName - Client's display name
+ * @param action - 'assigned' (new advisor) or 'removed' (previous advisor)
+ * @param otherAdvisorName - Name of the other advisor involved
+ * @param firmId - Optional firm ID
+ */
+export async function notifyClientReassigned(
+  userId: string,
+  clientId: string,
+  clientName: string,
+  action: 'assigned' | 'removed',
+  otherAdvisorName: string,
+  firmId?: string
+): Promise<void> {
+  const resolvedFirmId = firmId || await getUserFirmId(userId)
+
+  const title = action === 'assigned'
+    ? `Client assigned: ${clientName}`
+    : `Client removed: ${clientName}`
+
+  const message = action === 'assigned'
+    ? `${clientName} has been assigned to you (previously with ${otherAdvisorName})`
+    : `${clientName} has been reassigned to ${otherAdvisorName}`
+
+  await NotificationService.create({
+    user_id: userId,
+    firm_id: resolvedFirmId,
+    client_id: clientId,
+    entity_type: 'client',
+    entity_id: clientId,
+    type: 'client_reassigned',
+    title,
+    message,
+    action_url: `/clients/${clientId}`,
+    priority: action === 'assigned' ? 'normal' : 'low',
+    metadata: {
+      action,
+      other_advisor_name: otherAdvisorName
+    }
   })
 }

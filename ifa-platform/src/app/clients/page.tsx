@@ -16,6 +16,8 @@ import SearchBar from '@/components/clients/SearchBar';
 import FilterPanel from '@/components/clients/FilterPanel';
 import { AddCommunicationModal } from '@/components/clients/AddCommunicationModal';
 import { ScheduleReviewModal } from '@/components/clients/ScheduleReviewModal';
+import { ReassignClientModal } from '@/components/clients/ReassignClientModal';
+import { UserCheck, CheckSquare, Square, X } from 'lucide-react';
 import { clientService } from '@/services/ClientService';
 import { getVulnerabilityStatus, isValidClientStatus } from '@/types/client'; // ✅ Import validation functions
 import type {
@@ -49,9 +51,14 @@ export default function ClientsPage() {
   // Modal states
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+
+  // Selection mode for bulk operations
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
 
   // Advisors for filter
-  const [advisors, setAdvisors] = useState<Array<{ id: string; name: string }>>([]);
+  const [advisors, setAdvisors] = useState<Array<{ id: string; name: string; role?: string }>>([]);
 
   // Load clients data
   const loadClients = useCallback(async () => {
@@ -289,6 +296,54 @@ export default function ClientsPage() {
     }
   };
 
+  // Selection mode handlers
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    if (selectionMode) {
+      // Exiting selection mode - clear selections
+      setSelectedClientIds(new Set());
+    }
+  };
+
+  const toggleClientSelection = (clientId: string) => {
+    const newSelection = new Set(selectedClientIds);
+    if (newSelection.has(clientId)) {
+      newSelection.delete(clientId);
+    } else {
+      newSelection.add(clientId);
+    }
+    setSelectedClientIds(newSelection);
+  };
+
+  const selectAllClients = () => {
+    setSelectedClientIds(new Set(clients.map(c => c.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedClientIds(new Set());
+  };
+
+  // Get clients prepared for reassignment modal
+  const getSelectedClientsForReassign = () => {
+    return clients
+      .filter(c => selectedClientIds.has(c.id))
+      .map(c => {
+        const currentAdvisor = advisors.find(a => a.id === c.advisorId);
+        return {
+          id: c.id,
+          name: `${c.personalDetails?.firstName || ''} ${c.personalDetails?.lastName || ''}`.trim() || 'Unnamed Client',
+          currentAdvisorId: c.advisorId,
+          currentAdvisorName: currentAdvisor?.name || 'Unassigned'
+        };
+      });
+  };
+
+  const handleReassignSuccess = () => {
+    setSelectionMode(false);
+    setSelectedClientIds(new Set());
+    loadClients(); // Refresh the list
+  };
+
   useEffect(() => {
     if (user) {
       loadClients();
@@ -349,22 +404,78 @@ export default function ClientsPage() {
   return (
     <div className="container mx-auto px-4 py-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-          <p className="text-gray-600">Manage your client relationships</p>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
+            <p className="text-gray-600">Manage your client relationships</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={selectionMode ? 'default' : 'outline'}
+              onClick={toggleSelectionMode}
+              className="gap-2"
+            >
+              {selectionMode ? (
+                <>
+                  <X className="h-4 w-4" />
+                  Cancel
+                </>
+              ) : (
+                <>
+                  <CheckSquare className="h-4 w-4" />
+                  Select
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </Button>
+            <Button onClick={() => router.push('/clients/new')}>
+              Add Client
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            {showFilters ? 'Hide Filters' : 'Show Filters'}
-          </Button>
-          <Button onClick={() => router.push('/clients/new')}>
-            Add Client
-          </Button>
-        </div>
+
+        {/* Selection mode toolbar */}
+        {selectionMode && (
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <span className="text-sm font-medium text-blue-900">
+              {selectedClientIds.size} of {clients.length} selected
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAllClients}
+                disabled={selectedClientIds.size === clients.length}
+              >
+                Select All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearSelection}
+                disabled={selectedClientIds.size === 0}
+              >
+                Clear
+              </Button>
+            </div>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              onClick={() => setShowReassignModal(true)}
+              disabled={selectedClientIds.size === 0}
+              className="gap-2"
+            >
+              <UserCheck className="h-4 w-4" />
+              Reassign ({selectedClientIds.size})
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* ✅ PRODUCTION: Enhanced clickable statistics dashboard with proper validation */}
@@ -491,13 +602,33 @@ export default function ClientsPage() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             {clients.map((client) => (
-              <ClientCard
-                key={client.id}
-                client={client}
-                onView={() => handleViewClient(client)}
-                onEdit={() => handleEditClient(client)}
-                onDelete={() => handleDeleteClient(client)}
-              />
+              <div key={client.id} className="relative">
+                {/* Selection checkbox overlay */}
+                {selectionMode && (
+                  <button
+                    onClick={() => toggleClientSelection(client.id)}
+                    className={`absolute top-3 left-3 z-10 p-1 rounded-md transition-all ${
+                      selectedClientIds.has(client.id)
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-300 text-gray-400 hover:border-blue-500 hover:text-blue-500'
+                    }`}
+                  >
+                    {selectedClientIds.has(client.id) ? (
+                      <CheckSquare className="h-5 w-5" />
+                    ) : (
+                      <Square className="h-5 w-5" />
+                    )}
+                  </button>
+                )}
+                <div className={selectionMode ? 'pl-2' : ''}>
+                  <ClientCard
+                    client={client}
+                    onView={() => selectionMode ? toggleClientSelection(client.id) : handleViewClient(client)}
+                    onEdit={() => handleEditClient(client)}
+                    onDelete={() => handleDeleteClient(client)}
+                  />
+                </div>
+              </div>
             ))}
           </div>
 
@@ -551,6 +682,15 @@ export default function ClientsPage() {
           }}
         />
       )}
+
+      {/* Reassign Modal */}
+      <ReassignClientModal
+        isOpen={showReassignModal}
+        onClose={() => setShowReassignModal(false)}
+        clients={getSelectedClientsForReassign()}
+        advisors={advisors}
+        onSuccess={handleReassignSuccess}
+      />
     </div>
   );
 }
