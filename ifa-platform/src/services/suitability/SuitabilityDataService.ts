@@ -34,6 +34,33 @@ export class SuitabilityDataService {
     this.supabase = supabaseClient ?? getServiceClient();
   }
 
+  private async archiveActiveDraft(clientId: string) {
+    const { data: activeDraft, error: draftError } = await this.supabase
+      .from('suitability_assessments')
+      .select('id')
+      .eq('client_id', clientId)
+      .eq('is_draft', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (draftError && draftError.code !== 'PGRST116') throw draftError;
+    if (!activeDraft?.id) return null;
+
+    const { error: updateError } = await this.supabase
+      .from('suitability_assessments')
+      .update({
+        is_current: false,
+        is_draft: false,
+        status: 'archived',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', activeDraft.id);
+
+    if (updateError) throw updateError;
+    return activeDraft.id;
+  }
+
   // Get all assessments for a client
   async getAssessmentsByClient(clientId: string) {
     try {
@@ -136,6 +163,7 @@ export class SuitabilityDataService {
     updated_by: string | null;
   }) {
     try {
+      await this.archiveActiveDraft(assessmentData.client_id);
       // Get the latest version number
       const latestVersion = await this.getLatestVersionNumber(assessmentData.client_id);
       const newVersionNumber = latestVersion + 1;
@@ -328,6 +356,7 @@ export class SuitabilityDataService {
     userId?: string | null
   ) {
     try {
+      await this.archiveActiveDraft(clientId);
       // Get the parent assessment
       const { data: parentData, error: parentError } = await this.supabase
         .from('suitability_assessments')

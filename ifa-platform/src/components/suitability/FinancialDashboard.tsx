@@ -3,7 +3,7 @@
 // COMPLETE FINANCIAL DASHBOARD WITH ALL FEATURES
 // =====================================================
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Progress } from '@/components/ui/Progress'
@@ -17,7 +17,7 @@ import {
   BarChart3, PieChart as PieChartIcon, Eye, EyeOff
 } from 'lucide-react'
 import {
-  ComposedChart, Line, Area, LineChart, BarChart, Bar, PieChart, Pie, Cell,
+  ComposedChart, Line, LineChart, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 import { SuitabilityFormData, PulledPlatformData } from '@/types/suitability'
@@ -194,6 +194,7 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
   const [activeTab, setActiveTab] = useState('overview')
   const [isCalculating, setIsCalculating] = useState(false)
   const financial = formData.financial_situation as any
+  const arrangements = formData.existing_arrangements as any
   const resolveAssumptionInput = (value: unknown, fallback: number) => {
     const parsed = parseNumber(value)
     return Number.isFinite(parsed) ? String(parsed) : String(fallback)
@@ -236,15 +237,19 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
       parseNumber(financial.income_employment),
       parseNumber(financial.income_rental),
       parseNumber(financial.income_dividends),
-      parseNumber(financial.income_other)
+      parseNumber(financial.income_other),
+      parseNumber(financial.income_state_pension),
+      parseNumber(financial.income_defined_benefit)
     ].filter((value): value is number => value !== undefined)
 
     const incomeBreakdownTotal = incomeBreakdown.length > 0 ? incomeBreakdown.reduce((sum, value) => sum + value, 0) : undefined
+    const annualIncomeInput = parseNumber(financial.annual_income ?? financial.annualIncome)
+    const incomeTotal = parseNumber(financial.income_total ?? financial.incomeTotal)
 
     const annualIncome =
       incomeBreakdownTotal ??
-      parseNumber(financial.income_total) ??
-      parseNumber(financial.annual_income) ??
+      incomeTotal ??
+      annualIncomeInput ??
       0
 
     const essentialBreakdown = [
@@ -259,10 +264,13 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     const essentialBreakdownTotal =
       essentialBreakdown.length > 0 ? essentialBreakdown.reduce((sum, value) => sum + value, 0) : undefined
 
+    const monthlyExpensesInput = parseNumber(
+      financial.monthly_expenses ?? financial.monthlyExpenses ?? financial.monthly_expenditure ?? financial.monthlyExpenditure
+    )
     const essentialAnnual =
       essentialBreakdownTotal ??
       parseNumber(financial.exp_total_essential) ??
-      (parseNumber(financial.monthly_expenses) !== undefined ? (parseNumber(financial.monthly_expenses) as number) * 12 : undefined) ??
+      (monthlyExpensesInput !== undefined ? (monthlyExpensesInput as number) * 12 : undefined) ??
       0
 
     const discretionaryBreakdown = [
@@ -279,9 +287,8 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
       parseNumber(financial.exp_total_discretionary) ??
       0
     const annualExpenditure = essentialAnnual + discretionaryAnnual
-
     const monthlyExpenditure =
-      parseNumber(financial.monthly_expenses) ??
+      monthlyExpensesInput ??
       (annualExpenditure > 0 ? Math.round(annualExpenditure / 12) : 0)
 
     const disposableIncome = annualIncome - annualExpenditure
@@ -295,8 +302,14 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     const mortgage = parseNumber(financial.mortgage_outstanding) ?? parseNumber(financial.outstanding_mortgage) ?? 0
     const otherLiabilities = parseNumber(financial.other_debts) ?? parseNumber(financial.other_liabilities) ?? 0
     const emergencyFund = parseNumber(financial.emergency_fund) ?? 0
+    const pensionValue =
+      parseNumber(arrangements?.pension_value ?? arrangements?.total_pension_value ?? arrangements?.pensionValue ?? arrangements?.totalPensionValue) ?? 0
+    const investmentValueRaw =
+      parseNumber(arrangements?.investment_value ?? arrangements?.total_investment_value ?? arrangements?.investmentValue ?? arrangements?.totalInvestmentValue)
+    const isaValue = parseNumber(arrangements?.isa_value ?? arrangements?.isaValue)
+    const investmentValue = investmentValueRaw ?? isaValue ?? 0
     
-    const totalAssets = liquidAssets + propertyValue
+    const totalAssets = liquidAssets + propertyValue + investmentValue + pensionValue
     const totalLiabilities = mortgage + otherLiabilities
     const netWorth = totalAssets - totalLiabilities
     
@@ -314,6 +327,8 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     const investmentCapacity = disposableIncome > 0 
       ? Math.round(disposableIncome * 0.8) 
       : 0
+
+    const debtToIncomeRatio = annualIncome > 0 ? totalLiabilities / annualIncome : 0
     
     return {
       annualIncome,
@@ -325,6 +340,8 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
       propertyValue,
       mortgage,
       otherLiabilities,
+      pensionValue,
+      investmentValue,
       totalAssets,
       totalLiabilities,
       netWorth,
@@ -333,9 +350,10 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
       recommendedEmergencyFund,
       emergencyFundShortfall,
       savingsRate,
-      investmentCapacity
+      investmentCapacity,
+      debtToIncomeRatio
     }
-  }, [financial])
+  }, [financial, arrangements])
 
   const projectionAssumptions = useMemo(() => {
     const readPercent = (fieldId: string, fallback: number) => {
@@ -385,9 +403,11 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
   
   const netWorthData = [
     { name: 'Liquid', value: calculations.liquidAssets, fill: '#10B981' },
+    { name: 'Investments', value: calculations.investmentValue, fill: '#6366F1' },
+    { name: 'Pensions', value: calculations.pensionValue, fill: '#0EA5E9' },
     { name: 'Property', value: Math.max(0, calculations.propertyValue - calculations.mortgage), fill: '#3B82F6' },
     { name: 'Liabilities', value: calculations.totalLiabilities, fill: '#EF4444' }
-  ]
+  ].filter((entry) => entry.value > 0 || entry.name === 'Liabilities')
   
   const monthlyBudgetData = useMemo(() => {
     const incomeGrowthRate = projectionAssumptions.incomeGrowth / 100
@@ -610,11 +630,19 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     return markers
   }, [calculations.mortgage, currentAge, projectionHorizon, targetRetirementAge])
   
+  const sanitizeExpenseCategories = useCallback((categories: any[]) => {
+    return categories.map((category) => {
+      const { icon, percentage, editable, ...rest } = category || {}
+      return rest
+    })
+  }, [])
+
   // Handle updating expense categories
   const handleUpdateCategories = (categories: any[]) => {
-    onUpdateField('expense_categories', categories)
+    const sanitized = sanitizeExpenseCategories(categories)
+    onUpdateField('expense_categories', sanitized)
     // Calculate total from categories and update monthly expenses (legacy dashboard helper)
-    const total = categories.reduce((sum, cat) => sum + cat.amount, 0)
+    const total = sanitized.reduce((sum, cat) => sum + (Number(cat?.amount) || 0), 0)
     if (Number.isFinite(total) && total !== calculations.monthlyExpenditure) onUpdateField('monthly_expenses', total)
   }
   
@@ -981,22 +1009,16 @@ export const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <ComposedChart data={monthlyBudgetData}>
-                      <defs>
-                        <linearGradient id="surplusGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
+                    <ComposedChart data={monthlyBudgetData} barCategoryGap={18}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis tickFormatter={(value: number) => `£${value.toLocaleString()}`} />
                       <Tooltip formatter={(value: any) => `£${value.toLocaleString()}`} />
                       <Legend />
                       <ReferenceLine y={0} stroke="#e5e7eb" />
-                      <Area type="monotone" dataKey="surplus" stroke="#3B82F6" fill="url(#surplusGradient)" name="Surplus" />
-                      <Line type="monotone" dataKey="income" stroke="#10B981" strokeWidth={2} dot={false} name="Income" />
-                      <Line type="monotone" dataKey="expenses" stroke="#EF4444" strokeWidth={2} dot={false} name="Expenses" />
+                      <Bar dataKey="income" fill="#10B981" name="Income" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" fill="#EF4444" name="Expenses" radius={[4, 4, 0, 0]} />
+                      <Line type="monotone" dataKey="surplus" stroke="#2563EB" strokeWidth={2} dot={{ r: 2 }} name="Surplus" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </CardContent>

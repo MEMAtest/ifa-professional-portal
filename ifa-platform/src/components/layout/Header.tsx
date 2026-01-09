@@ -2,7 +2,7 @@
 // Updated version with Plannetic Logo component and Global Search
 'use client'
 import { useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { Logo } from '@/components/ui/Logo'
@@ -43,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
   const { user, signOut } = useAuth()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   const handleSignOut = async () => {
     await signOut()
@@ -51,6 +52,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
 
   const getBreadcrumbs = (): BreadcrumbItem[] => {
     const segments = pathname?.split('/').filter(Boolean) || []
+    const returnTo = searchParams?.get('returnTo') || searchParams?.get('from')
+    const clientId = searchParams?.get('clientId')
+    const assessmentId = searchParams?.get('assessmentId')
     const breadcrumbs: BreadcrumbItem[] = [
       { label: 'Dashboard', href: '/dashboard', icon: Home }
     ]
@@ -98,13 +102,26 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
             'persona-assessment': 'Persona Assessment',
             'dashboard': 'Assessment Dashboard'
           }
-          breadcrumbs.push({
-            label: assessmentTypes[segments[1]] || segments[1],
-            href: `/assessments/${segments[1]}`
-          })
-          // Handle results sub-page
-          if (segments[2] === 'results') {
-            breadcrumbs.push({ label: 'Results' })
+          if (segments[1] === 'suitability' && segments[2] === 'results') {
+            breadcrumbs.push({ label: 'Suitability Results' })
+          } else if (segments[1] === 'suitability' && returnTo === 'results' && clientId && segments[2] !== 'results') {
+            const params = new URLSearchParams()
+            if (assessmentId) params.set('assessmentId', assessmentId)
+            const query = params.toString()
+            breadcrumbs.push({
+              label: 'Suitability Results',
+              href: `/assessments/suitability/results/${clientId}${query ? `?${query}` : ''}`
+            })
+            breadcrumbs.push({ label: assessmentTypes[segments[1]] || segments[1] })
+          } else {
+            breadcrumbs.push({
+              label: assessmentTypes[segments[1]] || segments[1],
+              href: `/assessments/${segments[1]}`
+            })
+            // Handle results sub-page
+            if (segments[2] === 'results') {
+              breadcrumbs.push({ label: 'Results' })
+            }
           }
         }
         break

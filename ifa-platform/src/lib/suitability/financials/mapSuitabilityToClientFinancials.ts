@@ -86,6 +86,7 @@ export interface ClientFinancialProfileUpdate {
   emergencyFund: number
   disposableIncome: number
   totalAssets: number
+  investmentAmount: number
   existingInvestments: Investment[]
   pensionArrangements: PensionArrangement[]
   insurancePolicies: InsurancePolicy[]
@@ -120,14 +121,67 @@ export function mapSuitabilityToClientFinancials(params: {
   const arrangements = (formData.existing_arrangements || {}) as any
   const objectives = (formData.objectives || {}) as any
 
+  const incomeBreakdown = [
+    parseNumber(financial.income_employment ?? financial.incomeEmployment),
+    parseNumber(financial.income_state_pension ?? financial.incomeStatePension),
+    parseNumber(financial.income_defined_benefit ?? financial.incomeDefinedBenefit),
+    parseNumber(financial.income_rental ?? financial.incomeRental),
+    parseNumber(financial.income_dividends ?? financial.incomeDividends),
+    parseNumber(financial.income_other ?? financial.incomeOther)
+  ].filter((value) => value > 0)
+  const incomeBreakdownTotal = incomeBreakdown.length > 0 ? incomeBreakdown.reduce((sum, value) => sum + value, 0) : 0
+  const incomeTotal = parseNumber(financial.income_total ?? financial.incomeTotal)
+
   // Parse core financial values
-  const annualIncome = parseNumber(financial.annual_income ?? financial.annualIncome)
-  const monthlyExpenses = parseNumber(financial.monthly_expenses ?? financial.monthlyExpenses ?? financial.monthly_expenditure)
+  const annualIncomeValue = parseNumber(financial.annual_income ?? financial.annualIncome)
+
+  const monthlyExpensesValue = parseNumber(
+    financial.monthly_expenses ?? financial.monthlyExpenses ?? financial.monthly_expenditure ?? financial.monthlyExpenditure
+  )
+  const essentialAnnualTotal = parseNumber(financial.exp_total_essential ?? financial.expTotalEssential)
+  const discretionaryAnnualTotal = parseNumber(financial.exp_total_discretionary ?? financial.expTotalDiscretionary)
+  const annualExpenseBreakdown = [
+    parseNumber(financial.exp_housing ?? financial.expHousing),
+    parseNumber(financial.exp_utilities ?? financial.expUtilities),
+    parseNumber(financial.exp_food ?? financial.expFood),
+    parseNumber(financial.exp_transport ?? financial.expTransport),
+    parseNumber(financial.exp_healthcare ?? financial.expHealthcare),
+    parseNumber(financial.exp_childcare ?? financial.expChildcare),
+    parseNumber(financial.exp_leisure ?? financial.expLeisure),
+    parseNumber(financial.exp_holidays ?? financial.expHolidays),
+    parseNumber(financial.exp_other ?? financial.expOther)
+  ].filter((value) => value > 0)
+  const annualExpenseTotal =
+    essentialAnnualTotal + discretionaryAnnualTotal > 0
+      ? essentialAnnualTotal + discretionaryAnnualTotal
+      : annualExpenseBreakdown.reduce((sum, value) => sum + value, 0)
+
+  const annualIncome =
+    annualIncomeValue > 0
+      ? annualIncomeValue
+      : incomeTotal > 0
+        ? incomeTotal
+        : incomeBreakdownTotal > 0
+          ? incomeBreakdownTotal
+          : 0
+
+  const monthlyExpenses =
+    monthlyExpensesValue > 0
+      ? monthlyExpensesValue
+      : annualExpenseTotal > 0
+        ? Math.round(annualExpenseTotal / 12)
+        : 0
   const savings = parseNumber(financial.savings ?? financial.liquid_assets ?? financial.liquidAssets)
   const propertyValue = parseNumber(financial.property_value ?? financial.propertyValue)
   const mortgageOutstanding = parseNumber(financial.mortgage_outstanding ?? financial.mortgageOutstanding ?? financial.mortgage_balance)
   const otherDebts = parseNumber(financial.other_debts ?? financial.otherDebts ?? financial.other_liabilities)
   const emergencyFund = parseNumber(financial.emergency_fund ?? financial.emergencyFund)
+  const investmentAmount = parseNumber(
+    financial.investment_amount ??
+      financial.investmentAmount ??
+      objectives.investment_amount ??
+      objectives.investmentAmount
+  )
 
   // Parse existing arrangements values
   const pensionValue = parseNumber(arrangements.pension_value ?? arrangements.pensionValue ?? arrangements.total_pension_value)
@@ -300,6 +354,7 @@ export function mapSuitabilityToClientFinancials(params: {
     mortgageOutstanding: mortgageOutstanding > 0 ? mortgageOutstanding : (existingProfile?.mortgageOutstanding || 0),
     otherLiabilities: otherDebts > 0 ? otherDebts : (existingProfile?.otherLiabilities || 0),
     emergencyFund: emergencyFund > 0 ? emergencyFund : (existingProfile?.emergencyFund || 0),
+    investmentAmount: investmentAmount > 0 ? investmentAmount : (existingProfile?.investmentAmount || 0),
     disposableIncome,
     totalAssets,
     existingInvestments,
@@ -333,6 +388,7 @@ export function mergeFinancialProfiles(
     emergencyFund: syncedData.emergencyFund > 0 ? syncedData.emergencyFund : existing.emergencyFund,
     disposableIncome: syncedData.disposableIncome,
     totalAssets: syncedData.totalAssets,
+    investmentAmount: syncedData.investmentAmount > 0 ? syncedData.investmentAmount : existing.investmentAmount,
 
     // Arrays - merge synced with existing
     existingInvestments: syncedData.existingInvestments,

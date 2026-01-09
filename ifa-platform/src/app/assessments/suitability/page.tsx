@@ -30,6 +30,7 @@ export default function SuitabilityAssessmentPage() {
   const urlClientId = searchParams?.get('clientId')
   const assessmentIdParam = searchParams?.get('assessmentId')
   const versionId = searchParams?.get('versionId')
+  const returnTo = searchParams?.get('returnTo') || searchParams?.get('from')
   const isProspect = searchParams?.get('isProspect') === 'true'
 
   const sessionClientId =
@@ -50,6 +51,36 @@ export default function SuitabilityAssessmentPage() {
   const [isLoadingVersion, setIsLoadingVersion] = useState(!isProspect)
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [showVersionComparison, setShowVersionComparison] = useState(false)
+
+  const resultsHref = useMemo(() => {
+    if (!effectiveClientId) return null
+    const selectedId = assessmentIdParam || versionId
+    const params = new URLSearchParams()
+    if (selectedId) params.set('assessmentId', selectedId)
+    const query = params.toString()
+    return `/assessments/suitability/results/${effectiveClientId}${query ? `?${query}` : ''}`
+  }, [effectiveClientId, assessmentIdParam, versionId])
+
+  const breadcrumbs = useMemo(() => {
+    const list: Array<{ label: string; href?: string }> = [
+      { label: 'Assessments', href: '/assessments' }
+    ]
+
+    if (returnTo === 'results' && resultsHref) {
+      list.push({ label: 'Suitability Results', href: resultsHref })
+    }
+
+    list.push({ label: 'Suitability Assessment' })
+    return list
+  }, [returnTo, resultsHref])
+
+  const handleCancel = useCallback(() => {
+    if (returnTo === 'results' && resultsHref) {
+      router.push(resultsHref)
+      return
+    }
+    router.back()
+  }, [returnTo, resultsHref, router])
 
   const loadVersionData = useCallback(async () => {
     if (!effectiveClientId || isProspect) {
@@ -211,9 +242,10 @@ export default function SuitabilityAssessmentPage() {
           assessmentId={savedAssessmentId || undefined}
           isProspect={isProspect}
           mode={canEdit ? (isProspect ? 'create' : 'edit') : 'view'}
-          onCancel={() => router.back()}
+          onCancel={handleCancel}
           onAssessmentIdChange={handleAssessmentIdChange}
           allowAI={!isProspect && canEdit}
+          breadcrumbs={breadcrumbs}
         />
       </div>
     </div>

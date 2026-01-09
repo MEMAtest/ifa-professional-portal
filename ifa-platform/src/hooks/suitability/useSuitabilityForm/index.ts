@@ -70,6 +70,7 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
   const saveQueueRef = useRef<NodeJS.Timeout>()
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSaveAttempt = useRef<Date | null>(null)
+  const lastReviewCadenceRef = useRef<string | null>(null)
   // REMOVED: autoSaveIntervalRef - interval auto-save causes race conditions
   const lastProcessedActions = useRef<Set<string>>(new Set())
 
@@ -835,19 +836,39 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
 	  ])
 
   const reviewFrequency = (formData as any)?.ongoing_service?.review_frequency as string | undefined
+  const reviewCadence = (formData as any)?.recommendation?.next_review_interval as string | undefined
   const nextReviewDate = (formData as any)?.recommendation?.next_review_date as string | undefined
 
   // Auto-set next review date when review frequency is chosen (cadence depends on user selection).
   useEffect(() => {
-    if (!reviewFrequency) return
-    if (nextReviewDate) return
+    const cadence = reviewCadence || reviewFrequency
+    if (!cadence) return
+
+    if (nextReviewDate && lastReviewCadenceRef.current === null) {
+      lastReviewCadenceRef.current = cadence
+      return
+    }
 
     const months =
-      reviewFrequency === 'Quarterly' ? 3 : reviewFrequency === 'Semi-Annual' ? 6 : reviewFrequency === 'Annual' ? 12 : null
+      cadence === '3 months'
+        ? 3
+        : cadence === '6 months'
+          ? 6
+          : cadence === '12 months'
+            ? 12
+            : cadence === 'Quarterly'
+              ? 3
+              : cadence === 'Semi-Annual'
+                ? 6
+                : cadence === 'Annual'
+                  ? 12
+                  : null
     if (!months) return
+    if (nextReviewDate && lastReviewCadenceRef.current === cadence) return
     const d = new Date()
     d.setMonth(d.getMonth() + months)
     const nextReviewISO = d.toISOString().slice(0, 10)
+    lastReviewCadenceRef.current = cadence
 
     updateField('recommendation', 'next_review_date', nextReviewISO, {
       source: 'system',
@@ -855,7 +876,7 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       skipConditionalLogic: true,
       broadcast: false
     })
-  }, [reviewFrequency, nextReviewDate, updateField])
+  }, [reviewCadence, reviewFrequency, nextReviewDate, updateField])
 
   // REMOVED: Auto-save interval - replaced by debounced auto-save with mutex
   // The interval-based auto-save (every 30 seconds) was causing race conditions

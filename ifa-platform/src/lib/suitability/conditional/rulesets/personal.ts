@@ -189,9 +189,9 @@ export const personalRules: ConditionalRule[] = [
           {
             id: 'dependant_details',
             label: 'Dependant Details',
-            type: 'textarea',
+            type: 'list',
             required: true,
-            placeholder: 'Names and ages of dependants'
+            placeholder: 'Name and age (e.g. Ava, 12)'
           },
           {
             id: 'education_planning_required',
@@ -248,12 +248,6 @@ export const personalRules: ConditionalRule[] = [
           {
             id: 'employer_name',
             label: 'Employer Name',
-            type: 'text',
-            required: true
-          },
-          {
-            id: 'occupation',
-            label: 'Occupation',
             type: 'text',
             required: true
           },

@@ -160,15 +160,35 @@ export const recommendationSection = {
       rows: 5
     },
     {
+      id: 'next_review_interval',
+      label: 'Next Review Cadence',
+      type: 'select',
+      options: ['3 months', '6 months', '12 months'],
+      helpText: 'Select a cadence to auto-calculate the next review date.'
+    },
+    {
       id: 'next_review_date',
       label: 'Next Review Date',
       type: 'date',
       required: true,
       helpText: 'Auto-set from today based on Ongoing Service review frequency (you can override).',
       smartDefault: (formData: any) => {
+        const cadence = (formData as any)?.recommendation?.next_review_interval
         const frequency = (formData as any)?.ongoing_service?.review_frequency
         const months =
-          frequency === 'Quarterly' ? 3 : frequency === 'Semi-Annual' ? 6 : frequency === 'Annual' ? 12 : null
+          cadence === '3 months'
+            ? 3
+            : cadence === '6 months'
+              ? 6
+              : cadence === '12 months'
+                ? 12
+                : frequency === 'Quarterly'
+                  ? 3
+                  : frequency === 'Semi-Annual'
+                    ? 6
+                    : frequency === 'Annual'
+                      ? 12
+                      : null
         if (!months) return ''
         const d = new Date()
         d.setMonth(d.getMonth() + months)

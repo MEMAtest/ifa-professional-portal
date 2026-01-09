@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts'
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import { cn } from '@/lib/utils'
 
 type Allocation = {
@@ -80,25 +80,39 @@ export const RecommendationAllocationChart: React.FC<RecommendationAllocationCha
         </div>
       )}
 
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-52 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
             <Pie
               data={data}
               dataKey="value"
               nameKey="name"
-              outerRadius={70}
+              outerRadius={72}
+              innerRadius={40}
+              paddingAngle={2}
               labelLine={false}
-              label={({ percent }) => (percent >= 0.06 ? `${Math.round(percent * 100)}%` : '')}
+              label={false}
             >
-              {data.map((entry, index) => (
-                <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value: number) => `${value}%`} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+                {data.map((entry, index) => (
+                  <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value: number) => `${value}%`} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="grid w-full grid-cols-2 gap-2 text-xs text-gray-600">
+          {data.map((entry, index) => (
+            <div key={entry.name} className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                <span className="truncate">{entry.name}</span>
+              </div>
+              <span className="text-gray-900">{entry.value}%</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

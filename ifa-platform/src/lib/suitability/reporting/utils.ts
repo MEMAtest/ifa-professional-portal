@@ -69,9 +69,18 @@ export function calculateNextReviewDateISO(
   const normalized = (reviewFrequency || '').toLowerCase()
   if (!normalized) return undefined
 
+  const monthMatch = normalized.match(/(\d+)\s*month/)
+  if (monthMatch) {
+    const months = Number(monthMatch[1])
+    if (Number.isFinite(months) && months > 0) {
+      return addMonths(base, months).toISOString().slice(0, 10)
+    }
+  }
+
   if (normalized.includes('quarter')) return addMonths(base, 3).toISOString().slice(0, 10)
   if (normalized.includes('semi')) return addMonths(base, 6).toISOString().slice(0, 10)
   if (normalized.includes('annual')) return addMonths(base, 12).toISOString().slice(0, 10)
+  if (normalized.includes('year')) return addMonths(base, 12).toISOString().slice(0, 10)
   return undefined
 }
 

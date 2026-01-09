@@ -161,6 +161,57 @@ export const SuitabilityField = memo(function SuitabilityField({
             error ? "border-red-500" : "border-gray-300"
           )}
         />
+      ) : field.type === 'list' ? (
+        <div className="space-y-2">
+          {Array.isArray(value) && value.length > 0 ? (
+            value.map((item: string, index: number) => (
+              <div key={`${field.id}-${index}`} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={item || ''}
+                  onChange={(e) => {
+                    const next = [...value]
+                    next[index] = e.target.value
+                    onChange(next.filter((entry) => entry && entry.trim().length > 0))
+                  }}
+                  placeholder={field.placeholder}
+                  className={cn(
+                    "w-full p-2 border rounded-md",
+                    error ? "border-red-500" : "border-gray-300"
+                  )}
+                />
+                <button
+                  type="button"
+                  className="text-xs text-gray-500"
+                  onClick={() => {
+                    const next = value.filter((_: string, idx: number) => idx !== index)
+                    onChange(next)
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          ) : (
+            <input
+              type="text"
+              value=""
+              onChange={(e) => onChange([e.target.value])}
+              placeholder={field.placeholder}
+              className={cn(
+                "w-full p-2 border rounded-md",
+                error ? "border-red-500" : "border-gray-300"
+              )}
+            />
+          )}
+          <button
+            type="button"
+            className="text-xs text-blue-600"
+            onClick={() => onChange([...(Array.isArray(value) ? value : []), ''])}
+          >
+            Add another
+          </button>
+        </div>
       ) : field.type === 'radio' ? (
         <div className="space-y-2">
           {field.options?.map(option => (

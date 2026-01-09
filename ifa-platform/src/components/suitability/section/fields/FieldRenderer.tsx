@@ -6,6 +6,7 @@ import { AddressField } from './renderers/AddressField'
 import { CheckboxField } from './renderers/CheckboxField'
 import { DateField } from './renderers/DateField'
 import { FallbackField } from './renderers/FallbackField'
+import { ListField } from './renderers/ListField'
 import { NumberField } from './renderers/NumberField'
 import { RadioField } from './renderers/RadioField'
 import { SelectField } from './renderers/SelectField'
@@ -58,6 +59,9 @@ export const FieldRenderer = memo<FieldProps>((props) => {
 
     case 'address':
       return <AddressField {...rendererProps} />
+
+    case 'list':
+      return <ListField {...rendererProps} />
 
     default:
       return <FallbackField {...rendererProps} />

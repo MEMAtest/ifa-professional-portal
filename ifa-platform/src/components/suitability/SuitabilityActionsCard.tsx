@@ -1,10 +1,12 @@
-import React from 'react'
-import { BarChart3, FileText, History, Loader2, Send, Shield, Share2, User } from 'lucide-react'
+import React, { useState } from 'react'
+import { BarChart3, ChevronDown, ChevronUp, FileText, History, Loader2, Send, Shield, Share2, User } from 'lucide-react'
 
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
+import { SuitabilityNumbersAtAGlance } from '@/components/suitability/SuitabilityNumbersAtAGlance'
 
 import type { SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
+import type { SuitabilityFormData } from '@/types/suitability'
 
 type Props = {
   mode: 'create' | 'edit' | 'view'
@@ -16,9 +18,12 @@ type Props = {
   onGeneratePdf: (variant: SuitabilityReportVariant) => void
   onShowHistory: () => void
   onShare: () => void
+  formData: SuitabilityFormData
 }
 
 export function SuitabilityActionsCard(props: Props) {
+  const [showNumbers, setShowNumbers] = useState(false)
+
   return (
     <Card>
       <CardHeader>
@@ -108,6 +113,26 @@ export function SuitabilityActionsCard(props: Props) {
           <Share2 className="h-4 w-4 mr-2" />
           Share
         </Button>
+
+        <div className="border-t pt-2 mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-between"
+            onClick={() => setShowNumbers((prev) => !prev)}
+          >
+            <span className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Numbers at a glance
+            </span>
+            {showNumbers ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+          {showNumbers && (
+            <div className="mt-2 max-h-80 overflow-auto pr-1">
+              <SuitabilityNumbersAtAGlance formData={props.formData} />
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

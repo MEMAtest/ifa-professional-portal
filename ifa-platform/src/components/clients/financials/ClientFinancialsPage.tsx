@@ -9,6 +9,7 @@ import type { Client } from '@/types/client'
 import { calculateClientAUM, calculateFinancialHealth } from '@/lib/financials/aumCalculator'
 
 import { FinancialSummaryCards } from './FinancialSummaryCards'
+import { FinancialAtAGlance } from './FinancialAtAGlance'
 import { InvestmentHoldings } from './InvestmentHoldings'
 import { PensionArrangements } from './PensionArrangements'
 import { InsurancePolicies } from './InsurancePolicies'
@@ -70,6 +71,8 @@ export function ClientFinancialsPage({
         monthlyExpenses={fp.monthlyExpenses || 0}
         netWorth={fp.netWorth || 0}
       />
+
+      <FinancialAtAGlance financialProfile={fp} aum={aum} />
 
       {/* Tabbed Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

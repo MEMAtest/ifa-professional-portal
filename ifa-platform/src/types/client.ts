@@ -99,6 +99,7 @@ export interface FinancialProfile {
   propertyValue?: number;          // Total property value
   emergencyFund?: number;          // Emergency savings amount
   disposableIncome?: number;       // Monthly disposable income
+  investmentAmount?: number;       // Amount available to invest
   
   // Scenario linkage
   linkedScenarioId?: string;

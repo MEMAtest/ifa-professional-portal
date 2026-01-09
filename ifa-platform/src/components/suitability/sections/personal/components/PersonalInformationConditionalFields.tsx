@@ -24,7 +24,7 @@ export function PersonalInformationConditionalFields(props: PersonalInformationC
           key={`group-${groupIndex}`}
           className={cn(
             'p-4 rounded-lg border-l-4',
-            group.aiReason ? 'border-purple-500 bg-purple-50' : 'border-blue-500 bg-blue-50'
+            group.aiReason ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-gray-50'
           )}
         >
           {group.aiReason && (
@@ -125,6 +125,58 @@ export function PersonalInformationConditionalFields(props: PersonalInformationC
                   />
                 )}
 
+                {field.type === 'list' && (
+                  <div className="space-y-2">
+                    {(() => {
+                      const baseValues = Array.isArray(props.data?.[field.id]) ? props.data?.[field.id] : []
+                      const rows = props.isReadOnly ? baseValues : baseValues.concat([''])
+
+                      return rows.map((item: string, index: number, arr: string[]) => {
+                        const isLast = index === arr.length - 1
+                        return (
+                          <div key={`${field.id}-${index}`} className="flex items-center gap-2">
+                            <Input
+                              id={index === 0 ? field.id : undefined}
+                              type="text"
+                              value={item || ''}
+                              placeholder={field.placeholder}
+                              onChange={(e) => {
+                                const current = Array.isArray(props.data?.[field.id]) ? props.data?.[field.id] : []
+                                const updated = [...current]
+                                if (isLast) {
+                                  updated.push(e.target.value)
+                                } else {
+                                  updated[index] = e.target.value
+                                }
+                                props.onFieldChange(
+                                  field.id,
+                                  updated.map((entry: string) => entry.trim()).filter((entry: string) => entry.length > 0)
+                                )
+                              }}
+                              disabled={props.isReadOnly}
+                            />
+                            {!isLast && !props.isReadOnly && (
+                              <button
+                                type="button"
+                                className="text-xs text-gray-500"
+                                onClick={() => {
+                                  const current = Array.isArray(props.data?.[field.id]) ? props.data?.[field.id] : []
+                                  props.onFieldChange(
+                                    field.id,
+                                    current.filter((_: string, idx: number) => idx !== index)
+                                  )
+                                }}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                )}
+
                 {field.type === 'checkbox' && (
                   <div className="space-y-2">
                     {field.options?.map((opt) => (
@@ -156,4 +208,3 @@ export function PersonalInformationConditionalFields(props: PersonalInformationC
     </>
   )
 }
-

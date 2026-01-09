@@ -251,7 +251,11 @@ export function buildSuitabilityReportModel(params: {
 
   // Ongoing service
   const ongoingServiceSection = asObject((formData as any).ongoing_service)
-  const reviewFrequency = pickFirstString(ongoingServiceSection.review_frequency, formRecommendation.review_frequency)
+  const reviewFrequency = pickFirstString(
+    ongoingServiceSection.review_frequency,
+    formRecommendation.next_review_interval,
+    formRecommendation.review_frequency
+  )
   const reportDateISO = params.reportDateISO || new Date().toISOString().slice(0, 10)
   const nextReviewDateISO = calculateNextReviewDateISO(reviewFrequency, reportDateISO)
 

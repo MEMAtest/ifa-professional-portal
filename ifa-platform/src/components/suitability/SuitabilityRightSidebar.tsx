@@ -5,6 +5,7 @@ import { SuitabilityHelpCard } from './SuitabilityHelpCard'
 import { SuitabilityProgressCard } from './SuitabilityProgressCard'
 
 import type { SuitabilityReportVariant } from '@/lib/documents/requestAssessmentReport'
+import type { SuitabilityFormData } from '@/types/suitability'
 
 type Props = {
   mode: 'create' | 'edit' | 'view'
@@ -12,6 +13,7 @@ type Props = {
   completedSectionsCount: number
   totalSectionsCount: number
   validationIssueCount: number
+  formData: SuitabilityFormData
 
   isSubmitting: boolean
   canGenerateReports: boolean
@@ -44,10 +46,10 @@ export function SuitabilityRightSidebar(props: Props) {
         onGeneratePdf={props.onGeneratePdf}
         onShowHistory={props.onShowHistory}
         onShare={props.onShare}
+        formData={props.formData}
       />
 
       <SuitabilityHelpCard autoSaveIntervalMs={props.autoSaveIntervalMs} />
     </div>
   )
 }
-

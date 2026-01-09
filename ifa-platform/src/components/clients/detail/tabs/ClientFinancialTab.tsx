@@ -8,6 +8,7 @@ import type { ClientDashboardData, ExtendedClientProfile } from '@/services/inte
 
 import { calculateClientAUM, calculateFinancialHealth } from '@/lib/financials/aumCalculator'
 import { FinancialSummaryCards } from '@/components/clients/financials/FinancialSummaryCards'
+import { FinancialAtAGlance } from '@/components/clients/financials/FinancialAtAGlance'
 import { InvestmentHoldings } from '@/components/clients/financials/InvestmentHoldings'
 import { PensionArrangements } from '@/components/clients/financials/PensionArrangements'
 import { InsurancePolicies } from '@/components/clients/financials/InsurancePolicies'
@@ -34,6 +35,8 @@ export function ClientFinancialTab(props: {
         monthlyExpenses={fp.monthlyExpenses || 0}
         netWorth={fp.netWorth || 0}
       />
+
+      <FinancialAtAGlance financialProfile={fp} aum={aum} />
 
       {/* Wealth Breakdown and Financial Health Score */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

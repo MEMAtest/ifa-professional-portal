@@ -15,7 +15,7 @@ type RequestArgs = {
   allowAutoFallbackToWarnings?: boolean
 }
 
-type RequestResult = {
+export type RequestResult = {
   inlinePdf?: string
   signedUrl?: string
   fileName?: string

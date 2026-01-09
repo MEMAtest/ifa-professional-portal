@@ -21,8 +21,9 @@ export const arrangementsRules: ConditionalRule[] = [
           {
             id: 'pension_providers',
             label: 'Pension Providers (list all)',
-            type: 'textarea',
-            required: true
+            type: 'list',
+            required: true,
+            placeholder: 'Provider name'
           },
           {
             id: 'total_pension_value',

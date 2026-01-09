@@ -1,5 +1,6 @@
 import React from 'react'
-import { Loader2, Save, Send, Shield, Sparkles, Users, WifiOff } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronRight, Loader2, Save, Send, Shield, Sparkles, Users, WifiOff } from 'lucide-react'
 
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -15,6 +16,7 @@ type Props = {
   allowAI: boolean
 
   onCancel?: () => void
+  breadcrumbs?: Array<{ label: string; href?: string }>
 
   saveStatus: {
     status: SaveStatus
@@ -44,12 +46,36 @@ type Props = {
     sectionProgress: Record<string, number>
     sectionErrors: Record<string, boolean>
   }
+
+  loadingState?: {
+    message: string
+    hint?: string
+  }
 }
 
 export function SuitabilityHeaderBar(props: Props) {
   return (
     <div className="sticky top-0 z-40 bg-white border-b shadow-sm">
       <div className="container mx-auto px-4 py-4">
+        {props.breadcrumbs && props.breadcrumbs.length > 0 && (
+          <nav className="mb-3 flex flex-wrap items-center text-xs text-gray-500">
+            {props.breadcrumbs.map((crumb, index) => {
+              const isLast = index === props.breadcrumbs!.length - 1
+              return (
+                <div key={`${crumb.label}-${index}`} className="flex items-center">
+                  {index > 0 && <ChevronRight className="mx-1 h-3.5 w-3.5 text-gray-300" />}
+                  {crumb.href && !isLast ? (
+                    <Link href={crumb.href} className="hover:text-gray-700 transition-colors">
+                      {crumb.label}
+                    </Link>
+                  ) : (
+                    <span className={isLast ? 'text-gray-800 font-medium' : ''}>{crumb.label}</span>
+                  )}
+                </div>
+              )
+            })}
+          </nav>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold">Suitability Assessment</h1>
@@ -122,6 +148,18 @@ export function SuitabilityHeaderBar(props: Props) {
             )}
           </div>
         </div>
+
+        {props.loadingState && (
+          <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium">{props.loadingState.message}</span>
+              {props.loadingState.hint && <span className="text-blue-600">{props.loadingState.hint}</span>}
+            </div>
+            <div className="mt-2 h-1 w-full rounded-full bg-blue-100">
+              <div className="h-1 w-1/2 animate-pulse rounded-full bg-blue-600" />
+            </div>
+          </div>
+        )}
 
         <div className="mt-4">
           <SuitabilityFormProgress

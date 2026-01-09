@@ -63,6 +63,7 @@ export interface FinancialSituation {
   outstanding_mortgage?: number
   other_liabilities?: number
   net_worth?: number
+  investment_amount?: number
   emergency_fund?: number
   emergency_months?: string
   partner_annual_income?: number
@@ -199,6 +200,7 @@ export interface Recommendation {
   product_3_amount?: number
   product_3_reason?: string
   recommendation_rationale?: string
+  next_review_interval?: string
   next_review_date?: string
   advisor_declaration?: string[] | string
 
@@ -502,7 +504,7 @@ export interface ChartData {
 export interface SuitabilityField {
   id: string
   label: string
-  type: 'text' | 'number' | 'select' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'email' | 'tel' | 'address'
+  type: 'text' | 'number' | 'select' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'email' | 'tel' | 'address' | 'list'
   required?: boolean
   options?: string[]
   allowCustom?: boolean
@@ -654,6 +656,7 @@ export interface ClientFinancialProfile {
   monthlyExpenses?: number
   liquidAssets?: number
   netWorth?: number
+  investmentAmount?: number
   existingInvestments?: Array<{ currentValue?: number; type?: string }>
   pensionArrangements?: Array<{ currentValue?: number; provider?: string }>
   properties?: Array<{ value?: number; mortgage?: number }>

@@ -20,15 +20,14 @@ import {
 import { 
   Home, Car, ShoppingCart, Heart, GraduationCap, 
   Sparkles, Shield, CreditCard, TrendingUp, 
-  TrendingDown, Edit2, Save, X, Plus, Trash2,
-  PieChart, BarChart3
+  Edit2, Save, X, Plus, Trash2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ExpenseCategory {
   id: string
   name: string
-  icon: React.ElementType
+  icon?: React.ElementType | string | null
   amount: number
   percentage?: number
   isFixed: boolean
@@ -57,6 +56,44 @@ const DEFAULT_CATEGORIES: Omit<ExpenseCategory, 'amount'>[] = [
   { id: 'savings', name: 'Savings & Investment', icon: TrendingUp, isFixed: false, benchmark: 10 }
 ]
 
+const CATEGORY_ICON_MAP: Record<string, React.ElementType> = {
+  housing: Home,
+  utilities: Home,
+  transport: Car,
+  travel: Car,
+  food: ShoppingCart,
+  groceries: ShoppingCart,
+  insurance: Shield,
+  debt: CreditCard,
+  debtpayments: CreditCard,
+  healthcare: Heart,
+  health: Heart,
+  education: GraduationCap,
+  entertainment: Sparkles,
+  leisure: Sparkles,
+  holidays: Sparkles,
+  savings: TrendingUp,
+  savingsinvestment: TrendingUp,
+  investments: TrendingUp,
+  childcare: Heart
+}
+
+const normalizeIconKey = (value?: string | null) =>
+  value ? value.toLowerCase().replace(/[^a-z]/g, '') : ''
+
+const resolveCategoryIcon = (category: ExpenseCategory) => {
+  if (typeof category.icon === 'function') return category.icon
+  if (typeof category.icon === 'string') {
+    const iconKey = normalizeIconKey(category.icon)
+    if (CATEGORY_ICON_MAP[iconKey]) return CATEGORY_ICON_MAP[iconKey]
+  }
+  const idKey = normalizeIconKey(category.id)
+  if (CATEGORY_ICON_MAP[idKey]) return CATEGORY_ICON_MAP[idKey]
+  const nameKey = normalizeIconKey(category.name)
+  if (CATEGORY_ICON_MAP[nameKey]) return CATEGORY_ICON_MAP[nameKey]
+  return Sparkles
+}
+
 export const ExpenseBreakdownTable: React.FC<ExpenseBreakdownTableProps> = ({
   monthlyIncome,
   categories: propCategories,
@@ -75,6 +112,7 @@ export const ExpenseBreakdownTable: React.FC<ExpenseBreakdownTableProps> = ({
     if (propCategories && propCategories.length > 0) {
       return propCategories.map(cat => ({
         ...cat,
+        icon: resolveCategoryIcon(cat),
         percentage: monthlyIncome > 0 ? (cat.amount / monthlyIncome) * 100 : 0
       }))
     }

@@ -11,6 +11,7 @@ import { getCurrentAssessment } from '@/domain/queries'
 import type { SnapshotReferences } from '@/domain/models'
 import { mapSuitabilityToClientVulnerability } from '@/lib/suitability/vulnerability/mapSuitabilityToClientVulnerability'
 import { mapSuitabilityToClientFinancials, mergeFinancialProfiles } from '@/lib/suitability/financials/mapSuitabilityToClientFinancials'
+import { mapSuitabilityToClientContactInfo } from '@/lib/suitability/contact/mapSuitabilityToClientContactInfo'
 import { notifyAssessmentCompleted } from '@/lib/notifications/notificationService'
 
 type FinalizePayload = {
@@ -296,11 +297,12 @@ export async function POST(req: NextRequest) {
       // First fetch existing client profile to merge with
       const { data: clientData } = await supabase
         .from('clients')
-        .select('financial_profile')
+        .select('financial_profile, contact_info')
         .eq('id', clientId)
         .single()
 
       const existingProfile = (clientData?.financial_profile || {}) as any
+      const existingContact = (clientData?.contact_info || {}) as any
 
       // Map suitability financial data to client profile structure
       const syncedFinancials = mapSuitabilityToClientFinancials({
@@ -312,16 +314,22 @@ export async function POST(req: NextRequest) {
       // Merge with existing profile (preserves user-entered data)
       const mergedProfile = mergeFinancialProfiles(existingProfile, syncedFinancials)
 
+      const mergedContactInfo = mapSuitabilityToClientContactInfo({
+        formData: (formData || ({} as any)) as SuitabilityFormData,
+        existingContact
+      })
+
       const { error: finError } = await supabase
         .from('clients')
         .update({
           financial_profile: mergedProfile,
+          contact_info: mergedContactInfo,
           updated_at: now
         } as any)
         .eq('id', clientId)
 
       if (finError) {
-        logger.warn('Client financial sync failed', { clientId, error: finError.message })
+        logger.warn('Client financial/contact sync failed', { clientId, error: finError.message })
       } else {
         logger.info('Client financial profile synced from suitability', {
           clientId,
