@@ -10,62 +10,87 @@
  *   node scripts/backfill-firm-id.mjs [--dry-run]
  *
  * Environment:
- *   DATABASE_URL - PostgreSQL connection string
+ *   NEXT_PUBLIC_SUPABASE_URL - Supabase project URL
+ *   SUPABASE_SERVICE_ROLE_KEY - Service role key for admin access
  */
 
-import { neon } from '@neondatabase/serverless'
+import { createClient } from '@supabase/supabase-js'
 
 const dryRun = process.argv.includes('--dry-run')
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL
-  if (!databaseUrl) {
-    console.error('DATABASE_URL environment variable is required')
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('Missing environment variables:')
+    if (!supabaseUrl) console.error('  - NEXT_PUBLIC_SUPABASE_URL')
+    if (!supabaseKey) console.error('  - SUPABASE_SERVICE_ROLE_KEY')
+    console.error('\nLoad your .env file first: source .env.local')
     process.exit(1)
   }
 
-  const sql = neon(databaseUrl)
+  const supabase = createClient(supabaseUrl, supabaseKey)
 
   console.log(`\n🔧 Firm ID Backfill Script ${dryRun ? '(DRY RUN)' : ''}\n`)
-  console.log('=' .repeat(50))
+  console.log('='.repeat(50))
 
   // Step 1: Check for existing firms
-  const firms = await sql`SELECT id, name, fca_number FROM firms ORDER BY created_at ASC`
+  const { data: firms, error: firmsError } = await supabase
+    .from('firms')
+    .select('id, name, fca_number')
+    .order('created_at', { ascending: true })
+
+  if (firmsError) {
+    console.error('Error fetching firms:', firmsError.message)
+    process.exit(1)
+  }
+
   console.log(`\n📊 Found ${firms.length} firm(s)`)
+
+  let defaultFirmId = firms[0]?.id
 
   if (firms.length === 0) {
     console.log('⚠️  No firms exist - creating default firm...')
     if (!dryRun) {
-      const [newFirm] = await sql`
-        INSERT INTO firms (name, fca_number, settings, subscription_tier)
-        VALUES (
-          'Default Firm',
-          'DEFAULT',
-          jsonb_build_object(
-            'branding', jsonb_build_object(
-              'primaryColor', '#2563eb',
-              'secondaryColor', '#1e40af'
-            ),
-            'compliance', jsonb_build_object(
-              'tr241Enabled', true,
-              'consumerDutyEnabled', true
-            ),
-            'billing', jsonb_build_object(
-              'maxSeats', 10,
-              'currentSeats', 0
-            )
-          ),
-          'professional'
-        )
-        RETURNING id, name
-      `
-      console.log(`✅ Created default firm: ${newFirm.name} (${newFirm.id})`)
-      firms.push(newFirm)
-    }
-  }
+      const { data: newFirm, error: createError } = await supabase
+        .from('firms')
+        .insert({
+          name: 'Default Firm',
+          fca_number: 'DEFAULT',
+          settings: {
+            branding: {
+              primaryColor: '#2563eb',
+              secondaryColor: '#1e40af'
+            },
+            compliance: {
+              tr241Enabled: true,
+              consumerDutyEnabled: true
+            },
+            billing: {
+              maxSeats: 10,
+              currentSeats: 0
+            }
+          },
+          subscription_tier: 'professional'
+        })
+        .select('id, name')
+        .single()
 
-  const defaultFirmId = firms[0].id
-  console.log(`\n🏢 Default firm: ${firms[0].name} (${defaultFirmId})`)
+      if (createError) {
+        console.error('Error creating default firm:', createError.message)
+        process.exit(1)
+      }
+
+      console.log(`✅ Created default firm: ${newFirm.name} (${newFirm.id})`)
+      defaultFirmId = newFirm.id
+    } else {
+      console.log('   Would create default firm')
+      defaultFirmId = 'DRY-RUN-FIRM-ID'
+    }
+  } else {
+    console.log(`\n🏢 Default firm: ${firms[0].name} (${defaultFirmId})`)
+  }
 
   // Step 2: Check current state
   console.log('\n📋 Current state (NULL firm_id counts):')
@@ -85,164 +110,169 @@ async function main() {
   const nullCounts = {}
   for (const table of tables) {
     try {
-      const [result] = await sql`
-        SELECT COUNT(*) as count FROM ${sql(table)} WHERE firm_id IS NULL
-      `
-      nullCounts[table] = parseInt(result.count)
-      console.log(`  ${table}: ${result.count}`)
+      const { count, error } = await supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .is('firm_id', null)
+
+      if (error) throw error
+      nullCounts[table] = count || 0
+      console.log(`  ${table}: ${count || 0}`)
     } catch (e) {
-      console.log(`  ${table}: (table not found)`)
+      console.log(`  ${table}: (error: ${e.message})`)
       nullCounts[table] = -1
     }
   }
 
-  if (Object.values(nullCounts).every(c => c <= 0)) {
+  const totalNull = Object.values(nullCounts).filter(c => c > 0).reduce((a, b) => a + b, 0)
+
+  if (totalNull === 0) {
     console.log('\n✅ All records already have firm_id populated!')
     return
   }
 
   if (dryRun) {
     console.log('\n🔍 DRY RUN - No changes will be made')
-    console.log('Run without --dry-run to apply changes')
+    console.log(`   Would update approximately ${totalNull} records`)
+    console.log('   Run without --dry-run to apply changes')
     return
   }
 
   // Step 3: Backfill profiles
   if (nullCounts.profiles > 0) {
     console.log('\n🔄 Backfilling profiles...')
-    const result = await sql`
-      UPDATE profiles
-      SET firm_id = ${defaultFirmId}
-      WHERE firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} profiles`)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated profiles with firm_id`)
+    }
   }
 
-  // Step 4: Backfill clients (try to get from advisor's profile first)
+  // Step 4: Backfill clients
   if (nullCounts.clients > 0) {
     console.log('\n🔄 Backfilling clients...')
-    const result = await sql`
-      UPDATE clients c
-      SET firm_id = COALESCE(
-        (SELECT p.firm_id FROM profiles p WHERE p.id = c.advisor_id),
-        ${defaultFirmId}
-      )
-      WHERE c.firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} clients`)
+    const { error } = await supabase
+      .from('clients')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated clients with firm_id`)
+    }
   }
 
   // Step 5: Backfill file_reviews
   if (nullCounts.file_reviews > 0) {
     console.log('\n🔄 Backfilling file_reviews...')
-    const result = await sql`
-      UPDATE file_reviews fr
-      SET firm_id = COALESCE(
-        (SELECT p.firm_id FROM profiles p WHERE p.id = fr.reviewer_id),
-        ${defaultFirmId}
-      )
-      WHERE fr.firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} file_reviews`)
+    const { error } = await supabase
+      .from('file_reviews')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated file_reviews with firm_id`)
+    }
   }
 
   // Step 6: Backfill complaint_register
   if (nullCounts.complaint_register > 0) {
     console.log('\n🔄 Backfilling complaint_register...')
-    const result = await sql`
-      UPDATE complaint_register cr
-      SET firm_id = COALESCE(
-        (SELECT c.firm_id FROM clients c WHERE c.id = cr.client_id),
-        ${defaultFirmId}
-      )
-      WHERE cr.firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} complaint_register`)
+    const { error } = await supabase
+      .from('complaint_register')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated complaint_register with firm_id`)
+    }
   }
 
   // Step 7: Backfill breach_register
   if (nullCounts.breach_register > 0) {
     console.log('\n🔄 Backfilling breach_register...')
-    const result = await sql`
-      UPDATE breach_register
-      SET firm_id = ${defaultFirmId}
-      WHERE firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} breach_register`)
+    const { error } = await supabase
+      .from('breach_register')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated breach_register with firm_id`)
+    }
   }
 
   // Step 8: Backfill vulnerability_register
   if (nullCounts.vulnerability_register > 0) {
     console.log('\n🔄 Backfilling vulnerability_register...')
-    const result = await sql`
-      UPDATE vulnerability_register vr
-      SET firm_id = COALESCE(
-        (SELECT c.firm_id FROM clients c WHERE c.id = vr.client_id),
-        ${defaultFirmId}
-      )
-      WHERE vr.firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} vulnerability_register`)
+    const { error } = await supabase
+      .from('vulnerability_register')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated vulnerability_register with firm_id`)
+    }
   }
 
   // Step 9: Backfill client_services
   if (nullCounts.client_services > 0) {
     console.log('\n🔄 Backfilling client_services...')
-    const result = await sql`
-      UPDATE client_services cs
-      SET firm_id = COALESCE(
-        (SELECT c.firm_id FROM clients c WHERE c.id = cs.client_id),
-        ${defaultFirmId}
-      )
-      WHERE cs.firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} client_services`)
+    const { error } = await supabase
+      .from('client_services')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated client_services with firm_id`)
+    }
   }
 
   // Step 10: Backfill notifications
   if (nullCounts.notifications > 0) {
     console.log('\n🔄 Backfilling notifications...')
-    const result = await sql`
-      UPDATE notifications n
-      SET firm_id = COALESCE(
-        (SELECT p.firm_id FROM profiles p WHERE p.id = n.user_id),
-        ${defaultFirmId}
-      )
-      WHERE n.firm_id IS NULL
-    `
-    console.log(`   Updated ${result.count} notifications`)
+    const { error } = await supabase
+      .from('notifications')
+      .update({ firm_id: defaultFirmId })
+      .is('firm_id', null)
+
+    if (error) {
+      console.log(`   Error: ${error.message}`)
+    } else {
+      console.log(`   Updated notifications with firm_id`)
+    }
   }
 
-  // Step 11: Update firm seat counts
-  console.log('\n🔄 Updating firm seat counts...')
-  await sql`
-    UPDATE firms f
-    SET settings = jsonb_set(
-      settings,
-      '{billing,currentSeats}',
-      (
-        SELECT COALESCE(COUNT(*)::text, '0')::jsonb
-        FROM profiles p
-        WHERE p.firm_id = f.id
-        AND (p.status IS NULL OR p.status = 'active')
-      )
-    )
-  `
-  console.log('   Done')
-
-  // Step 12: Verify
+  // Step 11: Verify
   console.log('\n📋 Final state (NULL firm_id counts):')
   console.log('-'.repeat(40))
 
   let allGood = true
   for (const table of tables) {
     try {
-      const [result] = await sql`
-        SELECT COUNT(*) as count FROM ${sql(table)} WHERE firm_id IS NULL
-      `
-      const count = parseInt(result.count)
+      const { count, error } = await supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .is('firm_id', null)
+
+      if (error) throw error
       const status = count === 0 ? '✅' : '⚠️'
-      console.log(`  ${status} ${table}: ${count}`)
+      console.log(`  ${status} ${table}: ${count || 0}`)
       if (count > 0) allGood = false
     } catch (e) {
       console.log(`  ⏭️  ${table}: (skipped)`)

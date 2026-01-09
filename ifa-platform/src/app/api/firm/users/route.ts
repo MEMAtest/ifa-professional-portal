@@ -56,9 +56,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
-    // Get emails from auth.users (requires service role or RPC)
-    // For now, we'll construct email from profile data or leave it empty
-    // In production, you'd use a service role client or RPC function
+    // Get emails using RPC function (SECURITY DEFINER to access auth.users)
+    const { data: emailData } = await supabase
+      .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
+
+    // Create a map of user_id -> email for quick lookup
+    const emailMap = new Map<string, string>()
+    if (emailData) {
+      for (const item of emailData as { user_id: string; email: string }[]) {
+        emailMap.set(item.user_id, item.email)
+      }
+    }
 
     const users: FirmUser[] = (profiles ?? []).map((profile: {
       id: string
@@ -74,7 +82,7 @@ export async function GET(request: NextRequest) {
       updated_at: string
     }) => ({
       id: profile.id,
-      email: '', // Would need service role to get from auth.users
+      email: emailMap.get(profile.id) || '',
       firstName: profile.first_name,
       lastName: profile.last_name,
       fullName: `${profile.first_name} ${profile.last_name}`.trim(),
