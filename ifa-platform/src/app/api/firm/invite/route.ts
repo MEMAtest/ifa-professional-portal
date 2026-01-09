@@ -208,11 +208,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
     }
 
-    // TODO: Send email with invitation link
-    // For now, return the invitation with token
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/auth/accept-invite?token=${token}`
 
-    const response: UserInvitation & { inviteUrl: string } = {
+    // Get firm name and inviter name for the email
+    const { data: firmData } = await supabase
+      .from('firms')
+      .select('name')
+      .eq('id', firmIdResult.firmId)
+      .single()
+
+    const { data: inviterProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', authResult.context.userId)
+      .single()
+
+    const firmName = firmData?.name || 'your firm'
+    const inviterName = inviterProfile
+      ? `${inviterProfile.first_name || ''} ${inviterProfile.last_name || ''}`.trim() || 'Your administrator'
+      : 'Your administrator'
+
+    // Send invitation email
+    let emailSent = false
+    let emailError: string | undefined
+
+    try {
+      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/notifications/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'userInvitation',
+          recipient: body.email.toLowerCase(),
+          data: {
+            inviteeEmail: body.email.toLowerCase(),
+            firmName,
+            role: body.role,
+            inviterName,
+            inviteUrl,
+            expiresAt: expiresAt.toLocaleDateString('en-GB', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })
+          }
+        })
+      })
+
+      if (emailResponse.ok) {
+        emailSent = true
+        console.log('[Invite API] Invitation email sent successfully')
+      } else {
+        const emailResult = await emailResponse.json().catch(() => ({}))
+        emailError = emailResult.error || 'Failed to send email'
+        console.warn('[Invite API] Failed to send invitation email:', emailError)
+      }
+    } catch (emailErr) {
+      emailError = emailErr instanceof Error ? emailErr.message : 'Email service unavailable'
+      console.warn('[Invite API] Email sending failed:', emailErr)
+    }
+
+    const response: UserInvitation & { inviteUrl: string; emailSent: boolean; emailError?: string } = {
       id: invitation.id,
       firmId: invitation.firm_id,
       email: invitation.email,
@@ -223,6 +279,8 @@ export async function POST(request: NextRequest) {
       acceptedAt: undefined,
       createdAt: new Date(invitation.created_at),
       inviteUrl,
+      emailSent,
+      emailError
     }
 
     return NextResponse.json(response, { status: 201 })

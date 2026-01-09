@@ -235,6 +235,61 @@ const EMAIL_TEMPLATES = {
         </p>
       </div>
     `
+  }),
+
+  // User invitation email
+  userInvitation: (data: { inviteeEmail: string; firmName: string; role: string; inviterName: string; inviteUrl: string; expiresAt: string }) => ({
+    subject: `You've been invited to join ${data.firmName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <div style="background: #dbeafe; width: 60px; height: 60px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+            <span style="font-size: 30px;">👋</span>
+          </div>
+          <h1 style="color: #1e40af; margin: 0;">You're Invited!</h1>
+        </div>
+
+        <p style="color: #374151; font-size: 16px;">Hello,</p>
+
+        <p style="color: #374151; font-size: 16px;">
+          <strong>${data.inviterName}</strong> has invited you to join <strong>${data.firmName}</strong>
+          as a${data.role === 'admin' ? 'n' : ''} <strong>${data.role}</strong> on the IFA Professional Platform.
+        </p>
+
+        <div style="background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0; color: #374151;"><strong>What you'll get access to:</strong></p>
+          <ul style="margin: 0; padding-left: 20px; color: #6b7280;">
+            <li style="margin-bottom: 8px;">Client management and assessments</li>
+            <li style="margin-bottom: 8px;">Suitability reports and documentation</li>
+            <li style="margin-bottom: 8px;">Compliance tools and file reviews</li>
+            <li>Cash flow modeling and analysis</li>
+          </ul>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${data.inviteUrl}" style="background: #3b82f6; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+            Accept Invitation
+          </a>
+        </div>
+
+        <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e; font-size: 14px;">
+            <strong>⏰ This invitation expires:</strong> ${data.expiresAt}
+          </p>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+        <p style="color: #6b7280; font-size: 12px;">
+          If the button doesn't work, copy and paste this link into your browser:<br>
+          <a href="${data.inviteUrl}" style="color: #3b82f6; word-break: break-all;">${data.inviteUrl}</a>
+        </p>
+
+        <p style="color: #6b7280; font-size: 12px;">
+          If you weren't expecting this invitation or have questions, please contact your administrator.
+        </p>
+      </div>
+    `
   })
 }
 
@@ -275,6 +330,9 @@ export async function POST(request: NextRequest) {
         break
       case 'assessmentCompleted':
         emailContent = EMAIL_TEMPLATES.assessmentCompleted(data)
+        break
+      case 'userInvitation':
+        emailContent = EMAIL_TEMPLATES.userInvitation(data)
         break
       default:
         throw new Error('Invalid email type')
