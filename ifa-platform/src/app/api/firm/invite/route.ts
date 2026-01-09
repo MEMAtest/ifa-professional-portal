@@ -124,10 +124,22 @@ export async function POST(request: NextRequest) {
 
     const body: InviteUserInput = await request.json()
 
-    // Validate email with proper regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!body.email || !emailRegex.test(body.email) || body.email.length > 255) {
+    // Validate email with RFC 5322 compliant regex
+    // This catches most common email format issues while being permissive enough for real-world use
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
+    if (!body.email || !emailRegex.test(body.email) || body.email.length > 254) {
       return NextResponse.json({ error: 'Valid email address is required' }, { status: 400 })
+    }
+
+    // Additional email validation
+    const emailParts = body.email.split('@')
+    if (emailParts.length !== 2 || emailParts[0].length > 64 || emailParts[1].length > 253) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
+    }
+
+    // Check for consecutive dots (invalid in email local part)
+    if (/\.\./.test(body.email)) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
     }
 
     if (!body.role || !['advisor', 'supervisor', 'admin'].includes(body.role)) {
@@ -135,16 +147,52 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
-
-    // Check if email already exists in auth.users
-    // Note: This requires service client to check auth.users
     const supabaseService = getSupabaseServiceClient()
-    const { data: existingUsers } = await supabaseService.auth.admin.listUsers({
-      perPage: 1000 // Paginate if needed for larger firms
-    })
-    const emailExists = existingUsers?.users?.some(
-      u => u.email?.toLowerCase() === body.email.toLowerCase()
-    )
+
+    // ========================================
+    // CHECK FOR EXISTING USER
+    // Uses paginated API to handle firms with >1000 users
+    // ========================================
+    const normalizedEmail = body.email.toLowerCase()
+    let emailExists = false
+    let page = 1
+    const perPage = 1000
+
+    // Iterate through all users with pagination
+    while (!emailExists) {
+      const { data: usersPage, error: listError } = await supabaseService.auth.admin.listUsers({
+        page,
+        perPage,
+      })
+
+      if (listError) {
+        console.error('[Invite API] Error checking existing users:', listError)
+        // Don't fail silently - return error to prevent duplicate invites
+        return NextResponse.json({ error: 'Failed to validate email' }, { status: 500 })
+      }
+
+      if (!usersPage?.users || usersPage.users.length === 0) {
+        break // No more users to check
+      }
+
+      emailExists = usersPage.users.some(
+        u => u.email?.toLowerCase() === normalizedEmail
+      )
+
+      // If we got fewer users than perPage, we've reached the end
+      if (usersPage.users.length < perPage) {
+        break
+      }
+
+      page++
+
+      // Safety limit to prevent infinite loops (100,000 users max)
+      if (page > 100) {
+        console.warn('[Invite API] Hit pagination safety limit')
+        break
+      }
+    }
+
     if (emailExists) {
       return NextResponse.json(
         { error: 'A user with this email already exists' },

@@ -83,6 +83,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
+// Valid role and status values
+const VALID_ROLES: UserRole[] = ['advisor', 'supervisor', 'admin']
+const VALID_STATUSES: UserStatus[] = ['active', 'invited', 'deactivated']
+
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { userId } = await params
@@ -111,6 +115,42 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     const { firstName, lastName, phone, role, status } = body
 
+    // ========================================
+    // INPUT VALIDATION
+    // ========================================
+
+    // Validate firstName if provided
+    if (firstName !== undefined) {
+      if (typeof firstName !== 'string' || firstName.trim().length === 0 || firstName.length > 100) {
+        return NextResponse.json({ error: 'First name must be 1-100 characters' }, { status: 400 })
+      }
+    }
+
+    // Validate lastName if provided
+    if (lastName !== undefined) {
+      if (typeof lastName !== 'string' || lastName.trim().length === 0 || lastName.length > 100) {
+        return NextResponse.json({ error: 'Last name must be 1-100 characters' }, { status: 400 })
+      }
+    }
+
+    // Validate phone if provided (allow E.164 format)
+    if (phone !== undefined && phone !== null && phone !== '') {
+      const cleanPhone = String(phone).replace(/[\s\-()]/g, '')
+      if (cleanPhone.length > 20 || !/^\+?[0-9]{7,15}$/.test(cleanPhone)) {
+        return NextResponse.json({ error: 'Invalid phone number format' }, { status: 400 })
+      }
+    }
+
+    // Validate role if provided
+    if (role !== undefined && !VALID_ROLES.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role. Must be advisor, supervisor, or admin' }, { status: 400 })
+    }
+
+    // Validate status if provided
+    if (status !== undefined && !VALID_STATUSES.includes(status)) {
+      return NextResponse.json({ error: 'Invalid status. Must be active, invited, or deactivated' }, { status: 400 })
+    }
+
     const supabase = await createClient()
 
     // Build update object
@@ -118,8 +158,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       updated_at: new Date().toISOString(),
     }
 
-    if (firstName !== undefined) updateData.first_name = firstName
-    if (lastName !== undefined) updateData.last_name = lastName
+    if (firstName !== undefined) updateData.first_name = firstName.trim()
+    if (lastName !== undefined) updateData.last_name = lastName.trim()
     if (phone !== undefined) updateData.phone = phone
 
     // Only admins can change role and status
@@ -128,15 +168,42 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       if (status !== undefined) updateData.status = status
     }
 
-    // Verify user belongs to the same firm
+    // Verify user belongs to the same firm and get current role
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('firm_id')
+      .select('firm_id, role, status')
       .eq('id', userId)
       .single()
 
     if (!existingProfile || existingProfile.firm_id !== firmIdResult.firmId) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // ========================================
+    // LAST ADMIN PROTECTION
+    // Prevent removing/demoting the last admin in the firm
+    // ========================================
+    const isCurrentlyAdmin = existingProfile.role === 'admin'
+    const wouldRemoveAdmin = (
+      (role !== undefined && role !== 'admin') ||
+      (status !== undefined && status === 'deactivated')
+    )
+
+    if (isAdmin && !isSelf && isCurrentlyAdmin && wouldRemoveAdmin) {
+      // Check if this is the last active admin
+      const { count: adminCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('firm_id', firmIdResult.firmId)
+        .eq('role', 'admin')
+        .eq('status', 'active')
+
+      if ((adminCount ?? 0) <= 1) {
+        return NextResponse.json(
+          { error: 'Cannot remove or demote the last admin in the firm' },
+          { status: 400 }
+        )
+      }
     }
 
     // Update the profile
@@ -226,15 +293,35 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const supabase = await createClient()
 
-    // Verify user belongs to the same firm
+    // Verify user belongs to the same firm and get role
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('firm_id, status')
+      .select('firm_id, status, role')
       .eq('id', userId)
       .single()
 
     if (!existingProfile || existingProfile.firm_id !== firmIdResult.firmId) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // ========================================
+    // LAST ADMIN PROTECTION
+    // Prevent deactivating the last admin in the firm
+    // ========================================
+    if (existingProfile.role === 'admin') {
+      const { count: adminCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('firm_id', firmIdResult.firmId)
+        .eq('role', 'admin')
+        .eq('status', 'active')
+
+      if ((adminCount ?? 0) <= 1) {
+        return NextResponse.json(
+          { error: 'Cannot deactivate the last admin in the firm' },
+          { status: 400 }
+        )
+      }
     }
 
     // Soft delete - set status to deactivated
