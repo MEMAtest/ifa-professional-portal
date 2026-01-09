@@ -53,7 +53,7 @@ export const existingArrangementsSection = {
   ],
   conditionalFields: [
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const value = formData.existing_arrangements?.has_pension
         if (typeof value === 'boolean') return value
         if (typeof value === 'string') return value.toLowerCase() === 'yes'
@@ -83,7 +83,7 @@ export const existingArrangementsSection = {
       ]
     },
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const flag = formData.existing_arrangements?.has_existing_protection
         if (typeof flag === 'boolean') return flag
         if (typeof flag === 'string') return flag.toLowerCase() === 'yes'

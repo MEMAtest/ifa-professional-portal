@@ -265,8 +265,9 @@ export const objectiveRules: ConditionalRule[] = [
     sections: ['objectives', 'personal_information'],
     priority: 18,
     condition: (formData) => {
-      const hasDependants = (formData.personal_information?.dependents || 0) > 0
-      const needsEducation = formData.personal_information?.education_planning_required === 'Yes'
+      const personalInfo = formData.personal_information as Record<string, any> | undefined
+      const hasDependants = (personalInfo?.dependents || 0) > 0
+      const needsEducation = personalInfo?.education_planning_required === 'Yes'
       return hasDependants && needsEducation
     },
     actions: [

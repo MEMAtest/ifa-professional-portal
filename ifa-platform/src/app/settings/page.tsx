@@ -11,7 +11,8 @@ import {
   Save,
   Eye,
   EyeOff,
-  Users
+  Users,
+  Building2
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -25,6 +26,9 @@ import { ConsumerDutyPanel } from '@/components/settings/consumerDuty/ConsumerDu
 import { useFirmContext } from '@/components/settings/hooks/useFirmContext'
 import { useProdServicesSettings } from '@/components/settings/hooks/useProdServicesSettings'
 import { useConsumerDutySettings } from '@/components/settings/hooks/useConsumerDutySettings'
+import { FirmSettingsPanel } from '@/modules/firm/components/FirmSettingsPanel'
+import { UserTable } from '@/modules/firm/components/UserManagement/UserTable'
+import { usePermissions } from '@/modules/firm/hooks/usePermissions'
 
 // Types based on actual database schema
 interface UserProfile {
@@ -61,7 +65,8 @@ export default function SettingsPage() {
   // State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users'>('profile')
+  const { isAdmin, canManageUsers } = usePermissions()
   const [showPassword, setShowPassword] = useState(false)
   const firmContext = useFirmContext({
     supabase,
@@ -173,6 +178,10 @@ export default function SettingsPage() {
       setActiveTab('consumer-duty')
     } else if (tab === 'personas') {
       setActiveTab('personas')
+    } else if (tab === 'firm') {
+      setActiveTab('firm')
+    } else if (tab === 'users') {
+      setActiveTab('users')
     }
   }, [searchParams])
 
@@ -407,6 +416,8 @@ export default function SettingsPage() {
                   Firm Configuration
                 </div>
                 {[
+                  ...(isAdmin ? [{ key: 'firm', label: 'Firm Settings', icon: Building2 }] : []),
+                  ...(canManageUsers ? [{ key: 'users', label: 'User Management', icon: Users }] : []),
                   { key: 'services', label: 'Services & PROD', icon: Briefcase },
                   { key: 'consumer-duty', label: 'Consumer Duty', icon: Shield },
                   { key: 'personas', label: 'Investor Personas', icon: Users }
@@ -779,6 +790,14 @@ export default function SettingsPage() {
 
           {activeTab === 'personas' && (
             <InvestorPersonaLibrary />
+          )}
+
+          {activeTab === 'firm' && isAdmin && (
+            <FirmSettingsPanel />
+          )}
+
+          {activeTab === 'users' && canManageUsers && (
+            <UserTable />
           )}
         </div>
       </div>

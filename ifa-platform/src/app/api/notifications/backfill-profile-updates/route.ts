@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       if (!notifiedClientIds.has(client.id)) {
         notificationsToInsert.push({
           user_id: user.id,
-          firm_id: profile.firm_id,
+          firm_id: firmId,
           client_id: client.id,
           entity_type: 'client',
           entity_id: client.id,

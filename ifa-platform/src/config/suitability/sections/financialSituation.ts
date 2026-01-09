@@ -222,7 +222,7 @@ export const financialSituationSection = {
   ],
   conditionalFields: [
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const hasProperty = formData.financial_situation?.has_property
         if (typeof hasProperty === 'string') return hasProperty === 'Yes'
         if (typeof hasProperty === 'boolean') return hasProperty
@@ -241,7 +241,7 @@ export const financialSituationSection = {
       ]
     },
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const mortgageFlag = formData.financial_situation?.has_mortgage
         if (typeof mortgageFlag === 'string') return mortgageFlag === 'Yes'
         if (typeof mortgageFlag === 'boolean') return mortgageFlag
@@ -264,7 +264,7 @@ export const financialSituationSection = {
       ]
     },
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const status = formData.personal_information?.employment_status
         const hasEmployment = status === 'Employed' || status === 'Self-Employed'
         const existing = (formData.financial_situation as any)?.income_employment
@@ -282,7 +282,7 @@ export const financialSituationSection = {
       ]
     },
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const propertyFlag = formData.financial_situation?.has_property
         const hasProperty = typeof propertyFlag === 'string' ? propertyFlag === 'Yes' : Boolean(propertyFlag)
         const propertyValue = Number((formData.financial_situation as any)?.property_value ?? 0)
@@ -300,7 +300,7 @@ export const financialSituationSection = {
       ]
     },
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const hasDependents = formData.personal_information?.has_dependents
         if (typeof hasDependents === 'string' && hasDependents === 'Yes') return true
         if (typeof hasDependents === 'boolean' && hasDependents) return true

@@ -27,7 +27,7 @@ const asCurrency = (value: unknown): string | undefined => {
 const resolveTimeHorizon = (formData: SuitabilityFormData): string | undefined => {
   const numeric = toNumber(formData.objectives?.time_horizon)
   if (numeric) return `${numeric} years`
-  const timeline = formData.objectives?.investment_timeline
+  const timeline = (formData.objectives as Record<string, any>)?.investment_timeline
   return timeline ? String(timeline) : undefined
 }
 

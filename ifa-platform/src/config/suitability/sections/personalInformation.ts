@@ -124,7 +124,7 @@ export const personalInformationSection = {
   ],
   conditionalFields: [
     {
-      condition: (formData) => {
+      condition: (formData: Record<string, any>) => {
         const value = formData.personal_information?.has_dependents
         if (typeof value === 'boolean') return value
         if (typeof value === 'string') return value.toLowerCase() === 'yes'

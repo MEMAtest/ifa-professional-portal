@@ -320,12 +320,12 @@ export const ExpenseBreakdownTable: React.FC<ExpenseBreakdownTableProps> = ({
             </TableHeader>
             <TableBody>
               {displayCategories.map(category => {
-                const Icon = category.icon
+                const Icon = typeof category.icon === 'function' ? category.icon : null
                 return (
                   <TableRow key={category.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-gray-500" />
+                        {Icon && <Icon className="h-4 w-4 text-gray-500" />}
                         <span>{category.name}</span>
                       </div>
                     </TableCell>

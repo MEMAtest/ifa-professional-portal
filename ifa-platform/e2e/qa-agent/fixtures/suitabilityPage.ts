@@ -97,7 +97,7 @@ export class SuitabilityPage {
   // FIELD INTERACTIONS
   // ============================================
 
-  async fillField(fieldId: string, value: string | number) {
+  async fillField(fieldId: string, value: string | number | boolean) {
     const field = this.getFieldLocator(fieldId)
     await field.waitFor({ state: 'visible', timeout: 5000 })
 

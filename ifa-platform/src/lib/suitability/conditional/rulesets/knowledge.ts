@@ -7,7 +7,7 @@ export const knowledgeRules: ConditionalRule[] = [
     name: 'Warn when investment experience is none',
     sections: ['knowledge_experience'],
     priority: 27,
-    condition: (formData) => formData.knowledge_experience?.investment_experience === 'None',
+    condition: (formData) => (formData.knowledge_experience as Record<string, any>)?.investment_experience === 'None',
     actions: [
       {
         type: 'validate',

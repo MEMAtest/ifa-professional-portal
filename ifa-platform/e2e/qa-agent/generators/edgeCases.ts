@@ -146,7 +146,7 @@ export const EdgeCases = {
       hundred: 100,
       thousand: 1000,
       tenThousand: 10000,
-      hundred thousand: 100000,
+      hundredThousand: 100000,
       million: 1000000,
       tenMillion: 10000000,
       billion: 1000000000,

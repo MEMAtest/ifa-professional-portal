@@ -24,7 +24,7 @@ const normalizeAddressText = (rawValue: string) => {
       const after = value.slice(match.index + match[0].length).trim()
       const countryMatch = after.match(/\b(United Kingdom|UK)\b/i)
       const country = countryMatch ? countryMatch[0] : ''
-      const afterRest = country ? after.replace(countryMatch[0], '').trim() : after
+      const afterRest = country ? after.replace(country, '').trim() : after
       value = [before, postcode, afterRest, country].filter(Boolean).join(', ')
     }
   }

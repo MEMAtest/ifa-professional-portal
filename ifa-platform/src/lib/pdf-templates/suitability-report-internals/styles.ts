@@ -217,7 +217,17 @@ export const createSuitabilityStyles = (brand: SuitabilityBranding = defaultSuit
     coverPage: {
       justifyContent: 'center',
       alignItems: 'center',
-      paddingTop: 100
+      paddingTop: 60
+    },
+    firmLogo: {
+      maxWidth: 180,
+      maxHeight: 60,
+      marginBottom: 16,
+      objectFit: 'contain' as const
+    },
+    firmLogoPlaceholder: {
+      height: 60,
+      marginBottom: 16
     },
     coverTitle: {
       fontSize: 28,

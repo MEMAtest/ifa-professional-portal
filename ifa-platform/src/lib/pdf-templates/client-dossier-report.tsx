@@ -1,10 +1,11 @@
 import React from 'react'
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, StyleSheet, Text, View, Image, renderToBuffer } from '@react-pdf/renderer'
 
 import type { ClientDossierReportData } from '@/lib/assessments/clientDossier/types'
 
 type Branding = {
   firmName?: string
+  logoUrl?: string
   primaryColor?: string
   accentColor?: string
   footerText?: string
@@ -12,6 +13,7 @@ type Branding = {
 
 const defaultBrand: Required<Branding> = {
   firmName: 'Financial Advisory Services',
+  logoUrl: '',
   primaryColor: '#0f172a',
   accentColor: '#2563eb',
   footerText: 'Confidential – Prepared for the client'
@@ -101,6 +103,12 @@ const createStyles = (brand: Required<Branding>) =>
     firmName: {
       fontSize: 16,
       fontWeight: 'bold'
+    },
+    firmLogo: {
+      maxWidth: 160,
+      maxHeight: 50,
+      marginBottom: 8,
+      objectFit: 'contain' as const
     },
     docTitle: {
       fontSize: 20,
@@ -220,6 +228,10 @@ const PageFooter = ({
 
 const CoverPage = ({ data, styles, brand }: { data: ClientDossierReportData; styles: any; brand: Required<Branding> }) => (
   <Page size="A4" style={styles.page}>
+    {/* Firm Logo - render if provided */}
+    {brand.logoUrl ? (
+      <Image src={brand.logoUrl} style={styles.firmLogo} />
+    ) : null}
     <Text style={styles.firmName}>{brand.firmName}</Text>
     <Text style={styles.docTitle}>Client Assessment Dossier</Text>
     <Text style={styles.subtitle}>Combined assessment export (Suitability, ATR, CFL, Investor Persona)</Text>

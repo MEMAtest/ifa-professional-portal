@@ -171,6 +171,8 @@ test.describe('API Stress Tests', () => {
       let filledCount = 0
       for (const [field, value] of Object.entries(data)) {
         try {
+          // Skip array values (like advice_scope) - fillField doesn't support them
+          if (Array.isArray(value)) continue
           await suitabilityPage.fillField(field, value)
           filledCount++
         } catch {

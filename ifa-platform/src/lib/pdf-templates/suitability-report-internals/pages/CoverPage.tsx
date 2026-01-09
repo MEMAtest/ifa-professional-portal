@@ -1,5 +1,5 @@
 import React from 'react'
-import { Page, Text, View } from '@react-pdf/renderer'
+import { Page, Text, View, Image } from '@react-pdf/renderer'
 import type { SuitabilityReportData } from '@/lib/suitability/reporting/types'
 import { formatDate } from '@/lib/pdf-templates/suitability-report-internals/formatters'
 import { PageFooter } from '@/lib/pdf-templates/suitability-report-internals/components/PageFooter'
@@ -10,6 +10,12 @@ export const CoverPage: React.FC<{ data: SuitabilityReportData; styles: any; bra
   brand
 }) => (
   <Page size="A4" style={[styles.page, styles.coverPage]}>
+    {/* Firm Logo - render if provided */}
+    {brand.logoUrl ? (
+      <Image src={brand.logoUrl} style={styles.firmLogo} />
+    ) : (
+      <View style={styles.firmLogoPlaceholder} />
+    )}
     <Text style={styles.firmName}>{brand.firmName}</Text>
     <Text style={styles.coverTitle}>Suitability Report</Text>
     <Text style={styles.coverSubtitle}>Personal Investment Recommendation</Text>
