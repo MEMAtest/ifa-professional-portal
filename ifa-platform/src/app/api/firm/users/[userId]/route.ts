@@ -8,7 +8,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { createClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { FirmUser, UserRole, UserStatus } from '@/modules/firm/types/user.types'
+import type { Json } from '@/types/db'
 
 // UUID validation regex (RFC 4122 compliant)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -181,16 +183,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (lastName !== undefined) updateData.last_name = lastName.trim()
     if (phone !== undefined) updateData.phone = phone
 
-    // Only admins can change role and status
-    if (isAdmin && !isSelf) {
+    // Only admins can change role and status (including self if not last admin)
+    // Self-demotion will be blocked by the last admin check below
+    if (isAdmin) {
       if (role !== undefined) updateData.role = role
       if (status !== undefined) updateData.status = status
     }
 
-    // Verify user belongs to the same firm and get current role
+    // Verify user belongs to the same firm and get current values for rollback
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('firm_id, role, status')
+      .select('firm_id, role, status, first_name, last_name, phone')
       .eq('id', userId)
       .single()
 
@@ -199,8 +202,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // ========================================
-    // LAST ADMIN PROTECTION
+    // LAST ADMIN PROTECTION (Pre-check)
     // Prevent removing/demoting the last admin in the firm
+    // Note: This includes self-demotion protection for admins
     // ========================================
     const isCurrentlyAdmin = existingProfile.role === 'admin'
     const wouldRemoveAdmin = (
@@ -208,8 +212,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       (status !== undefined && status === 'deactivated')
     )
 
-    if (isAdmin && !isSelf && isCurrentlyAdmin && wouldRemoveAdmin) {
-      // Check if this is the last active admin
+    // Check applies to ANY admin being demoted (including self)
+    if (isCurrentlyAdmin && wouldRemoveAdmin) {
+      // Pre-check admin count (will also do post-check for race condition protection)
       const { count: adminCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true })
@@ -249,6 +254,124 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (error) {
       console.error('[User API] Update error:', error)
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
+    }
+
+    // ========================================
+    // RACE CONDITION PROTECTION (Post-check)
+    // If we just demoted/deactivated an admin, verify firm still has at least one
+    // This catches race conditions where multiple demotions happen simultaneously
+    // ========================================
+    if (isCurrentlyAdmin && wouldRemoveAdmin) {
+      const { count: postUpdateAdminCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('firm_id', firmIdResult.firmId)
+        .eq('role', 'admin')
+        .eq('status', 'active')
+
+      if ((postUpdateAdminCount ?? 0) < 1) {
+        // Race condition detected! Rollback ALL changes (not just role/status)
+        console.warn('[User API] Race condition detected - rolling back admin demotion')
+        await supabase
+          .from('profiles')
+          .update({
+            role: existingProfile.role,
+            status: existingProfile.status,
+            first_name: existingProfile.first_name,
+            last_name: existingProfile.last_name,
+            phone: existingProfile.phone,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId)
+          .eq('firm_id', firmIdResult.firmId)
+
+        return NextResponse.json(
+          { error: 'Cannot remove or demote the last admin in the firm (concurrent modification detected)' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // ========================================
+    // ACTIVITY LOGGING
+    // Log significant changes (role, status) for audit trail
+    // ========================================
+    const supabaseService = getSupabaseServiceClient()
+    const activityEntries: Array<{
+      id: string
+      client_id: string | null
+      firm_id: string
+      action: string
+      type: string
+      date: string
+      user_name: string
+      metadata: Json
+    }> = []
+
+    // Get performer name
+    const { data: performerProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', authResult.context.userId)
+      .single()
+
+    const performerName = performerProfile
+      ? `${performerProfile.first_name || ''} ${performerProfile.last_name || ''}`.trim() || 'Admin'
+      : 'Admin'
+    const targetUserName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'User'
+    const nowIso = new Date().toISOString()
+
+    // Log role change
+    if (role !== undefined && role !== existingProfile.role) {
+      activityEntries.push({
+        id: crypto.randomUUID(),
+        client_id: null,
+        firm_id: firmIdResult.firmId, // Required for RLS policy
+        action: `Role changed for ${targetUserName}: ${existingProfile.role} → ${role}`,
+        type: 'user_role_change',
+        date: nowIso,
+        user_name: performerName,
+        metadata: {
+          target_user_id: userId,
+          target_user_name: targetUserName,
+          previous_role: existingProfile.role,
+          new_role: role,
+          performed_by: authResult.context.userId
+        } as Json
+      })
+    }
+
+    // Log status change
+    if (status !== undefined && status !== existingProfile.status) {
+      const statusAction = status === 'deactivated' ? 'deactivated' : status === 'active' ? 'reactivated' : 'status changed'
+      activityEntries.push({
+        id: crypto.randomUUID(),
+        client_id: null,
+        firm_id: firmIdResult.firmId, // Required for RLS policy
+        action: `User ${targetUserName} ${statusAction}`,
+        type: 'user_status_change',
+        date: nowIso,
+        user_name: performerName,
+        metadata: {
+          target_user_id: userId,
+          target_user_name: targetUserName,
+          previous_status: existingProfile.status,
+          new_status: status,
+          performed_by: authResult.context.userId
+        } as Json
+      })
+    }
+
+    // Insert activity log entries
+    if (activityEntries.length > 0) {
+      const { error: activityError } = await supabaseService
+        .from('activity_log')
+        .insert(activityEntries)
+
+      if (activityError) {
+        console.warn('[User API] Failed to log activity:', activityError)
+        // Don't fail the request - activity logging is non-critical
+      }
     }
 
     // Get email using RPC function
@@ -387,6 +510,17 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    // Get user info before deactivation for logging
+    const { data: targetProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', userId)
+      .single()
+
+    const targetUserName = targetProfile
+      ? `${targetProfile.first_name || ''} ${targetProfile.last_name || ''}`.trim() || 'User'
+      : 'User'
+
     // Soft delete - set status to deactivated
     const { error } = await supabase
       .from('profiles')
@@ -400,6 +534,75 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (error) {
       console.error('[User API] Deactivate error:', error)
       return NextResponse.json({ error: 'Failed to deactivate user' }, { status: 500 })
+    }
+
+    // ========================================
+    // RACE CONDITION PROTECTION (Post-check for DELETE)
+    // If we just deactivated an admin, verify firm still has at least one
+    // ========================================
+    if (existingProfile.role === 'admin') {
+      const { count: postDeleteAdminCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('firm_id', firmIdResult.firmId)
+        .eq('role', 'admin')
+        .eq('status', 'active')
+
+      if ((postDeleteAdminCount ?? 0) < 1) {
+        // Race condition detected! Rollback the deactivation
+        console.warn('[User API] Race condition in DELETE - rolling back admin deactivation')
+        await supabase
+          .from('profiles')
+          .update({
+            status: existingProfile.status,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId)
+          .eq('firm_id', firmIdResult.firmId)
+
+        return NextResponse.json(
+          { error: 'Cannot deactivate the last admin in the firm (concurrent modification detected)' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // ========================================
+    // ACTIVITY LOGGING - User deactivation
+    // ========================================
+    const supabaseService = getSupabaseServiceClient()
+
+    // Get performer name
+    const { data: performerProfile } = await supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', authResult.context.userId)
+      .single()
+
+    const performerName = performerProfile
+      ? `${performerProfile.first_name || ''} ${performerProfile.last_name || ''}`.trim() || 'Admin'
+      : 'Admin'
+
+    const { error: activityError } = await supabaseService
+      .from('activity_log')
+      .insert({
+        id: crypto.randomUUID(),
+        client_id: null,
+        firm_id: firmIdResult.firmId, // Required for RLS policy
+        action: `User ${targetUserName} deactivated${confirmOrphan && (clientCount ?? 0) > 0 ? ` (${clientCount} orphaned clients)` : ''}`,
+        type: 'user_deactivated',
+        date: new Date().toISOString(),
+        user_name: performerName,
+        metadata: {
+          target_user_id: userId,
+          target_user_name: targetUserName,
+          orphaned_clients: confirmOrphan ? (clientCount ?? 0) : 0,
+          performed_by: authResult.context.userId
+        }
+      })
+
+    if (activityError) {
+      console.warn('[User API] Failed to log deactivation:', activityError)
     }
 
     return NextResponse.json({ success: true, message: 'User deactivated' })

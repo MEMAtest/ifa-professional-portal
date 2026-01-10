@@ -12,6 +12,7 @@ import { rateLimit } from '@/lib/security/rateLimit'
 import { generateTokenPair } from '@/lib/security/crypto'
 import { validateCsrfWithExemptions, csrfError } from '@/lib/security/csrf'
 import type { UserInvitation, InviteUserInput } from '@/modules/firm/types/user.types'
+import type { Json } from '@/types/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -402,20 +403,70 @@ export async function POST(request: NextRequest) {
       console.warn('[Invite API] Email sending failed:', emailErr)
     }
 
-    // SECURITY: Don't expose raw token in response - only include inviteUrl
-    const response: Omit<UserInvitation, 'token'> & { inviteUrl: string; emailSent: boolean; emailError?: string } = {
+    // ========================================
+    // ACTIVITY LOGGING - User invitation sent
+    // ========================================
+    const { error: activityError } = await supabaseService
+      .from('activity_log')
+      .insert({
+        id: crypto.randomUUID(),
+        client_id: null,
+        firm_id: firmIdResult.firmId, // Required for RLS policy
+        action: `Invitation sent to ${body.email.toLowerCase()} as ${body.role}`,
+        type: 'user_invited',
+        date: new Date().toISOString(),
+        user_name: inviterName,
+        metadata: {
+          invitation_id: invitation.id,
+          invitee_email: body.email.toLowerCase(),
+          role: body.role,
+          firm_name: firmName,
+          performed_by: authResult.context.userId,
+          email_sent: emailSent
+        } as Json
+      })
+
+    if (activityError) {
+      console.warn('[Invite API] Failed to log invitation activity:', activityError)
+    }
+
+    // ========================================
+    // HANDLE EMAIL FAILURE
+    // If email failed, don't expose the invite URL (contains plain token)
+    // Return error status so client knows to handle appropriately
+    // ========================================
+    if (!emailSent) {
+      // Delete the invitation if email failed to prevent orphaned records
+      await supabase
+        .from('user_invitations')
+        .delete()
+        .eq('id', invitation.id)
+
+      console.error('[Invite API] Email failed - invitation deleted for security')
+
+      return NextResponse.json(
+        {
+          error: 'Failed to send invitation email',
+          message: emailError || 'The email service is unavailable. Please try again later.',
+          code: 'EMAIL_FAILED'
+        },
+        { status: 500 }
+      )
+    }
+
+    // SECURITY: Only include inviteUrl if email was successfully sent
+    // (The plain token is only safe to expose because user received it in email)
+    const response: Omit<UserInvitation, 'token'> & { inviteUrl: string; emailSent: boolean } = {
       id: invitation.id,
       firmId: invitation.firm_id,
       email: invitation.email,
       role: invitation.role as UserInvitation['role'],
       invitedBy: invitation.invited_by ?? undefined,
-      // token intentionally omitted for security - only exposed via inviteUrl in email
       expiresAt: new Date(invitation.expires_at),
       acceptedAt: undefined,
       createdAt: new Date(invitation.created_at),
       inviteUrl,
-      emailSent,
-      emailError
+      emailSent: true
     }
 
     return NextResponse.json(response, { status: 201 })

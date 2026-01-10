@@ -137,14 +137,47 @@ export async function PATCH(
 
     const updates = await request.json();
 
+    // ========================================
+    // OPTIMISTIC LOCKING
+    // If client sends expectedUpdatedAt, verify no concurrent edits
+    // ========================================
+    const expectedUpdatedAt = updates.expectedUpdatedAt || updates._expectedUpdatedAt;
+
     const { data: previousClient, error: previousError } = await supabase
       .from('clients')
-      .select('personal_details, status')
+      .select('personal_details, status, updated_at')
       .eq('id', clientId)
       .maybeSingle()
 
     if (previousError) {
       logger.warn('Unable to fetch existing client for comparison', { clientId, error: previousError.message })
+    }
+
+    // Check for concurrent edit conflict
+    if (expectedUpdatedAt && previousClient?.updated_at) {
+      const expectedTime = new Date(expectedUpdatedAt).getTime()
+      const actualTime = new Date(previousClient.updated_at).getTime()
+
+      // Allow 100ms tolerance for timing differences (network latency, clock skew)
+      if (Math.abs(expectedTime - actualTime) > 100) {
+        logger.info('Optimistic lock conflict detected', {
+          clientId,
+          expected: expectedUpdatedAt,
+          actual: previousClient.updated_at
+        })
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Conflict',
+            code: 'CONCURRENT_EDIT',
+            message: 'This record was modified by another user. Please refresh and try again.',
+            serverUpdatedAt: previousClient.updated_at,
+            yourExpectedAt: expectedUpdatedAt
+          },
+          { status: 409 }
+        )
+      }
     }
 
     // Prepare update data (convert to snake_case for DB)
@@ -212,6 +245,7 @@ export async function PATCH(
     const activityEntries: Array<{
       id: string
       client_id: string
+      firm_id: string
       action: string
       type: string
       date: string
@@ -225,6 +259,7 @@ export async function PATCH(
       activityEntries.push({
         id: crypto.randomUUID(),
         client_id: clientId,
+        firm_id: client.firm_id, // Required for RLS policy
         action: `Client name updated from ${previousName} to ${updatedName}`,
         type: 'profile_update',
         user_name: userName,
@@ -241,6 +276,7 @@ export async function PATCH(
       activityEntries.push({
         id: crypto.randomUUID(),
         client_id: clientId,
+        firm_id: client.firm_id, // Required for RLS policy
         action: `Client status updated from ${formatStatus(previousStatus)} to ${formatStatus(updatedStatus)}`,
         type: 'profile_update',
         user_name: userName,
@@ -257,6 +293,7 @@ export async function PATCH(
       activityEntries.push({
         id: crypto.randomUUID(),
         client_id: clientId,
+        firm_id: client.firm_id, // Required for RLS policy
         action: 'Profile updated',
         type: 'profile_update',
         user_name: userName,
