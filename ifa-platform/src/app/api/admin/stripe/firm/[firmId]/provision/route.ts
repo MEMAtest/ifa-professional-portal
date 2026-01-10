@@ -132,7 +132,7 @@ export async function POST(
       includedSeats,
       currentSeats: activeUsers,
       stripeCustomerId,
-      stripeSubscriptionId: schedule.subscription ?? null,
+      stripeSubscriptionId: typeof schedule.subscription === 'string' ? schedule.subscription : (schedule.subscription?.id ?? undefined),
       stripeScheduleId: schedule.id,
       stripeBasePriceId: basePriceId,
       stripeSeatPriceId: seatPriceId,
@@ -145,7 +145,7 @@ export async function POST(
 
     const { data: updatedFirm, error: updateError } = await supabase
       .from('firms')
-      .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+      .update({ settings: updatedSettings as any, updated_at: new Date().toISOString() })
       .eq('id', firmId)
       .select('id,name,subscription_tier,settings,created_at,updated_at')
       .single()

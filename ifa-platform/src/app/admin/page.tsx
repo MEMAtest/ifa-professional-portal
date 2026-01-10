@@ -222,9 +222,9 @@ export default function AdminPage() {
             <CardDescription>Manage Stripe price IDs and seat pricing.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild variant="outline">
-              <Link href="/admin/billing">Open Pricing Settings</Link>
-            </Button>
+            <Link href="/admin/billing" className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+              Open Pricing Settings
+            </Link>
           </CardContent>
         </Card>
 
@@ -295,9 +295,12 @@ export default function AdminPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/admin/firms/${firm.id}`}>View</Link>
-                        </Button>
+                        <Link
+                          href={`/admin/firms/${firm.id}`}
+                          className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                        >
+                          View
+                        </Link>
                       </TableCell>
                     </TableRow>
                   )

@@ -1,4 +1,28 @@
 import Stripe from 'stripe'
+import fs from 'fs'
+import path from 'path'
+
+function loadEnvFile(filename) {
+  try {
+    const filePath = path.resolve(process.cwd(), filename)
+    if (!fs.existsSync(filePath)) return
+    const contents = fs.readFileSync(filePath, 'utf8')
+    for (const line of contents.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const [rawKey, ...rest] = trimmed.split('=')
+      const key = rawKey?.trim()
+      if (!key) continue
+      if (process.env[key]) continue
+      const value = rest.join('=').trim().replace(/^['"]|['"]$/g, '')
+      process.env[key] = value
+    }
+  } catch (error) {
+    console.warn('Unable to load .env.local:', error?.message ?? error)
+  }
+}
+
+loadEnvFile('.env.local')
 
 const secretKey = process.env.STRIPE_SECRET_KEY
 if (!secretKey) {

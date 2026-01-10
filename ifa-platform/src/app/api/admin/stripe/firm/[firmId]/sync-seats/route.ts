@@ -89,7 +89,7 @@ export async function POST(
 
       await supabase
         .from('firms')
-        .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+        .update({ settings: updatedSettings as any, updated_at: new Date().toISOString() })
         .eq('id', firmId)
 
       return NextResponse.json({ success: true, billableSeats })
@@ -125,7 +125,7 @@ export async function POST(
 
     await supabase
       .from('firms')
-      .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+      .update({ settings: updatedSettings as any, updated_at: new Date().toISOString() })
       .eq('id', firmId)
 
     return NextResponse.json({ success: true, billableSeats })

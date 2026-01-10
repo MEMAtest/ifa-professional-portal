@@ -209,19 +209,17 @@ export default function AdminFirmDetailPage() {
   }
 
   const basePrice = resolveBasePrice(firm)
-  const seatPrice = typeof firm.seatPrice === 'number' ? firm.seatPrice : null
+  const displaySeatPrice = typeof firm.seatPrice === 'number' ? firm.seatPrice : null
   const hasStripe = Boolean(firm.stripeSubscriptionId || firm.stripeCustomerId)
 
   return (
     <Layout>
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/admin" className="flex items-center gap-2">
-              <ChevronLeft className="h-4 w-4" />
-              Back to Admin
-            </Link>
-          </Button>
+          <Link href="/admin" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+            <ChevronLeft className="h-4 w-4" />
+            Back to Admin
+          </Link>
         </div>
 
         <div className="flex flex-col gap-2">
@@ -289,7 +287,7 @@ export default function AdminFirmDetailPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span>Seat Price</span>
-                <span className="font-medium">{seatPrice !== null ? formatCurrency(seatPrice) : '—'}</span>
+                <span className="font-medium">{displaySeatPrice !== null ? formatCurrency(displaySeatPrice) : '—'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Included Seats</span>

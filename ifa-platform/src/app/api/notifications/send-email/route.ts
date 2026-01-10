@@ -6,6 +6,13 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { log } from '@/lib/logging/structured'
+import {
+  getFirmBranding,
+  wrapWithBranding,
+  applyBrandColors,
+  getBrandedSender,
+  type EmailBranding
+} from '@/lib/email/brandingHelper'
 
 // Lazy initialize Resend to avoid build-time errors
 let resend: Resend | null = null
@@ -296,10 +303,19 @@ const EMAIL_TEMPLATES = {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, recipient, cc, data } = body
+    const { type, recipient, cc, data, firmId } = body
 
     let emailContent: { subject: string; html: string }
     let attachments: any[] = []
+
+    // Fetch firm branding if firmId provided
+    let branding: EmailBranding | null = null
+    if (firmId) {
+      branding = await getFirmBranding(firmId)
+      if (!branding) {
+        log.warn('[send-email] Could not load branding for firm', { firmId })
+      }
+    }
 
     // Handle different email types
     switch (type) {
@@ -342,13 +358,30 @@ export async function POST(request: NextRequest) {
     const to = Array.isArray(recipient) ? recipient : [recipient]
     const ccRecipients = cc || []
 
+    // Apply firm branding to email content if available
+    let finalHtml = emailContent.html
+    if (branding) {
+      // Apply brand colors to the template
+      finalHtml = applyBrandColors(finalHtml, branding)
+      // Wrap with branded header and footer (includes email signature)
+      finalHtml = wrapWithBranding(finalHtml, branding, {
+        includeHeader: true,
+        includeFooter: true
+      })
+    }
+
     // Send email with Resend
     try {
+      // Use branded sender if branding available
+      const fromAddress = branding
+        ? getBrandedSender(branding)
+        : 'IFA Platform <onboarding@resend.dev>'
+
       const emailData: any = {
-        from: 'IFA Platform <onboarding@resend.dev>', // Replace with your verified domain
+        from: fromAddress,
         to,
         subject: emailContent.subject,
-        html: emailContent.html,
+        html: finalHtml,
       }
 
       if (ccRecipients.length > 0) {

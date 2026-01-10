@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseServiceClient()
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('platform_billing_config')
       .select('*')
       .order('updated_at', { ascending: false })
@@ -83,7 +83,7 @@ export async function PUT(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    const { data: existing, error: existingError } = await supabase
+    const { data: existing, error: existingError } = await (supabase as any)
       .from('platform_billing_config')
       .select('id')
       .order('updated_at', { ascending: false })
@@ -97,7 +97,7 @@ export async function PUT(request: NextRequest) {
     let result: BillingConfigRow | null = null
 
     if (existing && existing.length > 0) {
-      const { data: updated, error: updateError } = await supabase
+      const { data: updated, error: updateError } = await (supabase as any)
         .from('platform_billing_config')
         .update(payload)
         .eq('id', existing[0].id)
@@ -111,7 +111,7 @@ export async function PUT(request: NextRequest) {
 
       result = updated as BillingConfigRow
     } else {
-      const { data: inserted, error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await (supabase as any)
         .from('platform_billing_config')
         .insert({
           ...payload,

@@ -22,7 +22,7 @@ function isTableMissing(error: unknown): boolean {
 export async function getPlatformBillingConfig(): Promise<PlatformBillingConfig | null> {
   try {
     const supabase = getSupabaseServiceClient()
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('platform_billing_config')
       .select('*')
       .order('updated_at', { ascending: false })

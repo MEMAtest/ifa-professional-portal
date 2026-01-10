@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         if (firm) {
           const settings = (firm.settings ?? {}) as { billing?: FirmBillingSettings }
           const billingPatch: FirmBillingSettings = {
-            lastInvoiceStatus: invoice.status ?? null,
+            lastInvoiceStatus: invoice.status ?? undefined,
             lastInvoiceAt: parseStripeDate(invoice.created) ?? new Date().toISOString()
           }
           const updatedSettings = mergeFirmBillingSettings(settings, billingPatch)
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
           const supabase = getSupabaseServiceClient()
           await supabase
             .from('firms')
-            .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+            .update({ settings: updatedSettings as any, updated_at: new Date().toISOString() })
             .eq('id', firm.id)
         }
       }
@@ -86,16 +86,16 @@ export async function POST(request: NextRequest) {
           const settings = (firm.settings ?? {}) as { billing?: FirmBillingSettings }
           const billingPatch: FirmBillingSettings = {
             stripeSubscriptionId: subscription.id,
-            subscriptionStatus: subscription.status ?? null,
-            contractStart: parseStripeDate(subscription.current_period_start) ?? null,
-            contractEnd: parseStripeDate(subscription.current_period_end) ?? null
+            subscriptionStatus: subscription.status ?? undefined,
+            contractStart: parseStripeDate(subscription.current_period_start) ?? undefined,
+            contractEnd: parseStripeDate(subscription.current_period_end) ?? undefined
           }
           const updatedSettings = mergeFirmBillingSettings(settings, billingPatch)
 
           const supabase = getSupabaseServiceClient()
           await supabase
             .from('firms')
-            .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+            .update({ settings: updatedSettings as any, updated_at: new Date().toISOString() })
             .eq('id', firm.id)
         }
       }
