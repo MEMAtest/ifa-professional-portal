@@ -300,17 +300,119 @@ const EMAIL_TEMPLATES = {
   })
 }
 
+// Maximum attachment size (5MB base64 encoded)
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024
+
+// Allowed MIME types for attachments
+const ALLOWED_MIME_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
+
+// Email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Validate email address
+function isValidEmail(email: string): boolean {
+  return typeof email === 'string' && EMAIL_REGEX.test(email)
+}
+
+// Validate and process attachment
+function validateAttachment(att: unknown): { filename: string; content: string } | null {
+  if (!att || typeof att !== 'object') return null
+
+  const attachment = att as Record<string, unknown>
+
+  // Validate filename
+  if (typeof attachment.filename !== 'string' || !attachment.filename.trim()) {
+    return null
+  }
+
+  // Validate content
+  if (typeof attachment.content !== 'string' || !attachment.content) {
+    return null
+  }
+
+  // Check size limit
+  if (attachment.content.length > MAX_ATTACHMENT_SIZE) {
+    log.warn('[send-email] Attachment too large', {
+      filename: attachment.filename,
+      size: attachment.content.length
+    })
+    return null
+  }
+
+  // Extract base64 content (handle both with and without data URI prefix)
+  let content = attachment.content
+  if (content.includes(',')) {
+    const parts = content.split(',')
+    // Validate MIME type if present
+    const mimeMatch = parts[0].match(/data:([^;]+)/)
+    if (mimeMatch && !ALLOWED_MIME_TYPES.includes(mimeMatch[1])) {
+      log.warn('[send-email] Invalid attachment MIME type', {
+        filename: attachment.filename,
+        mimeType: mimeMatch[1]
+      })
+      return null
+    }
+    content = parts[1] || ''
+  }
+
+  if (!content) {
+    return null
+  }
+
+  return {
+    filename: attachment.filename.trim(),
+    content
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { type, recipient, cc, data, firmId } = body
 
+    // Validate required fields
+    if (!type || typeof type !== 'string') {
+      return NextResponse.json(
+        { error: 'Missing or invalid email type' },
+        { status: 400 }
+      )
+    }
+
+    if (!recipient) {
+      return NextResponse.json(
+        { error: 'Missing recipient' },
+        { status: 400 }
+      )
+    }
+
+    // Validate recipients
+    const recipients = Array.isArray(recipient) ? recipient : [recipient]
+    const invalidRecipients = recipients.filter(r => !isValidEmail(r))
+    if (invalidRecipients.length > 0) {
+      return NextResponse.json(
+        { error: 'Invalid email address', invalid: invalidRecipients },
+        { status: 400 }
+      )
+    }
+
+    // Validate CC if provided
+    if (cc) {
+      const ccList = Array.isArray(cc) ? cc : [cc]
+      const invalidCc = ccList.filter(r => !isValidEmail(r))
+      if (invalidCc.length > 0) {
+        return NextResponse.json(
+          { error: 'Invalid CC email address', invalid: invalidCc },
+          { status: 400 }
+        )
+      }
+    }
+
     let emailContent: { subject: string; html: string }
-    let attachments: any[] = []
+    let attachments: { filename: string; content: string }[] = []
 
     // Fetch firm branding if firmId provided
     let branding: EmailBranding | null = null
-    if (firmId) {
+    if (firmId && typeof firmId === 'string') {
       branding = await getFirmBranding(firmId)
       if (!branding) {
         log.warn('[send-email] Could not load branding for firm', { firmId })
@@ -320,38 +422,64 @@ export async function POST(request: NextRequest) {
     // Handle different email types
     switch (type) {
       case 'documentSent':
+        if (!data?.clientName || !data?.documentName) {
+          return NextResponse.json({ error: 'Missing required data for documentSent' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.documentSent(data.clientName, data.documentName, data.documentLink)
         break
       case 'signatureCompleted':
+        if (!data?.advisorName || !data?.clientName || !data?.documentName) {
+          return NextResponse.json({ error: 'Missing required data for signatureCompleted' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.signatureCompleted(data.advisorName, data.clientName, data.documentName)
         break
       case 'weeklyReport':
+        if (!data?.advisorName || !data?.stats) {
+          return NextResponse.json({ error: 'Missing required data for weeklyReport' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.weeklyReport(data.advisorName, data.stats)
         break
       case 'reminder':
+        if (!data?.clientName || !data?.documentName || data?.daysLeft === undefined) {
+          return NextResponse.json({ error: 'Missing required data for reminder' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.reminder(data.clientName, data.documentName, data.daysLeft)
         break
       case 'reportWithAttachment':
+        if (!data?.subject || !data?.message) {
+          return NextResponse.json({ error: 'Missing required data for reportWithAttachment' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.reportWithAttachment(data)
-        // Handle attachments
-        if (data.attachments && data.attachments.length > 0) {
-          attachments = data.attachments.map((att: any) => ({
-            filename: att.filename,
-            content: att.content.split(',')[1] // Remove data:application/pdf;base64, prefix
-          }))
+        // Handle attachments with validation
+        if (data.attachments && Array.isArray(data.attachments)) {
+          for (const att of data.attachments) {
+            const validated = validateAttachment(att)
+            if (validated) {
+              attachments.push(validated)
+            }
+          }
         }
         break
       case 'assessmentInvite':
+        if (!data?.clientName || !data?.advisorName || !data?.link) {
+          return NextResponse.json({ error: 'Missing required data for assessmentInvite' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.assessmentInvite(data)
         break
       case 'assessmentCompleted':
+        if (!data?.clientName || !data?.advisorName || !data?.assessmentType) {
+          return NextResponse.json({ error: 'Missing required data for assessmentCompleted' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.assessmentCompleted(data)
         break
       case 'userInvitation':
+        if (!data?.inviteeEmail || !data?.firmName || !data?.inviteUrl) {
+          return NextResponse.json({ error: 'Missing required data for userInvitation' }, { status: 400 })
+        }
         emailContent = EMAIL_TEMPLATES.userInvitation(data)
         break
       default:
-        throw new Error('Invalid email type')
+        return NextResponse.json({ error: 'Invalid email type' }, { status: 400 })
     }
 
     // Determine recipients
