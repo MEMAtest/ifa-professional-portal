@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 import { Logo } from '@/components/ui/Logo'
 import {
   LogOut,
@@ -21,6 +22,7 @@ import {
   User,
   ChevronDown,
   HelpCircle,
+  Lock,
   Menu
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -44,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const isPlatformAdmin = isPlatformAdminEmail(user?.email)
 
   const handleSignOut = async () => {
     await signOut()
@@ -55,6 +58,27 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
     const returnTo = searchParams?.get('returnTo') || searchParams?.get('from')
     const clientId = searchParams?.get('clientId')
     const assessmentId = searchParams?.get('assessmentId')
+    if (isPlatformAdmin) {
+      const breadcrumbs: BreadcrumbItem[] = [
+        { label: 'Owner Admin', href: '/admin', icon: Lock }
+      ]
+
+      if (segments[0] === 'admin') {
+        if (segments[1] === 'billing') {
+          breadcrumbs.push({ label: 'Billing & Plans' })
+        } else if (segments[1] === 'firms') {
+          breadcrumbs.push({ label: 'Firms' })
+          if (segments[2]) {
+            breadcrumbs.push({ label: 'Firm Details' })
+          }
+        } else if (segments[1]) {
+          breadcrumbs.push({ label: segments[1].charAt(0).toUpperCase() + segments[1].slice(1) })
+        }
+      }
+
+      return breadcrumbs
+    }
+
     const breadcrumbs: BreadcrumbItem[] = [
       { label: 'Dashboard', href: '/dashboard', icon: Home }
     ]
@@ -205,6 +229,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
 
   const breadcrumbs = getBreadcrumbs()
 
+  const homeHref = isPlatformAdmin ? '/admin' : '/dashboard'
+  const homeLabel = isPlatformAdmin ? 'Owner Admin' : 'Dashboard'
+  const showHomeButton = isPlatformAdmin
+    ? !pathname?.startsWith('/admin')
+    : pathname !== '/dashboard'
+
   return (
     <header className="fixed top-0 left-0 right-0 h-[var(--app-header-height)] pt-[env(safe-area-inset-top)] bg-white border-b border-gray-200 z-50">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6">
@@ -265,18 +295,20 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
           )}
         </div>
 
-        <div className="hidden lg:block flex-1 max-w-lg mx-6">
-          <GlobalSearchInput />
-        </div>
+        {!isPlatformAdmin && (
+          <div className="hidden lg:block flex-1 max-w-lg mx-6">
+            <GlobalSearchInput />
+          </div>
+        )}
 
         <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
-          {pathname !== '/dashboard' && (
+          {showHomeButton && (
             <Link
-              href="/dashboard"
+              href={homeHref}
               className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
             >
               <Home className="h-4 w-4" />
-              Dashboard
+              {homeLabel}
             </Link>
           )}
 

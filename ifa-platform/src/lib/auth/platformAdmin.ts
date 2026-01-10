@@ -12,7 +12,8 @@ export function getPlatformAdminEmails(): string[] {
   const envList = parseEmailList(
     process.env.NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS ?? process.env.PLATFORM_ADMIN_EMAILS
   )
-  return envList.length ? envList : DEFAULT_PLATFORM_ADMINS
+  if (!envList.length) return DEFAULT_PLATFORM_ADMINS
+  return Array.from(new Set([...DEFAULT_PLATFORM_ADMINS, ...envList]))
 }
 
 export function isPlatformAdminEmail(email: string | undefined | null): boolean {

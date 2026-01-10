@@ -1,6 +1,8 @@
 'use client'
-import { useContext, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { LoginForm } from '@/components/auth/LoginForm'
@@ -13,11 +15,21 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, loading } = useAuth()
   const isWrappedByRoot = useContext(LayoutContext)
+  const pathname = usePathname()
+  const router = useRouter()
+  const isPlatformAdmin = isPlatformAdminEmail(user?.email)
+  const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
 
   // Hooks must be called unconditionally at the top
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
   const closeSidebar = () => setIsSidebarOpen(false)
+
+  useEffect(() => {
+    if (!user || !isPlatformAdmin) return
+    if (isAdminRoute) return
+    router.replace('/admin')
+  }, [user, isPlatformAdmin, isAdminRoute, router])
 
   // If already wrapped by root layout, just return children
   if (isWrappedByRoot) {

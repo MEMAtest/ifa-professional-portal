@@ -125,7 +125,17 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     return assessmentRoutes.some(route => href.includes(route));
   };
 
-  const navigation: NavSection[] = [
+  const ownerNavigation: NavSection[] = [
+    {
+      title: 'Owner Admin',
+      items: [
+        { name: 'Overview', href: '/admin', icon: Lock },
+        { name: 'Billing & Plans', href: '/admin/billing', icon: PoundSterling }
+      ]
+    }
+  ]
+
+  const fullNavigation: NavSection[] = [
     {
       title: 'Dashboard',
       items: [
@@ -195,6 +205,8 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
       ],
     },
   ];
+
+  const navigation = isPlatformAdmin ? ownerNavigation : fullNavigation
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -301,6 +313,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
 
   // Fetch stats
   useEffect(() => {
+    if (isPlatformAdmin) return
     const fetchStats = async () => {
       try {
         // Fetch cash flow stats
@@ -341,30 +354,40 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     fetchStats();
     const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
-  }, [supabase]);
+  }, [supabase, isPlatformAdmin]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin) return
+    setExpandedSections((prev) => ({
+      ...prev,
+      'Owner Admin': true
+    }))
+  }, [isPlatformAdmin])
 
   // Add counts to navigation items
-  const navigationWithCounts = navigation.map(section => {
-    if (section.title === 'Financial Analysis') {
-      return {
-        ...section,
-        items: section.items.map(item => {
-          if (item.name === 'Monte Carlo Analysis') {
-            return { ...item, count: monteCarloCount > 0 ? monteCarloCount : undefined };
-          }
-          if (item.name === 'Cash Flow Modeling') {
-            return { ...item, count: cashFlowStats.totalScenarios > 0 ? cashFlowStats.totalScenarios : undefined };
-          }
-          if (item.name === 'Market Intelligence') {
-            // No count for Market Intelligence - it's a real-time view
-            return item;
-          }
-          return item;
-        })
-      };
-    }
-    return section;
-  });
+  const navigationWithCounts = isPlatformAdmin
+    ? navigation
+    : navigation.map(section => {
+        if (section.title === 'Financial Analysis') {
+          return {
+            ...section,
+            items: section.items.map(item => {
+              if (item.name === 'Monte Carlo Analysis') {
+                return { ...item, count: monteCarloCount > 0 ? monteCarloCount : undefined };
+              }
+              if (item.name === 'Cash Flow Modeling') {
+                return { ...item, count: cashFlowStats.totalScenarios > 0 ? cashFlowStats.totalScenarios : undefined };
+              }
+              if (item.name === 'Market Intelligence') {
+                // No count for Market Intelligence - it's a real-time view
+                return item;
+              }
+              return item;
+            })
+          };
+        }
+        return section;
+      });
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev => ({
@@ -505,34 +528,36 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
         })}
         
         {/* Client Context Indicator */}
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          {clientId ? (
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-green-800 truncate">
-                    Client Selected
-                  </p>
-                  {isProspect && (
-                    <p className="text-xs text-green-600 mt-0.5">
-                      Prospect Mode
+        {!isPlatformAdmin && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            {clientId ? (
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-green-800 truncate">
+                      Client Selected
                     </p>
-                  )}
+                    {isProspect && (
+                      <p className="text-xs text-green-600 mt-0.5">
+                        Prospect Mode
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (pathname?.includes('/assessments')) && (
-            <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-600" />
-                <p className="text-xs text-orange-800">
-                  Select a client to access assessment tools
-                </p>
+            ) : (pathname?.includes('/assessments')) && (
+              <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <p className="text-xs text-orange-800">
+                    Select a client to access assessment tools
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </nav>
     </div>
     </>

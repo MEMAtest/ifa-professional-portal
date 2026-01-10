@@ -3,9 +3,10 @@
 // ================================================================
 
 'use client'
-import { createContext, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { createContext, useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { LoginForm } from '@/components/auth/LoginForm'
@@ -21,6 +22,9 @@ interface SmartLayoutWrapperProps {
 export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children }) => {
   const { user, loading } = useAuth()
   const pathname = usePathname()
+  const router = useRouter()
+  const isPlatformAdmin = isPlatformAdminEmail(user?.email)
+  const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
 
   // Hooks must be called unconditionally at the top
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -40,6 +44,12 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
                        pathname === '/blog' ||
                        pathname.startsWith('/blog/') ||
                        pathname.startsWith('/client/')
+
+  useEffect(() => {
+    if (!user || !isPlatformAdmin) return
+    if (isAdminRoute) return
+    router.replace('/admin')
+  }, [user, isPlatformAdmin, isAdminRoute, router])
 
   if (loading) {
     return (
