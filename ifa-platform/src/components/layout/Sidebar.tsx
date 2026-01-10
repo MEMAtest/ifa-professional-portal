@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useClientContext } from '@/hooks/useClientContext';
+import { useAuth } from '@/hooks/useAuth';
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin';
 import { createClient } from '@/lib/supabase/client';
 import {
   BarChart3,
@@ -74,6 +76,7 @@ interface SidebarProps {
 
 export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
   const supabase = useMemo(() => createClient(), [])
+  const { user } = useAuth()
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
@@ -101,6 +104,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'Assessment Tools': true
   });
+  const isPlatformAdmin = useMemo(() => isPlatformAdminEmail(user?.email), [user?.email])
 
   // Helper to build assessment URLs with client context
   const getAssessmentUrl = (baseUrl: string): string => {
@@ -187,6 +191,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
       title: 'Administration',
       items: [
         { name: 'Preferences', href: '/settings', icon: Settings },
+        ...(isPlatformAdmin ? [{ name: 'Owner Admin', href: '/admin', icon: Lock }] : []),
       ],
     },
   ];

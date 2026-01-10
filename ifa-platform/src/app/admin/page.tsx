@@ -1,0 +1,312 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { Layout } from '@/components/layout/Layout'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { useAuth } from '@/hooks/useAuth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { formatCurrency } from '@/lib/utils'
+import { Lock } from 'lucide-react'
+
+type AdminFirmSummary = {
+  id: string
+  name: string
+  subscriptionTier: string
+  createdAt: string
+  updatedAt: string
+  activeUsers: number
+  billableSeats: number
+  includedSeats: number
+  billingEmail: string | null
+  maxSeats: number | null
+  currentSeats: number | null
+  termMonths: number | null
+  basePrice: number | null
+  seatPrice: number | null
+  contractStart: string | null
+  contractEnd: string | null
+  autoRenew: boolean | null
+  stripeCustomerId: string | null
+  stripeSubscriptionId: string | null
+  stripeScheduleId: string | null
+}
+
+const BASE_PRICE_BY_TERM: Record<number, number> = {
+  12: 500,
+  24: 415,
+  36: 350
+}
+
+function resolveBasePrice(firm: AdminFirmSummary): number | null {
+  if (typeof firm.basePrice === 'number') return firm.basePrice
+  if (firm.termMonths && BASE_PRICE_BY_TERM[firm.termMonths]) {
+    return BASE_PRICE_BY_TERM[firm.termMonths]
+  }
+  return null
+}
+
+function resolveSeatPrice(firm: AdminFirmSummary): number | null {
+  if (typeof firm.seatPrice === 'number') return firm.seatPrice
+  return null
+}
+
+export default function AdminPage() {
+  const { user, loading: authLoading } = useAuth()
+  const [firms, setFirms] = useState<AdminFirmSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const isPlatformAdmin = useMemo(() => isPlatformAdminEmail(user?.email), [user?.email])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!isPlatformAdmin) {
+      setLoading(false)
+      return
+    }
+
+    const fetchFirms = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch('/api/admin/firms')
+        if (!response.ok) {
+          throw new Error('Failed to load admin firms')
+        }
+        const data = await response.json()
+        setFirms(data.firms ?? [])
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load admin firms')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchFirms()
+  }, [authLoading, isPlatformAdmin])
+
+  const filteredFirms = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return firms
+    return firms.filter((firm) => {
+      return (
+        firm.name.toLowerCase().includes(term) ||
+        (firm.billingEmail ?? '').toLowerCase().includes(term)
+      )
+    })
+  }, [firms, query])
+
+  const totals = useMemo(() => {
+    let totalUsers = 0
+    let totalBillableSeats = 0
+    let totalMrr = 0
+
+    for (const firm of firms) {
+      totalUsers += firm.activeUsers
+      totalBillableSeats += firm.billableSeats
+      const basePrice = resolveBasePrice(firm)
+      const seatPrice = resolveSeatPrice(firm)
+      if (basePrice !== null) {
+        totalMrr += basePrice
+      }
+      if (seatPrice !== null) {
+        totalMrr += seatPrice * firm.billableSeats
+      }
+    }
+
+    return {
+      totalFirms: firms.length,
+      totalUsers,
+      totalBillableSeats,
+      totalMrr
+    }
+  }, [firms])
+
+  if (authLoading || loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+        </div>
+      </Layout>
+    )
+  }
+
+  if (!isPlatformAdmin) {
+    return (
+      <Layout>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-gray-500" />
+              Owner Admin Access
+            </CardTitle>
+            <CardDescription>
+              This area is restricted to platform owners.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-600">
+              If you need access, contact support.
+            </p>
+          </CardContent>
+        </Card>
+      </Layout>
+    )
+  }
+
+  return (
+    <Layout>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold text-gray-900">Owner Admin Hub</h1>
+          <p className="text-sm text-gray-600">
+            Platform-wide overview of firms, subscriptions, and seat usage.
+          </p>
+        </div>
+
+        {error && (
+          <Card>
+            <CardContent className="py-4 text-sm text-red-600">{error}</CardContent>
+          </Card>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Total Firms</CardTitle>
+              <CardDescription>Active tenants</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {totals.totalFirms}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Total Users</CardTitle>
+              <CardDescription>Active profiles</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {totals.totalUsers}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Billable Seats</CardTitle>
+              <CardDescription>Above included seats</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {totals.totalBillableSeats}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Estimated MRR</CardTitle>
+              <CardDescription>Base + seats</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {formatCurrency(totals.totalMrr)}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Plans & Rates</CardTitle>
+            <CardDescription>Manage Stripe price IDs and seat pricing.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/admin/billing">Open Pricing Settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Firms</CardTitle>
+              <CardDescription>Subscription terms, seats, and billing</CardDescription>
+            </div>
+            <div className="w-full md:w-64">
+              <Input
+                placeholder="Search firm or billing email..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Firm</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead>Base</TableHead>
+                  <TableHead>Seat Price</TableHead>
+                  <TableHead>Users</TableHead>
+                  <TableHead>Billable</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredFirms.map((firm) => {
+                  const basePrice = resolveBasePrice(firm)
+                  const seatPrice = resolveSeatPrice(firm)
+                  const hasStripe = Boolean(firm.stripeSubscriptionId || firm.stripeCustomerId)
+
+                  return (
+                    <TableRow key={firm.id}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{firm.name}</span>
+                          <span className="text-xs text-gray-500">{firm.billingEmail ?? 'Billing email not set'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {firm.termMonths ? `${firm.termMonths} mo` : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {basePrice !== null ? formatCurrency(basePrice) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {seatPrice !== null ? formatCurrency(seatPrice) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-gray-700">
+                          {firm.activeUsers} / {firm.includedSeats} incl
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm font-medium text-gray-900">
+                          {firm.billableSeats}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={hasStripe ? 'default' : 'outline'}>
+                          {hasStripe ? 'Connected' : 'Not linked'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/admin/firms/${firm.id}`}>View</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    </Layout>
+  )
+}
