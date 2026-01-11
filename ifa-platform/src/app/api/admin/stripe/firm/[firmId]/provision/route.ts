@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getStripeClient } from '@/lib/billing/stripeClient'
 import { BASE_PLAN_PRICES } from '@/lib/billing/stripeConfig'
@@ -33,7 +33,7 @@ export async function POST(
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!isPlatformAdminEmail(authResult.context.email)) {
+    if (!isPlatformAdminUser(authResult.context)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

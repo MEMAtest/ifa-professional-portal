@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 type BillingConfigRow = {
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!isPlatformAdminEmail(authResult.context.email)) {
+    if (!isPlatformAdminUser(authResult.context)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -66,7 +66,7 @@ export async function PUT(request: NextRequest) {
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!isPlatformAdminEmail(authResult.context.email)) {
+    if (!isPlatformAdminUser(authResult.context)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

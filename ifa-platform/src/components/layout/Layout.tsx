@@ -2,7 +2,7 @@
 import { useContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { LoginForm } from '@/components/auth/LoginForm'
@@ -17,7 +17,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isWrappedByRoot = useContext(LayoutContext)
   const pathname = usePathname()
   const router = useRouter()
-  const isPlatformAdmin = isPlatformAdminEmail(user?.email) || user?.role === 'owner'
+  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role })
   const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
   const shouldRedirectToAdmin = Boolean(user && isPlatformAdmin && !isAdminRoute)
 

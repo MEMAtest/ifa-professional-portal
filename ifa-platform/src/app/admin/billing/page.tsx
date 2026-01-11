@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@/hooks/useAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { ChevronLeft, Lock } from 'lucide-react'
 
 type BillingConfig = {
@@ -35,7 +35,10 @@ export default function AdminBillingPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const isPlatformAdmin = useMemo(() => isPlatformAdminEmail(user?.email), [user?.email])
+  const isPlatformAdmin = useMemo(
+    () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
+    [user?.email, user?.role]
+  )
 
   useEffect(() => {
     if (authLoading) return

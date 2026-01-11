@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { Logo } from '@/components/ui/Logo'
 import {
   LogOut,
@@ -46,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const isPlatformAdmin = isPlatformAdminEmail(user?.email) || user?.role === 'owner'
+  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role })
 
   const handleSignOut = async () => {
     await signOut()
@@ -312,11 +312,14 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
             </Link>
           )}
 
-          <NotificationBell />
-
-          <button className="p-2 text-gray-400 hover:text-gray-600 rounded-md">
-            <Settings className="h-5 w-5" />
-          </button>
+          {!isPlatformAdmin && (
+            <>
+              <NotificationBell />
+              <button className="p-2 text-gray-400 hover:text-gray-600 rounded-md">
+                <Settings className="h-5 w-5" />
+              </button>
+            </>
+          )}
 
           <div className="relative">
             <button
@@ -360,31 +363,35 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
                     <p className="text-xs text-gray-500">{user?.email}</p>
                   </div>
                   <div className="py-1">
-                    <Link
-                      href="/settings"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      <User className="h-4 w-4 mr-3" />
-                      Profile Settings
-                    </Link>
-                    <Link
-                      href="/settings/preferences"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      <Settings className="h-4 w-4 mr-3" />
-                      Preferences
-                    </Link>
-                    <Link
-                      href="/help"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      <HelpCircle className="h-4 w-4 mr-3" />
-                      Help & Support
-                    </Link>
-                    <div className="border-t border-white/20 mt-1 pt-1">
+                    {!isPlatformAdmin && (
+                      <>
+                        <Link
+                          href="/settings"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
+                          onClick={() => setUserMenuOpen(false)}
+                        >
+                          <User className="h-4 w-4 mr-3" />
+                          Profile Settings
+                        </Link>
+                        <Link
+                          href="/settings/preferences"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
+                          onClick={() => setUserMenuOpen(false)}
+                        >
+                          <Settings className="h-4 w-4 mr-3" />
+                          Preferences
+                        </Link>
+                        <Link
+                          href="/help"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
+                          onClick={() => setUserMenuOpen(false)}
+                        >
+                          <HelpCircle className="h-4 w-4 mr-3" />
+                          Help & Support
+                        </Link>
+                      </>
+                    )}
+                    <div className={cn("border-t border-white/20 mt-1 pt-1", isPlatformAdmin && "border-t-0 mt-0 pt-0")}>
                       <button
                         onClick={handleSignOut}
                         className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50/50 transition-colors"

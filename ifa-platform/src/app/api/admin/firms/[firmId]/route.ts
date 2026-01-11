@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 
 type BillingSettings = {
   billingEmail?: string
@@ -54,7 +54,7 @@ export async function GET(
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!isPlatformAdminEmail(authResult.context.email)) {
+    if (!isPlatformAdminUser(authResult.context)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

@@ -6,7 +6,7 @@
 import { createContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { LoginForm } from '@/components/auth/LoginForm'
@@ -23,7 +23,7 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   const { user, loading } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
-  const isPlatformAdmin = isPlatformAdminEmail(user?.email) || user?.role === 'owner'
+  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role })
   const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
   const shouldRedirectToAdmin = Boolean(user && isPlatformAdmin && !isAdminRoute)
 
@@ -59,11 +59,6 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
     )
   }
 
-  // Show public pages without layout
-  if (!user || isPublicPage) {
-    return <>{children}</>
-  }
-
   if (shouldRedirectToAdmin) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -75,19 +70,26 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
     )
   }
 
+  // Show public pages without layout
+  if (!user || isPublicPage) {
+    return <>{children}</>
+  }
+
+  const layout = (
+    <div className="min-h-screen bg-gray-50">
+      <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} sidebarId="primary-navigation" />
+      <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
+      <main className="pt-[var(--app-header-height)] lg:ml-64">
+        <div className="p-4 sm:p-6">
+          {children}
+        </div>
+      </main>
+    </div>
+  )
+
   return (
     <LayoutContext.Provider value={true}>
-      <NotificationsProvider>
-        <div className="min-h-screen bg-gray-50">
-          <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} sidebarId="primary-navigation" />
-          <Sidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
-          <main className="pt-[var(--app-header-height)] lg:ml-64">
-            <div className="p-4 sm:p-6">
-              {children}
-            </div>
-          </main>
-        </div>
-      </NotificationsProvider>
+      {isPlatformAdmin ? layout : <NotificationsProvider>{layout}</NotificationsProvider>}
     </LayoutContext.Provider>
   )
 }

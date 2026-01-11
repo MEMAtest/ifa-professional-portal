@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@/hooks/useAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { formatCurrency } from '@/lib/utils'
 import { Lock } from 'lucide-react'
 
@@ -62,7 +62,10 @@ export default function AdminPage() {
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const isPlatformAdmin = useMemo(() => isPlatformAdminEmail(user?.email), [user?.email])
+  const isPlatformAdmin = useMemo(
+    () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
+    [user?.email, user?.role]
+  )
 
   useEffect(() => {
     if (authLoading) return

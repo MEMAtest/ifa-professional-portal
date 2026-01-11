@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useClientContext } from '@/hooks/useClientContext';
 import { useAuth } from '@/hooks/useAuth';
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin';
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin';
 import { createClient } from '@/lib/supabase/client';
 import {
   BarChart3,
@@ -106,7 +106,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     'Assessment Tools': true
   });
   const isPlatformAdmin = useMemo(
-    () => isPlatformAdminEmail(user?.email) || user?.role === 'owner',
+    () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
     [user?.email, user?.role]
   )
 

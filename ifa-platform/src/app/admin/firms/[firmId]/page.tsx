@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/hooks/useAuth'
-import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { formatCurrency } from '@/lib/utils'
 import { ChevronLeft, Lock } from 'lucide-react'
 
@@ -77,7 +77,10 @@ export default function AdminFirmDetailPage() {
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
-  const isPlatformAdmin = useMemo(() => isPlatformAdminEmail(user?.email), [user?.email])
+  const isPlatformAdmin = useMemo(
+    () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
+    [user?.email, user?.role]
+  )
 
   const fetchFirm = useCallback(async () => {
     if (!firmId) return
