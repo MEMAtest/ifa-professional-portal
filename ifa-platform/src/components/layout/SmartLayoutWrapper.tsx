@@ -25,6 +25,7 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   const router = useRouter()
   const isPlatformAdmin = isPlatformAdminEmail(user?.email)
   const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
+  const shouldRedirectToAdmin = Boolean(user && isPlatformAdmin && !isAdminRoute)
 
   // Hooks must be called unconditionally at the top
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -46,10 +47,9 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
                        pathname.startsWith('/client/')
 
   useEffect(() => {
-    if (!user || !isPlatformAdmin) return
-    if (isAdminRoute) return
+    if (!shouldRedirectToAdmin) return
     router.replace('/admin')
-  }, [user, isPlatformAdmin, isAdminRoute, router])
+  }, [shouldRedirectToAdmin, router])
 
   if (loading) {
     return (
@@ -62,6 +62,17 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   // Show public pages without layout
   if (!user || isPublicPage) {
     return <>{children}</>
+  }
+
+  if (shouldRedirectToAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center space-y-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
+          <p className="text-sm text-gray-600">Redirecting to Owner Admin...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
