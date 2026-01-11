@@ -44,7 +44,8 @@ import {
   Lock,
   UserCheck,
   X,
-  Fingerprint
+  Fingerprint,
+  CheckSquare
 } from 'lucide-react';
 
 interface NavItem {
@@ -104,7 +105,10 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'Assessment Tools': true
   });
-  const isPlatformAdmin = useMemo(() => isPlatformAdminEmail(user?.email), [user?.email])
+  const isPlatformAdmin = useMemo(
+    () => isPlatformAdminEmail(user?.email) || user?.role === 'owner',
+    [user?.email, user?.role]
+  )
 
   // Helper to build assessment URLs with client context
   const getAssessmentUrl = (baseUrl: string): string => {
@@ -140,6 +144,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
       title: 'Dashboard',
       items: [
         { name: 'Overview', href: '/dashboard', icon: BarChart3 },
+        { name: 'Tasks', href: '/tasks', icon: CheckSquare },
         { name: 'AI Insights', href: '/dashboard/ai-insights', icon: Brain },
       ],
     },

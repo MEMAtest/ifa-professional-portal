@@ -46,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const isPlatformAdmin = isPlatformAdminEmail(user?.email)
+  const isPlatformAdmin = isPlatformAdminEmail(user?.email) || user?.role === 'owner'
 
   const handleSignOut = async () => {
     await signOut()
