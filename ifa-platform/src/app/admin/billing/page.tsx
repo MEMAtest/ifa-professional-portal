@@ -208,12 +208,91 @@ export default function AdminBillingPage() {
     ]
   }, [metrics.totalIncludedSeats, metrics.totalBillableSeats])
 
+  const planMixChartData = useMemo(() => {
+    if (!firms.length) return []
+    const counts = new Map<string, number>()
+    firms.forEach((f) => {
+      const tier = (f.subscriptionTier || 'starter').toLowerCase()
+      counts.set(tier, (counts.get(tier) ?? 0) + 1)
+    })
+    return Array.from(counts.entries()).map(([name, value]) => ({ name, value }))
+  }, [firms])
+
+  const filteredFirms = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    return firms.filter((f) => {
+      const matchesSearch =
+        !term ||
+        f.name.toLowerCase().includes(term) ||
+        (f.billingEmail ?? '').toLowerCase().includes(term) ||
+        (f.subscriptionTier ?? '').toLowerCase().includes(term)
+
+      const termLabel = f.termMonths ? String(f.termMonths) : 'other'
+      const matchesTerm =
+        termFilter === 'all' ||
+        (termFilter === 'other' && !['12', '24', '36'].includes(termLabel)) ||
+        termFilter === termLabel
+
+      const autoRenewStatus = f.autoRenew === true ? 'yes' : f.autoRenew === false ? 'no' : 'all'
+      const matchesAutoRenew =
+        autoRenewFilter === 'all' || autoRenewFilter === autoRenewStatus
+
+      return matchesSearch && matchesTerm && matchesAutoRenew
+    })
+  }, [firms, searchTerm, termFilter, autoRenewFilter])
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency: config.currency || 'GBP',
       minimumFractionDigits: 0
     }).format(value)
+
+  const exportCsv = () => {
+    if (!filteredFirms.length) return
+    const headers = [
+      'Name',
+      'Subscription Tier',
+      'Term (months)',
+      'Active Users',
+      'Included Seats',
+      'Billable Seats',
+      'Base MRR',
+      'Seat MRR',
+      'Auto Renew',
+      'Billing Email',
+      'Created',
+      'Updated'
+    ]
+    const rows = filteredFirms.map((f) => {
+      const base = resolveBasePrice(f) ?? 0
+      const seatRev = resolveSeatPrice(f, seatPrice) * f.billableSeats
+      return [
+        f.name,
+        f.subscriptionTier ?? 'starter',
+        f.termMonths ?? '',
+        f.activeUsers,
+        f.includedSeats,
+        f.billableSeats,
+        base,
+        seatRev,
+        f.autoRenew === true ? 'Yes' : f.autoRenew === false ? 'No' : '',
+        f.billingEmail ?? '',
+        f.createdAt,
+        f.updatedAt
+      ]
+    })
+    const csv = [headers, ...rows]
+      .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'plannetic_firm_billing.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   const handleSave = async () => {
     try {
@@ -386,6 +465,126 @@ export default function AdminBillingPage() {
               ) : (
                 <p className="text-sm text-gray-500">Seat data will appear once firms are provisioned.</p>
               )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Plan Mix</CardTitle>
+              <CardDescription>Firms by subscription tier</CardDescription>
+            </CardHeader>
+            <CardContent style={{ height: 320 }}>
+              {planMixChartData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={planMixChartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="value" name="Firms" fill="#2563eb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-gray-500">Plan data will appear once firms are provisioned.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Firm Drilldown</CardTitle>
+              <CardDescription>Search, filter, and export firm billing details</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <Input
+                  label="Search firm, email, or tier"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search..."
+                />
+                <div className="space-y-1">
+                  <label className="text-sm text-gray-600">Term</label>
+                  <select
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                    value={termFilter}
+                    onChange={(e) => setTermFilter(e.target.value as typeof termFilter)}
+                  >
+                    <option value="all">All terms</option>
+                    <option value="12">12m</option>
+                    <option value="24">24m</option>
+                    <option value="36">36m</option>
+                    <option value="other">Other / unset</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-gray-600">Auto-renew</label>
+                  <select
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                    value={autoRenewFilter}
+                    onChange={(e) => setAutoRenewFilter(e.target.value as typeof autoRenewFilter)}
+                  >
+                    <option value="all">All</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div className="flex items-end justify-end">
+                  <Button type="button" variant="secondary" onClick={exportCsv} disabled={!filteredFirms.length}>
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Firm</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Tier</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Term</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Users</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Billable</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Base MRR</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Seat MRR</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Auto-renew</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Billing Email</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredFirms.map((f) => {
+                      const base = resolveBasePrice(f) ?? 0
+                      const seatRev = resolveSeatPrice(f, seatPrice) * f.billableSeats
+                      const termLabel = f.termMonths ? `${f.termMonths}m` : '—'
+                      return (
+                        <tr key={f.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-900">{f.name}</td>
+                          <td className="px-3 py-2 text-gray-700">{f.subscriptionTier ?? 'starter'}</td>
+                          <td className="px-3 py-2 text-gray-700">{termLabel}</td>
+                          <td className="px-3 py-2 text-gray-700">{f.activeUsers}</td>
+                          <td className="px-3 py-2 text-gray-700">{f.billableSeats}</td>
+                          <td className="px-3 py-2 text-gray-700">{formatCurrency(base)}</td>
+                          <td className="px-3 py-2 text-gray-700">{formatCurrency(seatRev)}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {f.autoRenew === true ? 'Yes' : f.autoRenew === false ? 'No' : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{f.billingEmail ?? '—'}</td>
+                        </tr>
+                      )
+                    })}
+                    {!filteredFirms.length && (
+                      <tr>
+                        <td className="px-3 py-4 text-gray-500" colSpan={9}>
+                          No firms match the current filters.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         </div>
