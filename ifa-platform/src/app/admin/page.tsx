@@ -12,6 +12,16 @@ import { useAuth } from '@/hooks/useAuth'
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { formatCurrency } from '@/lib/utils'
 import { Lock } from 'lucide-react'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from 'recharts'
 
 type AdminFirmSummary = {
   id: string
@@ -61,6 +71,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [termFilter, setTermFilter] = useState<'all' | '12' | '24' | '36' | 'other'>('all')
+  const [autoRenewFilter, setAutoRenewFilter] = useState<'all' | 'yes' | 'no'>('all')
 
   const isPlatformAdmin = useMemo(
     () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
@@ -96,14 +108,25 @@ export default function AdminPage() {
 
   const filteredFirms = useMemo(() => {
     const term = query.trim().toLowerCase()
-    if (!term) return firms
     return firms.filter((firm) => {
-      return (
+      const matchesSearch =
+        !term ||
         firm.name.toLowerCase().includes(term) ||
         (firm.billingEmail ?? '').toLowerCase().includes(term)
-      )
+
+      const termLabel = firm.termMonths ? String(firm.termMonths) : 'other'
+      const matchesTerm =
+        termFilter === 'all' ||
+        (termFilter === 'other' && !['12', '24', '36'].includes(termLabel)) ||
+        termFilter === termLabel
+
+      const autoRenewStatus = firm.autoRenew === true ? 'yes' : firm.autoRenew === false ? 'no' : 'all'
+      const matchesAutoRenew =
+        autoRenewFilter === 'all' || autoRenewFilter === autoRenewStatus
+
+      return matchesSearch && matchesTerm && matchesAutoRenew
     })
-  }, [firms, query])
+  }, [firms, query, termFilter, autoRenewFilter])
 
   const totals = useMemo(() => {
     let totalUsers = 0
@@ -129,6 +152,33 @@ export default function AdminPage() {
       totalBillableSeats,
       totalMrr
     }
+  }, [firms])
+
+  const mrrByTerm = useMemo(() => {
+    return [12, 24, 36].map((term) => {
+      const firmsForTerm = firms.filter((f) => f.termMonths === term)
+      const base = firmsForTerm.reduce((sum, f) => sum + (resolveBasePrice(f) ?? 0), 0)
+      const seat = firmsForTerm.reduce(
+        (sum, f) => sum + (resolveSeatPrice(f) ?? 0) * f.billableSeats,
+        0
+      )
+      return {
+        termLabel: `${term}m`,
+        base,
+        seat,
+        firms: firmsForTerm.length
+      }
+    })
+  }, [firms])
+
+  const planMix = useMemo(() => {
+    if (!firms.length) return []
+    const counts = new Map<string, number>()
+    firms.forEach((f) => {
+      const tier = (f.subscriptionTier || 'starter').toLowerCase()
+      counts.set(tier, (counts.get(tier) ?? 0) + 1)
+    })
+    return Array.from(counts.entries()).map(([name, value]) => ({ name, value }))
   }, [firms])
 
   if (authLoading || loading) {
@@ -219,6 +269,55 @@ export default function AdminPage() {
           </Card>
         </div>
 
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>MRR by Term</CardTitle>
+              <CardDescription>Base vs seat revenue split</CardDescription>
+            </CardHeader>
+            <CardContent style={{ height: 300 }}>
+              {mrrByTerm.some((d) => d.base || d.seat) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={mrrByTerm} stackOffset="expand" margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="termLabel" />
+                    <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} />
+                    <Tooltip formatter={(value: number, name) => [`${formatCurrency(value)}`, name === 'base' ? 'Base' : 'Seat']} />
+                    <Legend />
+                    <Bar dataKey="base" name="Base MRR" stackId="mrr" fill="#2563eb" />
+                    <Bar dataKey="seat" name="Seat MRR" stackId="mrr" fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-gray-500">No firm data available yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Plan Mix</CardTitle>
+              <CardDescription>Firms by subscription tier</CardDescription>
+            </CardHeader>
+            <CardContent style={{ height: 300 }}>
+              {planMix.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={planMix} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="value" name="Firms" fill="#2563eb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-gray-500">Plan data will appear once firms are provisioned.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle>Plans & Rates</CardTitle>
@@ -237,12 +336,32 @@ export default function AdminPage() {
               <CardTitle>Firms</CardTitle>
               <CardDescription>Subscription terms, seats, and billing</CardDescription>
             </div>
-            <div className="w-full md:w-64">
+            <div className="w-full md:w-96 flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
               <Input
                 placeholder="Search firm or billing email..."
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
+              <select
+                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                value={termFilter}
+                onChange={(e) => setTermFilter(e.target.value as typeof termFilter)}
+              >
+                <option value="all">All terms</option>
+                <option value="12">12m</option>
+                <option value="24">24m</option>
+                <option value="36">36m</option>
+                <option value="other">Other / unset</option>
+              </select>
+              <select
+                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                value={autoRenewFilter}
+                onChange={(e) => setAutoRenewFilter(e.target.value as typeof autoRenewFilter)}
+              >
+                <option value="all">Auto-renew: All</option>
+                <option value="yes">Auto-renew: Yes</option>
+                <option value="no">Auto-renew: No</option>
+              </select>
             </div>
           </CardHeader>
           <CardContent>
