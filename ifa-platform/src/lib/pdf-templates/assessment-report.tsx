@@ -247,31 +247,31 @@ export const AssessmentReport: React.FC<AssessmentReportProps> = ({
         {charts?.riskChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Risk Distribution</Text>
-            <Image src={charts.riskChart} style={{ width: '100%', height: 160 }} />
+            <Image src={charts.riskChart} style={{ width: '100%', height: 160 }} alt="" />
           </View>
         )}
         {charts?.capacityChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Capacity for Loss</Text>
-            <Image src={charts.capacityChart} style={{ width: '100%', height: 160 }} />
+            <Image src={charts.capacityChart} style={{ width: '100%', height: 160 }} alt="" />
           </View>
         )}
         {charts?.progressChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Assessment Progress</Text>
-            <Image src={charts.progressChart} style={{ width: '100%', height: 160 }} />
+            <Image src={charts.progressChart} style={{ width: '100%', height: 160 }} alt="" />
           </View>
         )}
         {charts?.categoryChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Category Scores</Text>
-            <Image src={charts.categoryChart} style={{ width: '100%', height: 180 }} />
+            <Image src={charts.categoryChart} style={{ width: '100%', height: 180 }} alt="" />
           </View>
         )}
         {charts?.alignmentChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Risk Profile Alignment</Text>
-            <Image src={charts.alignmentChart} style={{ width: '100%', height: 160 }} />
+            <Image src={charts.alignmentChart} style={{ width: '100%', height: 160 }} alt="" />
           </View>
         )}
       </View>
