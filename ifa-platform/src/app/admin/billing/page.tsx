@@ -9,6 +9,16 @@ import { Input } from '@/components/ui/Input'
 import { useAuth } from '@/hooks/useAuth'
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { ChevronLeft, Lock } from 'lucide-react'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from 'recharts'
 
 type BillingConfig = {
   stripeBasePrice12mId: string
@@ -28,12 +38,55 @@ const DEFAULT_CONFIG: BillingConfig = {
   currency: 'GBP'
 }
 
+type AdminFirmSummary = {
+  id: string
+  name: string
+  subscriptionTier: string
+  createdAt: string
+  updatedAt: string
+  activeUsers: number
+  billableSeats: number
+  includedSeats: number
+  maxSeats: number | null
+  currentSeats: number | null
+  termMonths: number | null
+  basePrice: number | null
+  seatPrice: number | null
+  contractStart: string | null
+  contractEnd: string | null
+  autoRenew: boolean | null
+  stripeCustomerId: string | null
+  stripeSubscriptionId: string | null
+  stripeScheduleId: string | null
+}
+
+const BASE_PRICE_BY_TERM: Record<number, number> = {
+  12: 500,
+  24: 415,
+  36: 350
+}
+
+function resolveBasePrice(firm: AdminFirmSummary): number | null {
+  if (typeof firm.basePrice === 'number') return firm.basePrice
+  if (firm.termMonths && BASE_PRICE_BY_TERM[firm.termMonths]) {
+    return BASE_PRICE_BY_TERM[firm.termMonths]
+  }
+  return null
+}
+
+function resolveSeatPrice(firm: AdminFirmSummary, defaultSeatPrice: number): number {
+  if (typeof firm.seatPrice === 'number') return firm.seatPrice
+  return defaultSeatPrice
+}
+
 export default function AdminBillingPage() {
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [config, setConfig] = useState<BillingConfig>(DEFAULT_CONFIG)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [firms, setFirms] = useState<AdminFirmSummary[]>([])
+  const [firmError, setFirmError] = useState<string | null>(null)
 
   const isPlatformAdmin = useMemo(
     () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
@@ -78,6 +131,89 @@ export default function AdminBillingPage() {
 
     fetchConfig()
   }, [authLoading, isPlatformAdmin])
+
+  useEffect(() => {
+    if (authLoading || !isPlatformAdmin) return
+    const fetchFirms = async () => {
+      try {
+        const response = await fetch('/api/admin/firms')
+        if (!response.ok) {
+          throw new Error('Failed to load firm data')
+        }
+        const data = await response.json()
+        setFirms(data.firms ?? [])
+        setFirmError(null)
+      } catch (err) {
+        setFirmError(err instanceof Error ? err.message : 'Failed to load firm data')
+      }
+    }
+    fetchFirms()
+  }, [authLoading, isPlatformAdmin])
+
+  const seatPrice = config.seatPrice ?? 85
+
+  const metrics = useMemo(() => {
+    let totalFirms = 0
+    let totalUsers = 0
+    let totalBillableSeats = 0
+    let totalIncludedSeats = 0
+    let totalMrrBase = 0
+    let totalMrrSeat = 0
+
+    for (const firm of firms) {
+      totalFirms += 1
+      totalUsers += firm.activeUsers
+      totalBillableSeats += firm.billableSeats
+      totalIncludedSeats += firm.includedSeats
+      const base = resolveBasePrice(firm)
+      if (base !== null) totalMrrBase += base
+      totalMrrSeat += resolveSeatPrice(firm, seatPrice) * firm.billableSeats
+    }
+
+    const mrrByTerm = [12, 24, 36].map((term) => {
+      const firmsForTerm = firms.filter((f) => f.termMonths === term)
+      const base = firmsForTerm.reduce((sum, f) => sum + (resolveBasePrice(f) ?? 0), 0)
+      const seat = firmsForTerm.reduce(
+        (sum, f) => sum + resolveSeatPrice(f, seatPrice) * f.billableSeats,
+        0
+      )
+      return {
+        termLabel: `${term}m`,
+        base,
+        seat,
+        firms: firmsForTerm.length
+      }
+    })
+
+    return {
+      totalFirms,
+      totalUsers,
+      totalBillableSeats,
+      totalIncludedSeats,
+      totalMrrBase,
+      totalMrrSeat,
+      totalMrr: totalMrrBase + totalMrrSeat,
+      mrrByTerm
+    }
+  }, [firms, seatPrice])
+
+  const seatUtilisationChartData = useMemo(() => {
+    if (!metrics.totalIncludedSeats && !metrics.totalBillableSeats) return []
+    return [
+      {
+        name: 'Seats',
+        Included: metrics.totalIncludedSeats,
+        Billable: metrics.totalBillableSeats
+      }
+    ]
+  }, [metrics.totalIncludedSeats, metrics.totalBillableSeats])
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: config.currency || 'GBP',
+      minimumFractionDigits: 0
+    }).format(value)
 
   const handleSave = async () => {
     try {
@@ -157,6 +293,101 @@ export default function AdminBillingPage() {
           <p className="text-sm text-gray-600">
             Manage Stripe price IDs and the default seat price. Base plan pricing is fixed.
           </p>
+        </div>
+
+        {!!firmError && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            {firmError}
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Total Firms</CardTitle>
+              <CardDescription>Active tenants</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {metrics.totalFirms}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Total Users</CardTitle>
+              <CardDescription>Active profiles</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {metrics.totalUsers}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Seats (Billable)</CardTitle>
+              <CardDescription>Above included seats</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {metrics.totalBillableSeats}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Est. MRR</CardTitle>
+              <CardDescription>Base + seat revenue</CardDescription>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold text-gray-900">
+              {formatCurrency(metrics.totalMrr)}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>MRR by Term</CardTitle>
+              <CardDescription>Base vs seat revenue split</CardDescription>
+            </CardHeader>
+            <CardContent style={{ height: 320 }}>
+              {metrics.mrrByTerm.some((d) => d.base || d.seat) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={metrics.mrrByTerm} stackOffset="expand" margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="termLabel" />
+                    <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} />
+                    <Tooltip formatter={(value: number, name) => [`${formatCurrency(value)}`, name === 'base' ? 'Base' : 'Seat']} />
+                    <Legend />
+                    <Bar dataKey="base" name="Base MRR" stackId="mrr" fill="#2563eb" />
+                    <Bar dataKey="seat" name="Seat MRR" stackId="mrr" fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-gray-500">No firm data available yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Seat Utilisation</CardTitle>
+              <CardDescription>Included vs billable seats</CardDescription>
+            </CardHeader>
+            <CardContent style={{ height: 320 }}>
+              {seatUtilisationChartData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={seatUtilisationChartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Included" stackId="seats" fill="#94a3b8" />
+                    <Bar dataKey="Billable" stackId="seats" fill="#f59e0b" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-gray-500">Seat data will appear once firms are provisioned.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <Card>
