@@ -154,7 +154,7 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
       value: occupation,
       label: occupation
     }))
-  }, [OCCUPATION_SUGGESTIONS])
+  }, []) // OCCUPATION_SUGGESTIONS is a constant, no need to include in deps
   
   // =====================================================
   // AI SUGGESTIONS
@@ -525,12 +525,12 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
       </div>
     )
   }, [
-    data, 
-    errors, 
-    warnings, 
-    fieldStates, 
-    aiSuggestions, 
-    showAI, 
+    data,
+    errors,
+    warnings,
+    fieldStates,
+    aiSuggestions,
+    showAI,
     isReadOnly,
     isProspect,
     showSensitiveData,
@@ -538,7 +538,8 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
     handleAISuggestion,
     onFieldFocus,
     onFieldBlur,
-    effectiveSaveState
+    effectiveSaveState,
+    customSelectValues
   ])
   
   // =====================================================

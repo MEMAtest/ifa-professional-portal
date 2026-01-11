@@ -108,7 +108,7 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
             Invite Team Member
           </DialogTitle>
           <DialogDescription>
-            Send an invitation to join your firm. They'll receive an email with a link to create their account.
+            Send an invitation to join your firm. They&apos;ll receive an email with a link to create their account.
           </DialogDescription>
         </DialogHeader>
 

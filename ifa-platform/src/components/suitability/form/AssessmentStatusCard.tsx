@@ -112,7 +112,7 @@ export function AssessmentStatusCard(props: AssessmentStatusCardProps) {
               </div>
               <div className="text-xs mt-1">{props.reconciledRisk.flags.map((f) => f.message).join(' ')}</div>
               <div className="text-xs mt-2 text-gray-700">
-                Review ATR/CFL/Persona results or update the Risk Assessment section if this mismatch doesn't reflect the client's profile.
+                Review ATR/CFL/Persona results or update the Risk Assessment section if this mismatch doesn&apos;t reflect the client&apos;s profile.
               </div>
               {showReviewAction && (
                 <div className="mt-2">

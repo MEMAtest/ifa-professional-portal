@@ -115,6 +115,7 @@ export function EditUserSheet({ user, open, onClose }: EditUserSheetProps) {
           <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
             <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center">
               {user.avatarUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={user.avatarUrl} alt={user.fullName} className="h-12 w-12 rounded-full" />
               ) : (
                 <span className="text-lg font-medium text-gray-600">

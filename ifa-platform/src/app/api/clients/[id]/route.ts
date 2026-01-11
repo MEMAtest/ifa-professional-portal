@@ -3,17 +3,20 @@ export const dynamic = 'force-dynamic'
 
 // src/app/api/clients/[id]/route.ts
 // ✅ FIXED: Using proper server-side Supabase client
+// ✅ SECURITY: Added explicit firm_id check for defense in depth
 
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyProfileUpdated } from '@/lib/notifications/notificationService'
 
 /**
  * GET /api/clients/[id]
  * Get a single client by ID - returns RAW data
+ * SECURITY: Includes explicit firm_id check for defense in depth
  */
 export async function GET(
   request: NextRequest,
@@ -22,14 +25,22 @@ export async function GET(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    // SECURITY: Require authentication
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    // SECURITY: Require firm_id for multi-tenant isolation
+    const firmIdResult = requireFirmId(auth.context);
+    if (firmIdResult instanceof NextResponse) {
+      return firmIdResult;
+    }
+    const firmId = firmIdResult.firmId;
+
+    const supabase = await createServerClient();
     const clientId = context?.params?.id;
-    logger.debug('GET /api/clients/[id] - Request received', { clientId })
+    logger.debug('GET /api/clients/[id] - Request received', { clientId, firmId })
 
     if (!clientId || clientId === 'undefined' || clientId === 'null') {
       logger.warn('No valid client ID provided', { receivedId: clientId })
@@ -42,11 +53,12 @@ export async function GET(
       );
     }
 
-    // Fetch client from database
+    // SECURITY: Fetch client with explicit firm_id filter (defense in depth)
     const { data: client, error } = await supabase
       .from('clients')
       .select('*')
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .single();
 
     if (error) {
@@ -108,6 +120,7 @@ export async function GET(
 /**
  * PATCH /api/clients/[id]
  * Update a client - accepts camelCase, stores as snake_case
+ * SECURITY: Includes explicit firm_id check for defense in depth
  */
 export async function PATCH(
   request: NextRequest,
@@ -116,14 +129,23 @@ export async function PATCH(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    // SECURITY: Require authentication
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    // SECURITY: Require firm_id for multi-tenant isolation
+    const firmIdResult = requireFirmId(auth.context);
+    if (firmIdResult instanceof NextResponse) {
+      return firmIdResult;
+    }
+    const firmId = firmIdResult.firmId;
+
+    const supabase = await createServerClient();
+    const user = { id: auth.context.userId, email: auth.context.email, user_metadata: {} };
     const clientId = context?.params?.id;
-    logger.debug('PATCH /api/clients/[id] - Updating client', { clientId })
+    logger.debug('PATCH /api/clients/[id] - Updating client', { clientId, firmId })
 
     if (!clientId || clientId === 'undefined' || clientId === 'null') {
       return NextResponse.json(
@@ -143,10 +165,12 @@ export async function PATCH(
     // ========================================
     const expectedUpdatedAt = updates.expectedUpdatedAt || updates._expectedUpdatedAt;
 
+    // SECURITY: Include firm_id filter for defense in depth
     const { data: previousClient, error: previousError } = await supabase
       .from('clients')
-      .select('personal_details, status, updated_at')
+      .select('personal_details, status, updated_at, firm_id')
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .maybeSingle()
 
     if (previousError) {
@@ -194,10 +218,12 @@ export async function PATCH(
     if (updates.status) updateData.status = updates.status;
     if (updates.clientRef) updateData.client_ref = updates.clientRef;
 
+    // SECURITY: Include firm_id filter for defense in depth
     const { data: client, error } = await supabase
       .from('clients')
       .update(updateData)
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .select()
       .single();
 
@@ -350,6 +376,7 @@ export async function PATCH(
 /**
  * DELETE /api/clients/[id]
  * Delete a client
+ * SECURITY: Includes explicit firm_id check for defense in depth
  */
 export async function DELETE(
   request: NextRequest,
@@ -358,14 +385,22 @@ export async function DELETE(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    // SECURITY: Require authentication
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    // SECURITY: Require firm_id for multi-tenant isolation
+    const firmIdResult = requireFirmId(auth.context);
+    if (firmIdResult instanceof NextResponse) {
+      return firmIdResult;
+    }
+    const firmId = firmIdResult.firmId;
+
+    const supabase = await createServerClient();
     const clientId = context?.params?.id;
-    logger.debug('DELETE /api/clients/[id] - Deleting client', { clientId })
+    logger.debug('DELETE /api/clients/[id] - Deleting client', { clientId, firmId })
 
     if (!clientId || clientId === 'undefined' || clientId === 'null') {
       return NextResponse.json(
@@ -377,10 +412,12 @@ export async function DELETE(
       );
     }
 
+    // SECURITY: Include firm_id filter for defense in depth
     const { error } = await supabase
       .from('clients')
       .delete()
-      .eq('id', clientId);
+      .eq('id', clientId)
+      .eq('firm_id', firmId);
 
     if (error) {
       if (error.code === 'PGRST116') {

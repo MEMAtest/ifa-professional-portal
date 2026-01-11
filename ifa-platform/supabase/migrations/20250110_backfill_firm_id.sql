@@ -228,13 +228,12 @@ END $$;
 
 UPDATE firms f
 SET settings = jsonb_set(
-  settings,
+  COALESCE(settings, '{}'::jsonb),
   '{billing,currentSeats}',
   (
     SELECT COALESCE(COUNT(*)::text, '0')::jsonb
     FROM profiles p
     WHERE p.firm_id = f.id
-    AND (p.status IS NULL OR p.status = 'active')
   )
 );
 

@@ -5,6 +5,7 @@ import type { ClientDossierReportData } from '@/lib/assessments/clientDossier/ty
 
 type Branding = {
   firmName?: string
+  fcaNumber?: string
   logoUrl?: string
   primaryColor?: string
   accentColor?: string
@@ -13,10 +14,34 @@ type Branding = {
 
 const defaultBrand: Required<Branding> = {
   firmName: 'Financial Advisory Services',
+  fcaNumber: '',
   logoUrl: '',
   primaryColor: '#0f172a',
   accentColor: '#2563eb',
   footerText: 'Confidential – Prepared for the client'
+}
+
+/**
+ * Validate that a URL is safe for rendering (https only)
+ */
+function isValidLogoUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false
+  const trimmed = url.trim()
+  if (!trimmed.startsWith('https://')) return false
+  try {
+    new URL(trimmed)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Validate hex color format
+ */
+function isValidHexColor(color?: string): boolean {
+  if (!color || typeof color !== 'string') return false
+  return /^#[0-9A-Fa-f]{6}$/.test(color.trim())
 }
 
 function formatDate(dateISO?: string): string {
@@ -82,16 +107,20 @@ function renderWarnings(warnings: string[]): string {
     .join(' • ')
 }
 
-const createStyles = (brand: Required<Branding>) =>
-  StyleSheet.create({
+const createStyles = (brand: Required<Branding>) => {
+  // Validate colors - use defaults if invalid
+  const primaryColor = isValidHexColor(brand.primaryColor) ? brand.primaryColor : defaultBrand.primaryColor
+  const accentColor = isValidHexColor(brand.accentColor) ? brand.accentColor : defaultBrand.accentColor
+
+  return StyleSheet.create({
     page: {
       padding: 40,
       fontSize: 11,
       fontFamily: 'Helvetica',
-      color: brand.primaryColor
+      color: primaryColor
     },
     header: {
-      borderBottom: `2pt solid ${brand.accentColor}`,
+      borderBottom: `2pt solid ${accentColor}`,
       paddingBottom: 12,
       marginBottom: 16
     },
@@ -160,7 +189,7 @@ const createStyles = (brand: Required<Branding>) =>
     },
     tableHeader: {
       flexDirection: 'row',
-      backgroundColor: brand.accentColor,
+      backgroundColor: accentColor,
       color: '#ffffff',
       padding: 8
     },
@@ -200,6 +229,7 @@ const createStyles = (brand: Required<Branding>) =>
       color: '#475569'
     }
   })
+}
 
 const PageHeader = ({ brand, styles, title }: { brand: Required<Branding>; styles: any; title: string }) => (
   <View style={styles.header}>
@@ -228,10 +258,11 @@ const PageFooter = ({
 
 const CoverPage = ({ data, styles, brand }: { data: ClientDossierReportData; styles: any; brand: Required<Branding> }) => (
   <Page size="A4" style={styles.page}>
-    {/* Firm Logo - render if provided */}
-    {brand.logoUrl ? (
+    {/* Firm Logo - render only if valid https URL */}
+    {isValidLogoUrl(brand.logoUrl) && (
+      /* eslint-disable-next-line jsx-a11y/alt-text */
       <Image src={brand.logoUrl} style={styles.firmLogo} />
-    ) : null}
+    )}
     <Text style={styles.firmName}>{brand.firmName}</Text>
     <Text style={styles.docTitle}>Client Assessment Dossier</Text>
     <Text style={styles.subtitle}>Combined assessment export (Suitability, ATR, CFL, Investor Persona)</Text>

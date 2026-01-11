@@ -255,11 +255,55 @@ export class AdvisorContextService {
   }
 
   /**
+   * Validate that a URL is a safe, valid logo URL (https only)
+   */
+  private isValidLogoUrl(url: string): boolean {
+    if (!url || typeof url !== 'string') return false
+    const trimmed = url.trim()
+    // Only allow https URLs for security
+    if (!trimmed.startsWith('https://')) return false
+    // Basic URL format validation
+    try {
+      new URL(trimmed)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Validate hex color format
+   */
+  private isValidHexColor(color: string): boolean {
+    if (!color || typeof color !== 'string') return false
+    return /^#[0-9A-Fa-f]{6}$/.test(color.trim())
+  }
+
+  /**
    * Map database firm data to FirmProfile interface
    */
   private mapFirmData(firm: any): FirmProfile {
     const settings = (firm.settings || {}) as any
     const branding = (settings.branding || {}) as any
+
+    // Handle both 'secondaryColor' (database schema) and 'accentColor' (legacy) field names
+    const accentColorValue = branding.secondaryColor || branding.accentColor || ''
+    // Handle both 'reportFooterText' (database schema) and 'footerText' (legacy) field names
+    const footerTextValue = branding.reportFooterText || branding.footerText || ''
+
+    // Validate logo URL - only use if valid https URL
+    const rawLogoUrl = (branding.logoUrl || '').trim()
+    const validatedLogoUrl = this.isValidLogoUrl(rawLogoUrl) ? rawLogoUrl : ''
+
+    // Validate colors - use defaults if invalid
+    const rawPrimaryColor = (branding.primaryColor || '').trim()
+    const rawAccentColor = accentColorValue.trim()
+    const validatedPrimaryColor = this.isValidHexColor(rawPrimaryColor)
+      ? rawPrimaryColor
+      : (DEFAULT_FIRM.branding?.primaryColor || '#1e3a5f')
+    const validatedAccentColor = this.isValidHexColor(rawAccentColor)
+      ? rawAccentColor
+      : (DEFAULT_FIRM.branding?.accentColor || '#2563eb')
 
     return {
       id: firm.id,
@@ -267,10 +311,10 @@ export class AdvisorContextService {
       address: this.formatFirmAddress(firm.address),
       fcaNumber: (firm.fca_number || '').trim(),
       branding: {
-        logoUrl: (branding.logoUrl || '').trim(),
-        primaryColor: (branding.primaryColor || DEFAULT_FIRM.branding?.primaryColor || '').trim(),
-        accentColor: (branding.accentColor || DEFAULT_FIRM.branding?.accentColor || '').trim(),
-        footerText: (branding.footerText || DEFAULT_FIRM.branding?.footerText || '').trim(),
+        logoUrl: validatedLogoUrl,
+        primaryColor: validatedPrimaryColor,
+        accentColor: validatedAccentColor,
+        footerText: (footerTextValue || DEFAULT_FIRM.branding?.footerText || '').trim(),
         website: (branding.website || '').trim(),
         email: (branding.email || '').trim(),
         phone: (branding.phone || '').trim()

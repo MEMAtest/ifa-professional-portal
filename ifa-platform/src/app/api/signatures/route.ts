@@ -1,24 +1,30 @@
 // ================================================================
-// GET /api/signatures - List all signature requests
+// GET /api/signatures - List signature requests for the user's firm
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createServerClient } from '@/lib/supabase/server'
-import { createClient } from '@supabase/supabase-js'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { createClient } from '@/lib/supabase/server'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get auth context (optional - don't block if not authenticated for now)
+    // SECURITY: Require authentication
     const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-    // Use service role for better access
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    // SECURITY: Require firm_id for multi-tenant isolation
+    const firmIdResult = requireFirmId(auth.context)
+    if (firmIdResult instanceof NextResponse) {
+      return firmIdResult
+    }
+    const firmId = firmIdResult.firmId
+
+    const supabase = await createClient()
 
     // Get query parameters
     const { searchParams } = new URL(request.url)
@@ -27,7 +33,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // Build query - only select columns that exist
+    // Build query with firm_id filter for multi-tenant isolation
     let query = supabase
       .from('signature_requests')
       .select(`
@@ -38,6 +44,7 @@ export async function GET(request: NextRequest) {
           personal_details
         )
       `)
+      .eq('firm_id', firmId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -49,9 +56,6 @@ export async function GET(request: NextRequest) {
     if (clientId) {
       query = query.eq('client_id', clientId)
     }
-
-    // If authenticated, filter by advisor's clients (optional)
-    // For now, return all to make testing easier
 
     const { data: signatureRequests, error } = await query
 

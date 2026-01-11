@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import type { SearchResult, SearchResponse } from '@/types/search'
 
 // Type definitions for database query results
@@ -54,15 +54,23 @@ interface AssessmentRow {
 /**
  * GET /api/search
  * Unified search across clients, documents, and assessments
+ * SECURITY: All searches are filtered by firm_id for multi-tenant isolation
  */
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request)
-  if (!auth.success) {
-    return auth.response!
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Require firm_id for multi-tenant isolation
+  const firmIdResult = requireFirmId(auth.context)
+  if (firmIdResult instanceof NextResponse) {
+    return firmIdResult
   }
 
   const supabase = await createClient()
   const { searchParams } = new URL(request.url)
+  const firmId = firmIdResult.firmId
 
   const query = searchParams.get('q')?.trim() || ''
   const limit = Math.min(parseInt(searchParams.get('limit') || '5'), 20)
@@ -78,11 +86,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Search all entities in parallel
+    // Search all entities in parallel - SECURITY: Pass firm_id to all search functions
     const [clientsResult, documentsResult, assessmentsResult] = await Promise.all([
-      searchClients(supabase, query, limit),
-      searchDocuments(supabase, query, limit),
-      searchAssessments(supabase, query, limit)
+      searchClients(supabase, query, limit, firmId),
+      searchDocuments(supabase, query, limit, firmId),
+      searchAssessments(supabase, query, limit, firmId)
     ])
 
     const response: SearchResponse = {
@@ -106,12 +114,14 @@ export async function GET(request: NextRequest) {
 async function searchClients(
   supabase: Awaited<ReturnType<typeof createClient>>,
   query: string,
-  limit: number
+  limit: number,
+  firmId: string
 ): Promise<SearchResult[]> {
-  // First try: fetch all clients and filter in memory (debugging approach)
+  // SECURITY: Filter by firm_id for multi-tenant isolation
   const { data: allClients, error: fetchError } = await supabase
     .from('clients')
     .select('id, client_ref, personal_details, contact_info')
+    .eq('firm_id', firmId)
     .limit(100)
 
   if (fetchError) {
@@ -160,14 +170,18 @@ async function searchClients(
 async function searchDocuments(
   supabase: Awaited<ReturnType<typeof createClient>>,
   query: string,
-  limit: number
+  limit: number,
+  firmId: string
 ): Promise<SearchResult[]> {
+  // SECURITY: Sanitize search input to prevent SQL injection
+  const sanitizedQuery = query.replace(/[%_\\,]/g, '\\$&')
   const orFilter = [
-    `name.ilike.%${query}%`,
-    `description.ilike.%${query}%`,
-    `file_name.ilike.%${query}%`
+    `name.ilike.%${sanitizedQuery}%`,
+    `description.ilike.%${sanitizedQuery}%`,
+    `file_name.ilike.%${sanitizedQuery}%`
   ].join(',')
 
+  // SECURITY: Filter by firm_id for multi-tenant isolation
   const { data, error } = await supabase
     .from('documents')
     .select(`
@@ -181,6 +195,7 @@ async function searchDocuments(
         personal_details
       )
     `)
+    .eq('firm_id', firmId)
     .eq('is_archived', false)
     .or(orFilter)
     .limit(limit)
@@ -213,21 +228,24 @@ async function searchDocuments(
 async function searchAssessments(
   supabase: Awaited<ReturnType<typeof createClient>>,
   query: string,
-  limit: number
+  limit: number,
+  firmId: string
 ): Promise<SearchResult[]> {
-  // Search suitability assessments - fetch more records for filtering
+  // SECURITY: Filter suitability assessments by firm_id via clients table
   const { data: suitabilityData, error: suitabilityError } = await supabase
     .from('suitability_assessments')
     .select(`
       id,
       status,
       created_at,
-      clients(
+      clients!inner(
         id,
         personal_details,
-        client_ref
+        client_ref,
+        firm_id
       )
     `)
+    .eq('clients.firm_id', firmId)
     .limit(100)
 
   if (suitabilityError) {
@@ -265,7 +283,7 @@ async function searchAssessments(
       }
     })
 
-  // Search ATR assessments - fetch more records for filtering
+  // SECURITY: Filter ATR assessments by firm_id via clients table
   const { data: atrData, error: atrError } = await supabase
     .from('atr_assessments')
     .select(`
@@ -273,12 +291,14 @@ async function searchAssessments(
       risk_category,
       total_score,
       created_at,
-      clients(
+      clients!inner(
         id,
         personal_details,
-        client_ref
+        client_ref,
+        firm_id
       )
     `)
+    .eq('clients.firm_id', firmId)
     .limit(100)
 
   if (atrError) {

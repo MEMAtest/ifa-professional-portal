@@ -214,7 +214,7 @@ export default function AcceptInvitePage() {
             {invitation && (
               <div className="mt-2 text-gray-600">
                 <p>
-                  You've been invited to join <strong>{invitation.firmName}</strong>
+                  You&apos;ve been invited to join <strong>{invitation.firmName}</strong>
                 </p>
                 <p className="text-sm mt-1">
                   as a <span className="font-medium capitalize">{invitation.role}</span>

@@ -159,6 +159,8 @@ export async function POST(request: NextRequest) {
 
     const pdf = await generateClientDossierReportPDF(dossier, {
       firmName: reportContext.firmName,
+      fcaNumber: reportContext.firmFcaNumber || undefined,
+      logoUrl: reportContext.firmLogoUrl || undefined,
       primaryColor: reportContext.firmPrimaryColor || undefined,
       accentColor: reportContext.firmAccentColor || undefined,
       footerText: reportContext.firmFooterText || undefined

@@ -303,7 +303,7 @@ export function UserTable() {
               Pending Invitations
             </CardTitle>
             <CardDescription>
-              Users who have been invited but haven't joined yet
+              Users who have been invited but haven&apos;t joined yet
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -418,6 +418,7 @@ function UserRow({ user, canEdit, canDelete, onEdit, onDeactivate, onReactivate 
       <div className="flex items-center gap-4">
         <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
           {user.avatarUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img src={user.avatarUrl} alt={user.fullName} className="h-10 w-10 rounded-full" />
           ) : (
             <span className="text-sm font-medium text-gray-600">

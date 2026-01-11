@@ -2,62 +2,61 @@
 export const dynamic = 'force-dynamic'
 
 // src/app/api/assessments/route.ts
+// SECURITY: Fixed to use proper firm isolation
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/db'; // <-- ADD THIS IMPORT
-import type { TablesInsert } from '@/types/db'; // <-- ADD THIS IMPORT
+import type { Database } from '@/types/db';
+import type { TablesInsert } from '@/types/db';
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
-
-// Lazy initialization to prevent build-time errors
-let supabaseAdmin: ReturnType<typeof createClient<Database>> | null = null; // <-- Type the client
-
-function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing Supabase environment variables');
-    }
-    
-    supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceKey); // <-- Type the client
-  }
-  return supabaseAdmin;
-}
 
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // SECURITY: Require firm_id for multi-tenant isolation
+    const firmIdResult = requireFirmId(auth.context);
+    if (firmIdResult instanceof NextResponse) {
+      return firmIdResult;
+    }
+    const firmId = firmIdResult.firmId;
+
+    const supabase = await createServerClient();
     const body = await request.json();
-    
-    // Get the authenticated user from the request headers
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    
-    if (!token) {
+
+    const clientId = body.client_id || body.clientId;
+
+    if (!clientId) {
       return NextResponse.json(
-        { error: 'No authorization token' },
-        { status: 401 }
+        { error: 'client_id is required' },
+        { status: 400 }
       );
     }
 
-    // Get supabase client (lazy initialization)
-    const supabaseAdmin = getSupabaseAdmin();
+    // SECURITY: Verify the client belongs to the user's firm before creating assessment
+    const { data: client, error: clientError } = await supabase
+      .from('clients')
+      .select('id, firm_id')
+      .eq('id', clientId)
+      .eq('firm_id', firmId)
+      .single();
 
-    // Verify the user with the token
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (authError || !user) {
+    if (clientError || !client) {
+      log.warn('Assessment creation blocked - client not in user firm', { clientId, firmId });
       return NextResponse.json(
-        { error: 'Invalid authorization token' },
-        { status: 401 }
+        { error: 'Client not found or access denied' },
+        { status: 404 }
       );
     }
 
     // Build assessment data directly for insert
     const insertData = {
-      client_id: body.client_id || body.clientId,
-      advisor_id: user.id,
+      client_id: clientId,
+      advisor_id: auth.context.userId,
       assessment_data: body.assessment_data || body.assessmentData || {},
       status: body.status || 'draft',
       version: body.version || 1,
@@ -67,9 +66,9 @@ export async function POST(request: NextRequest) {
       ...(body.legacy_form_id || body.legacyFormId ? { legacy_form_id: body.legacy_form_id || body.legacyFormId } : {})
     };
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from('assessments')
-      .insert<TablesInsert<'assessments'>>([insertData]) // <-- FIXED: Added type argument
+      .insert([insertData])
       .select()
       .single();
 
@@ -81,8 +80,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data,
       message: 'Assessment saved successfully'
     });
@@ -98,25 +97,37 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require authentication
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // SECURITY: Require firm_id for multi-tenant isolation
+    const firmIdResult = requireFirmId(auth.context);
+    if (firmIdResult instanceof NextResponse) {
+      return firmIdResult;
+    }
+    const firmId = firmIdResult.firmId;
+
+    const supabase = await createServerClient();
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
     const assessmentId = searchParams.get('id');
-    const limitParam = searchParams.get('limit')
-    const limit = limitParam ? Math.min(50, Math.max(1, Number(limitParam))) : null
-
-    // Prefer a session-bound client for GET requests (avoids hard dependency on service role env vars)
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? Math.min(50, Math.max(1, Number(limitParam))) : null;
 
     // Build the query based on parameters
     if (assessmentId) {
+      // SECURITY: Join with clients to verify firm ownership
       const { data, error } = await supabase
         .from('assessments')
-        .select('*')
+        .select(`
+          *,
+          clients!inner(id, firm_id)
+        `)
         .eq('id', assessmentId)
+        .eq('clients.firm_id', firmId)
         .maybeSingle();
 
       if (error) {
@@ -127,22 +138,48 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      if (!data) {
+        return NextResponse.json(
+          { error: 'Assessment not found or access denied' },
+          { status: 404 }
+        );
+      }
+
+      // Remove the joined clients data from response
+      const { clients, ...assessmentData } = data as any;
+
       return NextResponse.json({
         success: true,
-        data
+        data: assessmentData
       });
     } else if (clientId) {
+      // SECURITY: First verify the client belongs to the user's firm
+      const { data: client, error: clientError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('id', clientId)
+        .eq('firm_id', firmId)
+        .single();
+
+      if (clientError || !client) {
+        log.warn('Assessment fetch blocked - client not in user firm', { clientId, firmId });
+        return NextResponse.json(
+          { error: 'Client not found or access denied' },
+          { status: 404 }
+        );
+      }
+
       let query = supabase
         .from('assessments')
         .select('*')
         .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (limit) {
-        query = query.limit(limit)
+        query = query.limit(limit);
       }
 
-      const { data, error } = await query
+      const { data, error } = await query;
 
       if (error) {
         log.error('Assessment fetch error by clientId', error, { clientId });

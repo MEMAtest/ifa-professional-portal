@@ -55,23 +55,28 @@ ALTER TABLE aml_client_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE aml_check_history ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for aml_client_status
+DROP POLICY IF EXISTS "Users can view AML status for their firm" ON aml_client_status;
 CREATE POLICY "Users can view AML status for their firm"
   ON aml_client_status FOR SELECT
   USING (true);
 
+DROP POLICY IF EXISTS "Users can insert AML status" ON aml_client_status;
 CREATE POLICY "Users can insert AML status"
   ON aml_client_status FOR INSERT
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users can update AML status" ON aml_client_status;
 CREATE POLICY "Users can update AML status"
   ON aml_client_status FOR UPDATE
   USING (true);
 
 -- RLS Policies for aml_check_history
+DROP POLICY IF EXISTS "Users can view AML history" ON aml_check_history;
 CREATE POLICY "Users can view AML history"
   ON aml_check_history FOR SELECT
   USING (true);
 
+DROP POLICY IF EXISTS "Users can insert AML history" ON aml_check_history;
 CREATE POLICY "Users can insert AML history"
   ON aml_check_history FOR INSERT
   WITH CHECK (true);

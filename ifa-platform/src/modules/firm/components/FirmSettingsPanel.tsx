@@ -273,6 +273,7 @@ export function FirmSettingsPanel() {
             </label>
             <div className="flex items-center gap-4">
               {firm?.settings?.branding?.logoUrl && (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={firm.settings.branding.logoUrl}
                   alt="Firm logo"

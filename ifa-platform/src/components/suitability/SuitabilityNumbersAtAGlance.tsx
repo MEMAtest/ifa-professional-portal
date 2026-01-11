@@ -50,9 +50,19 @@ export function SuitabilityNumbersAtAGlance(props: { formData: SuitabilityFormDa
   const [query, setQuery] = useState('')
   const [showBreakdown, setShowBreakdown] = useState(false)
 
-  const financial = (props.formData.financial_situation || {}) as any
-  const arrangements = (props.formData.existing_arrangements || {}) as any
-  const objectives = (props.formData.objectives || {}) as any
+  // Memoize these to prevent creating new object references on every render
+  const financial = useMemo(
+    () => (props.formData.financial_situation || {}) as any,
+    [props.formData.financial_situation]
+  )
+  const arrangements = useMemo(
+    () => (props.formData.existing_arrangements || {}) as any,
+    [props.formData.existing_arrangements]
+  )
+  const objectives = useMemo(
+    () => (props.formData.objectives || {}) as any,
+    [props.formData.objectives]
+  )
 
   const snapshot = useMemo(() => {
     const incomeBreakdown = [

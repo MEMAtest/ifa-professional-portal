@@ -1,9 +1,10 @@
 import { createClient } from "@/lib/supabase/server"
 // src/app/api/clients/route.ts
 // ✅ FIXED: Returns RAW database data, no transformation
+// ✅ FIXED: Firm isolation - filters by firm_id
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/auth/apiAuth';
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
 import { createRequestLogger } from '@/lib/logging/structured';
 
 // Force dynamic rendering
@@ -12,31 +13,38 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   // Verify authentication
   const auth = await getAuthContext(request);
-  if (!auth.success) {
-    return auth.response!;
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Require firm_id for multi-tenant isolation
+  const firmIdResult = requireFirmId(auth.context);
+  if (firmIdResult instanceof NextResponse) {
+    return firmIdResult;
   }
 
   const supabase = await createClient()
   const logger = createRequestLogger(request)
   try {
-    logger.info('GET /api/clients - Fetching clients');
-    
+    logger.info('GET /api/clients - Fetching clients', { firmId: firmIdResult.firmId });
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
-    
+
     // Get filter parameters
     const status = searchParams.getAll('status');
     const vulnerabilityStatus = searchParams.get('vulnerabilityStatus');
     const search = searchParams.get('search');
     const sortBy = searchParams.get('sortBy') || 'updated_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
-    
-    // Build query
+
+    // Build query - CRITICAL: Filter by firm_id for multi-tenant isolation
     let query = supabase
       .from('clients')
-      .select('*', { count: 'exact' });
+      .select('*', { count: 'exact' })
+      .eq('firm_id', firmIdResult.firmId);
     
     // Apply filters
     if (status.length > 0) {
@@ -102,19 +110,27 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   // Verify authentication
   const auth = await getAuthContext(request);
-  if (!auth.success) {
-    return auth.response!;
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Require firm_id for multi-tenant isolation
+  const firmIdResult = requireFirmId(auth.context);
+  if (firmIdResult instanceof NextResponse) {
+    return firmIdResult;
   }
 
   const supabase = await createClient()
   const logger = createRequestLogger(request)
   try {
-    logger.info('POST /api/clients - Creating new client');
-    
+    logger.info('POST /api/clients - Creating new client', { firmId: firmIdResult.firmId });
+
     const body = await request.json();
-    
+
     // Prepare data for database (already in snake_case from frontend)
+    // CRITICAL: Include firm_id for multi-tenant isolation
     const clientData = {
+      firm_id: firmIdResult.firmId, // ✅ SECURITY: Set firm_id from auth context
       client_ref: body.clientRef,
       personal_details: body.personalDetails,
       contact_info: body.contactInfo,
@@ -122,7 +138,7 @@ export async function POST(request: NextRequest) {
       vulnerability_assessment: body.vulnerabilityAssessment,
       risk_profile: body.riskProfile,
       status: body.status || 'prospect',
-      advisor_id: auth.context?.advisorId || auth.context?.userId, // Link to current advisor
+      advisor_id: auth.context.advisorId || auth.context.userId, // Link to current advisor
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

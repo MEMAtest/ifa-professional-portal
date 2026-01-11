@@ -48,7 +48,7 @@ export default function TermsPage() {
       <section>
         <h2 className="text-xl font-semibold text-gray-900 mb-3">Liability</h2>
         <p>
-          Plannetic is provided on an "as is" basis. We limit liability to the maximum extent permitted by law and do not accept
+          Plannetic is provided on an &quot;as is&quot; basis. We limit liability to the maximum extent permitted by law and do not accept
           liability for indirect or consequential loss. Full liability terms are provided in the contract agreed with your firm.
         </p>
       </section>

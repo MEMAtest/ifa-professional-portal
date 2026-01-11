@@ -24,24 +24,27 @@ const normalizeListValue = (value: unknown): string[] => {
 }
 
 export function ListField(props: FieldProps) {
+  // Destructure onChange to satisfy exhaustive-deps lint rule
+  const { onChange, value } = props
+
   const isRequired = Boolean(props.isRequired ?? props.field.required)
   const showHelp = Boolean(props.showHelp ?? props.field.helpText)
   const isDisabled = Boolean(props.isReadOnly || props.isLoading || props.field.calculate)
 
   const [items, setItems] = useState(() => {
-    const normalized = normalizeListValue(props.value)
+    const normalized = normalizeListValue(value)
     return normalized.length > 0 ? normalized : ['']
   })
 
   useEffect(() => {
-    const normalized = normalizeListValue(props.value)
+    const normalized = normalizeListValue(value)
     setItems(normalized.length > 0 ? normalized : [''])
-  }, [props.value])
+  }, [value])
 
   const updateValues = useCallback((nextValues: string[]) => {
     const cleaned = nextValues.map((item) => item.trim()).filter(Boolean)
-    props.onChange(cleaned)
-  }, [props.onChange])
+    onChange(cleaned)
+  }, [onChange])
 
   const handleChange = useCallback((index: number, nextValue: string) => {
     const nextValues = [...items]

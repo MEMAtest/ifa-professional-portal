@@ -7,15 +7,22 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   // Verify authentication
   const auth = await getAuthContext(request)
-  if (!auth.success) {
-    return auth.response!
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // SECURITY: Require firm_id for multi-tenant isolation
+  const firmIdResult = requireFirmId(auth.context)
+  if (firmIdResult instanceof NextResponse) {
+    return firmIdResult
+  }
+  const firmId = firmIdResult.firmId
 
   const supabase = await createClient()
 
@@ -38,10 +45,8 @@ export async function GET(request: NextRequest) {
     const statuses = searchParams.getAll('statuses')
     const compliance_statuses = searchParams.getAll('compliance_statuses')
 
-    // Get firm ID from auth context (optional). If absent, fall back to all.
-    const firmId = auth.context?.firmId
-
     // Build Supabase query with actual schema
+    // SECURITY: Always filter by firm_id for multi-tenant isolation
     let query = supabase
       .from('documents')
       .select(`
@@ -64,10 +69,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('is_archived', false)
-
-    if (firmId) {
-      query = query.eq('firm_id', firmId)
-    }
+      .eq('firm_id', firmId)
 
     // Apply filters based on your schema
     if (category_id) {
@@ -99,12 +101,10 @@ export async function GET(request: NextRequest) {
     }
     
     // Search across multiple fields
+    // SECURITY: Sanitize search input to prevent SQL injection
     if (search) {
-      query = query.or(`
-        name.ilike.%${search}%,
-        description.ilike.%${search}%,
-        file_name.ilike.%${search}%
-      `)
+      const sanitizedSearch = search.replace(/[%_\\,]/g, '\\$&')
+      query = query.or(`name.ilike.%${sanitizedSearch}%,description.ilike.%${sanitizedSearch}%,file_name.ilike.%${sanitizedSearch}%`)
     }
 
     // Apply sorting
@@ -112,13 +112,12 @@ export async function GET(request: NextRequest) {
     query = query.order(sort_by, { ascending })
 
     // Get total count for pagination
+    // SECURITY: Always filter by firm_id
     const { count } = await supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
       .eq('is_archived', false)
-    if (firmId) {
-      query = query.eq('firm_id', firmId)
-    }
+      .eq('firm_id', firmId)
 
     // Apply pagination
     const start = (page - 1) * limit
@@ -130,10 +129,12 @@ export async function GET(request: NextRequest) {
     let docs = documents
     if (error) {
       log.warn('Primary documents query failed, falling back to minimal select', { error: error.message })
+      // SECURITY: Fallback query still requires firm_id filter
       const { data: fallbackDocs, error: fallbackError } = await supabase
         .from('documents')
         .select('*')
         .eq('is_archived', false)
+        .eq('firm_id', firmId)
         .range(start, start + limit - 1)
         .order(sort_by, { ascending })
 
@@ -144,38 +145,10 @@ export async function GET(request: NextRequest) {
       docs = fallbackDocs
     }
 
-    // If firm filter was applied and returned nothing, retry without firm filter
-    if ((docs || []).length === 0 && firmId) {
-      const { data: retryDocs, error: retryError } = await supabase
-        .from('documents')
-        .select(`
-          *,
-          document_categories(
-            id,
-            name,
-            description,
-            requires_signature,
-            compliance_level,
-            template_available,
-            created_at,
-            updated_at
-          ),
-          clients(
-            id,
-            client_ref,
-            personal_details,
-            contact_info
-          )
-        `)
-        .eq('is_archived', false)
-        .range(start, start + limit - 1)
-        .order(sort_by, { ascending })
-      if (!retryError && retryDocs) {
-        docs = retryDocs
-      }
-    }
+    // SECURITY: Removed bypass logic that would retry without firm filter
+    // Empty results are valid - the firm simply has no documents
 
-    // ✅ REAL: Transform your database structure to match frontend expectations
+    // Transform database structure to match frontend expectations
     const transformedDocuments = (docs || []).map((doc: any) => ({
       id: doc.id,
       name: doc.name,

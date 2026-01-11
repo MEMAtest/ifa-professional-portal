@@ -20,14 +20,15 @@ export function SelectField(props: FieldProps) {
   const allowCustom = Boolean((props.field as any).allowCustom)
   const customOptionLabel = (props.field as any).customOptionLabel || 'Add custom...'
   const valueString = typeof props.value === 'string' ? props.value : ''
-  const baseOptions = props.field.options || []
-  const isCustomValue = allowCustom && valueString && !baseOptions.includes(valueString)
   const [customSelected, setCustomSelected] = useState(false)
   const [customValue, setCustomValue] = useState('')
 
+  // Memoize options to prevent new array reference on every render
   const options = useMemo(() => {
-    return baseOptions
-  }, [baseOptions])
+    return props.field.options || []
+  }, [props.field.options])
+
+  const isCustomValue = allowCustom && valueString && !options.includes(valueString)
 
   useEffect(() => {
     if (!allowCustom) {

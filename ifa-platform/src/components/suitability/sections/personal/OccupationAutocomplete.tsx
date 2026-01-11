@@ -117,6 +117,7 @@ export const OccupationAutocomplete = ({
       <input
         id={id}
         type="text"
+        role="combobox"
         ref={inputRef}
         value={value}
         onChange={(e) => {
@@ -142,6 +143,7 @@ export const OccupationAutocomplete = ({
         aria-describedby={ariaDescribedBy}
         aria-autocomplete="list"
         aria-expanded={isOpen}
+        aria-controls={`${id}-listbox`}
         autoComplete="off"
         inputMode="text"
         autoCapitalize="words"
@@ -160,6 +162,8 @@ export const OccupationAutocomplete = ({
         typeof document !== 'undefined' &&
         createPortal(
           <div
+            id={`${id}-listbox`}
+            role="listbox"
             className="z-[9999] overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg"
             style={{ position: 'fixed', left: menuRect.left, top: menuRect.top, width: menuRect.width }}
           >

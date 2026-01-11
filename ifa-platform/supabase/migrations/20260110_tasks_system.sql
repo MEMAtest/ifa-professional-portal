@@ -7,6 +7,97 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
+-- PRE-FIX: Add missing columns if table exists
+-- ============================================
+DO $$
+BEGIN
+    -- Add all potentially missing columns to tasks table
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tasks') THEN
+        -- Core columns
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'firm_id') THEN
+            ALTER TABLE tasks ADD COLUMN firm_id UUID REFERENCES firms(id) ON DELETE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'title') THEN
+            ALTER TABLE tasks ADD COLUMN title TEXT NOT NULL DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'description') THEN
+            ALTER TABLE tasks ADD COLUMN description TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'type') THEN
+            ALTER TABLE tasks ADD COLUMN type TEXT NOT NULL DEFAULT 'general';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'status') THEN
+            ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'pending';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'priority') THEN
+            ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium';
+        END IF;
+
+        -- Assignment columns
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'assigned_to') THEN
+            ALTER TABLE tasks ADD COLUMN assigned_to UUID REFERENCES profiles(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'assigned_by') THEN
+            ALTER TABLE tasks ADD COLUMN assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
+        END IF;
+
+        -- Relationship columns
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'client_id') THEN
+            ALTER TABLE tasks ADD COLUMN client_id UUID REFERENCES clients(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'assessment_id') THEN
+            ALTER TABLE tasks ADD COLUMN assessment_id UUID REFERENCES suitability_assessments(id) ON DELETE SET NULL;
+        END IF;
+
+        -- Date columns
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'due_date') THEN
+            ALTER TABLE tasks ADD COLUMN due_date TIMESTAMPTZ;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'completed_at') THEN
+            ALTER TABLE tasks ADD COLUMN completed_at TIMESTAMPTZ;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'completed_by') THEN
+            ALTER TABLE tasks ADD COLUMN completed_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
+        END IF;
+
+        -- Workflow columns
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'requires_sign_off') THEN
+            ALTER TABLE tasks ADD COLUMN requires_sign_off BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'signed_off_by') THEN
+            ALTER TABLE tasks ADD COLUMN signed_off_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'signed_off_at') THEN
+            ALTER TABLE tasks ADD COLUMN signed_off_at TIMESTAMPTZ;
+        END IF;
+
+        -- Recurrence columns
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'is_recurring') THEN
+            ALTER TABLE tasks ADD COLUMN is_recurring BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'recurrence_rule') THEN
+            ALTER TABLE tasks ADD COLUMN recurrence_rule TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'parent_task_id') THEN
+            ALTER TABLE tasks ADD COLUMN parent_task_id UUID REFERENCES tasks(id) ON DELETE SET NULL;
+        END IF;
+
+        -- Metadata
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'metadata') THEN
+            ALTER TABLE tasks ADD COLUMN metadata JSONB NOT NULL DEFAULT '{}';
+        END IF;
+
+        -- Timestamps
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'created_at') THEN
+            ALTER TABLE tasks ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'updated_at') THEN
+            ALTER TABLE tasks ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+        END IF;
+    END IF;
+END $$;
+
+-- ============================================
 -- TASKS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS tasks (
@@ -185,7 +276,6 @@ SELECT
   c.client_ref,
   p_assigned.first_name as assigned_to_first_name,
   p_assigned.last_name as assigned_to_last_name,
-  p_assigned.email as assigned_to_email,
   p_assigner.first_name as assigned_by_first_name,
   p_assigner.last_name as assigned_by_last_name,
   (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id) as comment_count
