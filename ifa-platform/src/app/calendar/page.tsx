@@ -4,12 +4,12 @@
 'use client'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  Calendar, 
-  Plus, 
-  Clock, 
-  User, 
-  MapPin, 
+import {
+  Calendar,
+  Plus,
+  Clock,
+  User,
+  MapPin,
   FileText,
   ChevronLeft,
   ChevronRight,
@@ -21,10 +21,14 @@ import {
   Users,
   Shield,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  CheckSquare,
+  CircleDot
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client' // FIXED IMPORT
 import { useToast } from '@/hooks/use-toast'
+import { TASK_TYPE_LABELS, TASK_PRIORITY_LABELS, TASK_PRIORITY_COLORS } from '@/modules/tasks'
+import type { TaskWithDetails } from '@/modules/tasks'
 
 // Meeting types with hex colors
 const meetingTypes = [
@@ -43,6 +47,14 @@ const reviewTypes = [
   { value: 'ad_hoc', label: 'Ad Hoc Review', icon: FileText, color: 'bg-purple-500', hex: '#8B5CF6' }
 ]
 
+// Task priority colors for calendar display
+const taskPriorityColors = {
+  urgent: '#DC2626',    // red-600
+  high: '#EA580C',      // orange-600
+  medium: '#CA8A04',    // yellow-600
+  low: '#16A34A',       // green-600
+}
+
 interface CalendarEvent {
   id: string
   title: string
@@ -54,11 +66,15 @@ interface CalendarEvent {
   location: string
   notes: string
   duration: number
-  eventType?: string
+  eventType?: string // 'meeting' | 'review' | 'task'
   color?: string
   status?: string
   relatedEntityType?: string
   relatedEntityId?: string
+  // Task-specific properties
+  taskPriority?: 'low' | 'medium' | 'high' | 'urgent'
+  taskStatus?: string
+  taskType?: string
 }
 
 interface Client {
@@ -124,6 +140,8 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [tasks, setTasks] = useState<CalendarEvent[]>([])
+  const [showTasks, setShowTasks] = useState(true)
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showMeetingModal, setShowMeetingModal] = useState(false)
@@ -270,12 +288,76 @@ export default function CalendarPage() {
 	    }
 	  }, [supabase])
 
+  // Load tasks with due dates for the current month
+  const loadTasks = useCallback(async () => {
+    // Get date range for the current month view (with buffer for previous/next month overflow)
+    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), -7)
+    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 7)
+
+    try {
+      // Use server-side date filtering for efficiency
+      const response = await fetch(
+        `/api/tasks?` + new URLSearchParams({
+          sortBy: 'due_date',
+          sortOrder: 'asc',
+          perPage: '500',
+          dueAfter: startDate.toISOString(),
+          dueBefore: endDate.toISOString(),
+          status: 'pending,in_progress', // Exclude completed and cancelled
+        })
+      )
+
+      if (!response.ok) {
+        console.error('Failed to fetch tasks')
+        return
+      }
+
+      const data = await response.json()
+      // Tasks are already filtered by date range and status on the server
+      const tasksWithDueDates = (data.tasks || []).filter((task: any) => task.dueDate)
+
+      // Convert tasks to CalendarEvent format
+      const taskEvents: CalendarEvent[] = tasksWithDueDates.map((task: any) => {
+        const dueDate = new Date(task.dueDate)
+        const priority = task.priority as 'low' | 'medium' | 'high' | 'urgent'
+
+        return {
+          id: task.id,
+          title: task.title,
+          date: dueDate.toISOString().split('T')[0],
+          time: dueDate.toTimeString().slice(0, 5) || '09:00',
+          clientId: task.clientId || '',
+          clientName: task.clientFirstName && task.clientLastName
+            ? `${task.clientFirstName} ${task.clientLastName}`.trim()
+            : task.clientRef || 'No client',
+          type: task.type || 'general',
+          location: '',
+          notes: task.description || '',
+          duration: 30, // Default duration for tasks
+          eventType: 'task',
+          color: taskPriorityColors[priority] || taskPriorityColors.medium,
+          status: task.status,
+          relatedEntityType: 'task',
+          relatedEntityId: task.id,
+          taskPriority: priority,
+          taskStatus: task.status,
+          taskType: task.type,
+        }
+      })
+
+      setTasks(taskEvents)
+    } catch (error) {
+      console.error('Error loading tasks:', error)
+    }
+  }, [currentDate])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
       await Promise.all([
         loadEvents(),
-        loadClients()
+        loadClients(),
+        loadTasks()
       ])
     } catch (error) {
       console.error('Error loading data:', error)
@@ -287,7 +369,7 @@ export default function CalendarPage() {
     } finally {
       setLoading(false)
     }
-  }, [loadClients, loadEvents, toast])
+  }, [loadClients, loadEvents, loadTasks, toast])
 
   // Initial load - runs once on mount
   useEffect(() => {
@@ -346,7 +428,9 @@ export default function CalendarPage() {
   // Event functions
   const getEventsForDate = (date: Date) => {
     const dateStr = date.toISOString().split('T')[0]
-    return events.filter(e => e.date === dateStr)
+    const calendarEvents = events.filter(e => e.date === dateStr)
+    const taskEvents = showTasks ? tasks.filter(t => t.date === dateStr) : []
+    return [...calendarEvents, ...taskEvents].sort((a, b) => a.time.localeCompare(b.time))
   }
 
   const handleDateClick = (date: Date) => {
@@ -370,6 +454,12 @@ export default function CalendarPage() {
   }
 
   const handleEditEvent = (event: CalendarEvent) => {
+    // If it's a task event, navigate to the tasks page
+    if (event.eventType === 'task' && event.relatedEntityId) {
+      router.push(`/tasks?taskId=${event.relatedEntityId}`)
+      return
+    }
+
     // If it's a review event, navigate to the review tab on client page
     if (event.eventType === 'review' && event.relatedEntityId) {
       router.push(`/clients/${event.clientId}?tab=reviews`)
@@ -508,8 +598,21 @@ export default function CalendarPage() {
     }
   }
 
-  // Get event type config (for both meetings and reviews)
+  // Get event type config (for meetings, reviews, and tasks)
   const getEventTypeConfig = (event: CalendarEvent) => {
+    // For task events
+    if (event.eventType === 'task') {
+      const priority = event.taskPriority || 'medium'
+      const priorityLabel = TASK_PRIORITY_LABELS[priority] || 'Medium'
+      const typeLabel = event.taskType ? (TASK_TYPE_LABELS[event.taskType as keyof typeof TASK_TYPE_LABELS] || 'Task') : 'Task'
+      return {
+        label: `${typeLabel} (${priorityLabel})`,
+        icon: CheckSquare,
+        color: `bg-${priority === 'urgent' ? 'red' : priority === 'high' ? 'orange' : priority === 'low' ? 'green' : 'yellow'}-500`,
+        hex: taskPriorityColors[priority] || taskPriorityColors.medium
+      }
+    }
+
     // For review events, try to determine the subtype from the title
     if (event.eventType === 'review') {
       if (event.title.includes('Annual')) {
@@ -523,8 +626,8 @@ export default function CalendarPage() {
       }
       return { label: 'Review', icon: FileText, color: 'bg-gray-500', hex: '#6B7280' };
     }
-    
-    return meetingTypes.find(t => t.value === event.type) || 
+
+    return meetingTypes.find(t => t.value === event.type) ||
       { label: 'Meeting', icon: Users, color: 'bg-gray-500', hex: '#6B7280' };
   };
 
@@ -532,22 +635,35 @@ export default function CalendarPage() {
   const getTooltipContent = (event: CalendarEvent) => {
     const config = getEventTypeConfig(event);
     let content = `${event.title}\n`;
+
+    // For tasks, show priority and status
+    if (event.eventType === 'task') {
+      const priorityLabel = event.taskPriority ? (TASK_PRIORITY_LABELS[event.taskPriority] || event.taskPriority) : 'Medium'
+      content += `Priority: ${priorityLabel}\n`;
+      content += `Status: ${event.taskStatus || 'Pending'}\n`;
+      if (event.notes) {
+        content += `Description: ${event.notes.substring(0, 100)}${event.notes.length > 100 ? '...' : ''}\n`;
+      }
+      content += 'Click to view task details';
+      return content;
+    }
+
     content += `Time: ${event.time} (${event.duration} min)\n`;
-    
+
     if (event.notes) {
       // Extract next review date if present
       const nextReviewMatch = event.notes.match(/Next Review: (.+)/);
       if (nextReviewMatch) {
         content += `Next Review: ${nextReviewMatch[1]}\n`;
       }
-      
+
       // Add other notes
       const cleanNotes = event.notes.replace(/Next Review: .+\n?/, '');
       if (cleanNotes.trim()) {
         content += `Notes: ${cleanNotes.trim()}\n`;
       }
     }
-    
+
     content += event.eventType === 'review' ? 'Click to view review details' : 'Click to edit';
     return content;
   };
@@ -635,13 +751,15 @@ export default function CalendarPage() {
                       {dayEvents.slice(0, 3).map((event, i) => {
                         const config = getEventTypeConfig(event)
                         const tooltipContent = getTooltipContent(event)
-                        
+                        const isTask = event.eventType === 'task'
+
                         return (
                           <div
                             key={i}
                             className={`
                               text-xs p-1 rounded truncate text-white cursor-pointer event-tooltip
                               ${event.eventType === 'review' ? 'font-semibold' : ''}
+                              ${isTask ? 'flex items-center gap-1' : ''}
                             `}
                             style={{ backgroundColor: event.color || config.hex || '#6B7280' }}
                             onClick={(e) => {
@@ -649,7 +767,14 @@ export default function CalendarPage() {
                               handleEditEvent(event)
                             }}
                           >
-                            {event.time} - {event.clientName}
+                            {isTask ? (
+                              <>
+                                <CheckSquare className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">{event.title}</span>
+                              </>
+                            ) : (
+                              <>{event.time} - {event.clientName}</>
+                            )}
                             <div className="event-tooltip-content">
                               {tooltipContent.split('\n').map((line, idx) => (
                                 <div key={idx}>{line}</div>
@@ -704,51 +829,89 @@ export default function CalendarPage() {
                   selectedDateEvents.map(event => {
                     const config = getEventTypeConfig(event)
                     const Icon = config.icon
-                    
+                    const isTask = event.eventType === 'task'
+
                     return (
                       <div
                         key={event.id}
-                        className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                        className={`border rounded-lg p-3 hover:bg-gray-50 cursor-pointer transition-colors ${isTask ? 'border-l-4' : ''}`}
+                        style={isTask ? { borderLeftColor: event.color || config.hex } : {}}
                         onClick={() => handleEditEvent(event)}
                       >
                         <div className="flex items-start space-x-3">
-                          <div 
+                          <div
                             className={`p-2 rounded-lg`}
                             style={{ backgroundColor: event.color || config.hex || '#6B7280' }}
                           >
                             <Icon className="h-4 w-4 text-white" />
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium">{event.clientName}</h4>
-                              <span className="text-sm text-gray-500">
-                                {event.time} ({event.duration} min)
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {config.label}
-                            </p>
-                            {event.notes && (
-                              <div className="text-sm text-gray-600 mt-2">
-                                {event.notes.split('\n').map((line, idx) => {
-                                  if (line.startsWith('Next Review:')) {
-                                    return (
-                                      <p key={idx} className="font-medium text-blue-600">
-                                        {line}
-                                      </p>
-                                    );
-                                  }
-                                  return line.trim() ? (
-                                    <p key={idx} className="italic">&quot;{line.trim()}&quot;</p>
-                                  ) : null;
-                                })}
-                              </div>
-                            )}
-                            {event.eventType === 'review' && (
-                              <div className="mt-2 flex items-center text-xs text-blue-600">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Click to view review details
-                              </div>
+                            {isTask ? (
+                              // Task display
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-medium">{event.title}</h4>
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    event.taskStatus === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                    event.taskStatus === 'pending' ? 'bg-gray-100 text-gray-700' :
+                                    'bg-green-100 text-green-700'
+                                  }`}>
+                                    {event.taskStatus || 'pending'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {config.label}
+                                </p>
+                                {event.clientName && event.clientName !== 'No client' && (
+                                  <p className="text-sm text-gray-500 mt-1">
+                                    Client: {event.clientName}
+                                  </p>
+                                )}
+                                {event.notes && (
+                                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                                    {event.notes}
+                                  </p>
+                                )}
+                                <div className="mt-2 flex items-center text-xs text-blue-600">
+                                  <CheckSquare className="h-3 w-3 mr-1" />
+                                  Click to view task details
+                                </div>
+                              </>
+                            ) : (
+                              // Meeting/Review display
+                              <>
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-medium">{event.clientName}</h4>
+                                  <span className="text-sm text-gray-500">
+                                    {event.time} ({event.duration} min)
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {config.label}
+                                </p>
+                                {event.notes && (
+                                  <div className="text-sm text-gray-600 mt-2">
+                                    {event.notes.split('\n').map((line, idx) => {
+                                      if (line.startsWith('Next Review:')) {
+                                        return (
+                                          <p key={idx} className="font-medium text-blue-600">
+                                            {line}
+                                          </p>
+                                        );
+                                      }
+                                      return line.trim() ? (
+                                        <p key={idx} className="italic">&quot;{line.trim()}&quot;</p>
+                                      ) : null;
+                                    })}
+                                  </div>
+                                )}
+                                {event.eventType === 'review' && (
+                                  <div className="mt-2 flex items-center text-xs text-blue-600">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    Click to view review details
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -766,7 +929,7 @@ export default function CalendarPage() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Events</span>
-                <span className="font-medium">{events.length}</span>
+                <span className="font-medium">{events.length + (showTasks ? tasks.length : 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Client Reviews</span>
@@ -778,6 +941,12 @@ export default function CalendarPage() {
                 <span className="text-gray-600">Meetings</span>
                 <span className="font-medium">
                   {events.filter(e => e.eventType !== 'review').length}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Tasks Due</span>
+                <span className="font-medium text-amber-600">
+                  {tasks.length}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -793,11 +962,41 @@ export default function CalendarPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <h3 className="font-semibold mb-3">Event Types</h3>
             <div className="space-y-2">
-              <div className="text-sm font-medium text-gray-700 mb-1">Reviews</div>
+              {/* Tasks section with toggle */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-sm font-medium text-gray-700">Tasks</div>
+                <button
+                  onClick={() => setShowTasks(!showTasks)}
+                  className={`text-xs px-2 py-1 rounded ${showTasks ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
+                >
+                  {showTasks ? 'Showing' : 'Hidden'}
+                </button>
+              </div>
+              {showTasks && (
+                <>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: taskPriorityColors.urgent }}></div>
+                    <span>Urgent Priority</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: taskPriorityColors.high }}></div>
+                    <span>High Priority</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: taskPriorityColors.medium }}></div>
+                    <span>Medium Priority</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm">
+                    <div className="w-4 h-4 rounded" style={{ backgroundColor: taskPriorityColors.low }}></div>
+                    <span>Low Priority</span>
+                  </div>
+                </>
+              )}
+              <div className="text-sm font-medium text-gray-700 mb-1 mt-3">Reviews</div>
               {reviewTypes.map(type => (
                 <div key={type.value} className="flex items-center space-x-2 text-sm">
-                  <div 
-                    className="w-4 h-4 rounded" 
+                  <div
+                    className="w-4 h-4 rounded"
                     style={{ backgroundColor: type.hex }}
                   ></div>
                   <span>{type.label}</span>
@@ -806,8 +1005,8 @@ export default function CalendarPage() {
               <div className="text-sm font-medium text-gray-700 mb-1 mt-3">Meetings</div>
               {meetingTypes.map(type => (
                 <div key={type.value} className="flex items-center space-x-2 text-sm">
-                  <div 
-                    className="w-4 h-4 rounded" 
+                  <div
+                    className="w-4 h-4 rounded"
                     style={{ backgroundColor: type.hex }}
                   ></div>
                   <span>{type.label}</span>

@@ -1,14 +1,15 @@
 // src/lib/pdf-templates/assessment-letter.tsx
 import React from 'react'
-import { 
-  Document, 
-  Page, 
-  Text, 
-  View, 
+import {
+  Document,
+  Page,
+  Text,
+  View,
   StyleSheet,
   Svg,
   Rect,
-  Line
+  Line,
+  Image
 } from '@react-pdf/renderer'
 
 // Define types for the component props
@@ -56,140 +57,194 @@ interface Assessment {
   vulnerability_factors?: string[]
 }
 
+/**
+ * Branding configuration for assessment letters
+ */
+export interface AssessmentLetterBranding {
+  firmName: string
+  firmAddress?: string
+  firmPhone?: string
+  firmEmail?: string
+  fcaNumber?: string
+  logoUrl?: string
+  primaryColor?: string
+  accentColor?: string
+  footerText?: string
+  advisorName?: string
+  advisorTitle?: string
+  advisorPhone?: string
+  advisorEmail?: string
+}
+
 interface AssessmentLetterProps {
   assessment: Assessment
   client: Client
   assessmentType: string
+  branding?: AssessmentLetterBranding
 }
 
-// Create styles
-const styles = StyleSheet.create({
-  page: {
-    padding: 40,
-    fontSize: 11,
-    lineHeight: 1.6,
-    fontFamily: 'Helvetica',
-    color: '#333333'
-  },
-  letterhead: {
-    marginBottom: 30,
-    paddingBottom: 15,
-    borderBottom: '2pt solid #002147'
-  },
-  companyName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    color: '#002147'
-  },
-  companyDetails: {
-    fontSize: 10,
-    color: '#666666',
-    marginBottom: 2
-  },
-  date: {
-    marginBottom: 20,
-    fontSize: 11,
-    color: '#333333'
-  },
-  recipientSection: {
-    marginBottom: 20
-  },
-  recipientName: {
-    fontSize: 11,
-    marginBottom: 2,
-    color: '#333333'
-  },
-  recipientAddress: {
-    fontSize: 11,
-    color: '#333333',
-    marginBottom: 1
-  },
-  salutation: {
-    marginBottom: 15,
-    fontSize: 11,
-    color: '#333333'
-  },
-  subject: {
-    marginBottom: 20,
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#002147',
-    textDecoration: 'underline'
-  },
-  bodyText: {
-    fontSize: 11,
-    marginBottom: 12,
-    textAlign: 'justify',
-    lineHeight: 1.6,
-    color: '#333333'
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 12,
-    color: '#002147'
-  },
-  bulletPoint: {
-    fontSize: 11,
-    marginLeft: 20,
-    marginBottom: 6,
-    color: '#333333'
-  },
-  riskBox: {
-    marginTop: 15,
-    marginBottom: 15,
-    padding: 15,
-    backgroundColor: '#f8f9fa',
-    border: '1pt solid #dee2e6'
-  },
-  riskScore: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 5,
-    color: '#002147'
-  },
-  riskCategory: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 5
-  },
-  chartContainer: {
-    marginTop: 15,
-    marginBottom: 15,
-    height: 80
-  },
-  signatureSection: {
-    marginTop: 40
-  },
-  signatureText: {
-    fontSize: 11,
-    marginBottom: 3,
-    color: '#333333'
-  },
-  signatureName: {
-    fontSize: 11,
-    marginTop: 30,
-    fontWeight: 'bold',
-    color: '#333333'
-  },
-  signatureTitle: {
-    fontSize: 11,
-    color: '#666666'
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 40,
-    right: 40,
-    fontSize: 9,
-    color: '#666666',
-    textAlign: 'center',
-    borderTop: '1pt solid #dee2e6',
-    paddingTop: 10
-  }
-})
+// Default branding values
+const DEFAULT_BRANDING: Required<Omit<AssessmentLetterBranding, 'logoUrl' | 'advisorPhone' | 'advisorEmail'>> = {
+  firmName: 'Financial Advisory Services',
+  firmAddress: '',
+  firmPhone: '',
+  firmEmail: '',
+  fcaNumber: '',
+  primaryColor: '#1e3a5f',
+  accentColor: '#2563eb',
+  footerText: 'This document is confidential and intended solely for the addressee.',
+  advisorName: 'Financial Advisor',
+  advisorTitle: 'Senior Financial Consultant'
+}
+
+/**
+ * Validate hex color format
+ */
+const isValidHexColor = (color?: string): boolean => {
+  if (!color || typeof color !== 'string') return false
+  return /^#[0-9A-Fa-f]{6}$/.test(color.trim())
+}
+
+// Create dynamic styles based on branding
+const createStyles = (branding: AssessmentLetterBranding) => {
+  // Validate color - use default if invalid
+  const primaryColor = isValidHexColor(branding.primaryColor)
+    ? branding.primaryColor!
+    : DEFAULT_BRANDING.primaryColor
+
+  return StyleSheet.create({
+    page: {
+      padding: 40,
+      fontSize: 11,
+      lineHeight: 1.6,
+      fontFamily: 'Helvetica',
+      color: '#333333'
+    },
+    letterhead: {
+      marginBottom: 30,
+      paddingBottom: 15,
+      borderBottom: `2pt solid ${primaryColor}`
+    },
+    companyLogo: {
+      maxWidth: 180,
+      maxHeight: 50,
+      marginBottom: 10
+    },
+    companyName: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 5,
+      color: primaryColor
+    },
+    companyDetails: {
+      fontSize: 10,
+      color: '#666666',
+      marginBottom: 2
+    },
+    date: {
+      marginBottom: 20,
+      fontSize: 11,
+      color: '#333333'
+    },
+    recipientSection: {
+      marginBottom: 20
+    },
+    recipientName: {
+      fontSize: 11,
+      marginBottom: 2,
+      color: '#333333'
+    },
+    recipientAddress: {
+      fontSize: 11,
+      color: '#333333',
+      marginBottom: 1
+    },
+    salutation: {
+      marginBottom: 15,
+      fontSize: 11,
+      color: '#333333'
+    },
+    subject: {
+      marginBottom: 20,
+      fontSize: 12,
+      fontWeight: 'bold',
+      color: primaryColor,
+      textDecoration: 'underline'
+    },
+    bodyText: {
+      fontSize: 11,
+      marginBottom: 12,
+      textAlign: 'justify',
+      lineHeight: 1.6,
+      color: '#333333'
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: 'bold',
+      marginTop: 20,
+      marginBottom: 12,
+      color: primaryColor
+    },
+    bulletPoint: {
+      fontSize: 11,
+      marginLeft: 20,
+      marginBottom: 6,
+      color: '#333333'
+    },
+    riskBox: {
+      marginTop: 15,
+      marginBottom: 15,
+      padding: 15,
+      backgroundColor: '#f8f9fa',
+      border: '1pt solid #dee2e6'
+    },
+    riskScore: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      marginBottom: 5,
+      color: primaryColor
+    },
+    riskCategory: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      marginBottom: 5
+    },
+    chartContainer: {
+      marginTop: 15,
+      marginBottom: 15,
+      height: 80
+    },
+    signatureSection: {
+      marginTop: 40
+    },
+    signatureText: {
+      fontSize: 11,
+      marginBottom: 3,
+      color: '#333333'
+    },
+    signatureName: {
+      fontSize: 11,
+      marginTop: 30,
+      fontWeight: 'bold',
+      color: '#333333'
+    },
+    signatureTitle: {
+      fontSize: 11,
+      color: '#666666'
+    },
+    footer: {
+      position: 'absolute',
+      bottom: 30,
+      left: 40,
+      right: 40,
+      fontSize: 9,
+      color: '#666666',
+      textAlign: 'center',
+      borderTop: '1pt solid #dee2e6',
+      paddingTop: 10
+    }
+  })
+}
 
 // Helper function to format date
 const formatDate = (dateString?: string): string => {
@@ -266,12 +321,48 @@ const RiskChart = ({ score, maxScore = 100 }: { score: number; maxScore?: number
   )
 }
 
+/**
+ * Validate URL is safe for rendering (https only)
+ */
+const isValidLogoUrl = (url?: string): boolean => {
+  if (!url || typeof url !== 'string') return false
+  const trimmed = url.trim()
+  if (!trimmed.startsWith('https://')) return false
+  try {
+    new URL(trimmed)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Main PDF component
-export const AssessmentLetter: React.FC<AssessmentLetterProps> = ({ 
-  assessment, 
-  client, 
-  assessmentType 
+export const AssessmentLetter: React.FC<AssessmentLetterProps> = ({
+  assessment,
+  client,
+  assessmentType,
+  branding = {}
 }) => {
+  // Merge branding with defaults
+  const effectiveBranding: AssessmentLetterBranding = {
+    firmName: branding.firmName || DEFAULT_BRANDING.firmName,
+    firmAddress: branding.firmAddress || DEFAULT_BRANDING.firmAddress,
+    firmPhone: branding.firmPhone || DEFAULT_BRANDING.firmPhone,
+    firmEmail: branding.firmEmail || DEFAULT_BRANDING.firmEmail,
+    fcaNumber: branding.fcaNumber || DEFAULT_BRANDING.fcaNumber,
+    logoUrl: isValidLogoUrl(branding.logoUrl) ? branding.logoUrl : undefined,
+    primaryColor: branding.primaryColor || DEFAULT_BRANDING.primaryColor,
+    accentColor: branding.accentColor || DEFAULT_BRANDING.accentColor,
+    footerText: branding.footerText || DEFAULT_BRANDING.footerText,
+    advisorName: branding.advisorName || DEFAULT_BRANDING.advisorName,
+    advisorTitle: branding.advisorTitle || DEFAULT_BRANDING.advisorTitle,
+    advisorPhone: branding.advisorPhone,
+    advisorEmail: branding.advisorEmail
+  }
+
+  // Create styles based on branding
+  const styles = createStyles(effectiveBranding)
+
   // Extract client details
   const clientTitle = client.personal_details?.title || ''
   const clientFirstName = client.personal_details?.firstName || ''
@@ -349,10 +440,24 @@ export const AssessmentLetter: React.FC<AssessmentLetterProps> = ({
       <Page size="A4" style={styles.page}>
         {/* Letterhead */}
         <View style={styles.letterhead}>
-          <Text style={styles.companyName}>Professional Financial Advisory Services</Text>
-          <Text style={styles.companyDetails}>123 Financial Street, London, EC1A 1BB</Text>
-          <Text style={styles.companyDetails}>Tel: 020 7946 0000 | Email: info@advisory.co.uk</Text>
-          <Text style={styles.companyDetails}>FCA Registration Number: 123456</Text>
+          {effectiveBranding.logoUrl && (
+            <Image src={effectiveBranding.logoUrl} style={styles.companyLogo} />
+          )}
+          <Text style={styles.companyName}>{effectiveBranding.firmName}</Text>
+          {effectiveBranding.firmAddress && (
+            <Text style={styles.companyDetails}>{effectiveBranding.firmAddress}</Text>
+          )}
+          {(effectiveBranding.firmPhone || effectiveBranding.firmEmail) && (
+            <Text style={styles.companyDetails}>
+              {[
+                effectiveBranding.firmPhone ? `Tel: ${effectiveBranding.firmPhone}` : '',
+                effectiveBranding.firmEmail ? `Email: ${effectiveBranding.firmEmail}` : ''
+              ].filter(Boolean).join(' | ')}
+            </Text>
+          )}
+          {effectiveBranding.fcaNumber && (
+            <Text style={styles.companyDetails}>FCA Registration Number: {effectiveBranding.fcaNumber}</Text>
+          )}
         </View>
 
         {/* Date */}
@@ -452,17 +557,24 @@ export const AssessmentLetter: React.FC<AssessmentLetterProps> = ({
         {/* Signature */}
         <View style={styles.signatureSection}>
           <Text style={styles.signatureText}>Yours sincerely,</Text>
-          <Text style={styles.signatureName}>Professional Advisor</Text>
-          <Text style={styles.signatureTitle}>Senior Financial Consultant</Text>
-          <Text style={styles.signatureTitle}>Direct: 020 7946 0001</Text>
-          <Text style={styles.signatureTitle}>Email: advisor@advisory.co.uk</Text>
+          <Text style={styles.signatureName}>{effectiveBranding.advisorName}</Text>
+          {effectiveBranding.advisorTitle && (
+            <Text style={styles.signatureTitle}>{effectiveBranding.advisorTitle}</Text>
+          )}
+          {effectiveBranding.advisorPhone && (
+            <Text style={styles.signatureTitle}>Direct: {effectiveBranding.advisorPhone}</Text>
+          )}
+          {effectiveBranding.advisorEmail && (
+            <Text style={styles.signatureTitle}>Email: {effectiveBranding.advisorEmail}</Text>
+          )}
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
           <Text>
-            This document is confidential and intended solely for the addressee. 
-            Regulated by the Financial Conduct Authority.
+            {effectiveBranding.footerText}
+            {effectiveBranding.fcaNumber && ` Regulated by the Financial Conduct Authority (${effectiveBranding.fcaNumber}).`}
+            {!effectiveBranding.fcaNumber && ' Regulated by the Financial Conduct Authority.'}
           </Text>
         </View>
       </Page>
