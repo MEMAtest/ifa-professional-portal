@@ -87,6 +87,9 @@ export default function AdminBillingPage() {
   const [saving, setSaving] = useState(false)
   const [firms, setFirms] = useState<AdminFirmSummary[]>([])
   const [firmError, setFirmError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [termFilter, setTermFilter] = useState<'all' | '12' | '24' | '36' | 'other'>('all')
+  const [autoRenewFilter, setAutoRenewFilter] = useState<'all' | 'yes' | 'no'>('all')
 
   const isPlatformAdmin = useMemo(
     () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
