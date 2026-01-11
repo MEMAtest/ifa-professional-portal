@@ -227,7 +227,6 @@ export default function AdminBillingPage() {
       const matchesSearch =
         !term ||
         f.name.toLowerCase().includes(term) ||
-        (f.billingEmail ?? '').toLowerCase().includes(term) ||
         (f.subscriptionTier ?? '').toLowerCase().includes(term)
 
       const termLabel = f.termMonths ? String(f.termMonths) : 'other'
@@ -263,7 +262,6 @@ export default function AdminBillingPage() {
       'Base MRR',
       'Seat MRR',
       'Auto Renew',
-      'Billing Email',
       'Created',
       'Updated'
     ]
@@ -280,7 +278,6 @@ export default function AdminBillingPage() {
         base,
         seatRev,
         f.autoRenew === true ? 'Yes' : f.autoRenew === false ? 'No' : '',
-        f.billingEmail ?? '',
         f.createdAt,
         f.updatedAt
       ]
@@ -554,7 +551,6 @@ export default function AdminBillingPage() {
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Base MRR</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Seat MRR</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-700">Auto-renew</th>
-                      <th className="px-3 py-2 text-left font-semibold text-gray-700">Billing Email</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -574,13 +570,12 @@ export default function AdminBillingPage() {
                           <td className="px-3 py-2 text-gray-700">
                             {f.autoRenew === true ? 'Yes' : f.autoRenew === false ? 'No' : '—'}
                           </td>
-                          <td className="px-3 py-2 text-gray-700">{f.billingEmail ?? '—'}</td>
                         </tr>
                       )
                     })}
                     {!filteredFirms.length && (
                       <tr>
-                        <td className="px-3 py-4 text-gray-500" colSpan={9}>
+                        <td className="px-3 py-4 text-gray-500" colSpan={8}>
                           No firms match the current filters.
                         </td>
                       </tr>
