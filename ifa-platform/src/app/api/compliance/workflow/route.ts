@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import type { TaskSourceType, TaskPriority } from '@/modules/tasks/types'
+import type { TaskPriority, TaskSourceType } from '@/modules/tasks/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,10 +25,10 @@ const priorityFromRisk = (risk?: string | null): TaskPriority | null => {
   return null
 }
 
-const getClientName = (client?: { personal_details?: Record<string, any> | null }) => {
-  const details = client?.personal_details || {}
-  const name = `${details.firstName || ''} ${details.lastName || ''}`.trim()
-  return name || 'Client'
+const getClientName = (client?: { personal_details?: Record<string, any> | null; client_ref?: string | null }) => {
+  if (!client?.personal_details) return client?.client_ref || 'Client'
+  const name = `${client.personal_details.firstName || ''} ${client.personal_details.lastName || ''}`.trim()
+  return name || client.client_ref || 'Client'
 }
 
 const getOwnerName = (owner?: { first_name?: string | null; last_name?: string | null }) => {
@@ -59,14 +59,9 @@ export async function GET(request: NextRequest) {
     }
 
     const firmResult = requireFirmId(authResult.context)
-    if (firmResult instanceof NextResponse) {
-      return firmResult
-    }
-    const firmId = firmResult.firmId
-
-    if (!firmId) {
-      return NextResponse.json({ error: 'Firm context required' }, { status: 400 })
-    }
+    const firmId = firmResult instanceof NextResponse ? authResult.context.firmId : firmResult.firmId
+    const userId = authResult.context.userId
+    const hasFirmId = typeof firmId === 'string' && firmId.trim().length > 0
 
     const url = new URL(request.url)
     const sectionParam = url.searchParams.get('section') || 'all'
@@ -78,42 +73,51 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid section filter' }, { status: 400 })
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+
+    const clients = await safeQuery(
+      hasFirmId
+        ? supabase
+            .from('clients')
+            .select('id, personal_details, client_ref, advisor_id')
+            .eq('firm_id', firmId)
+        : supabase
+            .from('clients')
+            .select('id, personal_details, client_ref, advisor_id')
+            .eq('advisor_id', userId),
+      'clients'
+    )
+
+    const clientMap = new Map<string, any>()
+    const clientIds: string[] = []
+    clients.forEach((client: any) => {
+      clientMap.set(client.id, client)
+      clientIds.push(client.id)
+    })
 
     const tasks: Promise<any[]>[] = []
 
     if (requestedSections.includes('complaint')) {
-      const complaintQuery = supabase
-        .from('complaint_register')
-        .select(`
-          id,
-          reference_number,
-          status,
-          priority,
-          complaint_date,
-          resolution_date,
-          client_id,
-          assigned_to,
-          clients(id, personal_details, client_ref),
-          assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-        `)
-        .eq('firm_id', firmId)
+      const complaintQuery = hasFirmId
+        ? supabase
+            .from('complaint_register')
+            .select('*')
+            .eq('firm_id', firmId)
+        : supabase
+            .from('complaint_register')
+            .select('*')
+            .eq('created_by', userId)
       tasks.push(
-        safeQuery(
-          complaintQuery,
-          'complaints'
-        ).then((rows) =>
+        safeQuery(complaintQuery, 'complaints').then((rows) =>
           rows.map((row: any) => ({
             id: `complaint-${row.id}`,
             sourceType: 'complaint' as TaskSourceType,
             sourceId: row.id,
             title: row.reference_number ? `Complaint ${row.reference_number}` : 'Complaint',
-            subtitle: row.clients ? getClientName(row.clients) : undefined,
+            subtitle: row.client_id ? getClientName(clientMap.get(row.client_id)) : undefined,
             status: row.status,
             priority: row.priority || null,
             ownerId: row.assigned_to || null,
-            ownerName: getOwnerName(row.assigned_user),
-            ownerAvatarUrl: row.assigned_user?.avatar_url || null,
             dueDate: row.resolution_date || null,
             clientId: row.client_id || null,
           }))
@@ -122,26 +126,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('breach')) {
-      const breachQuery = supabase
-        .from('breach_register')
-        .select(`
-          id,
-          reference_number,
-          status,
-          priority,
-          breach_date,
-          remediation_date,
-          severity,
-          affected_clients,
-          assigned_to,
-          assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-        `)
-        .eq('firm_id', firmId)
+      const breachQuery = hasFirmId
+        ? supabase
+            .from('breach_register')
+            .select('*')
+            .eq('firm_id', firmId)
+        : supabase
+            .from('breach_register')
+            .select('*')
+            .eq('created_by', userId)
       tasks.push(
-        safeQuery(
-          breachQuery,
-          'breaches'
-        ).then((rows) =>
+        safeQuery(breachQuery, 'breaches').then((rows) =>
           rows.map((row: any) => ({
             id: `breach-${row.id}`,
             sourceType: 'breach' as TaskSourceType,
@@ -151,8 +146,6 @@ export async function GET(request: NextRequest) {
             status: row.status,
             priority: row.priority || null,
             ownerId: row.assigned_to || null,
-            ownerName: getOwnerName(row.assigned_user),
-            ownerAvatarUrl: row.assigned_user?.avatar_url || null,
             dueDate: row.remediation_date || null,
             description: row.affected_clients ? `${row.affected_clients} affected client(s)` : undefined,
           }))
@@ -161,37 +154,26 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('vulnerability')) {
-      const vulnerabilityQuery = supabase
-        .from('vulnerability_register')
-        .select(`
-          id,
-          client_id,
-          status,
-          priority,
-          vulnerability_type,
-          severity,
-          next_review_date,
-          assigned_to,
-          clients(id, personal_details, client_ref),
-          assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-        `)
-        .eq('firm_id', firmId)
+      const vulnerabilityQuery = hasFirmId
+        ? supabase
+            .from('vulnerability_register')
+            .select('*')
+            .eq('firm_id', firmId)
+        : supabase
+            .from('vulnerability_register')
+            .select('*')
+            .eq('created_by', userId)
       tasks.push(
-        safeQuery(
-          vulnerabilityQuery,
-          'vulnerability'
-        ).then((rows) =>
+        safeQuery(vulnerabilityQuery, 'vulnerability').then((rows) =>
           rows.map((row: any) => ({
             id: `vulnerability-${row.id}`,
             sourceType: 'vulnerability' as TaskSourceType,
             sourceId: row.id,
-            title: row.clients ? getClientName(row.clients) : 'Vulnerability',
+            title: row.client_id ? getClientName(clientMap.get(row.client_id)) : 'Vulnerability',
             subtitle: row.vulnerability_type ? `${row.vulnerability_type} - ${row.severity}` : undefined,
             status: row.status,
             priority: row.priority || null,
             ownerId: row.assigned_to || null,
-            ownerName: getOwnerName(row.assigned_user),
-            ownerAvatarUrl: row.assigned_user?.avatar_url || null,
             dueDate: row.next_review_date || null,
             clientId: row.client_id || null,
           }))
@@ -200,37 +182,26 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('file_review')) {
-      const fileReviewQuery = supabase
-        .from('file_reviews')
-        .select(`
-          id,
-          client_id,
-          status,
-          review_type,
-          risk_rating,
-          due_date,
-          reviewer_id,
-          adviser_id,
-          clients(id, personal_details, client_ref),
-          reviewer:reviewer_id(id, first_name, last_name, avatar_url)
-        `)
-        .eq('firm_id', firmId)
+      const fileReviewQuery = hasFirmId
+        ? supabase
+            .from('file_reviews')
+            .select('*')
+            .eq('firm_id', firmId)
+        : supabase
+            .from('file_reviews')
+            .select('*')
+            .eq('adviser_id', userId)
       tasks.push(
-        safeQuery(
-          fileReviewQuery,
-          'file reviews'
-        ).then((rows) =>
+        safeQuery(fileReviewQuery, 'file reviews').then((rows) =>
           rows.map((row: any) => ({
             id: `file-review-${row.id}`,
             sourceType: 'file_review' as TaskSourceType,
             sourceId: row.id,
-            title: row.clients ? getClientName(row.clients) : 'File Review',
+            title: row.client_id ? getClientName(clientMap.get(row.client_id)) : 'File Review',
             subtitle: row.review_type || undefined,
             status: row.status,
             priority: priorityFromRisk(row.risk_rating),
             ownerId: row.reviewer_id || null,
-            ownerName: getOwnerName(row.reviewer),
-            ownerAvatarUrl: row.reviewer?.avatar_url || null,
             dueDate: row.due_date || null,
             clientId: row.client_id || null,
           }))
@@ -238,30 +209,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (requestedSections.includes('aml_check')) {
+    if (requestedSections.includes('aml_check') && clientIds.length > 0) {
       const amlQuery = supabase
         .from('aml_client_status')
-        .select(`
-          id,
-          client_id,
-          id_verification,
-          risk_rating,
-          next_review_date,
-          updated_at,
-          created_at,
-          clients!inner(id, personal_details, client_ref, firm_id)
-        `)
-        .eq('clients.firm_id', firmId)
+        .select('id, client_id, id_verification, risk_rating, next_review_date, updated_at, created_at')
+        .in('client_id', clientIds)
       tasks.push(
-        safeQuery(
-          amlQuery,
-          'aml'
-        ).then((rows) =>
+        safeQuery(amlQuery, 'aml').then((rows) =>
           rows.map((row: any) => ({
             id: `aml-${row.id}`,
             sourceType: 'aml_check' as TaskSourceType,
             sourceId: row.id,
-            title: row.clients ? getClientName(row.clients) : 'AML Check',
+            title: row.client_id ? getClientName(clientMap.get(row.client_id)) : 'AML Check',
             subtitle: row.risk_rating ? `Risk ${row.risk_rating}` : undefined,
             status: row.id_verification,
             priority: priorityFromRisk(row.risk_rating),
@@ -272,30 +231,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (requestedSections.includes('consumer_duty')) {
+    if (requestedSections.includes('consumer_duty') && clientIds.length > 0) {
       const consumerDutyQuery = supabase
         .from('consumer_duty_status')
-        .select(`
-          id,
-          client_id,
-          overall_status,
-          next_review_date,
-          updated_at,
-          created_at,
-          clients!inner(id, personal_details, client_ref, firm_id)
-        `)
-        .eq('clients.firm_id', firmId)
+        .select('id, client_id, overall_status, next_review_date, updated_at, created_at')
+        .in('client_id', clientIds)
       tasks.push(
-        safeQuery(
-          consumerDutyQuery,
-          'consumer duty'
-        ).then((rows) =>
+        safeQuery(consumerDutyQuery, 'consumer duty').then((rows) =>
           rows.map((row: any) => ({
             id: `consumer-duty-${row.id}`,
             sourceType: 'consumer_duty' as TaskSourceType,
             sourceId: row.id,
-            title: row.clients ? getClientName(row.clients) : 'Consumer Duty',
-            subtitle: row.clients?.client_ref || undefined,
+            title: row.client_id ? getClientName(clientMap.get(row.client_id)) : 'Consumer Duty',
+            subtitle: row.client_id ? clientMap.get(row.client_id)?.client_ref || undefined : undefined,
             status: row.overall_status,
             dueDate: row.next_review_date || null,
             clientId: row.client_id || null,
@@ -304,25 +252,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (requestedSections.includes('risk_assessment')) {
+    if (requestedSections.includes('risk_assessment') && clientIds.length > 0) {
       const riskQuery = supabase
         .from('risk_profiles')
-        .select(`
-          id,
-          client_id,
-          final_risk_level,
-          final_risk_category,
-          updated_at,
-          created_at,
-          clients!inner(id, personal_details, client_ref, firm_id)
-        `)
-        .eq('clients.firm_id', firmId)
+        .select('id, client_id, final_risk_level, final_risk_category, updated_at, created_at')
+        .in('client_id', clientIds)
         .order('updated_at', { ascending: false })
       tasks.push(
-        safeQuery(
-          riskQuery,
-          'risk profiles'
-        ).then((rows) => {
+        safeQuery(riskQuery, 'risk profiles').then((rows) => {
           const seen = new Set<string>()
           return rows
             .filter((row: any) => {
@@ -344,8 +281,8 @@ export async function GET(request: NextRequest) {
                 id: `risk-${row.id}`,
                 sourceType: 'risk_assessment' as TaskSourceType,
                 sourceId: row.client_id,
-                title: row.clients ? getClientName(row.clients) : 'Risk Assessment',
-                subtitle: row.final_risk_category || row.clients?.client_ref || undefined,
+                title: row.client_id ? getClientName(clientMap.get(row.client_id)) : 'Risk Assessment',
+                subtitle: row.final_risk_category || (row.client_id ? clientMap.get(row.client_id)?.client_ref : undefined),
                 status: recencyStatus,
                 dueDate: lastDate || null,
                 clientId: row.client_id || null,
@@ -359,7 +296,38 @@ export async function GET(request: NextRequest) {
     const results = await Promise.all(tasks)
     const items = results.flat()
 
-    return NextResponse.json({ items })
+    const ownerIds = new Set<string>()
+    items.forEach((item: any) => {
+      if (item.ownerId) ownerIds.add(item.ownerId)
+    })
+
+    const ownerProfiles = ownerIds.size
+      ? await safeQuery(
+          supabase
+            .from('profiles')
+            .select('id, first_name, last_name, avatar_url')
+            .in('id', Array.from(ownerIds)),
+          'profiles'
+        )
+      : []
+
+    const ownerMap = new Map<string, any>()
+    ownerProfiles.forEach((profile: any) => {
+      ownerMap.set(profile.id, profile)
+    })
+
+    const enrichedItems = items.map((item: any) => {
+      if (!item.ownerId) return item
+      const profile = ownerMap.get(item.ownerId)
+      if (!profile) return item
+      return {
+        ...item,
+        ownerName: getOwnerName(profile),
+        ownerAvatarUrl: profile.avatar_url || null,
+      }
+    })
+
+    return NextResponse.json({ items: enrichedItems })
   } catch (error) {
     console.error('[Compliance Workflow] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

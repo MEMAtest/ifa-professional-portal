@@ -105,7 +105,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Format events for calendar display
-    const formattedEvents = (data || []).map(event => {
+    const events: any[] = data || [];
+    const formattedEvents = events.map((event: any) => {
       // Extract duration from description if stored there
       const durationMatch = event.description?.match(/Duration: (\d+) minutes/);
       const duration = durationMatch ? parseInt(durationMatch[1]) : 60;

@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch Persona history', message: error.message, success: false }, { status: 500 })
     }
 
-    const versions = assessments || []
-    const current = versions.find((a) => a.is_current) || versions[0] || null
+    const versions: any[] = assessments || []
+    const current = versions.find((a: any) => a.is_current) || versions[0] || null
 
     const averageConfidence = versions.length
       ? versions.reduce((sum: number, a: any) => sum + (typeof a.confidence === 'number' ? a.confidence : 0), 0) / versions.length

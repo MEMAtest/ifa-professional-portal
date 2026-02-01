@@ -564,7 +564,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const firmId = auth.context?.firmId
 
     // If no firmId, return empty metrics instead of 403
@@ -667,7 +667,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const firmId = auth.context?.firmId
 
     // If no firmId, return empty metrics for refresh/export actions

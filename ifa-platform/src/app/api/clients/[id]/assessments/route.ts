@@ -48,7 +48,7 @@ export async function GET(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -164,7 +164,7 @@ export async function PATCH(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {

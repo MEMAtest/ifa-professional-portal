@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid sourceId' }, { status: 400 })
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Verify the source record belongs to this firm
     const sourceTableMap: Record<string, string> = {
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Comment is too long (max 2000 chars)' }, { status: 400 })
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Verify the source record belongs to this firm
     const sourceTableMap: Record<string, string> = {

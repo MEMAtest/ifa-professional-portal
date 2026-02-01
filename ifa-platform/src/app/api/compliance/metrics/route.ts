@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
 
-const supabase = createClient(
+const supabase: any = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
@@ -56,12 +56,12 @@ export async function GET(request: NextRequest) {
       supabase.from('clients').select('id', { count: 'exact', head: true })
     ])
 
-    const fileReviews = fileReviewsResult.data || []
-    const complaints = complaintsResult.data || []
-    const breaches = breachesResult.data || []
-    const vulnerability = vulnerabilityResult.data || []
-    const amlStatuses = amlResult.data || []
-    const consumerDuty = consumerDutyResult.data || []
+    const fileReviews: any[] = fileReviewsResult.data || []
+    const complaints: any[] = complaintsResult.data || []
+    const breaches: any[] = breachesResult.data || []
+    const vulnerability: any[] = vulnerabilityResult.data || []
+    const amlStatuses: any[] = amlResult.data || []
+    const consumerDuty: any[] = consumerDutyResult.data || []
     const totalClients = clientsResult.count || 0
 
     // Calculate QA metrics

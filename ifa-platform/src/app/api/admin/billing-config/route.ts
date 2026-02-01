@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data, error } = await (supabase as any)
       .from('platform_billing_config')
       .select('*')
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest) {
       updated_at: new Date().toISOString()
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     const { data: existing, error: existingError } = await (supabase as any)
       .from('platform_billing_config')

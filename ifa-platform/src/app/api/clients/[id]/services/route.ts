@@ -33,7 +33,7 @@ export async function GET(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -98,7 +98,7 @@ export async function POST(
   }
 
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })

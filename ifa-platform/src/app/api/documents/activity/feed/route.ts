@@ -55,7 +55,8 @@ interface ActivityFilters {
 // ===================================================================
 
 export async function GET(request: NextRequest) {
-  const supabase = getSupabaseServiceClient()
+  // Cast to any: document_audit_log schema mismatch with generated types
+  const supabase: any = getSupabaseServiceClient()
   try {
    
     

@@ -16,6 +16,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { hashToken } from '@/lib/security/crypto'
@@ -31,12 +32,12 @@ interface SagaState {
 
 // Rollback function to undo completed steps on failure
 async function rollbackSaga(
-  supabaseAdmin: ReturnType<typeof getSupabaseServiceClient>,
+  supabaseAdmin: any,
   state: SagaState,
   invitationId?: string,
   failureReason?: string
 ): Promise<void> {
-  console.log('[Accept Invite] Rolling back saga, state:', state, 'reason:', failureReason)
+  log.info('[Accept Invite] Rolling back saga', { state, reason: failureReason })
 
   // Rollback in reverse order of creation
   // IMPORTANT: We do NOT revert invitation acceptance to prevent race conditions
@@ -49,9 +50,9 @@ async function rollbackSaga(
         .from('profiles')
         .delete()
         .eq('id', state.authUserId)
-      console.log('[Accept Invite] Rolled back profile creation')
+      log.info('[Accept Invite] Rolled back profile creation')
     } catch (err) {
-      console.error('[Accept Invite] Failed to rollback profile:', err)
+      log.error('[Accept Invite] Failed to rollback profile', err)
     }
   }
 
@@ -59,9 +60,9 @@ async function rollbackSaga(
   if (state.authUserId) {
     try {
       await supabaseAdmin.auth.admin.deleteUser(state.authUserId)
-      console.log('[Accept Invite] Rolled back auth user creation')
+      log.info('[Accept Invite] Rolled back auth user creation')
     } catch (err) {
-      console.error('[Accept Invite] Failed to rollback auth user:', err)
+      log.error('[Accept Invite] Failed to rollback auth user', err)
     }
   }
 
@@ -70,7 +71,7 @@ async function rollbackSaga(
   if (invitationId && failureReason) {
     try {
       await supabaseAdmin
-        .from('user_invitations' as any)
+        .from('user_invitations')
         .update({
           // Keep accepted_at set - NEVER revert to null (security)
           // Add failure metadata for admin visibility
@@ -81,9 +82,9 @@ async function rollbackSaga(
           }
         })
         .eq('id', invitationId)
-      console.log('[Accept Invite] Marked invitation as failed (token remains consumed)')
+      log.info('[Accept Invite] Marked invitation as failed (token remains consumed)')
     } catch (err) {
-      console.error('[Accept Invite] Failed to update invitation metadata:', err)
+      log.error('[Accept Invite] Failed to update invitation metadata', err)
     }
   }
 }
@@ -171,8 +172,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServiceClient()
-    const supabaseAdmin = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+    const supabaseAdmin: any = getSupabaseServiceClient()
 
     // Hash the incoming token for comparison (tokens are stored hashed in DB)
     const hashedToken = hashToken(token)
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (inviteError || !invitation) {
-      console.log('[Accept Invite] Invalid or expired invitation token')
+      log.warn('[Accept Invite] Invalid or expired invitation token')
       return NextResponse.json(
         { error: 'Invalid invitation token' },
         { status: 404 }
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
     // ========================================
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
     const existingUser = existingUsers?.users?.find(
-      u => u.email?.toLowerCase() === invitation.email.toLowerCase()
+      (u: any) => u.email?.toLowerCase() === invitation.email.toLowerCase()
     )
 
     if (existingUser) {
@@ -253,10 +254,10 @@ export async function POST(request: NextRequest) {
       }) as { data: AcceptInvitationResult | null; error: any }
 
     if (acceptError) {
-      console.error('[Accept Invite] Failed to accept invitation atomically:', acceptError)
+      log.error('[Accept Invite] Failed to accept invitation atomically', acceptError)
       // Try fallback method
       const { error: updateError } = await supabaseAdmin
-        .from('user_invitations' as any)
+        .from('user_invitations')
         .update({ accepted_at: new Date().toISOString() })
         .eq('id', invitation.id)
         .is('accepted_at', null) // Only update if not already accepted
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (createError) {
-      console.error('[Accept Invite] Failed to create user:', createError)
+      log.error('[Accept Invite] Failed to create user', createError)
       await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Auth user creation failed: ${createError.message}`)
 
       if (createError.message?.includes('already registered')) {
@@ -335,7 +336,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (profileError) {
-      console.error('[Accept Invite] Failed to create profile:', profileError)
+      log.error('[Accept Invite] Failed to create profile', profileError)
       await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Profile creation failed: ${profileError.message}`)
       return NextResponse.json(
         { error: 'Failed to create user profile' },
@@ -362,7 +363,7 @@ export async function POST(request: NextRequest) {
     if (seatError) {
       // Atomic seat allocation failed - this is a hard failure
       // DO NOT use a non-atomic fallback as it creates race conditions
-      console.error('[Accept Invite] Atomic seat allocation failed:', seatError)
+      log.error('[Accept Invite] Atomic seat allocation failed', seatError)
       await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Seat allocation failed: ${seatError.message}`)
       return NextResponse.json(
         { error: 'Failed to allocate seat. Please try again or contact support.' },
@@ -372,7 +373,7 @@ export async function POST(request: NextRequest) {
 
     if (seatResult && !seatResult.success) {
       // Seat limit reached - this is a hard failure
-      console.error('[Accept Invite] Seat limit reached:', seatResult)
+      log.error('[Accept Invite] Seat limit reached', undefined, { seatResult })
       await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Seat limit reached: ${seatResult.message}`)
       return NextResponse.json(
         {
@@ -392,7 +393,7 @@ export async function POST(request: NextRequest) {
     // ========================================
     try {
       await supabaseAdmin
-        .from('activity_log' as any)
+        .from('activity_log')
         .insert({
           type: 'user_joined',
           action: `${firstName.trim()} ${lastName.trim()} joined as ${invitation.role}`,
@@ -407,10 +408,10 @@ export async function POST(request: NextRequest) {
           }
         })
     } catch (logErr) {
-      console.warn('[Accept Invite] Failed to log activity:', logErr)
+      log.warn('[Accept Invite] Failed to log activity', { error: logErr })
     }
 
-    console.log('[Accept Invite] User created successfully:', {
+    log.info('[Accept Invite] User created successfully', {
       userId: newUser.user.id,
       email: invitation.email,
       role: invitation.role,
@@ -424,16 +425,16 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[Accept Invite] Error:', error)
+    log.error('[Accept Invite] Error', error)
 
     // Attempt rollback on unexpected errors
     if (Object.keys(sagaState).length > 0) {
       try {
-        const supabaseAdmin = getSupabaseServiceClient()
+        const supabaseAdmin: any = getSupabaseServiceClient()
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Unexpected error: ${errorMessage}`)
       } catch (rollbackErr) {
-        console.error('[Accept Invite] Rollback failed:', rollbackErr)
+        log.error('[Accept Invite] Rollback failed', rollbackErr)
       }
     }
 

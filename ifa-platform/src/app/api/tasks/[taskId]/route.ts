@@ -56,7 +56,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     const { data: task, error } = await supabase
       .from('tasks')
@@ -66,17 +66,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
           id,
           personal_details,
           client_ref
-        ),
-        assigned_user:assigned_to (
-          id,
-          first_name,
-          last_name,
-          email
-        ),
-        assigner:assigned_by (
-          id,
-          first_name,
-          last_name
         )
       `)
       .eq('id', taskId)
@@ -124,14 +113,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
       metadata: task.metadata,
       createdAt: task.created_at,
       updatedAt: task.updated_at,
-      clientFirstName: (task as any).clients?.personal_details?.firstName,
-      clientLastName: (task as any).clients?.personal_details?.lastName,
+      clientFirstName: (task as any).clients?.personal_details?.firstName || (task as any).clients?.personal_details?.first_name,
+      clientLastName: (task as any).clients?.personal_details?.lastName || (task as any).clients?.personal_details?.last_name,
       clientRef: (task as any).clients?.client_ref,
-      assignedToFirstName: (task as any).assigned_user?.first_name,
-      assignedToLastName: (task as any).assigned_user?.last_name,
-      assignedToEmail: (task as any).assigned_user?.email,
-      assignedByFirstName: (task as any).assigner?.first_name,
-      assignedByLastName: (task as any).assigner?.last_name,
+      assignedToFirstName: undefined,
+      assignedToLastName: undefined,
+      assignedToEmail: undefined,
+      assignedByFirstName: undefined,
+      assignedByLastName: undefined,
       commentCount: commentCount || 0,
     }
 
@@ -235,8 +224,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const supabase = getSupabaseServiceClient()
-    const supabaseService = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+    const supabaseService: any = getSupabaseServiceClient()
 
     // Get existing task
     const { data: existingTask, error: fetchError } = await supabase
@@ -328,17 +317,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           id,
           personal_details,
           client_ref
-        ),
-        assigned_user:assigned_to (
-          id,
-          first_name,
-          last_name,
-          email
-        ),
-        assigner:assigned_by (
-          id,
-          first_name,
-          last_name
         )
       `)
       .single()
@@ -419,14 +397,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       metadata: task.metadata,
       createdAt: task.created_at,
       updatedAt: task.updated_at,
-      clientFirstName: (task as any).clients?.personal_details?.firstName,
-      clientLastName: (task as any).clients?.personal_details?.lastName,
+      clientFirstName: (task as any).clients?.personal_details?.firstName || (task as any).clients?.personal_details?.first_name,
+      clientLastName: (task as any).clients?.personal_details?.lastName || (task as any).clients?.personal_details?.last_name,
       clientRef: (task as any).clients?.client_ref,
-      assignedToFirstName: (task as any).assigned_user?.first_name,
-      assignedToLastName: (task as any).assigned_user?.last_name,
-      assignedToEmail: (task as any).assigned_user?.email,
-      assignedByFirstName: (task as any).assigner?.first_name,
-      assignedByLastName: (task as any).assigner?.last_name,
+      assignedToFirstName: undefined,
+      assignedToLastName: undefined,
+      assignedToEmail: undefined,
+      assignedByFirstName: undefined,
+      assignedByLastName: undefined,
     }
 
     return NextResponse.json({ task: response })
@@ -458,8 +436,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const supabase = getSupabaseServiceClient()
-    const supabaseService = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+    const supabaseService: any = getSupabaseServiceClient()
 
     // Get task before deletion for logging and authorization
     const { data: existingTask } = await supabase

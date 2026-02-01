@@ -113,8 +113,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServiceClient()
-    const supabaseService = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+    const supabaseService: any = getSupabaseServiceClient()
 
     // ========================================
     // VERIFY CLIENT BELONGS TO FIRM

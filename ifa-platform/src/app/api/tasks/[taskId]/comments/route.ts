@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Verify task exists and belongs to firm
     const { data: task, error: taskError } = await supabase
@@ -67,7 +67,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
           id,
           first_name,
           last_name,
-          email,
           avatar_url
         )
       `, { count: 'exact' })
@@ -89,7 +88,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
       updatedAt: comment.updated_at,
       userFirstName: comment.user?.first_name,
       userLastName: comment.user?.last_name,
-      userEmail: comment.user?.email,
       userAvatarUrl: comment.user?.avatar_url,
     }))
 
@@ -136,7 +134,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Comment must be 5000 characters or less' }, { status: 400 })
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Verify task exists and belongs to firm
     const { data: task, error: taskError } = await supabase
@@ -164,7 +162,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
           id,
           first_name,
           last_name,
-          email,
           avatar_url
         )
       `)
@@ -185,7 +182,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       updatedAt: comment.updated_at,
       userFirstName: (comment as any).user?.first_name,
       userLastName: (comment as any).user?.last_name,
-      userEmail: (comment as any).user?.email,
       userAvatarUrl: (comment as any).user?.avatar_url,
     }
 

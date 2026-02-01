@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
         .eq('client_id', clientId)
         .eq('is_current', true)
 
-      const previousCurrentIds = (previousCurrentRecords || []).map((r) => r.id)
+      const previousCurrentIds = ((previousCurrentRecords || []) as any[]).map((r: any) => r.id)
 
       await supabase
         .from('suitability_assessments')

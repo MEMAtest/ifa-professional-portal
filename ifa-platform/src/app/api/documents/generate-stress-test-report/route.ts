@@ -523,7 +523,8 @@ export async function POST(request: NextRequest) {
     const avgResilience = results.reduce((sum: number, r: StressTestResult) => sum + r.resilienceScore, 0) / results.length;
 
     // Try to save to Supabase
-    const supabase = getSupabaseServiceClient();
+    // Cast to any: documents insert schema mismatch with generated types
+    const supabase: any = getSupabaseServiceClient();
     const fileName = `stress-test-${clientProfile.clientRef}-${Date.now()}.pdf`;
 
     try {

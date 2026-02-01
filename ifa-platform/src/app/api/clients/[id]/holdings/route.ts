@@ -34,7 +34,7 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -88,7 +88,7 @@ export async function POST(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -167,7 +167,7 @@ export async function PATCH(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -229,7 +229,7 @@ export async function DELETE(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })

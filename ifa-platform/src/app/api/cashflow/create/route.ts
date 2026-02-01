@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseServiceClient()
-    const auth = await getAuthContext(request)
+    const auth = await getAuthContext(req)
     const currentUserId = auth.context?.userId || null
 
     // Load client + assessment via existing services (they use anon client; safe for reads)

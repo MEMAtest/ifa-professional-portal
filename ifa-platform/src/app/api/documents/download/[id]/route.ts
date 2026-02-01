@@ -20,14 +20,17 @@ export async function GET(
     const documentId = params.id
     log.info('Download requested for document', { documentId })
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Fetch document record
-    const { data: document, error } = await supabase
+    const { data: rawDocument, error } = await supabase
       .from('documents')
       .select('*')
       .eq('id', documentId)
       .single()
+
+    // Cast to any: document schema has columns not yet in generated types
+    const document = rawDocument as any
 
     if (error || !document) {
       log.error('Document not found', error)
@@ -40,7 +43,7 @@ export async function GET(
     // Helper function to log download activity and send notification
     const logDownloadActivity = async () => {
       if (document.client_id) {
-        const activitySupabase = getSupabaseServiceClient()
+        const activitySupabase: any = getSupabaseServiceClient()
 
         // Log activity
         try {
@@ -65,7 +68,8 @@ export async function GET(
               .select('personal_details')
               .eq('id', document.client_id)
               .single()
-            const clientName = clientData?.personal_details?.firstName || clientData?.personal_details?.first_name || 'Client'
+            const pd = clientData?.personal_details as Record<string, any> | null
+            const clientName = pd?.firstName || pd?.first_name || 'Client'
             await notifyDocumentDownloaded(userId, document.client_id, clientName, documentId, document.name || document.file_name || 'Document')
           } catch (notifyError) {
             log.warn('Failed to send document download notification', { clientId: document.client_id, error: notifyError })
@@ -108,10 +112,11 @@ export async function GET(
     }
 
     // Option 3: Check for base64 PDF in metadata (fallback)
-    if (document.metadata?.pdf_base64) {
+    const meta = document.metadata as Record<string, any> | null
+    if (meta?.pdf_base64) {
       log.info('Using base64 PDF from metadata', { documentId })
       await logDownloadActivity()
-      const pdfBuffer = Buffer.from(document.metadata.pdf_base64, 'base64')
+      const pdfBuffer = Buffer.from(meta.pdf_base64, 'base64')
 
       const headers = new Headers()
       headers.set('Content-Type', 'application/pdf')
@@ -123,7 +128,7 @@ export async function GET(
     }
 
     // Option 4: Generate PDF from HTML content if available
-    if (document.html_content || document.metadata?.html_content) {
+    if (document.html_content || meta?.html_content) {
       log.warn('Only HTML content available, PDF generation needed', { documentId })
       // For now, return error suggesting PDF generation
       return NextResponse.json(

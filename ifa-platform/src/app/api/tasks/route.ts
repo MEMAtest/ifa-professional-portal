@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
       search: url.searchParams.get('search') || undefined,
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Build query
     let query = supabase
@@ -107,17 +107,6 @@ export async function GET(request: NextRequest) {
           id,
           personal_details,
           client_ref
-        ),
-        assigned_user:assigned_to (
-          id,
-          first_name,
-          last_name,
-          email
-        ),
-        assigner:assigned_by (
-          id,
-          first_name,
-          last_name
         )
       `, { count: 'exact' })
       .eq('firm_id', firmIdResult.firmId)
@@ -268,14 +257,14 @@ export async function GET(request: NextRequest) {
       createdAt: task.created_at,
       updatedAt: task.updated_at,
       // Related data
-      clientFirstName: task.clients?.personal_details?.firstName,
-      clientLastName: task.clients?.personal_details?.lastName,
+      clientFirstName: task.clients?.personal_details?.firstName || task.clients?.personal_details?.first_name,
+      clientLastName: task.clients?.personal_details?.lastName || task.clients?.personal_details?.last_name,
       clientRef: task.clients?.client_ref,
-      assignedToFirstName: task.assigned_user?.first_name,
-      assignedToLastName: task.assigned_user?.last_name,
-      assignedToEmail: task.assigned_user?.email,
-      assignedByFirstName: task.assigner?.first_name,
-      assignedByLastName: task.assigner?.last_name,
+      assignedToFirstName: undefined,
+      assignedToLastName: undefined,
+      assignedToEmail: undefined,
+      assignedByFirstName: undefined,
+      assignedByLastName: undefined,
       commentCount: commentCounts[task.id] || 0,
     }))
 
@@ -360,21 +349,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const supabase = getSupabaseServiceClient()
-    const supabaseService = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+    const supabaseService: any = getSupabaseServiceClient()
 
     // Verify client belongs to firm if clientId provided
+    let client: { id: string; personal_details?: Record<string, any>; client_ref?: string | null } | null = null
     if (body.clientId) {
-      const { data: client, error: clientError } = await supabase
+      const { data: clientData, error: clientError } = await supabase
         .from('clients')
-        .select('id')
+        .select('id, personal_details, client_ref')
         .eq('id', body.clientId)
         .eq('firm_id', firmIdResult.firmId)
         .single()
 
-      if (clientError || !client) {
+      if (clientError || !clientData) {
         return NextResponse.json({ error: 'Client not found' }, { status: 400 })
       }
+      client = clientData
     }
 
     // Verify assigned user belongs to firm if assignedTo provided
@@ -392,50 +383,38 @@ export async function POST(request: NextRequest) {
     }
 
     // Create task
-    const { data: task, error: createError } = await supabase
-      .from('tasks')
-      .insert({
-        firm_id: firmIdResult.firmId,
-        title: body.title.trim(),
-        description: body.description?.trim() || null,
-        type: body.type || 'general',
-        status: 'pending',
-        priority: body.priority || 'medium',
-        assigned_to: body.assignedTo || null,
-        assigned_by: authResult.context.userId,
-        client_id: body.clientId || null,
-        assessment_id: body.assessmentId || null,
-        source_type: body.sourceType || null,
-        source_id: body.sourceId || null,
-        due_date: body.dueDate || null,
-        requires_sign_off: body.requiresSignOff || false,
-        is_recurring: body.isRecurring || false,
-        recurrence_rule: body.recurrenceRule || null,
-        parent_task_id: body.parentTaskId || null,
-        metadata: (body.metadata || {}) as Json,
-      })
-      .select(`
-        *,
-        clients:client_id (
-          id,
-          personal_details,
-          client_ref
-        ),
-        assigned_user:assigned_to (
-          id,
-          first_name,
-          last_name,
-          email
-        ),
-        assigner:assigned_by (
-          id,
-          first_name,
-          last_name
-        )
-      `)
-      .single()
+    const createdAt = new Date().toISOString()
+    const taskId = crypto.randomUUID()
+    const assignedTo = body.assignedTo || null
+    const taskPayload = {
+      id: taskId,
+      firm_id: firmIdResult.firmId,
+      title: body.title.trim(),
+      description: body.description?.trim() || null,
+      type: body.type || 'general',
+      status: 'pending',
+      priority: body.priority || 'medium',
+      assigned_to: assignedTo,
+      assigned_by: authResult.context.userId,
+      client_id: body.clientId || null,
+      assessment_id: body.assessmentId || null,
+      source_type: body.sourceType || null,
+      source_id: body.sourceId || null,
+      due_date: body.dueDate || null,
+      requires_sign_off: body.requiresSignOff || false,
+      is_recurring: body.isRecurring || false,
+      recurrence_rule: body.recurrenceRule || null,
+      parent_task_id: body.parentTaskId || null,
+      metadata: (body.metadata || {}) as Json,
+      created_at: createdAt,
+      updated_at: createdAt,
+    }
 
-    if (createError || !task) {
+    const { error: createError } = await supabase
+      .from('tasks')
+      .insert(taskPayload)
+
+    if (createError) {
       console.error('[Tasks API] Error creating task:', createError)
       return NextResponse.json({ error: 'Failed to create task' }, { status: 500 })
     }
@@ -452,25 +431,25 @@ export async function POST(request: NextRequest) {
         date: new Date().toISOString(),
         user_name: null, // Will be populated from session if needed
         metadata: {
-          task_id: task.id,
-          task_type: task.type,
-          assigned_to: task.assigned_to,
+          task_id: taskId,
+          task_type: taskPayload.type,
+          assigned_to: assignedTo,
           performed_by: authResult.context.userId,
         } as Json,
       })
 
     // Create notification if task is assigned to someone else
-    if (task.assigned_to && task.assigned_to !== authResult.context.userId) {
+    if (assignedTo && assignedTo !== authResult.context.userId) {
       await supabaseService
         .from('notifications')
         .insert({
           id: crypto.randomUUID(),
-          user_id: task.assigned_to,
+          user_id: assignedTo,
           firm_id: firmIdResult.firmId,
           type: 'task_assigned',
           title: 'New task assigned',
-          message: `You have been assigned a new task: ${task.title}`,
-          action_url: `/tasks/${task.id}`,
+          message: `You have been assigned a new task: ${taskPayload.title}`,
+          action_url: `/tasks/${taskId}`,
           read: false,
           created_at: new Date().toISOString(),
         })
@@ -478,39 +457,39 @@ export async function POST(request: NextRequest) {
 
     // Transform response
     const response = {
-      id: task.id,
-      firmId: task.firm_id,
-      title: task.title,
-      description: task.description,
-      type: task.type,
-      status: task.status,
-      priority: task.priority,
-      assignedTo: task.assigned_to,
-      assignedBy: task.assigned_by,
-      clientId: task.client_id,
-      assessmentId: task.assessment_id,
-      sourceType: task.source_type,
-      sourceId: task.source_id,
-      dueDate: task.due_date,
-      completedAt: task.completed_at,
-      completedBy: task.completed_by,
-      requiresSignOff: task.requires_sign_off,
-      signedOffBy: task.signed_off_by,
-      signedOffAt: task.signed_off_at,
-      isRecurring: task.is_recurring,
-      recurrenceRule: task.recurrence_rule,
-      parentTaskId: task.parent_task_id,
-      metadata: task.metadata,
-      createdAt: task.created_at,
-      updatedAt: task.updated_at,
-      clientFirstName: (task as any).clients?.personal_details?.firstName,
-      clientLastName: (task as any).clients?.personal_details?.lastName,
-      clientRef: (task as any).clients?.client_ref,
-      assignedToFirstName: (task as any).assigned_user?.first_name,
-      assignedToLastName: (task as any).assigned_user?.last_name,
-      assignedToEmail: (task as any).assigned_user?.email,
-      assignedByFirstName: (task as any).assigner?.first_name,
-      assignedByLastName: (task as any).assigner?.last_name,
+      id: taskId,
+      firmId: taskPayload.firm_id,
+      title: taskPayload.title,
+      description: taskPayload.description,
+      type: taskPayload.type,
+      status: taskPayload.status,
+      priority: taskPayload.priority,
+      assignedTo,
+      assignedBy: taskPayload.assigned_by,
+      clientId: taskPayload.client_id,
+      assessmentId: taskPayload.assessment_id,
+      sourceType: taskPayload.source_type,
+      sourceId: taskPayload.source_id,
+      dueDate: taskPayload.due_date,
+      completedAt: null,
+      completedBy: null,
+      requiresSignOff: taskPayload.requires_sign_off,
+      signedOffBy: null,
+      signedOffAt: null,
+      isRecurring: taskPayload.is_recurring,
+      recurrenceRule: taskPayload.recurrence_rule,
+      parentTaskId: taskPayload.parent_task_id,
+      metadata: taskPayload.metadata,
+      createdAt,
+      updatedAt: createdAt,
+      clientFirstName: client?.personal_details?.firstName || client?.personal_details?.first_name,
+      clientLastName: client?.personal_details?.lastName || client?.personal_details?.last_name,
+      clientRef: client?.client_ref,
+      assignedToFirstName: undefined,
+      assignedToLastName: undefined,
+      assignedToEmail: undefined,
+      assignedByFirstName: undefined,
+      assignedByLastName: undefined,
     }
 
     return NextResponse.json({ task: response }, { status: 201 })

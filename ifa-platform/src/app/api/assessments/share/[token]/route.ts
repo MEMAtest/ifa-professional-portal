@@ -6,6 +6,7 @@ import { logger, getErrorMessage } from '@/lib/errors'
 import { createAuditLogger, getClientIP, getUserAgent } from '@/lib/audit'
 import { notifyAssessmentCompleted } from '@/lib/notifications/notificationService'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,9 +22,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  // Rate limit: 100 requests per minute per IP (public endpoint)
+  const rateLimitResponse = await rateLimit(request, 'api')
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { token } = await params
-    const supabase = getSupabaseServiceClient()
+    // Cast to any: assessment_shares table not yet in generated Supabase types
+    const supabase: any = getSupabaseServiceClient()
 
     // Find the share by token
     const { data: share, error: queryError } = await supabase
@@ -131,7 +137,8 @@ export async function POST(
 ) {
   try {
     const { token } = await params
-    const supabase = getSupabaseServiceClient()
+    // Cast to any: assessment_shares table not yet in generated Supabase types
+    const supabase: any = getSupabaseServiceClient()
 
     // Find the share
     const { data: share, error: queryError } = await supabase
@@ -345,7 +352,8 @@ export async function PATCH(
 ) {
   try {
     const { token } = await params
-    const supabase = getSupabaseServiceClient()
+    // Cast to any: assessment_shares table not yet in generated Supabase types
+    const supabase: any = getSupabaseServiceClient()
 
     const body = await request.json()
     const { status } = body

@@ -12,6 +12,7 @@
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { NextRequest, NextResponse } from 'next/server'
+import * as nodeCrypto from 'crypto'
 
 // In-memory fallback for development
 const inMemoryStore = new Map<string, { count: number; resetAt: number }>()
@@ -188,16 +189,25 @@ export function getClientIP(request: NextRequest): string {
     return cfConnectingIP
   }
 
-  // Generate a unique identifier for this request based on available data
-  // This prevents all unknown requests from sharing the same rate limit
-  const userAgent = request.headers.get('user-agent') || 'unknown'
-  const acceptLanguage = request.headers.get('accept-language') || 'unknown'
+  // Cannot determine client IP — build a fingerprint from multiple request
+  // characteristics using a proper hash to reduce collision probability.
+  //
+  // In production (Vercel/Cloudflare), IP should always be available via
+  // x-real-ip or cf-connecting-ip. If this fallback path is hit frequently
+  // in production, investigate proxy/CDN configuration.
+  const userAgent = request.headers.get('user-agent') || ''
+  const acceptLanguage = request.headers.get('accept-language') || ''
+  const acceptEncoding = request.headers.get('accept-encoding') || ''
+  const secChUa = request.headers.get('sec-ch-ua') || ''
+  const secChUaPlatform = request.headers.get('sec-ch-ua-platform') || ''
+  const secChUaMobile = request.headers.get('sec-ch-ua-mobile') || ''
 
-  // Create a hash-like identifier from request characteristics
-  // This isn't perfect but is better than sharing 127.0.0.1 for all requests
-  const identifier = `unknown-${Buffer.from(userAgent + acceptLanguage).toString('base64').substring(0, 16)}`
+  // Use SHA-256 hash of multiple client hints for a more unique fingerprint
+  const fingerprintData = [userAgent, acceptLanguage, acceptEncoding, secChUa, secChUaPlatform, secChUaMobile].join('|')
+  const hash = nodeCrypto.createHash('sha256').update(fingerprintData).digest('hex').substring(0, 24)
+  const identifier = `fp-${hash}`
 
-  console.warn('[RateLimit] Could not determine client IP, using request fingerprint:', identifier)
+  console.warn('[RateLimit] Could not determine client IP, using fingerprint:', identifier)
   return identifier
 }
 

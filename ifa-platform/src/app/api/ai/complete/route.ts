@@ -277,7 +277,7 @@ async function logAIRequest(
 ) {
   try {
     // Log to Supabase for analytics
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     await (supabase.from as any)('ai_request_logs').insert({
       provider,

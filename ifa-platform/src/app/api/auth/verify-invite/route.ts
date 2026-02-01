@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     // Hash the incoming token for comparison (tokens are stored hashed in DB)
     const hashedToken = hashToken(token)

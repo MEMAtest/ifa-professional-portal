@@ -45,7 +45,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
       )
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
     const body: GenerateDocumentRequest = await request.json()
 
     // Validate required fields
@@ -92,7 +92,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
         firm_id: firmId,
         client_id: body.clientId || null,
         created_by: userId,
-        updated_by: userId,
         status: 'active',
         compliance_status: 'pending',
         metadata
@@ -102,18 +101,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
 
     if (dbError) {
       log.error('Document creation error', dbError)
-      // Return success anyway with generated document info for fallback behavior
-      return NextResponse.json({
-        success: true,
-        document: {
-          id: documentId,
-          name: body.title,
-          file_path: filePath,
-          file_type: 'application/pdf',
-          created_at: new Date().toISOString()
-        },
-        url: `/api/documents/preview/${documentId}`
-      })
+      return NextResponse.json(
+        { success: false, error: 'Failed to create document record' },
+        { status: 500 }
+      )
     }
 
     // Log activity for document generation

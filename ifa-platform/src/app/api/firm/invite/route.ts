@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       return firmIdResult
     }
 
-    const supabase = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
 
     const { data: invitations, error } = await supabase
       .from('user_invitations')
@@ -146,8 +146,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid role is required' }, { status: 400 })
     }
 
-    const supabase = getSupabaseServiceClient()
-    const supabaseService = getSupabaseServiceClient()
+    const supabase: any = getSupabaseServiceClient()
+    const supabaseService: any = getSupabaseServiceClient()
 
     // ========================================
     // CHECK FOR EXISTING USER
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       }
 
       emailExists = usersPage.users.some(
-        u => u.email?.toLowerCase() === normalizedEmail
+        (u: any) => u.email?.toLowerCase() === normalizedEmail
       )
 
       // If we got fewer users than perPage, we've reached the end

@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('activity_log')
         .insert({
+          id: crypto.randomUUID(),
           client_id: clientId,
           action: 'communication_logged',
           type: 'communication',

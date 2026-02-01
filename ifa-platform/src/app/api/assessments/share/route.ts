@@ -9,6 +9,7 @@ import { logger, getErrorMessage } from '@/lib/errors'
 import { createAuditLogger } from '@/lib/audit'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,14 +27,20 @@ function generateToken(): string {
 
 // POST: Create a new assessment share
 export async function POST(request: NextRequest) {
-  try {
-    const supabase = getSupabaseServiceClient()
+  // Rate limit: 100 requests per minute per IP
+  const rateLimitResponse = await rateLimit(request, 'api')
+  if (rateLimitResponse) return rateLimitResponse
 
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    // Authenticate using proper auth context (provides firm_id scoping)
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const { userId, firmId } = authResult.context
+
+    // Cast to any: users/assessment_shares tables not yet in generated Supabase types
+    const supabase: any = getSupabaseServiceClient()
 
     const body = await request.json()
 
@@ -57,6 +64,21 @@ export async function POST(request: NextRequest) {
       sendEmail
     } = validationResult.data
 
+    // SECURITY: Verify client belongs to the advisor's firm
+    const { data: clientRecord, error: clientError } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('id', clientId)
+      .eq('firm_id', firmId)
+      .maybeSingle()
+
+    if (clientError || !clientRecord) {
+      return NextResponse.json(
+        { error: 'Client not found' },
+        { status: 404 }
+      )
+    }
+
     // Generate secure token
     const token = generateToken()
 
@@ -68,7 +90,7 @@ export async function POST(request: NextRequest) {
     const { data: advisor } = await supabase
       .from('users')
       .select('full_name, email')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single()
 
     // Get client info if not provided
@@ -88,14 +110,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the share record
+    // Create the share record with firm_id scoping
     const { data: share, error: insertError } = await supabase
       .from('assessment_shares')
       .insert({
         token,
         assessment_type: assessmentType,
         client_id: clientId,
-        advisor_id: user.id,
+        advisor_id: userId,
+        firm_id: firmId,
         client_email: clientEmail,
         client_name: finalClientName,
         expires_at: expiresAt.toISOString(),
@@ -121,7 +144,7 @@ export async function POST(request: NextRequest) {
     await auditLogger.logShareCreated(
       share.id,
       clientId,
-      user.id,
+      userId,
       assessmentType,
       clientEmail
     )
@@ -195,23 +218,25 @@ export async function POST(request: NextRequest) {
 // GET: List assessment shares for current user or specific client
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseServiceClient()
-
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Authenticate using proper auth context
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const { userId } = authResult.context
+
+    // Cast to any: assessment_shares table not yet in generated Supabase types
+    const supabase: any = getSupabaseServiceClient()
 
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const status = searchParams.get('status')
 
-    // Build query
+    // Build query scoped to authenticated advisor
     let query = supabase
       .from('assessment_shares')
       .select('*')
-      .eq('advisor_id', user.id)
+      .eq('advisor_id', userId)
       .order('created_at', { ascending: false })
 
     if (clientId) {

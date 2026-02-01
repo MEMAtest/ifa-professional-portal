@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     log.info('Fetching all CFL assessments for client', { clientId })
 
     // Fetch ALL CFL assessments for this client (not just current)
-    const { data: assessments, error } = await supabase
+    const { data, error } = await supabase
       .from('cfl_assessments')
       .select(`
         id,
@@ -64,6 +64,8 @@ export async function GET(request: NextRequest) {
       .order('version', { ascending: false }) // Latest version first
       .order('assessment_date', { ascending: false }) // Then by date
 
+    const assessments: any[] = data || []
+
     if (error) {
       log.error('Error fetching CFL history', error)
       return NextResponse.json(
@@ -73,35 +75,35 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the current assessment
-    const currentAssessment = assessments?.find(a => a.is_current) || assessments?.[0]
-    
+    const currentAssessment = assessments.find((a: any) => a.is_current) || assessments[0]
+
     // Calculate statistics
     const stats = {
-      totalAssessments: assessments?.length || 0,
+      totalAssessments: assessments.length,
       latestVersion: currentAssessment?.version || 0,
-      averageCapacity: assessments?.length 
-        ? assessments.reduce((sum, a) => sum + (a.capacity_level || 0), 0) / assessments.length
+      averageCapacity: assessments.length
+        ? assessments.reduce((sum: number, a: any) => sum + (a.capacity_level || 0), 0) / assessments.length
         : 0,
-      averageMaxLoss: assessments?.length
-        ? assessments.reduce((sum, a) => sum + (a.max_loss_percentage || 0), 0) / assessments.length
+      averageMaxLoss: assessments.length
+        ? assessments.reduce((sum: number, a: any) => sum + (a.max_loss_percentage || 0), 0) / assessments.length
         : 0,
-      capacityProgression: assessments?.map(a => ({
+      capacityProgression: assessments.map((a: any) => ({
         version: a.version || 1,
         capacity: a.capacity_level,
         maxLoss: a.max_loss_percentage,
         date: a.assessment_date
-      })) || [],
-      incomeProgression: assessments?.map(a => ({
+      })),
+      incomeProgression: assessments.map((a: any) => ({
         version: a.version || 1,
         income: a.monthly_income || 0,
         expenses: a.monthly_expenses || 0,
         surplus: (a.monthly_income || 0) - (a.monthly_expenses || 0),
         date: a.assessment_date
-      })) || []
+      }))
     }
 
     // Group by capacity category to show distribution
-    const capacityDistribution = assessments?.reduce((acc, assessment) => {
+    const capacityDistribution = assessments.reduce((acc: Record<string, number>, assessment: any) => {
       const category = assessment.capacity_category || 'Unknown'
       acc[category] = (acc[category] || 0) + 1
       return acc
@@ -116,10 +118,10 @@ export async function GET(request: NextRequest) {
       capacityChange: number;
       date: string;
     }> = []
-    
-    for (let i = 0; i < (assessments?.length || 0) - 1; i++) {
-      const current = assessments![i]
-      const previous = assessments![i + 1]
+
+    for (let i = 0; i < assessments.length - 1; i++) {
+      const current = assessments[i]
+      const previous = assessments[i + 1]
       
       if (current.capacity_category !== previous.capacity_category || 
           current.capacity_level !== previous.capacity_level) {
@@ -141,7 +143,7 @@ export async function GET(request: NextRequest) {
       emergencyFundChange: null as number | null,
     }
 
-    if (assessments && assessments.length > 1) {
+    if (assessments.length > 1) {
       const latest = assessments[0]
       const oldest = assessments[assessments.length - 1]
       
@@ -161,7 +163,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       current: currentAssessment,
-      versions: assessments || [],
+      versions: assessments,
       stats,
       capacityDistribution,
       capacityChanges,

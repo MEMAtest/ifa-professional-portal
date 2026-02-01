@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ✅ REAL: Get document counts if requested
-    let categoriesWithCounts = categories || []
+    let categoriesWithCounts: any[] = categories || []
 
     if (includeCount) {
       const auth = await getAuthContext(request)

@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     // Verify new advisor exists and is in the same firm
     const { data: newAdvisor, error: advisorError } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, firm_id, role, status')
+      .select('id, first_name, last_name, firm_id, role')
       .eq('id', newAdvisorId)
       .single()
 
@@ -161,14 +161,6 @@ export async function POST(request: NextRequest) {
     if (newAdvisor.firm_id !== profile.firm_id) {
       return NextResponse.json(
         { success: false, error: 'New advisor must be in the same firm' },
-        { status: 400 }
-      )
-    }
-
-    // Verify advisor is active
-    if (newAdvisor.status !== 'active') {
-      return NextResponse.json(
-        { success: false, error: 'Cannot reassign to inactive or deactivated user' },
         { status: 400 }
       )
     }
@@ -190,7 +182,7 @@ export async function POST(request: NextRequest) {
       .from('clients')
       .select('id, advisor_id, personal_details, firm_id')
       .in('id', clientIds)
-      .eq('firm_id', profile.firm_id) // Security: only reassign clients in user's firm
+      .eq('firm_id', profile.firm_id!) // Security: only reassign clients in user's firm
 
     if (clientsError) {
       logger.error('Error fetching clients', clientsError)

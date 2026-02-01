@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 
   const logger = createRequestLogger(request)
-  const supabase = getSupabaseServiceClient() as any
+  const supabase: any = getSupabaseServiceClient() as any
 
   try {
     let firmId = auth.context?.firmId ?? null

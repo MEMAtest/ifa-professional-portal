@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     log.info('Fetching all ATR assessments for client', { clientId })
 
     // Fetch ALL ATR assessments for this client (not just current)
-    const { data: assessments, error } = await supabase
+    const { data, error } = await supabase
       .from('atr_assessments')
       .select(`
         id,
@@ -59,6 +59,8 @@ export async function GET(request: NextRequest) {
       .order('version', { ascending: false }) // Latest version first
       .order('assessment_date', { ascending: false }) // Then by date
 
+    const assessments: any[] = data || []
+
     if (error) {
       log.error('Error fetching ATR history', error)
       return NextResponse.json(
@@ -68,36 +70,36 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the current assessment
-    const currentAssessment = assessments?.find(a => a.is_current) || assessments?.[0]
-    
+    const currentAssessment = assessments.find((a: any) => a.is_current) || assessments[0]
+
     // Calculate statistics
     const stats = {
-      totalAssessments: assessments?.length || 0,
+      totalAssessments: assessments.length,
       latestVersion: currentAssessment?.version || 0,
-      averageScore: assessments?.length 
-        ? assessments.reduce((sum, a) => sum + (a.total_score || 0), 0) / assessments.length
+      averageScore: assessments.length
+        ? assessments.reduce((sum: number, a: any) => sum + (a.total_score || 0), 0) / assessments.length
         : 0,
-      averageRiskLevel: assessments?.length
-        ? assessments.reduce((sum, a) => sum + (a.risk_level || 0), 0) / assessments.length
+      averageRiskLevel: assessments.length
+        ? assessments.reduce((sum: number, a: any) => sum + (a.risk_level || 0), 0) / assessments.length
         : 0,
-      scoreProgression: assessments?.map(a => ({
+      scoreProgression: assessments.map((a: any) => ({
         version: a.version || 1,
         score: a.total_score,
         riskLevel: a.risk_level,
         date: a.assessment_date
-      })) || [],
-      categoryScoreProgression: assessments?.map(a => ({
+      })),
+      categoryScoreProgression: assessments.map((a: any) => ({
         version: a.version || 1,
         attitude: a.category_scores?.attitude || 0,
         experience: a.category_scores?.experience || 0,
         knowledge: a.category_scores?.knowledge || 0,
         emotional: a.category_scores?.emotional || 0,
         date: a.assessment_date
-      })) || []
+      }))
     }
 
     // Group by risk category to show distribution over time
-    const riskDistribution = assessments?.reduce((acc, assessment) => {
+    const riskDistribution = assessments.reduce((acc: Record<string, number>, assessment: any) => {
       const category = assessment.risk_category || 'Unknown'
       acc[category] = (acc[category] || 0) + 1
       return acc
@@ -113,10 +115,10 @@ export async function GET(request: NextRequest) {
       scoreChange: number;
       date: string;
     }> = []
-    
-    for (let i = 0; i < (assessments?.length || 0) - 1; i++) {
-      const current = assessments![i]
-      const previous = assessments![i + 1]
+
+    for (let i = 0; i < assessments.length - 1; i++) {
+      const current = assessments[i]
+      const previous = assessments[i + 1]
       
       if (current.risk_category !== previous.risk_category || 
           current.risk_level !== previous.risk_level) {
@@ -140,12 +142,12 @@ export async function GET(request: NextRequest) {
       emotional: { trend: 'stable', change: 0 }
     }
 
-    if (assessments && assessments.length > 1) {
+    if (assessments.length > 1) {
       const latest = assessments[0]
       const oldest = assessments[assessments.length - 1]
-      
+
       const categories = ['attitude', 'experience', 'knowledge', 'emotional'] as const
-      
+
       categories.forEach(cat => {
         const latestScore = latest.category_scores?.[cat] || 0
         const oldestScore = oldest.category_scores?.[cat] || 0
@@ -166,13 +168,13 @@ export async function GET(request: NextRequest) {
       emotional: 0
     }
 
-    if (assessments && assessments.length > 2) {
+    if (assessments.length > 2) {
       const categories = ['attitude', 'experience', 'knowledge', 'emotional'] as const
-      
+
       categories.forEach(cat => {
-        const scores = assessments.map(a => a.category_scores?.[cat] || 0)
-        const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length
-        const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length
+        const scores = assessments.map((a: any) => a.category_scores?.[cat] || 0)
+        const mean = scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length
+        const variance = scores.reduce((sum: number, score: number) => sum + Math.pow(score - mean, 2), 0) / scores.length
         categoryVolatility[cat] = Math.sqrt(variance) // Standard deviation
       })
     }
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       current: currentAssessment,
-      versions: assessments || [],
+      versions: assessments,
       stats,
       riskDistribution,
       riskChanges,
@@ -195,8 +197,8 @@ export async function GET(request: NextRequest) {
         mostConsistentCategory: mostConsistent,
         mostVolatileCategory: mostVolatile,
         categoryVolatility,
-        overallTrend: assessments && assessments.length > 1 
-          ? (assessments[0].risk_level > assessments[assessments.length - 1].risk_level ? 'increasing' : 
+        overallTrend: assessments.length > 1
+          ? (assessments[0].risk_level > assessments[assessments.length - 1].risk_level ? 'increasing' :
              assessments[0].risk_level < assessments[assessments.length - 1].risk_level ? 'decreasing' : 'stable')
           : 'insufficient_data'
       },
