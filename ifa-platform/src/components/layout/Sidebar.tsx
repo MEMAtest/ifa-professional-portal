@@ -45,7 +45,8 @@ import {
   UserCheck,
   X,
   Fingerprint,
-  CheckSquare
+  CheckSquare,
+  Upload
 } from 'lucide-react';
 
 interface NavItem {
@@ -206,6 +207,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
       title: 'Administration',
       items: [
         { name: 'Preferences', href: '/settings', icon: Settings },
+        { name: 'Bulk Setup', href: '/setup', icon: Upload },
         ...(isPlatformAdmin ? [{ name: 'Owner Admin', href: '/admin', icon: Lock }] : []),
       ],
     },

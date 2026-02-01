@@ -6,10 +6,10 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 interface GenerateDocumentRequest {
   content: string
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const body: GenerateDocumentRequest = await request.json()
 
     // Validate required fields
@@ -70,6 +70,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
     const fileName = `${body.title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`
     const filePath = `documents/${firmId}/${documentId}/${fileName}`
 
+    const metadata = {
+      templateId: body.templateId,
+      variables: body.variables,
+      generatedAt: new Date().toISOString(),
+      source: body.templateId ? 'template-generation' : 'api-generation',
+      ...(body.metadata || {}),
+    }
+
     // Create document record in database
     const { data: document, error: dbError } = await supabase
       .from('documents')
@@ -87,12 +95,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
         updated_by: userId,
         status: 'active',
         compliance_status: 'pending',
-        metadata: {
-          templateId: body.templateId,
-          variables: body.variables,
-          generatedAt: new Date().toISOString(),
-          source: 'template-generation'
-        }
+        metadata
       })
       .select()
       .single()

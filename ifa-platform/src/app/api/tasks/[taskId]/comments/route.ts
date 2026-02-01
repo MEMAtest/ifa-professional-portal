@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import type { CreateTaskCommentInput } from '@/modules/tasks/types'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Verify task exists and belongs to firm
     const { data: task, error: taskError } = await supabase
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Comment must be 5000 characters or less' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Verify task exists and belongs to firm
     const { data: task, error: taskError } = await supabase

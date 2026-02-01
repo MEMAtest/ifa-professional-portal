@@ -1,14 +1,12 @@
-import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
 // src/app/api/documents/download/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { log } from '@/lib/logging/structured'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { notifyDocumentDownloaded } from '@/lib/notifications/notificationService'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export async function GET(
   request: NextRequest,
@@ -22,19 +20,7 @@ export async function GET(
     const documentId = params.id
     log.info('Download requested for document', { documentId })
 
-    // Create Supabase client with auth
-    const cookieStore = cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
+    const supabase = getSupabaseServiceClient()
 
     // Fetch document record
     const { data: document, error } = await supabase
@@ -54,7 +40,7 @@ export async function GET(
     // Helper function to log download activity and send notification
     const logDownloadActivity = async () => {
       if (document.client_id) {
-        const activitySupabase = await createClient()
+        const activitySupabase = getSupabaseServiceClient()
 
         // Log activity
         try {

@@ -3,32 +3,20 @@
 
 export const dynamic = 'force-dynamic'
 
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // Get current user for firm context
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Try to get firm_id from user metadata or profile
-    let firmId = (user.user_metadata as any)?.firm_id || (user.user_metadata as any)?.firmId
-
-    if (!firmId) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('firm_id')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      firmId = profile?.firm_id
-    }
+    const supabase = getSupabaseServiceClient()
+    const firmId = getValidatedFirmId(auth.context)
 
     // Query advisors/profiles
     let query = supabase

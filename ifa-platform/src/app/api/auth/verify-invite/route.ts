@@ -7,9 +7,9 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { hashToken } from '@/lib/security/crypto'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export async function GET(request: NextRequest) {
   // Rate limit: 5 requests per 15 minutes per IP
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Hash the incoming token for comparison (tokens are stored hashed in DB)
     const hashedToken = hashToken(token)

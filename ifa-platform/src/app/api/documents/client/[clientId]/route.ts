@@ -7,14 +7,8 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
-
-// ✅ FIXED: Add supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 export async function GET(
   request: NextRequest,
@@ -42,6 +36,8 @@ export async function GET(
       assessmentType,
       assessmentVersion
     })
+
+    const supabase = getSupabaseServiceClient()
 
     // Start building the query
     // Try to select with signature_requests, but handle gracefully if relationship doesn't exist
@@ -89,7 +85,7 @@ export async function GET(
       // Filter by assessment type and version (e.g., ATR version 3)
       query = query
         .eq('document_type', `${assessmentType}_report`)
-        .eq('assessment_version', assessmentVersion)
+        .eq('assessment_version', Number(assessmentVersion))
       log.debug('Filtering by type and version', { assessmentType, assessmentVersion })
     } else if (assessmentType) {
       // Filter by assessment type only (e.g., all ATR documents)

@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type {
   CreateTaskInput,
@@ -14,10 +13,27 @@ import type {
   TaskStatus,
   TaskType,
   TaskPriority,
+  TaskSourceType,
 } from '@/modules/tasks/types'
 import type { Json } from '@/types/db'
 
 export const dynamic = 'force-dynamic'
+
+const ALLOWED_SOURCE_TYPES: TaskSourceType[] = [
+  'complaint',
+  'breach',
+  'vulnerability',
+  'file_review',
+  'aml_check',
+  'consumer_duty',
+  'risk_assessment',
+]
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value)
+}
 
 // ============================================
 // GET: List tasks
@@ -41,6 +57,20 @@ export async function GET(request: NextRequest) {
     const statusParam = url.searchParams.get('status')
     const typeParam = url.searchParams.get('type')
     const priorityParam = url.searchParams.get('priority')
+    const sourceTypeParam = url.searchParams.get('sourceType') || undefined
+    const sourceIdParam = url.searchParams.get('sourceId') || undefined
+
+    if ((sourceTypeParam && !sourceIdParam) || (!sourceTypeParam && sourceIdParam)) {
+      return NextResponse.json({ error: 'sourceType and sourceId must be provided together' }, { status: 400 })
+    }
+
+    if (sourceTypeParam && !ALLOWED_SOURCE_TYPES.includes(sourceTypeParam as TaskSourceType)) {
+      return NextResponse.json({ error: 'Invalid sourceType' }, { status: 400 })
+    }
+
+    if (sourceIdParam && !isValidUUID(sourceIdParam)) {
+      return NextResponse.json({ error: 'Invalid sourceId' }, { status: 400 })
+    }
 
     const params: TaskListParams = {
       page: parseInt(url.searchParams.get('page') || '1'),
@@ -58,13 +88,15 @@ export async function GET(request: NextRequest) {
         : priorityParam as TaskPriority | undefined,
       assignedTo: url.searchParams.get('assignedTo') || undefined,
       clientId: url.searchParams.get('clientId') || undefined,
+      sourceType: sourceTypeParam as TaskSourceType | undefined,
+      sourceId: sourceIdParam || undefined,
       dueBefore: url.searchParams.get('dueBefore') || undefined,
       dueAfter: url.searchParams.get('dueAfter') || undefined,
       overdue: url.searchParams.get('overdue') === 'true',
       search: url.searchParams.get('search') || undefined,
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Build query
     let query = supabase
@@ -127,6 +159,14 @@ export async function GET(request: NextRequest) {
 
     if (params.clientId) {
       query = query.eq('client_id', params.clientId)
+    }
+
+    if (params.sourceType) {
+      query = query.eq('source_type', params.sourceType)
+    }
+
+    if (params.sourceId) {
+      query = query.eq('source_id', params.sourceId)
     }
 
     // Date range filters for calendar integration
@@ -213,6 +253,8 @@ export async function GET(request: NextRequest) {
       assignedBy: task.assigned_by,
       clientId: task.client_id,
       assessmentId: task.assessment_id,
+      sourceType: task.source_type,
+      sourceId: task.source_id,
       dueDate: task.due_date,
       completedAt: task.completed_at,
       completedBy: task.completed_by,
@@ -289,6 +331,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
     }
 
+    // Validate source type if provided
+    if (body.sourceType && !ALLOWED_SOURCE_TYPES.includes(body.sourceType)) {
+      return NextResponse.json({ error: 'Invalid sourceType' }, { status: 400 })
+    }
+
+    if ((body.sourceType && !body.sourceId) || (!body.sourceType && body.sourceId)) {
+      return NextResponse.json({ error: 'sourceType and sourceId must be provided together' }, { status: 400 })
+    }
+
+    if (body.sourceId && !isValidUUID(body.sourceId)) {
+      return NextResponse.json({ error: 'Invalid sourceId' }, { status: 400 })
+    }
+
     // Validate due date format if provided
     if (body.dueDate) {
       const dueDate = new Date(body.dueDate)
@@ -305,7 +360,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
 
     // Verify client belongs to firm if clientId provided
@@ -350,6 +405,8 @@ export async function POST(request: NextRequest) {
         assigned_by: authResult.context.userId,
         client_id: body.clientId || null,
         assessment_id: body.assessmentId || null,
+        source_type: body.sourceType || null,
+        source_id: body.sourceId || null,
         due_date: body.dueDate || null,
         requires_sign_off: body.requiresSignOff || false,
         is_recurring: body.isRecurring || false,
@@ -432,6 +489,8 @@ export async function POST(request: NextRequest) {
       assignedBy: task.assigned_by,
       clientId: task.client_id,
       assessmentId: task.assessment_id,
+      sourceType: task.source_type,
+      sourceId: task.source_id,
       dueDate: task.due_date,
       completedAt: task.completed_at,
       completedBy: task.completed_by,

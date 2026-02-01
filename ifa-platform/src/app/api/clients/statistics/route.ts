@@ -1,16 +1,16 @@
-import { createClient } from "@/lib/supabase/server"
 // src/app/api/clients/statistics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
+import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth';
 import { log } from '@/lib/logging/structured';
-
 
 export const dynamic = 'force-dynamic';
 
 interface ClientStatistics {
   totalClients: number;
   activeClients: number;
-  archivedClients: number; // ✅ NEW
-  vulnerableClients: number; // ✅ FIXED
+  archivedClients: number;
+  vulnerableClients: number;
   prospectsCount: number;
   reviewsDue: number;
   highRiskClients: number;
@@ -20,7 +20,13 @@ interface ClientStatistics {
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const auth = await getAuthContext(request);
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json(getDefaultStats());
+  }
+
+  const supabase = getSupabaseServiceClient();
+  const firmId = getValidatedFirmId(auth.context);
   try {
     log.debug('GET /api/clients/statistics - Fetching statistics');
     
@@ -30,7 +36,11 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('clients')
       .select('*', { count: 'exact' });
-    
+
+    if (firmId) {
+      query = query.eq('firm_id', firmId);
+    }
+
     if (advisorId) {
       query = query.eq('advisor_id', advisorId);
     }

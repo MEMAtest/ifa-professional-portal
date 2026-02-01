@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import type { Firm, FirmUpdateInput } from '@/modules/firm/types/firm.types'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     const { data: firm, error } = await supabase
       .from('firms')
@@ -80,7 +80,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body: FirmUpdateInput = await request.json()
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Build update object
     const updateData: Record<string, unknown> = {

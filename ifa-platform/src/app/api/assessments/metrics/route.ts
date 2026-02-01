@@ -6,9 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { Database, DbTableKey } from '@/types/db'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { normalizeAssessmentType } from '@/lib/assessments/routing'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest) {
     logger.info('Metrics API request received')
     step = 'auth'
 
-    const authSupabase = await createServerClient()
+    const authSupabase = getSupabaseServiceClient()
     const {
       data: { user }
     } = await authSupabase.auth.getUser()

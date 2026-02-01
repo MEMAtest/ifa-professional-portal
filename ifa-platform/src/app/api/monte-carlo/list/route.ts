@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
 // src/app/api/monte-carlo/list/route.ts
 // ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';

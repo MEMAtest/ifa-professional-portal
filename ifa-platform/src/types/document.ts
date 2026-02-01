@@ -78,7 +78,7 @@ export type DocumentType =
   | 'tax_planning'
 
 // Status Types
-export type DocumentStatus = 'active' | 'pending' | 'reviewed' | 'archived' | 'deleted';
+export type DocumentStatus = 'active' | 'pending' | 'reviewed' | 'archived' | 'deleted' | 'processing' | 'extracted' | 'analyzed' | 'failed';
 export type ComplianceStatus = 'pending' | 'compliant' | 'non_compliant' | 'under_review' | 'exempt';
 export type ComplianceLevel = 'standard' | 'high' | 'critical';
 export type SignatureStatus = 'pending' | 'sent' | 'viewed' | 'completed' | 'expired' | 'cancelled';
@@ -293,7 +293,7 @@ export class DocumentError extends Error {
 // ===================================================================
 // CONSTANTS
 // ===================================================================
-export const DOCUMENT_STATUSES: DocumentStatus[] = ['active', 'pending', 'reviewed', 'archived', 'deleted'];
+export const DOCUMENT_STATUSES: DocumentStatus[] = ['active', 'pending', 'reviewed', 'archived', 'deleted', 'processing', 'extracted', 'analyzed', 'failed'];
 export const COMPLIANCE_STATUSES: ComplianceStatus[] = ['pending', 'compliant', 'non_compliant', 'under_review', 'exempt'];
 export const COMPLIANCE_LEVELS: ComplianceLevel[] = ['standard', 'high', 'critical'];
 export const SIGNATURE_STATUSES: SignatureStatus[] = ['pending', 'sent', 'viewed', 'completed', 'expired', 'cancelled'];
@@ -323,16 +323,20 @@ export const ALLOWED_FILE_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-outlook',
   'text/plain',
   'image/jpeg',
   'image/png',
   'image/gif'
 ];
 
-export const FILE_TYPE_EXTENSIONS = {
+export const FILE_TYPE_EXTENSIONS: Record<string, string> = {
   'application/pdf': '.pdf',
   'application/msword': '.doc',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-outlook': '.msg',
   'text/plain': '.txt',
   'image/jpeg': '.jpg',
   'image/png': '.png',

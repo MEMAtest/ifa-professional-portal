@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +9,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { handleError, checkAuthentication } from '../../utils';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 interface RouteParams {
   params: { scenarioId: string };

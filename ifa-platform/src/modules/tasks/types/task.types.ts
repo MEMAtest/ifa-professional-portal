@@ -27,6 +27,15 @@ export type TaskPriority =
   | 'high'
   | 'urgent'
 
+export type TaskSourceType =
+  | 'complaint'
+  | 'breach'
+  | 'vulnerability'
+  | 'file_review'
+  | 'aml_check'
+  | 'consumer_duty'
+  | 'risk_assessment'
+
 // ============================================
 // CORE INTERFACES
 // ============================================
@@ -47,6 +56,8 @@ export interface Task {
   // Relationships
   clientId?: string
   assessmentId?: string
+  sourceType?: TaskSourceType | null
+  sourceId?: string | null
 
   // Dates
   dueDate?: Date
@@ -147,6 +158,8 @@ export interface CreateTaskInput {
   assignedTo?: string
   clientId?: string
   assessmentId?: string
+  sourceType?: TaskSourceType
+  sourceId?: string
   dueDate?: string
   requiresSignOff?: boolean
   isRecurring?: boolean
@@ -164,6 +177,8 @@ export interface UpdateTaskInput {
   assignedTo?: string | null
   clientId?: string | null
   assessmentId?: string | null
+  sourceType?: TaskSourceType | null
+  sourceId?: string | null
   dueDate?: string | null
   requiresSignOff?: boolean
   isRecurring?: boolean
@@ -189,6 +204,8 @@ export interface TaskFilters {
   priority?: TaskPriority | TaskPriority[]
   assignedTo?: string
   clientId?: string
+  sourceType?: TaskSourceType
+  sourceId?: string
   dueBefore?: string
   dueAfter?: string
   overdue?: boolean

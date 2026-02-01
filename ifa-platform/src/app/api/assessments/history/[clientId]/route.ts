@@ -2,9 +2,10 @@
 // COMPLETE UPDATED VERSION - NO ASSUMPTIONS
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import type { AssessmentHistory } from '@/types/assessment';
 import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export async function GET(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     
@@ -126,7 +127,7 @@ export async function POST(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
     const body = await request.json();
     const { assessmentType, assessmentId, action, changes, metadata } = body;
@@ -188,7 +189,7 @@ export async function DELETE(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     const assessmentType = searchParams.get('assessmentType');

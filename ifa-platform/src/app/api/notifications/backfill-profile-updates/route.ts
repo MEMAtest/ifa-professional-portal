@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 type ClientRow = {
   id: string
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = await createServerClient()
+    const supabase = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })

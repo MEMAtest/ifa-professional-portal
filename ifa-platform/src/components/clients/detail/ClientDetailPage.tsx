@@ -18,6 +18,7 @@ import { useClientDetailsData } from '@/hooks/useClientDetailsData'
 
 import ActivityTab from '@/components/clients/ActivityTab'
 import DocumentGenerationHub from '@/components/documents/DocumentGenerationHub'
+import ClientUploadedDocuments from '@/components/documents/ClientUploadedDocuments'
 import { LogCommunicationModal } from '@/components/communications/LogCommunicationModal'
 import { ScheduleReviewModal } from '@/components/reviews/ScheduleReviewModal'
 import { EditReviewModal } from '@/components/reviews/EditReviewModal'
@@ -49,6 +50,7 @@ export function ClientDetailPage(props: { clientId: string }) {
     })
 
   const [activeTab, setActiveTab] = useState('overview')
+  const [documentsSubTab, setDocumentsSubTab] = useState('uploaded')
   const [isGeneratingDoc, setIsGeneratingDoc] = useState(false)
   const [showVulnerabilityWizard, setShowVulnerabilityWizard] = useState(false)
   const [showConsumerDutyWizard, setShowConsumerDutyWizard] = useState(false)
@@ -200,6 +202,12 @@ export function ClientDetailPage(props: { clientId: string }) {
     return Math.round((completed / checks.length) * 100)
   }
 
+  const clientName = client
+    ? `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim() ||
+      client.clientRef ||
+      'Client'
+    : 'Client'
+
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -233,7 +241,6 @@ export function ClientDetailPage(props: { clientId: string }) {
   const integrationStatus = getIntegrationStatus()
   const completionPercentage = calculateCompletionPercentage()
 
-  const clientName = `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim()
   const clientEmail = client.contactInfo?.email
 
   return (
@@ -304,7 +311,18 @@ export function ClientDetailPage(props: { clientId: string }) {
         </TabsContent>
 
         <TabsContent value="documents">
-          <DocumentGenerationHub clientId={client.id} clientName={clientName} clientEmail={clientEmail} />
+          <Tabs value={documentsSubTab} onValueChange={setDocumentsSubTab}>
+            <TabsList>
+              <TabsTrigger value="uploaded">Uploaded</TabsTrigger>
+              <TabsTrigger value="generated">Generated</TabsTrigger>
+            </TabsList>
+            <TabsContent value="uploaded">
+              <ClientUploadedDocuments clientId={client.id} clientName={clientName} />
+            </TabsContent>
+            <TabsContent value="generated">
+              <DocumentGenerationHub clientId={client.id} clientName={clientName} clientEmail={clientEmail} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="communications">

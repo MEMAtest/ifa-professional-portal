@@ -3,9 +3,9 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
     const firmId = firmIdResult.firmId
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get query parameters
     const { searchParams } = new URL(request.url)

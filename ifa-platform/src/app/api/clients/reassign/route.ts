@@ -6,12 +6,12 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyClientReassigned } from '@/lib/notifications/notificationService'
 import { rateLimit } from '@/lib/security/rateLimit'
 import type { Json } from '@/types/db'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 // UUID validation regex (RFC 4122 compliant)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = await createServerClient()
+    const supabase = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {

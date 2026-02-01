@@ -5,8 +5,8 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { jsPDF } from 'jspdf';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // ================================================================
 // TYPES
@@ -523,7 +523,7 @@ export async function POST(request: NextRequest) {
     const avgResilience = results.reduce((sum: number, r: StressTestResult) => sum + r.resilienceScore, 0) / results.length;
 
     // Try to save to Supabase
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
     const fileName = `stress-test-${clientProfile.clientRef}-${Date.now()}.pdf`;
 
     try {

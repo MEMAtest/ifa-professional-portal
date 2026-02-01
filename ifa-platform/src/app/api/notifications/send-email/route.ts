@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
@@ -6,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import {
   getFirmBranding,
   wrapWithBranding,

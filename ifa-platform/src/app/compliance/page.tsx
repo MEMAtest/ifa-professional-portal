@@ -32,7 +32,8 @@ import {
   UserX,
   Scale,
   Bell,
-  RefreshCw
+  RefreshCw,
+  LayoutGrid
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
@@ -50,6 +51,7 @@ import AMLDashboard from '@/components/compliance/AMLDashboard'
 import ConsumerDutyDashboard from '@/components/compliance/ConsumerDutyDashboard'
 import ProdServicesDashboard from '@/components/compliance/ProdServicesDashboard'
 import { ProdServicesClientPanel } from '@/components/compliance/ProdServicesClientPanel'
+import ComplianceWorkflowHub from '@/components/compliance/ComplianceWorkflowHub'
 
 // Error Boundary Component to catch and handle errors gracefully
 interface ErrorBoundaryProps {
@@ -139,7 +141,7 @@ interface ComplianceStats {
   complianceScore: number
 }
 
-type TabType = 'qa-reviews' | 'registers' | 'aml' | 'consumer-duty' | 'prod-services' | 'settings'
+type TabType = 'qa-reviews' | 'registers' | 'aml' | 'consumer-duty' | 'prod-services' | 'workflow-hub' | 'settings'
 
 export default function ComplianceHubPage() {
   const supabase = createClient()
@@ -179,6 +181,8 @@ export default function ComplianceHubPage() {
     } else if (tab === 'registers') {
       setActiveTab('registers')
       if (sub) setRegistersSubTab(sub)
+    } else if (tab === 'workflow-hub' || tab === 'workflow') {
+      setActiveTab('workflow-hub')
     } else if (tab === 'prod-services') {
       setActiveTab('prod-services')
     }
@@ -365,6 +369,13 @@ export default function ComplianceHubPage() {
       key: 'prod-services' as TabType,
       label: 'PROD & Services',
       icon: FileText,
+      badge: undefined,
+      badgeColor: 'secondary'
+    },
+    {
+      key: 'workflow-hub' as TabType,
+      label: 'Workflow Hub',
+      icon: LayoutGrid,
       badge: undefined,
       badgeColor: 'secondary'
     },
@@ -667,6 +678,14 @@ export default function ComplianceHubPage() {
               <ProdServicesDashboard />
               <ProdServicesClientPanel />
             </div>
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'workflow-hub' && (
+          <TabErrorBoundary
+            key="workflow-hub"
+            fallback={<TabErrorFallback tabName="Workflow Hub" onRetry={() => setActiveTab('workflow-hub')} />}
+          >
+            <ComplianceWorkflowHub />
           </TabErrorBoundary>
         )}
         {activeTab === 'settings' && (

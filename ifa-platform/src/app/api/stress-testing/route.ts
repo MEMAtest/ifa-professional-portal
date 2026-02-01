@@ -3,7 +3,6 @@
 // API routes for Stress Testing functionality
 // ================================================================
 
-import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/auth/apiAuth';
 import { createRequestLogger } from '@/lib/logging/structured';
@@ -36,7 +35,7 @@ export async function GET(request: NextRequest) {
     return auth.response!;
   }
 
-  const supabase = await createClient();
+  const supabase = getSupabaseServiceClient();
   const supabaseService = getSupabaseServiceClient();
   const logger = createRequestLogger(request);
 
@@ -129,7 +128,7 @@ export async function POST(request: NextRequest) {
     return auth.response!;
   }
 
-  const supabase = await createClient();
+  const supabase = getSupabaseServiceClient();
   const supabaseService = getSupabaseServiceClient();
   const logger = createRequestLogger(request);
   const authContext = auth.context;

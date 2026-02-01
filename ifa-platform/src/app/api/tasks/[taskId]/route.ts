@@ -7,9 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import type { UpdateTaskInput, TaskStatus, TaskType, TaskPriority } from '@/modules/tasks/types'
+import type { UpdateTaskInput, TaskStatus, TaskType, TaskPriority, TaskSourceType } from '@/modules/tasks/types'
 import type { Json } from '@/types/db'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +19,16 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value)
 }
+
+const ALLOWED_SOURCE_TYPES: TaskSourceType[] = [
+  'complaint',
+  'breach',
+  'vulnerability',
+  'file_review',
+  'aml_check',
+  'consumer_duty',
+  'risk_assessment',
+]
 
 interface RouteContext {
   params: Promise<{ taskId: string }>
@@ -47,7 +56,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     const { data: task, error } = await supabase
       .from('tasks')
@@ -101,6 +110,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       assignedBy: task.assigned_by,
       clientId: task.client_id,
       assessmentId: task.assessment_id,
+      sourceType: task.source_type,
+      sourceId: task.source_id,
       dueDate: task.due_date,
       completedAt: task.completed_at,
       completedBy: task.completed_by,
@@ -183,6 +194,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
     }
 
+    // Validate source type if provided
+    if (body.sourceType && !ALLOWED_SOURCE_TYPES.includes(body.sourceType)) {
+      return NextResponse.json({ error: 'Invalid sourceType' }, { status: 400 })
+    }
+
+    if ((body.sourceType && !body.sourceId) || (!body.sourceType && body.sourceId)) {
+      return NextResponse.json({ error: 'sourceType and sourceId must be provided together' }, { status: 400 })
+    }
+
+    if (body.sourceId && !isValidUUID(body.sourceId)) {
+      return NextResponse.json({ error: 'Invalid sourceId' }, { status: 400 })
+    }
+
     // Validate due date format if provided
     if (body.dueDate) {
       const dueDate = new Date(body.dueDate)
@@ -211,7 +235,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
 
     // Get existing task
@@ -267,6 +291,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (body.assignedTo !== undefined) updateData.assigned_to = body.assignedTo
     if (body.clientId !== undefined) updateData.client_id = body.clientId
     if (body.assessmentId !== undefined) updateData.assessment_id = body.assessmentId
+    if (body.sourceType !== undefined) updateData.source_type = body.sourceType
+    if (body.sourceId !== undefined) updateData.source_id = body.sourceId
     if (body.dueDate !== undefined) updateData.due_date = body.dueDate
     if (body.requiresSignOff !== undefined) updateData.requires_sign_off = body.requiresSignOff
     if (body.isRecurring !== undefined) updateData.is_recurring = body.isRecurring
@@ -379,6 +405,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       assignedBy: task.assigned_by,
       clientId: task.client_id,
       assessmentId: task.assessment_id,
+      sourceType: task.source_type,
+      sourceId: task.source_id,
       dueDate: task.due_date,
       completedAt: task.completed_at,
       completedBy: task.completed_by,
@@ -430,7 +458,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
 
     // Get task before deletion for logging and authorization

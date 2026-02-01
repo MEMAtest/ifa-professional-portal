@@ -4,12 +4,12 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { clientService } from '@/services/ClientService';
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -56,7 +56,7 @@ export async function POST(
     const { format = 'pdf', includeHistory = true, assessmentTypes = [] } = body;
     
     // Create Supabase client
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
 
     // Fetch all required data
     const [clientData, progressData, historyData] = await Promise.all([

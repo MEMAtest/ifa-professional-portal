@@ -601,9 +601,9 @@ export function getValidatedFirmId(authContext: AuthContext): string | null {
   }
 
   // Reject known test/placeholder UUIDs
+  // NOTE: 00000000-...-000000000001 is the real "Demo Financial Advisers Ltd" firm
   const invalidIds = [
     '00000000-0000-0000-0000-000000000000',
-    '00000000-0000-0000-0000-000000000001',
     '12345678-1234-1234-1234-123456789012'
   ]
 

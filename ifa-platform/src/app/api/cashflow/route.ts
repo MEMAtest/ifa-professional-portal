@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server"
 // src/app/api/cashflow/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { checkAuthentication, handleError, validateRequiredFields, createSuccessResponse } from '../utils';
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';

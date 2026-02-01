@@ -1,17 +1,16 @@
-import { createClient } from "@/lib/supabase/server"
 // src/app/api/communications/route.ts
 // ✅ FIXED: Using correct Supabase import for API routes
 
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
-
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
 
 // GET - Fetch communications for a client
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
@@ -69,7 +68,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new communication
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     const body = await request.json();
     const { 
@@ -163,7 +162,7 @@ export async function POST(request: NextRequest) {
 
 // PATCH - Update communication
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     const body = await request.json();
     const { id, ...updates } = body;
@@ -220,7 +219,7 @@ export async function PATCH(request: NextRequest) {
 
 // DELETE - Delete communication
 export async function DELETE(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

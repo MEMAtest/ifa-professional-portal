@@ -34,13 +34,19 @@ import {
   UserCircle,
   History,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  LayoutGrid,
+  List
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import { WorkflowBoard, StatusPipeline, CommentThread, OwnerPicker, WORKFLOW_CONFIGS } from './workflow'
+import type { WorkflowItem } from './workflow'
+import { CreateTaskModal } from '@/modules/tasks/components/CreateTaskModal'
+import { useCreateTask, useSourceTasks } from '@/modules/tasks/hooks/useTasks'
 
 interface Complaint {
   id: string
@@ -53,6 +59,8 @@ interface Complaint {
   description: string
   root_cause: string | null
   status: 'open' | 'investigating' | 'resolved' | 'escalated' | 'closed'
+  assigned_to: string | null
+  priority: 'low' | 'medium' | 'high' | 'urgent'
   resolution: string | null
   resolution_date: string | null
   redress_amount: number
@@ -70,6 +78,12 @@ interface Complaint {
       title?: string
     }
   }
+  assigned_user?: {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    avatar_url: string | null
+  }
 }
 
 interface Props {
@@ -79,11 +93,15 @@ interface Props {
 export default function ComplaintsRegister({ onStatsChange }: Props) {
   const supabase = createClient()
   const { toast } = useToast()
+  const [showTaskModal, setShowTaskModal] = useState(false)
+  const createTask = useCreateTask()
+  const { data: linkedTasks } = useSourceTasks('complaint', complaint.id)
 
   const [complaints, setComplaints] = useState<Complaint[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'table' | 'workflow'>('table')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null)
 
@@ -98,6 +116,12 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
             id,
             client_ref,
             personal_details
+          ),
+          assigned_user:assigned_to (
+            id,
+            first_name,
+            last_name,
+            avatar_url
           )
         `)
         .order('complaint_date', { ascending: false })
@@ -136,6 +160,40 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
       complaint.description.toLowerCase().includes(searchTerm.toLowerCase())
     )
   })
+
+  const workflowItems: WorkflowItem[] = filteredComplaints.map((complaint) => ({
+    id: complaint.id,
+    sourceType: 'complaint',
+    sourceId: complaint.id,
+    title: complaint.reference_number || 'Complaint',
+    subtitle: getClientName(complaint),
+    status: complaint.status,
+    priority: complaint.priority || 'medium',
+    ownerId: complaint.assigned_to || null,
+    ownerName: getOwnerName(complaint),
+    commentCount: 0,
+    dueDate: getComplaintDueDate(complaint),
+    clientId: complaint.client_id || null,
+  }))
+
+  const handleWorkflowStatusChange = async (item: WorkflowItem, status: string) => {
+    try {
+      const { error } = await supabase
+        .from('complaint_register')
+        .update({ status })
+        .eq('id', item.id)
+      if (error) throw error
+      await loadComplaints()
+      onStatsChange?.()
+    } catch (error) {
+      console.error('Error updating complaint status:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update complaint status',
+        variant: 'destructive'
+      })
+    }
+  }
 
   const getClientName = (complaint: Complaint): string => {
     if (!complaint.clients?.personal_details) return 'Unknown Client'
@@ -187,6 +245,18 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
       style: 'currency',
       currency: 'GBP'
     }).format(amount)
+  }
+
+  const getOwnerName = (complaint: Complaint): string => {
+    const owner = complaint.assigned_user
+    if (!owner) return 'Unassigned'
+    return `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unassigned'
+  }
+
+  const getComplaintDueDate = (complaint: Complaint): string => {
+    const base = new Date(complaint.complaint_date)
+    const due = new Date(base.getTime() + 56 * 24 * 60 * 60 * 1000)
+    return due.toISOString()
   }
 
   // Calculate days since complaint (FCA requires resolution within 8 weeks = 56 days)
@@ -387,6 +457,24 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+            >
+              <List className="mr-2 h-4 w-4" />
+              Table
+            </Button>
+            <Button
+              variant={viewMode === 'workflow' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('workflow')}
+            >
+              <LayoutGrid className="mr-2 h-4 w-4" />
+              Workflow
+            </Button>
+          </div>
           <Button variant="outline" onClick={handleExportCSV} className="w-full sm:w-auto">
             <Download className="h-4 w-4 mr-2" />
             Export CSV
@@ -398,179 +486,201 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
         </div>
       </div>
 
-      {/* Complaints Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <MessageSquareWarning className="h-5 w-5" />
-            <span>Complaints Register ({filteredComplaints.length})</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredComplaints.length === 0 ? (
-            <div className="text-center py-12">
-              <MessageSquareWarning className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg">No complaints found</p>
-              <p className="text-gray-400 mt-1">
-                {statusFilter !== 'all' ? 'Try changing the filter' : 'Log your first complaint to get started'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-3 sm:hidden">
-                {filteredComplaints.map((complaint) => (
-                  <div
-                    key={complaint.id}
-                    className={`rounded-lg border p-4 shadow-sm ${
-                      isOverdue(complaint) ? 'border-red-200 bg-red-50/40' :
-                      isApproachingDeadline(complaint) ? 'border-yellow-200 bg-yellow-50/40' :
-                      'border-gray-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-gray-500 font-mono">{complaint.reference_number}</p>
-                        <p className="text-sm font-semibold text-gray-900">{getClientName(complaint)}</p>
-                        <p className="text-xs text-gray-500 mt-1">{formatDate(complaint.complaint_date)}</p>
+      {viewMode === 'workflow' ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <MessageSquareWarning className="h-5 w-5" />
+              <span>Complaints Workflow ({filteredComplaints.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WorkflowBoard
+              columns={WORKFLOW_CONFIGS.complaint.stages}
+              items={workflowItems}
+              onItemClick={(item) => {
+                const complaint = complaints.find((c) => c.id === item.id)
+                if (complaint) setSelectedComplaint(complaint)
+              }}
+              onStatusChange={handleWorkflowStatusChange}
+              emptyMessage="No complaints in this workflow"
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <MessageSquareWarning className="h-5 w-5" />
+              <span>Complaints Register ({filteredComplaints.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredComplaints.length === 0 ? (
+              <div className="text-center py-12">
+                <MessageSquareWarning className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg">No complaints found</p>
+                <p className="text-gray-400 mt-1">
+                  {statusFilter !== 'all' ? 'Try changing the filter' : 'Log your first complaint to get started'}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 sm:hidden">
+                  {filteredComplaints.map((complaint) => (
+                    <div
+                      key={complaint.id}
+                      className={`rounded-lg border p-4 shadow-sm ${
+                        isOverdue(complaint) ? 'border-red-200 bg-red-50/40' :
+                        isApproachingDeadline(complaint) ? 'border-yellow-200 bg-yellow-50/40' :
+                        'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-gray-500 font-mono">{complaint.reference_number}</p>
+                          <p className="text-sm font-semibold text-gray-900">{getClientName(complaint)}</p>
+                          <p className="text-xs text-gray-500 mt-1">{formatDate(complaint.complaint_date)}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedComplaint(complaint)}
+                          className="shrink-0"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedComplaint(complaint)}
-                        className="shrink-0"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                      <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
-                      {getStatusBadge(complaint.status)}
-                      {complaint.fca_reportable && (
-                        <Badge variant="destructive" className="text-xs">FCA</Badge>
-                      )}
-                    </div>
-                    <div className="mt-3 text-xs text-gray-600">
-                      {complaint.description.length > 90
-                        ? `${complaint.description.substring(0, 90)}...`
-                        : complaint.description}
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <p className="text-gray-400 uppercase">Days Open</p>
-                        {complaint.status === 'resolved' || complaint.status === 'closed' ? (
-                          <p className="text-sm font-semibold text-green-600">-</p>
-                        ) : (
-                          <p className={`text-sm font-semibold ${
-                            isOverdue(complaint) ? 'text-red-600' :
-                            isApproachingDeadline(complaint) ? 'text-yellow-600' :
-                            'text-gray-700'
-                          }`}>
-                            {getDaysSinceComplaint(complaint.complaint_date)}d
-                          </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
+                        {getStatusBadge(complaint.status)}
+                        {complaint.fca_reportable && (
+                          <Badge variant="destructive" className="text-xs">FCA</Badge>
                         )}
                       </div>
-                      <div>
-                        <p className="text-gray-400 uppercase">Redress</p>
-                        <p className={`text-sm font-semibold ${
-                          complaint.redress_amount > 0 ? 'text-red-600' : 'text-gray-500'
-                        }`}>
-                          {complaint.redress_amount > 0 ? formatCurrency(complaint.redress_amount) : '-'}
-                        </p>
+                      <div className="mt-3 text-xs text-gray-600">
+                        {complaint.description.length > 90
+                          ? `${complaint.description.substring(0, 90)}...`
+                          : complaint.description}
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <p className="text-gray-400 uppercase">Days Open</p>
+                          {complaint.status === 'resolved' || complaint.status === 'closed' ? (
+                            <p className="text-sm font-semibold text-green-600">-</p>
+                          ) : (
+                            <p className={`text-sm font-semibold ${
+                              isOverdue(complaint) ? 'text-red-600' :
+                              isApproachingDeadline(complaint) ? 'text-yellow-600' :
+                              'text-gray-700'
+                            }`}>
+                              {getDaysSinceComplaint(complaint.complaint_date)}d
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-gray-400 uppercase">Redress</p>
+                          <p className={`text-sm font-semibold ${
+                            complaint.redress_amount > 0 ? 'text-red-600' : 'text-gray-500'
+                          }`}>
+                            {complaint.redress_amount > 0 ? formatCurrency(complaint.redress_amount) : '-'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-gray-50">
-                      <th className="text-left p-3 font-medium">Reference</th>
-                      <th className="text-left p-3 font-medium">Date</th>
-                      <th className="text-left p-3 font-medium">Client</th>
-                      <th className="text-left p-3 font-medium">Category</th>
-                      <th className="text-left p-3 font-medium">Summary</th>
-                      <th className="text-left p-3 font-medium">Status</th>
-                      <th className="text-left p-3 font-medium">Days Open</th>
-                      <th className="text-left p-3 font-medium">Redress</th>
-                      <th className="text-left p-3 font-medium">FCA</th>
-                      <th className="text-right p-3 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredComplaints.map((complaint) => (
-                      <tr
-                        key={complaint.id}
-                        className={`hover:bg-gray-50 ${
-                          isOverdue(complaint) ? 'bg-red-50' :
-                          isApproachingDeadline(complaint) ? 'bg-yellow-50' : ''
-                        }`}
-                      >
-                        <td className="p-3">
-                          <span className="font-mono text-xs">{complaint.reference_number || '-'}</span>
-                        </td>
-                        <td className="p-3">{formatDate(complaint.complaint_date)}</td>
-                        <td className="p-3">
-                          <span className="font-medium">{getClientName(complaint)}</span>
-                        </td>
-                        <td className="p-3">
-                          <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
-                        </td>
-                        <td className="p-3 max-w-[200px]">
-                          <span className="text-gray-600 text-xs" title={complaint.description}>
-                            {complaint.description.length > 50
-                              ? `${complaint.description.substring(0, 50)}...`
-                              : complaint.description}
-                          </span>
-                        </td>
-                        <td className="p-3">{getStatusBadge(complaint.status)}</td>
-                        <td className="p-3">
-                          {complaint.status === 'resolved' || complaint.status === 'closed' ? (
-                            <span className="text-green-600">-</span>
-                          ) : (
-                            <span className={
-                              isOverdue(complaint) ? 'text-red-600 font-bold' :
-                              isApproachingDeadline(complaint) ? 'text-yellow-600 font-medium' :
-                              'text-gray-600'
-                            }>
-                              {getDaysSinceComplaint(complaint.complaint_date)}d
-                              {isOverdue(complaint) && ' (Overdue!)'}
-                              {isApproachingDeadline(complaint) && !isOverdue(complaint) && ' (Due soon)'}
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          {complaint.redress_amount > 0 ? (
-                            <span className="text-red-600">{formatCurrency(complaint.redress_amount)}</span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          {complaint.fca_reportable ? (
-                            <Badge variant="destructive" className="text-xs">Yes</Badge>
-                          ) : (
-                            <span className="text-gray-400">No</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedComplaint(complaint)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </td>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="text-left p-3 font-medium">Reference</th>
+                        <th className="text-left p-3 font-medium">Date</th>
+                        <th className="text-left p-3 font-medium">Client</th>
+                        <th className="text-left p-3 font-medium">Category</th>
+                        <th className="text-left p-3 font-medium">Summary</th>
+                        <th className="text-left p-3 font-medium">Status</th>
+                        <th className="text-left p-3 font-medium">Days Open</th>
+                        <th className="text-left p-3 font-medium">Redress</th>
+                        <th className="text-left p-3 font-medium">FCA</th>
+                        <th className="text-right p-3 font-medium">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                    </thead>
+                    <tbody className="divide-y">
+                      {filteredComplaints.map((complaint) => (
+                        <tr
+                          key={complaint.id}
+                          className={`hover:bg-gray-50 ${
+                            isOverdue(complaint) ? 'bg-red-50' :
+                            isApproachingDeadline(complaint) ? 'bg-yellow-50' : ''
+                          }`}
+                        >
+                          <td className="p-3">
+                            <span className="font-mono text-xs">{complaint.reference_number || '-'}</span>
+                          </td>
+                          <td className="p-3">{formatDate(complaint.complaint_date)}</td>
+                          <td className="p-3">
+                            <span className="font-medium">{getClientName(complaint)}</span>
+                          </td>
+                          <td className="p-3">
+                            <Badge variant="outline">{getCategoryLabel(complaint.category)}</Badge>
+                          </td>
+                          <td className="p-3 max-w-[200px]">
+                            <span className="text-gray-600 text-xs" title={complaint.description}>
+                              {complaint.description.length > 50
+                                ? `${complaint.description.substring(0, 50)}...`
+                                : complaint.description}
+                            </span>
+                          </td>
+                          <td className="p-3">{getStatusBadge(complaint.status)}</td>
+                          <td className="p-3">
+                            {complaint.status === 'resolved' || complaint.status === 'closed' ? (
+                              <span className="text-green-600">-</span>
+                            ) : (
+                              <span className={
+                                isOverdue(complaint) ? 'text-red-600 font-bold' :
+                                isApproachingDeadline(complaint) ? 'text-yellow-600 font-medium' :
+                                'text-gray-600'
+                              }>
+                                {getDaysSinceComplaint(complaint.complaint_date)}d
+                                {isOverdue(complaint) && ' (Overdue!)'}
+                                {isApproachingDeadline(complaint) && !isOverdue(complaint) && ' (Due soon)'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {complaint.redress_amount > 0 ? (
+                              <span className="text-red-600">{formatCurrency(complaint.redress_amount)}</span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {complaint.fca_reportable ? (
+                              <Badge variant="destructive" className="text-xs">Yes</Badge>
+                            ) : (
+                              <span className="text-gray-400">No</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedComplaint(complaint)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Create Modal */}
       {showCreateModal && (
@@ -616,6 +726,8 @@ function ComplaintFormModal({
   const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     client_id: '',
+    assigned_to: '',
+    priority: 'medium' as Complaint['priority'],
     complaint_date: new Date().toISOString().split('T')[0],
     received_via: 'email' as Complaint['received_via'],
     category: 'service' as Complaint['category'],
@@ -652,6 +764,8 @@ function ComplaintFormModal({
         .from('complaint_register')
         .insert({
           client_id: formData.client_id || null,
+          assigned_to: formData.assigned_to || null,
+          priority: formData.priority,
           complaint_date: formData.complaint_date,
           received_via: formData.received_via,
           category: formData.category,
@@ -712,6 +826,35 @@ function ComplaintFormModal({
                   {getClientDisplayName(client)}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Owner */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Assigned To
+            </label>
+            <OwnerPicker
+              value={formData.assigned_to || null}
+              onChange={(value) => setFormData({ ...formData, assigned_to: value || '' })}
+              compact
+            />
+          </div>
+
+          {/* Priority */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Priority
+            </label>
+            <select
+              value={formData.priority}
+              onChange={(e) => setFormData({ ...formData, priority: e.target.value as Complaint['priority'] })}
+              className="w-full border rounded-lg p-2 text-sm"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
             </select>
           </div>
 
@@ -824,6 +967,8 @@ function ComplaintDetailModal({
 
   const [formData, setFormData] = useState({
     status: complaint.status,
+    assigned_to: complaint.assigned_to || '',
+    priority: complaint.priority || 'medium',
     root_cause: complaint.root_cause || '',
     resolution: complaint.resolution || '',
     resolution_date: complaint.resolution_date || '',
@@ -867,6 +1012,8 @@ function ComplaintDetailModal({
         .from('complaint_register')
         .update({
           status: formData.status,
+          assigned_to: formData.assigned_to || null,
+          priority: formData.priority,
           root_cause: formData.root_cause || null,
           resolution: formData.resolution || null,
           resolution_date: formData.resolution_date || null,
@@ -893,6 +1040,16 @@ function ComplaintDetailModal({
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleCreateTask = async (input: any) => {
+    await createTask.mutateAsync({
+      ...input,
+      sourceType: 'complaint',
+      sourceId: complaint.id,
+      clientId: complaint.client_id || input.clientId,
+      assignedTo: formData.assigned_to || input.assignedTo,
+    })
   }
 
   const getReceivedViaIcon = () => {
@@ -948,6 +1105,10 @@ function ComplaintDetailModal({
               </div>
             </div>
           )}
+
+          <div className="mt-4">
+            <StatusPipeline stages={WORKFLOW_CONFIGS.complaint.stages} currentStage={formData.status} />
+          </div>
         </div>
 
         {/* Tabs */}
@@ -1018,6 +1179,33 @@ function ComplaintDetailModal({
                   <option value="escalated">Escalated</option>
                   <option value="closed">Closed</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {/* Owner */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+                  <OwnerPicker
+                    value={formData.assigned_to || null}
+                    onChange={(value) => setFormData({ ...formData, assigned_to: value || '' })}
+                    compact
+                  />
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as Complaint['priority'] })}
+                    className="w-full border rounded-lg p-2 text-sm"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
               </div>
 
               {/* Root Cause */}
@@ -1102,6 +1290,39 @@ function ComplaintDetailModal({
                   <span className="text-gray-500 block text-xs">Check if this complaint must be reported to the FCA</span>
                 </label>
               </div>
+
+              {/* Linked Tasks */}
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-gray-800">Linked Tasks</div>
+                  <Button size="sm" onClick={() => setShowTaskModal(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Task
+                  </Button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {linkedTasks?.tasks?.length ? (
+                    linkedTasks.tasks.map((task) => (
+                      <div key={task.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 text-sm">
+                        <div>
+                          <p className="font-medium text-gray-800">{task.title}</p>
+                          <p className="text-xs text-gray-500">{task.status.replace('_', ' ')}</p>
+                        </div>
+                        <Badge variant="secondary" className="capitalize">
+                          {task.priority}
+                        </Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400">
+                      No linked tasks yet
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Comments */}
+              <CommentThread sourceType="complaint" sourceId={complaint.id} />
             </div>
           )}
 
@@ -1302,6 +1523,14 @@ function ComplaintDetailModal({
           </Button>
         </div>
       </div>
+
+      <CreateTaskModal
+        open={showTaskModal}
+        onOpenChange={setShowTaskModal}
+        onSubmit={handleCreateTask}
+        defaultClientId={complaint.client_id || undefined}
+        defaultAssigneeId={formData.assigned_to || undefined}
+      />
     </div>
   )
 }

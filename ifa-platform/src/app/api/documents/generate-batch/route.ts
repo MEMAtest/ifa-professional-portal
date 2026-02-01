@@ -6,13 +6,14 @@ export const dynamic = 'force-dynamic'
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { enhancedDocumentService } from '@/services/EnhancedDocumentGenerationService'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {

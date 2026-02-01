@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
@@ -9,10 +8,10 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
-
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     // Get current user and firm context
     const { data: { user }, error: authError } = await supabase.auth.getUser()

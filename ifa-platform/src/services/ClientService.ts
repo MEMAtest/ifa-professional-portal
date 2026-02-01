@@ -31,35 +31,38 @@ export class ClientService {
     this.supabase = createClient()
   }
 
-  // Core CRUD operations
+  // Core CRUD operations — uses API route to bypass RLS issues
   async getAllClients(filters?: ClientFilters, page: number = 1, limit: number = 50): Promise<ClientListResponse> {
     try {
-      let query = this.supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range((page - 1) * limit, page * limit - 1)
+      const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('limit', String(limit))
 
       if (filters?.status && filters.status.length > 0) {
-        query = query.in('status', filters.status)
+        filters.status.forEach(s => params.append('status', s))
       }
-
       if (filters?.searchQuery) {
-        query = query.or(`personal_details->>firstName.ilike.%${filters.searchQuery}%,personal_details->>lastName.ilike.%${filters.searchQuery}%,contact_info->>email.ilike.%${filters.searchQuery}%`)
+        params.set('search', filters.searchQuery)
+      }
+      if (filters?.vulnerabilityStatus) {
+        params.set('vulnerabilityStatus', String(filters.vulnerabilityStatus))
       }
 
-      const { data, error, count } = await query
+      const resp = await fetch(`/api/clients?${params.toString()}`)
+      const json = await resp.json()
 
-      if (error) throw error
+      if (!resp.ok || !json.success) {
+        throw new Error(json.error || json.details || 'Failed to fetch clients')
+      }
 
-      const clients = (data || []).map((dbClient: any) => this.transformDbClient(dbClient))
+      const clients = (json.clients || []).map((dbClient: any) => this.transformDbClient(dbClient))
 
       return {
         clients,
-        total: count || 0,
-        page,
-        limit,
-        totalPages: Math.ceil((count || 0) / limit)
+        total: json.total || 0,
+        page: json.page || page,
+        limit: json.limit || limit,
+        totalPages: json.totalPages || Math.ceil((json.total || 0) / limit)
       }
     } catch (error) {
       console.error('Error fetching clients:', error)
@@ -73,46 +76,28 @@ export class ClientService {
     }
   }
 
-  // ✅ FIXED: Better error handling for missing clients
+  // Uses API route to bypass RLS issues
   async getClientById(id: string): Promise<Client> {
     try {
-      // Validate ID format first
       if (!id || typeof id !== 'string' || id.trim() === '') {
         throw new Error('Invalid client ID provided')
       }
 
-      const { data, error } = await this.supabase
-        .from('clients')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle() // Use maybeSingle to handle missing records gracefully
+      const resp = await fetch(`/api/clients/${id}`)
+      const json = await resp.json()
 
-      // Check for Supabase errors (network, permissions, etc.)
-      if (error) {
-        // This is an actual database error, not just a missing record
-        console.error('Database error fetching client:', error)
-        throw new Error(`Database error: ${error.message}`)
+      if (!resp.ok || !json.success) {
+        if (resp.status === 404) {
+          throw new Error(`Client with ID ${id} not found`)
+        }
+        throw new Error(json.error || json.details || 'Failed to fetch client')
       }
 
-      // Check if client was found
-      if (!data) {
-        // Client not found - this is an expected case, not an error
-        // Use console.warn instead of console.error
-        console.warn(`Client lookup: Client with ID ${id} not found in database`)
-        // Still throw the error so calling code can handle it
-        throw new Error(`Client with ID ${id} not found`)
-      }
-
-      // Transform and return the client data
-      return this.transformDbClient(data)
+      return this.transformDbClient(json.client)
     } catch (error) {
-      // Only use console.error for unexpected errors
-      // Check if it's a "not found" error
       if (error instanceof Error && error.message.includes('not found')) {
-        // Don't log again - already logged as warning above
         throw error
       } else {
-        // This is an unexpected error
         console.error('Unexpected error in getClientById:', error)
         throw error
       }
@@ -198,12 +183,11 @@ export class ClientService {
 
   async deleteClient(id: string): Promise<void> {
     try {
-      const { error } = await this.supabase
-        .from('clients')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
+      const response = await fetch(`${this.baseUrl}/${id}`, { method: 'DELETE' })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || data.details || 'Failed to delete client')
+      }
     } catch (error) {
       console.error('Error deleting client:', error)
       throw error
@@ -246,66 +230,41 @@ export class ClientService {
 
   async getClientStatistics(advisorId?: string): Promise<ClientStatistics> {
     try {
-      let query = this.supabase
-        .from('clients')
-        .select('status, vulnerability_assessment, risk_profile, created_at')
+      const params = new URLSearchParams()
+      if (advisorId) params.set('advisorId', advisorId)
 
-      if (advisorId) {
-        query = query.eq('advisor_id', advisorId)
+      const resp = await fetch(`/api/clients/statistics?${params.toString()}`)
+      const stats = await resp.json()
+
+      if (!resp.ok) {
+        throw new Error('Failed to fetch statistics')
       }
 
-      const { data, error } = await query
-
-      if (error) throw error
-
-      // Calculate statistics from the data
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
-      const statusCounts = {
-        prospect: data?.filter((c: any) => c.status === 'prospect').length || 0,
-        active: data?.filter((c: any) => c.status === 'active').length || 0,
-        review_due: data?.filter((c: any) => c.status === 'review_due').length || 0,
-        inactive: data?.filter((c: any) => c.status === 'inactive').length || 0,
-        archived: data?.filter((c: any) => c.status === 'archived').length || 0
+      // Normalize the API response to match the full ClientStatistics shape
+      const statusCounts = stats.byStatus || {
+        prospect: 0, active: 0, review_due: 0, inactive: 0, archived: 0
       }
 
-      const stats: ClientStatistics = {
-        totalClients: data?.length || 0,
-        activeClients: statusCounts.active,
-        prospectsCount: statusCounts.prospect,
-        reviewsDue: statusCounts.review_due,
-        vulnerableClients: data?.filter((c: any) => c.vulnerability_assessment?.is_vulnerable === true).length || 0,
-        highRiskClients: data?.filter((c: any) => {
-          const riskLevel = c.risk_profile?.attitudeToRisk
-          return riskLevel && riskLevel >= 8
-        }).length || 0,
-        recentlyAdded: data?.filter((c: any) => {
-          const createdDate = new Date(c.created_at)
-          const daysDiff = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24)
-          return daysDiff <= 30
-        }).length || 0,
-        newThisMonth: data?.filter((c: any) => {
-          const createdDate = new Date(c.created_at)
-          return createdDate >= startOfMonth
-        }).length || 0,
+      return {
+        totalClients: stats.totalClients || 0,
+        activeClients: stats.activeClients || 0,
+        prospectsCount: stats.prospectsCount || 0,
+        reviewsDue: stats.reviewsDue || 0,
+        vulnerableClients: stats.vulnerableClients || 0,
+        highRiskClients: stats.highRiskClients || 0,
+        recentlyAdded: stats.recentlyAdded || 0,
+        newThisMonth: stats.recentlyAdded || 0,
         byStatus: statusCounts,
-        byRiskLevel: {},
+        byRiskLevel: stats.byRiskLevel || {},
         averagePortfolioValue: 0,
         totalAssetsUnderManagement: 0,
         clientsByStatus: statusCounts,
-        clientsByRiskLevel: {}
+        clientsByRiskLevel: stats.byRiskLevel || {}
       }
-
-      return stats
     } catch (error) {
       console.error('Error fetching client statistics:', error)
       const emptyStatusCounts = {
-        prospect: 0,
-        active: 0,
-        review_due: 0,
-        inactive: 0,
-        archived: 0
+        prospect: 0, active: 0, review_due: 0, inactive: 0, archived: 0
       }
       return {
         totalClients: 0,

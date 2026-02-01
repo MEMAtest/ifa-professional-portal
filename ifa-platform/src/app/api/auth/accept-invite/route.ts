@@ -16,7 +16,6 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { hashToken } from '@/lib/security/crypto'
@@ -172,7 +171,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const supabaseAdmin = getSupabaseServiceClient()
 
     // Hash the incoming token for comparison (tokens are stored hashed in DB)

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DEFAULT_PROD_SERVICES } from '@/lib/prod/serviceCatalog'
 import { advisorContextService } from '@/services/AdvisorContextService'
@@ -80,7 +80,7 @@ export const useProdServicesSettings = ({
     [prodDetails, firmServices.services]
   )
 
-  const loadFirmSettings = async (firmIdOverride?: string | null) => {
+  const loadFirmSettings = useCallback(async (firmIdOverride?: string | null) => {
     const resolvedFirmId = resolveFirmId(firmIdOverride) || (await resolveFirmIdFromAuth())
     if (!resolvedFirmId) {
       setFirmServices({ prodPolicy: '', services: [] })
@@ -209,7 +209,7 @@ export const useProdServicesSettings = ({
     setProdVersions(versions)
     setProdReviewTask(reviewTask || null)
     return resolvedFirmId
-  }
+  }, [resolveFirmId, resolveFirmIdFromAuth, supabase])
 
   const buildProdReportData = async (
     details: ProdDetails,

@@ -1,14 +1,14 @@
-import { createClient } from "@/lib/supabase/server"
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
 
 // ===================================================================
 // File: src/app/api/dashboard/stats/route.ts
 // API Route: Dashboard Statistics for Document Vault
-// FIXED: All TypeScript errors resolved
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
 
@@ -71,16 +71,16 @@ interface DashboardStats {
 // ===================================================================
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
   try {
-    // Get current user - using your existing supabase client
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get firm_id from user metadata - NO hardcoded fallback for security
-    const firmId = user.user_metadata?.firm_id
+    const supabase = getSupabaseServiceClient()
+
+    // Get firm_id from auth context
+    const firmId = getValidatedFirmId(auth.context)
     if (!firmId) {
       return NextResponse.json(
         {

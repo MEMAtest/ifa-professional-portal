@@ -3,9 +3,9 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifySignatureCompleted } from '@/lib/notifications/notificationService'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Process the webhook using the database function
     logger.debug('Processing webhook via database function', { event, documentId: data.id })

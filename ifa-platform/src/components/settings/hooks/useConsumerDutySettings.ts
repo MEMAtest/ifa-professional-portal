@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   OTHER_OPTION,
@@ -82,7 +82,7 @@ export const useConsumerDutySettings = ({
 
   const summary = useMemo(() => buildConsumerDutySummary(framework), [framework])
 
-  const loadConsumerDutySettings = async (firmIdOverride?: string | null) => {
+  const loadConsumerDutySettings = useCallback(async (firmIdOverride?: string | null) => {
     const resolvedFirmId = resolveFirmId(firmIdOverride) || (await resolveFirmIdFromAuth())
     if (!resolvedFirmId) {
       setFramework(createDefaultConsumerDutyFramework())
@@ -124,7 +124,7 @@ export const useConsumerDutySettings = ({
     }
 
     return resolvedFirmId
-  }
+  }, [resolveFirmId, resolveFirmIdFromAuth, supabase])
 
   const handleSave = async () => {
     setSaving?.(true)

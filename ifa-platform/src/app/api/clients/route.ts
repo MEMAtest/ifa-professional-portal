@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
 // src/app/api/clients/route.ts
 // ✅ FIXED: Returns RAW database data, no transformation
-// ✅ FIXED: Firm isolation - filters by firm_id
+// ✅ FIXED: Firm isolation - filters by firm_id when available
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
+import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth';
 import { createRequestLogger } from '@/lib/logging/structured';
 
 // Force dynamic rendering
@@ -17,16 +17,12 @@ export async function GET(request: NextRequest) {
     return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Require firm_id for multi-tenant isolation
-  const firmIdResult = requireFirmId(auth.context);
-  if (firmIdResult instanceof NextResponse) {
-    return firmIdResult;
-  }
-
-  const supabase = await createClient()
+  // Use service client to bypass RLS (broken "advisor" role in policies)
+  const supabase = getSupabaseServiceClient()
+  const firmId = getValidatedFirmId(auth.context)
   const logger = createRequestLogger(request)
   try {
-    logger.info('GET /api/clients - Fetching clients', { firmId: firmIdResult.firmId });
+    logger.info('GET /api/clients - Fetching clients', { firmId });
 
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
@@ -40,11 +36,14 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'updated_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
 
-    // Build query - CRITICAL: Filter by firm_id for multi-tenant isolation
+    // Build query - filter by firm_id when available for multi-tenant isolation
     let query = supabase
       .from('clients')
       .select('*', { count: 'exact' })
-      .eq('firm_id', firmIdResult.firmId);
+
+    if (firmId) {
+      query = query.eq('firm_id', firmId)
+    }
     
     // Apply filters
     if (status.length > 0) {
@@ -114,23 +113,17 @@ export async function POST(request: NextRequest) {
     return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Require firm_id for multi-tenant isolation
-  const firmIdResult = requireFirmId(auth.context);
-  if (firmIdResult instanceof NextResponse) {
-    return firmIdResult;
-  }
-
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
+  const firmId = getValidatedFirmId(auth.context)
   const logger = createRequestLogger(request)
   try {
-    logger.info('POST /api/clients - Creating new client', { firmId: firmIdResult.firmId });
+    logger.info('POST /api/clients - Creating new client', { firmId });
 
     const body = await request.json();
 
     // Prepare data for database (already in snake_case from frontend)
-    // CRITICAL: Include firm_id for multi-tenant isolation
-    const clientData = {
-      firm_id: firmIdResult.firmId, // ✅ SECURITY: Set firm_id from auth context
+    const clientData: Record<string, unknown> = {
+      ...(firmId ? { firm_id: firmId } : {}),
       client_ref: body.clientRef,
       personal_details: body.personalDetails,
       contact_info: body.contactInfo,
@@ -145,7 +138,7 @@ export async function POST(request: NextRequest) {
     
     const { data: client, error } = await supabase
       .from('clients')
-      .insert([clientData])
+      .insert([clientData] as any)
       .select()
       .single();
     

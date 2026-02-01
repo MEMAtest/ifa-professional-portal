@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { clientService } from '@/services/ClientService';
 import { createClient } from '@/lib/supabase/client';
+import { WorkflowBoard, WORKFLOW_CONFIGS } from '@/components/compliance/workflow';
+import type { WorkflowItem } from '@/components/compliance/workflow';
 import {
   PieChart, Pie, Cell, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, Legend, ResponsiveContainer
@@ -91,6 +93,7 @@ export default function RiskCenterPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRiskLevel, setFilterRiskLevel] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'due' | 'recent'>('all');
+  const [viewMode, setViewMode] = useState<'table' | 'workflow'>('table');
   const [selectedClient, setSelectedClient] = useState<RiskClient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -368,6 +371,32 @@ export default function RiskCenterPage() {
     if (days < 30) return { label: 'Recent', color: 'success' };
     return { label: 'Current', color: 'default' };
   };
+
+  const getWorkflowStageId = useCallback((days: number) => {
+    if (days > 365) return 'overdue';
+    if (days > 300) return 'due_soon';
+    if (days < 30) return 'recent';
+    return 'current';
+  }, []);
+
+  const workflowItems: WorkflowItem[] = useMemo(() => {
+    return filteredClients.map((client) => {
+      const name = `${client.personalDetails?.firstName || ''} ${client.personalDetails?.lastName || ''}`.trim()
+      const riskScore = client.riskProfile?.attitudeToRisk || 5
+      const days = client.daysSinceAssessment || 0
+      return {
+        id: client.id,
+        sourceType: 'risk_assessment',
+        sourceId: client.id,
+        title: name || client.clientRef || 'Client',
+        subtitle: client.clientRef || undefined,
+        status: getWorkflowStageId(days),
+        dueDate: client.lastAssessmentDate,
+        clientId: client.id,
+        description: `Risk score ${riskScore}/10`,
+      }
+    })
+  }, [filteredClients, getWorkflowStageId]);
 
   const openClientModal = (client: RiskClient) => {
     setSelectedClient(client);
@@ -705,6 +734,23 @@ export default function RiskCenterPage() {
                 Recent
               </Button>
             </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant={viewMode === 'table' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('table')}
+              >
+                List
+              </Button>
+              <Button
+                variant={viewMode === 'workflow' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('workflow')}
+              >
+                Workflow
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -715,153 +761,170 @@ export default function RiskCenterPage() {
           <CardTitle>Client Risk Profiles ({filteredClients.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredClients.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No clients match your filters.
-            </div>
+          {viewMode === 'workflow' ? (
+            filteredClients.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No clients match your filters.
+              </div>
+            ) : (
+              <WorkflowBoard
+                columns={WORKFLOW_CONFIGS.risk_assessment.stages}
+                items={workflowItems}
+                onItemClick={(item) => {
+                  const client = filteredClients.find((entry) => entry.id === item.sourceId)
+                  if (client) openClientModal(client)
+                }}
+              />
+            )
           ) : (
-            <>
-              <div className="space-y-3 sm:hidden">
-                {filteredClients.map((client) => {
-                  const riskScore = client.riskProfile?.attitudeToRisk || 5;
-                  const assessmentStatus = getAssessmentStatus(client.daysSinceAssessment || 0);
-                  return (
-                    <div key={client.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {client.personalDetails?.firstName} {client.personalDetails?.lastName}
-                          </p>
-                          <p className="text-xs text-gray-500">{client.clientRef}</p>
+            filteredClients.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No clients match your filters.
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3 sm:hidden">
+                  {filteredClients.map((client) => {
+                    const riskScore = client.riskProfile?.attitudeToRisk || 5;
+                    const assessmentStatus = getAssessmentStatus(client.daysSinceAssessment || 0);
+                    return (
+                      <div key={client.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {client.personalDetails?.firstName} {client.personalDetails?.lastName}
+                            </p>
+                            <p className="text-xs text-gray-500">{client.clientRef}</p>
+                          </div>
+                          <Badge variant={riskScore >= 7 ? 'destructive' : riskScore >= 4 ? 'warning' : 'success'}>
+                            {getRiskLabel(riskScore)}
+                          </Badge>
                         </div>
-                        <Badge variant={riskScore >= 7 ? 'destructive' : riskScore >= 4 ? 'warning' : 'success'}>
-                          {getRiskLabel(riskScore)}
-                        </Badge>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <p className="text-gray-400 uppercase">Risk Score</p>
-                          <p className={`text-lg font-semibold ${getRiskColor(riskScore)}`}>
-                            {riskScore}<span className="text-gray-400 text-xs">/10</span>
-                          </p>
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-gray-400 uppercase">Risk Score</p>
+                            <p className={`text-lg font-semibold ${getRiskColor(riskScore)}`}>
+                              {riskScore}<span className="text-gray-400 text-xs">/10</span>
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 uppercase">Assessment</p>
+                            <p className="text-sm font-semibold text-gray-900">{client.daysSinceAssessment} days ago</p>
+                            <p className="text-xs text-gray-500">
+                              {client.lastAssessmentDate && new Date(client.lastAssessmentDate).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-gray-400 uppercase">Assessment</p>
-                          <p className="text-sm font-semibold text-gray-900">{client.daysSinceAssessment} days ago</p>
-                          <p className="text-xs text-gray-500">
-                            {client.lastAssessmentDate && new Date(client.lastAssessmentDate).toLocaleDateString()}
-                          </p>
+                        <div className="mt-3">
+                          <Badge variant={assessmentStatus.color as any}>
+                            {assessmentStatus.label}
+                          </Badge>
                         </div>
-                      </div>
-                      <div className="mt-3">
-                        <Badge variant={assessmentStatus.color as any}>
-                          {assessmentStatus.label}
-                        </Badge>
-                      </div>
-                      <div className="mt-4 flex flex-col gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openClientModal(client)}
-                          className="w-full"
-                        >
-                          View Details
-                        </Button>
-                        {client.daysSinceAssessment! > 300 && (
+                        <div className="mt-4 flex flex-col gap-2">
                           <Button
                             size="sm"
-                            onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
+                            variant="outline"
+                            onClick={() => openClientModal(client)}
                             className="w-full"
                           >
-                            Update Assessment
+                            View Details
                           </Button>
-                        )}
+                          {client.daysSinceAssessment! > 300 && (
+                            <Button
+                              size="sm"
+                              onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
+                              className="w-full"
+                            >
+                              Update Assessment
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4">Client</th>
-                      <th className="text-left py-3 px-4">Risk Score</th>
-                      <th className="text-left py-3 px-4">Risk Level</th>
-                      <th className="text-left py-3 px-4">Last Assessment</th>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredClients.map((client) => {
-                      const riskScore = client.riskProfile?.attitudeToRisk || 5;
-                      const assessmentStatus = getAssessmentStatus(client.daysSinceAssessment || 0);
-                      
-                      return (
-                        <tr key={client.id} className="border-b hover:bg-gray-50">
-                          <td className="py-3 px-4">
-                            <div>
-                              <p className="font-medium">
-                                {client.personalDetails?.firstName} {client.personalDetails?.lastName}
-                              </p>
-                              <p className="text-sm text-gray-500">{client.clientRef}</p>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center">
-                              <span className={`text-2xl font-bold ${getRiskColor(riskScore)}`}>
-                                {riskScore}
-                              </span>
-                              <span className="text-gray-500 ml-1">/10</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge variant={riskScore >= 7 ? 'destructive' : riskScore >= 4 ? 'warning' : 'success'}>
-                              {getRiskLabel(riskScore)}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div>
-                              <p className="text-sm">
-                                {client.daysSinceAssessment} days ago
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {new Date(client.lastAssessmentDate!).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge variant={assessmentStatus.color as any}>
-                              {assessmentStatus.label}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openClientModal(client)}
-                              >
-                                View Details
-                              </Button>
-                              {client.daysSinceAssessment! > 300 && (
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4">Client</th>
+                        <th className="text-left py-3 px-4">Risk Score</th>
+                        <th className="text-left py-3 px-4">Risk Level</th>
+                        <th className="text-left py-3 px-4">Last Assessment</th>
+                        <th className="text-left py-3 px-4">Status</th>
+                        <th className="text-left py-3 px-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredClients.map((client) => {
+                        const riskScore = client.riskProfile?.attitudeToRisk || 5;
+                        const assessmentStatus = getAssessmentStatus(client.daysSinceAssessment || 0);
+                        
+                        return (
+                          <tr key={client.id} className="border-b hover:bg-gray-50">
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="font-medium">
+                                  {client.personalDetails?.firstName} {client.personalDetails?.lastName}
+                                </p>
+                                <p className="text-sm text-gray-500">{client.clientRef}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center">
+                                <span className={`text-2xl font-bold ${getRiskColor(riskScore)}`}>
+                                  {riskScore}
+                                </span>
+                                <span className="text-gray-500 ml-1">/10</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge variant={riskScore >= 7 ? 'destructive' : riskScore >= 4 ? 'warning' : 'success'}>
+                                {getRiskLabel(riskScore)}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="text-sm">
+                                  {client.daysSinceAssessment} days ago
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(client.lastAssessmentDate!).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Badge variant={assessmentStatus.color as any}>
+                                {assessmentStatus.label}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex gap-2">
                                 <Button
                                   size="sm"
-                                  onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
+                                  variant="outline"
+                                  onClick={() => openClientModal(client)}
                                 >
-                                  Update Assessment
+                                  View Details
                                 </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                                {client.daysSinceAssessment! > 300 && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => router.push(`/assessments/atr?clientId=${client.id}`)}
+                                  >
+                                    Update Assessment
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )
           )}
         </CardContent>
       </Card>

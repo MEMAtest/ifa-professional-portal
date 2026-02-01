@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server"
 // =====================================================
 // FILE: src/app/api/ai/complete/route.ts
 // AI COMPLETION API WITH MULTIPLE PROVIDER SUPPORT - FIXED
@@ -6,9 +5,9 @@ import { createClient } from "@/lib/supabase/server"
 
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
 import { z } from 'zod'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // =====================================================
 // TYPES & VALIDATION
@@ -277,30 +276,9 @@ async function logAIRequest(
   error?: string
 ) {
   try {
-    // Check for environment variables first
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY // ✅ FIXED: Changed from SUPABASE_SERVICE_KEY
-    
-    if (!supabaseUrl || !supabaseKey) {
-      log.warn('Supabase credentials not configured for AI logging')
-      return
-    }
-    
     // Log to Supabase for analytics
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseKey,
-      {
-        cookies: {
-          get(name: string) {
-            return null
-          },
-          set() {},
-          remove() {}
-        }
-      }
-    )
-    
+    const supabase = getSupabaseServiceClient()
+
     await supabase.from('ai_request_logs').insert({
       provider,
       success,

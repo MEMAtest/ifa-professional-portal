@@ -24,6 +24,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import { CommentThread, StatusPipeline, WORKFLOW_CONFIGS } from './workflow'
 
 interface FileReview {
   id: string
@@ -228,6 +229,10 @@ export default function FileReviewModal({
           </button>
         </div>
 
+        <div className="px-6 py-4 border-b">
+          <StatusPipeline stages={WORKFLOW_CONFIGS.file_review.stages} currentStage={review.status} />
+        </div>
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Review Info */}
@@ -383,6 +388,8 @@ export default function FileReviewModal({
               className="w-full border rounded-lg p-3 min-h-[120px] text-sm"
             />
           </div>
+
+          <CommentThread sourceType="file_review" sourceId={review.id} />
         </div>
 
         {/* Footer Actions */}

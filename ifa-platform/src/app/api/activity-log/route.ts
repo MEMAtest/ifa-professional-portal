@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
 
 interface AggregatedActivity {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
 
     // If requesting recent activities across all clients - aggregate from multiple sources
     if (recent === 'true') {
@@ -275,7 +275,7 @@ export async function GET(request: NextRequest) {
             .select('id, personal_details, client_ref')
             .in('id', Array.from(clientIds));
           clientMap = new Map(
-            (clientsData || []).map((c: ClientRow) => [c.id, c])
+            (clientsData || []).map((c: any) => [c.id, c as ClientRow])
           );
         }
 
@@ -392,7 +392,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();  // FIXED: Using await, no parameters
+    const supabase = getSupabaseServiceClient();  // FIXED: Using await, no parameters
 
     // Create the activity log entry matching your table structure
     const { data, error } = await supabase
@@ -403,7 +403,7 @@ export async function POST(request: NextRequest) {
         type: type || null,
         user_name: userName || null,
         date: new Date().toISOString()
-      })
+      } as any)
       .select()
       .single();
 

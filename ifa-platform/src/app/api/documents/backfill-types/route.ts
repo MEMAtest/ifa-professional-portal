@@ -1,10 +1,10 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/db'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Backfill documents.type/document_type using category name where missing
 export async function POST(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     let firmId: string | null = null
 
     if (auth.success) {
-      supabase = await createClient()
+      supabase = getSupabaseServiceClient()
       firmId = auth.context?.firmId || null
     } else {
       // Service token fallback

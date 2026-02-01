@@ -17,13 +17,19 @@ import {
   X,
   Users,
   Calendar,
-  Shield
+  Shield,
+  LayoutGrid,
+  List
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import { WorkflowBoard, StatusPipeline, CommentThread, OwnerPicker, WORKFLOW_CONFIGS } from './workflow'
+import type { WorkflowItem } from './workflow'
+import { CreateTaskModal } from '@/modules/tasks/components/CreateTaskModal'
+import { useCreateTask, useSourceTasks } from '@/modules/tasks/hooks/useTasks'
 
 interface Breach {
   id: string
@@ -37,6 +43,8 @@ interface Breach {
   root_cause: string | null
   affected_clients: number
   status: 'open' | 'investigating' | 'remediated' | 'closed'
+  assigned_to: string | null
+  priority: 'low' | 'medium' | 'high' | 'urgent'
   remediation_actions: string | null
   remediation_date: string | null
   fca_notified: boolean
@@ -47,6 +55,12 @@ interface Breach {
   updated_at: string
   // Linked clients from junction table
   breach_affected_clients?: BreachAffectedClient[]
+  assigned_user?: {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    avatar_url: string | null
+  }
 }
 
 interface BreachAffectedClient {
@@ -86,6 +100,7 @@ export default function BreachesRegister({ onStatsChange }: Props) {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'table' | 'workflow'>('table')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [selectedBreach, setSelectedBreach] = useState<Breach | null>(null)
 
@@ -105,6 +120,12 @@ export default function BreachesRegister({ onStatsChange }: Props) {
             remediation_status,
             notes,
             clients(id, personal_details, client_ref)
+          ),
+          assigned_user:assigned_to (
+            id,
+            first_name,
+            last_name,
+            avatar_url
           )
         `)
         .order('breach_date', { ascending: false })
@@ -151,6 +172,50 @@ export default function BreachesRegister({ onStatsChange }: Props) {
       breach.category.toLowerCase().includes(searchTerm.toLowerCase())
     )
   })
+
+  const getOwnerName = (breach: Breach): string => {
+    const owner = breach.assigned_user
+    if (!owner) return 'Unassigned'
+    return `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unassigned'
+  }
+
+  const getBreachDueDate = (breach: Breach): string => {
+    const base = breach.remediation_date || breach.discovered_date || breach.breach_date
+    return new Date(base).toISOString()
+  }
+
+  const workflowItems: WorkflowItem[] = filteredBreaches.map((breach) => ({
+    id: breach.id,
+    sourceType: 'breach',
+    sourceId: breach.id,
+    title: breach.reference_number || 'Breach',
+    subtitle: breach.description ? breach.description.slice(0, 50) + (breach.description.length > 50 ? '…' : '') : '',
+    status: breach.status,
+    priority: breach.priority || 'medium',
+    ownerId: breach.assigned_to || null,
+    ownerName: getOwnerName(breach),
+    commentCount: 0,
+    dueDate: getBreachDueDate(breach),
+  }))
+
+  const handleWorkflowStatusChange = async (item: WorkflowItem, status: string) => {
+    try {
+      const { error } = await supabase
+        .from('breach_register')
+        .update({ status })
+        .eq('id', item.id)
+      if (error) throw error
+      await loadBreaches()
+      onStatsChange?.()
+    } catch (error) {
+      console.error('Error updating breach status:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update breach status',
+        variant: 'destructive'
+      })
+    }
+  }
 
   const getSeverityBadge = (severity: Breach['severity']) => {
     const config = {
@@ -266,6 +331,24 @@ export default function BreachesRegister({ onStatsChange }: Props) {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+            >
+              <List className="mr-2 h-4 w-4" />
+              Table
+            </Button>
+            <Button
+              variant={viewMode === 'workflow' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('workflow')}
+            >
+              <LayoutGrid className="mr-2 h-4 w-4" />
+              Workflow
+            </Button>
+          </div>
           <Button variant="outline" onClick={handleExportCSV} className="w-full sm:w-auto">
             <Download className="h-4 w-4 mr-2" />
             Export CSV
@@ -277,8 +360,32 @@ export default function BreachesRegister({ onStatsChange }: Props) {
         </div>
       </div>
 
+      {viewMode === 'workflow' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <AlertOctagon className="h-5 w-5" />
+              <span>Breaches Workflow ({filteredBreaches.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WorkflowBoard
+              columns={WORKFLOW_CONFIGS.breach.stages}
+              items={workflowItems}
+              onItemClick={(item) => {
+                const breach = breaches.find((b) => b.id === item.id)
+                if (breach) setSelectedBreach(breach)
+              }}
+              onStatusChange={handleWorkflowStatusChange}
+              emptyMessage="No breaches in this workflow"
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Breaches Table */}
-      <Card>
+      {viewMode === 'table' && (
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <AlertOctagon className="h-5 w-5" />
@@ -418,7 +525,8 @@ export default function BreachesRegister({ onStatsChange }: Props) {
             </>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
       {/* Create Modal */}
       {showCreateModal && (
@@ -464,6 +572,8 @@ function BreachFormModal({
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
   const [clientSearchTerm, setClientSearchTerm] = useState('')
   const [formData, setFormData] = useState({
+    assigned_to: '',
+    priority: 'medium' as Breach['priority'],
     breach_date: new Date().toISOString().split('T')[0],
     discovered_date: new Date().toISOString().split('T')[0],
     category: 'procedural' as Breach['category'],
@@ -521,6 +631,8 @@ function BreachFormModal({
       const { data: breach, error } = await supabase
         .from('breach_register')
         .insert({
+          assigned_to: formData.assigned_to || null,
+          priority: formData.priority,
           breach_date: formData.breach_date,
           discovered_date: formData.discovered_date,
           category: formData.category,
@@ -599,6 +711,30 @@ function BreachFormModal({
                 className="w-full border rounded-lg p-2 text-sm"
                 required
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+              <OwnerPicker
+                value={formData.assigned_to || null}
+                onChange={(value) => setFormData({ ...formData, assigned_to: value || '' })}
+                compact
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <select
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: e.target.value as Breach['priority'] })}
+                className="w-full border rounded-lg p-2 text-sm"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
             </div>
           </div>
 
@@ -757,9 +893,14 @@ function BreachDetailModal({
 }) {
   const supabase = createClient()
   const { toast } = useToast()
+  const [showTaskModal, setShowTaskModal] = useState(false)
+  const createTask = useCreateTask()
+  const { data: linkedTasks } = useSourceTasks('breach', breach.id)
 
   const [formData, setFormData] = useState({
     status: breach.status,
+    assigned_to: breach.assigned_to || '',
+    priority: breach.priority || 'medium',
     root_cause: breach.root_cause || '',
     remediation_actions: breach.remediation_actions || '',
     remediation_date: breach.remediation_date || '',
@@ -785,6 +926,8 @@ function BreachDetailModal({
         .from('breach_register')
         .update({
           status: formData.status,
+          assigned_to: formData.assigned_to || null,
+          priority: formData.priority,
           root_cause: formData.root_cause || null,
           remediation_actions: formData.remediation_actions || null,
           remediation_date: formData.remediation_date || null,
@@ -813,6 +956,15 @@ function BreachDetailModal({
     }
   }
 
+  const handleCreateTask = async (input: any) => {
+    await createTask.mutateAsync({
+      ...input,
+      sourceType: 'breach',
+      sourceId: breach.id,
+      assignedTo: formData.assigned_to || input.assignedTo,
+    })
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -824,6 +976,10 @@ function BreachDetailModal({
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
             <X className="h-5 w-5" />
           </button>
+        </div>
+
+        <div className="px-6 py-4">
+          <StatusPipeline stages={WORKFLOW_CONFIGS.breach.stages} currentStage={formData.status} />
         </div>
 
         <div className="p-6 space-y-6">
@@ -871,6 +1027,30 @@ function BreachDetailModal({
               <div className="border rounded-lg p-2 text-sm bg-gray-50">
                 {breach.breach_affected_clients?.length || breach.affected_clients}
               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
+              <OwnerPicker
+                value={formData.assigned_to || null}
+                onChange={(value) => setFormData({ ...formData, assigned_to: value || '' })}
+                compact
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <select
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: e.target.value as Breach['priority'] })}
+                className="w-full border rounded-lg p-2 text-sm"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
             </div>
           </div>
 
@@ -991,6 +1171,39 @@ function BreachDetailModal({
               className="w-full border rounded-lg p-2 text-sm min-h-[80px]"
             />
           </div>
+
+          {/* Linked Tasks */}
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-800">Linked Tasks</div>
+              <Button size="sm" onClick={() => setShowTaskModal(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Task
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {linkedTasks?.tasks?.length ? (
+                linkedTasks.tasks.map((task) => (
+                  <div key={task.id} className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 text-sm">
+                    <div>
+                      <p className="font-medium text-gray-800">{task.title}</p>
+                      <p className="text-xs text-gray-500">{task.status.replace('_', ' ')}</p>
+                    </div>
+                    <Badge variant="secondary" className="capitalize">
+                      {task.priority}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400">
+                  No linked tasks yet
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Comments */}
+          <CommentThread sourceType="breach" sourceId={breach.id} />
         </div>
 
         <div className="p-6 border-t bg-gray-50 flex justify-end space-x-3">
@@ -1000,6 +1213,13 @@ function BreachDetailModal({
           </Button>
         </div>
       </div>
+
+      <CreateTaskModal
+        open={showTaskModal}
+        onOpenChange={setShowTaskModal}
+        onSubmit={handleCreateTask}
+        defaultAssigneeId={formData.assigned_to || undefined}
+      />
     </div>
   )
 }

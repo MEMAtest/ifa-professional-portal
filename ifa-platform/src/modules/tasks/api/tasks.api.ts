@@ -35,6 +35,8 @@ export async function fetchTasks(params: TaskListParams = {}): Promise<TaskListR
   if (params.priority) searchParams.set('priority', Array.isArray(params.priority) ? params.priority.join(',') : params.priority)
   if (params.assignedTo) searchParams.set('assignedTo', params.assignedTo)
   if (params.clientId) searchParams.set('clientId', params.clientId)
+  if (params.sourceType) searchParams.set('sourceType', params.sourceType)
+  if (params.sourceId) searchParams.set('sourceId', params.sourceId)
   if (params.overdue) searchParams.set('overdue', 'true')
   if (params.search) searchParams.set('search', params.search)
 
@@ -192,4 +194,24 @@ export async function fetchClientTasks(
   params: Omit<TaskListParams, 'clientId'> = {}
 ): Promise<TaskListResponse> {
   return fetchTasks({ ...params, clientId })
+}
+
+/**
+ * Fetch tasks linked to a specific source record
+ */
+export async function fetchSourceTasks(
+  sourceType: TaskListParams['sourceType'],
+  sourceId: string,
+  params: Omit<TaskListParams, 'sourceType' | 'sourceId'> = {}
+): Promise<TaskListResponse> {
+  if (!sourceType || !sourceId) {
+    return {
+      tasks: [],
+      total: 0,
+      page: 1,
+      perPage: params.perPage || 20,
+      hasMore: false,
+    }
+  }
+  return fetchTasks({ ...params, sourceType, sourceId })
 }

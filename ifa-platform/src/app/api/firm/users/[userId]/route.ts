@@ -7,7 +7,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { FirmUser, UserRole, UserStatus } from '@/modules/firm/types/user.types'
 import type { Json } from '@/types/db'
@@ -43,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get the user profile
     const { data: profile, error } = await supabase
@@ -172,7 +171,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Invalid status. Must be active, invited, or deactivated' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Build update object
     const updateData: Record<string, unknown> = {
@@ -439,7 +438,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Verify user belongs to the same firm and get role
     const { data: existingProfile } = await supabase

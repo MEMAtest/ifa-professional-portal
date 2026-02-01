@@ -1,7 +1,8 @@
 // src/app/api/utils.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server'; // Use your existing supabase client
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 /**
  * Standard API response interface
@@ -17,7 +18,7 @@ export interface ApiResponse<T = any> {
  * Check authentication for API routes
  */
 export async function checkAuthentication(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     // Get the authorization header
     const authHeader = request.headers.get('authorization');
@@ -45,7 +46,7 @@ export async function checkAuthentication(request: NextRequest) {
  * Alternative: Check authentication using cookies (for SSR)
  */
 export async function checkAuthenticationFromCookies(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     // Get the session from cookies
     const cookieHeader = request.headers.get('cookie');

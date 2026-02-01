@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import type { Database } from '@/types/db';
 import type { TablesInsert } from '@/types/db';
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
     const firmId = firmIdResult.firmId;
 
-    const supabase = await createServerClient();
+    const supabase = getSupabaseServiceClient();
     const body = await request.json();
 
     const clientId = body.client_id || body.clientId;
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     }
     const firmId = firmIdResult.firmId;
 
-    const supabase = await createServerClient();
+    const supabase = getSupabaseServiceClient();
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
     const assessmentId = searchParams.get('id');

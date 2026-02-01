@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { Json } from '@/types/db'
 
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const body: CompleteTaskInput = await request.json().catch(() => ({}))
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
 
     // Get existing task

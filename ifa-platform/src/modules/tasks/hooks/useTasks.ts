@@ -19,6 +19,7 @@ import {
   completeTask,
   fetchTaskComments,
   addTaskComment,
+  fetchSourceTasks,
 } from '../api/tasks.api'
 import type {
   TaskListParams,
@@ -39,6 +40,8 @@ export const taskKeys = {
   myTasks: (params?: Omit<TaskListParams, 'assignedTo'>) => [...taskKeys.all, 'my', params ?? {}] as const,
   overdue: (params?: Omit<TaskListParams, 'overdue'>) => [...taskKeys.all, 'overdue', params ?? {}] as const,
   clientTasks: (clientId: string, params?: Omit<TaskListParams, 'clientId'>) => [...taskKeys.all, 'client', clientId, params ?? {}] as const,
+  sourceTasks: (sourceType: string, sourceId: string, params?: Omit<TaskListParams, 'sourceType' | 'sourceId'>) =>
+    [...taskKeys.all, 'source', sourceType, sourceId, params ?? {}] as const,
 }
 
 /**
@@ -87,6 +90,22 @@ export function useClientTasks(clientId: string, params: Omit<TaskListParams, 'c
 }
 
 /**
+ * Fetch tasks linked to a specific source record
+ */
+export function useSourceTasks(
+  sourceType: string | undefined,
+  sourceId: string | undefined,
+  params: Omit<TaskListParams, 'sourceType' | 'sourceId'> = {}
+) {
+  return useQuery({
+    queryKey: taskKeys.sourceTasks(sourceType || 'unknown', sourceId || 'unknown', params),
+    queryFn: () => fetchSourceTasks(sourceType, sourceId || '', params),
+    staleTime: 30 * 1000,
+    enabled: !!sourceType && !!sourceId,
+  })
+}
+
+/**
  * Fetch single task
  */
 export function useTask(taskId: string) {
@@ -124,6 +143,9 @@ export function useCreateTask() {
       if (task.clientId) {
         queryClient.invalidateQueries({ queryKey: taskKeys.clientTasks(task.clientId) })
       }
+      if (task.sourceType && task.sourceId) {
+        queryClient.invalidateQueries({ queryKey: taskKeys.sourceTasks(task.sourceType, task.sourceId) })
+      }
     },
   })
 }
@@ -144,6 +166,9 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: taskKeys.overdue() })
       if (task.clientId) {
         queryClient.invalidateQueries({ queryKey: taskKeys.clientTasks(task.clientId) })
+      }
+      if (task.sourceType && task.sourceId) {
+        queryClient.invalidateQueries({ queryKey: taskKeys.sourceTasks(task.sourceType, task.sourceId) })
       }
     },
   })
@@ -185,6 +210,9 @@ export function useCompleteTask() {
       queryClient.invalidateQueries({ queryKey: taskKeys.overdue() })
       if (task.clientId) {
         queryClient.invalidateQueries({ queryKey: taskKeys.clientTasks(task.clientId) })
+      }
+      if (task.sourceType && task.sourceId) {
+        queryClient.invalidateQueries({ queryKey: taskKeys.sourceTasks(task.sourceType, task.sourceId) })
       }
     },
   })

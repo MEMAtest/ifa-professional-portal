@@ -4,9 +4,10 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import type { Database, DbInsert, DbRow } from '@/types/db';
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,7 @@ export async function GET(
 ) {
   try {
     const clientId = params.clientId;
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
 
     // Get assessment progress - fixed typing
     const { data: progress, error } = await supabase
@@ -210,7 +211,7 @@ export async function POST(
     const clientId = params.clientId;
     const body = await request.json();
     const { alertId, resolution, notes } = body;
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
 
     if (!alertId || !resolution) {
       return NextResponse.json(
@@ -282,7 +283,7 @@ export async function PATCH(
     const clientId = params.clientId;
     const body = await request.json();
     const { remindersEnabled, reviewFrequency } = body;
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
 
     // Validate input
     if (typeof remindersEnabled !== 'boolean' || !reviewFrequency) {
@@ -372,7 +373,7 @@ export async function DELETE(
 ) {
   try {
     const clientId = params.clientId;
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
 
     // Check user authorization
     const { data: { user } } = await supabase.auth.getUser();

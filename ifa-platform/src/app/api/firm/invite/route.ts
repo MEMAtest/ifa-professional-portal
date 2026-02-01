@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { generateTokenPair } from '@/lib/security/crypto'
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     const { data: invitations, error } = await supabase
       .from('user_invitations')
@@ -147,7 +146,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid role is required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
 
     // ========================================

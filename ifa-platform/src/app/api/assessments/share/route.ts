@@ -2,12 +2,13 @@
 // API for creating and listing assessment share tokens
 // Phase 2: Added Zod validation for type safety
 
-import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { ShareAssessmentInputSchema, formatValidationErrors } from '@/lib/validation/schemas'
 import { logger, getErrorMessage } from '@/lib/errors'
 import { createAuditLogger } from '@/lib/audit'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,7 @@ function generateToken(): string {
 // POST: Create a new assessment share
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
 // GET: List assessment shares for current user or specific client
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()

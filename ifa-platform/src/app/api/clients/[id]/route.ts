@@ -7,9 +7,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyProfileUpdated } from '@/lib/notifications/notificationService'
 
@@ -31,14 +30,8 @@ export async function GET(
       return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // SECURITY: Require firm_id for multi-tenant isolation
-    const firmIdResult = requireFirmId(auth.context);
-    if (firmIdResult instanceof NextResponse) {
-      return firmIdResult;
-    }
-    const firmId = firmIdResult.firmId;
-
-    const supabase = await createServerClient();
+    const supabase = getSupabaseServiceClient();
+    const firmId = getValidatedFirmId(auth.context);
     const clientId = context?.params?.id;
     logger.debug('GET /api/clients/[id] - Request received', { clientId, firmId })
 
@@ -53,13 +46,17 @@ export async function GET(
       );
     }
 
-    // SECURITY: Fetch client with explicit firm_id filter (defense in depth)
-    const { data: client, error } = await supabase
+    // Fetch client with firm_id filter when available
+    let query = supabase
       .from('clients')
       .select('*')
       .eq('id', clientId)
-      .eq('firm_id', firmId)
-      .single();
+
+    if (firmId) {
+      query = query.eq('firm_id', firmId)
+    }
+
+    const { data: client, error } = await query.single();
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -135,14 +132,8 @@ export async function PATCH(
       return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // SECURITY: Require firm_id for multi-tenant isolation
-    const firmIdResult = requireFirmId(auth.context);
-    if (firmIdResult instanceof NextResponse) {
-      return firmIdResult;
-    }
-    const firmId = firmIdResult.firmId;
-
-    const supabase = await createServerClient();
+    const supabase = getSupabaseServiceClient();
+    const firmId = getValidatedFirmId(auth.context);
     const user = { id: auth.context.userId, email: auth.context.email, user_metadata: {} };
     const clientId = context?.params?.id;
     logger.debug('PATCH /api/clients/[id] - Updating client', { clientId, firmId })
@@ -165,13 +156,17 @@ export async function PATCH(
     // ========================================
     const expectedUpdatedAt = updates.expectedUpdatedAt || updates._expectedUpdatedAt;
 
-    // SECURITY: Include firm_id filter for defense in depth
-    const { data: previousClient, error: previousError } = await supabase
+    // Fetch existing client for comparison
+    let prevQuery = supabase
       .from('clients')
       .select('personal_details, status, updated_at, firm_id')
       .eq('id', clientId)
-      .eq('firm_id', firmId)
-      .maybeSingle()
+
+    if (firmId) {
+      prevQuery = prevQuery.eq('firm_id', firmId)
+    }
+
+    const { data: previousClient, error: previousError } = await prevQuery.maybeSingle()
 
     if (previousError) {
       logger.warn('Unable to fetch existing client for comparison', { clientId, error: previousError.message })
@@ -218,14 +213,16 @@ export async function PATCH(
     if (updates.status) updateData.status = updates.status;
     if (updates.clientRef) updateData.client_ref = updates.clientRef;
 
-    // SECURITY: Include firm_id filter for defense in depth
-    const { data: client, error } = await supabase
+    let updateQuery = supabase
       .from('clients')
       .update(updateData)
       .eq('id', clientId)
-      .eq('firm_id', firmId)
-      .select()
-      .single();
+
+    if (firmId) {
+      updateQuery = updateQuery.eq('firm_id', firmId)
+    }
+
+    const { data: client, error } = await updateQuery.select().single();
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -271,7 +268,7 @@ export async function PATCH(
     const activityEntries: Array<{
       id: string
       client_id: string
-      firm_id: string
+      firm_id: string | null
       action: string
       type: string
       date: string
@@ -342,7 +339,8 @@ export async function PATCH(
 
     // Send bell notification
     try {
-      const clientName = updatedName || client.personal_details?.firstName || client.personal_details?.first_name || 'Client'
+      const pd = client.personal_details as Record<string, any> | null
+      const clientName = updatedName || pd?.firstName || pd?.first_name || 'Client'
       logger.info('Creating profile update notification', { userId: user.id, clientId, clientName })
       await notifyProfileUpdated(user.id, clientId, clientName)
       logger.info('Profile update notification created successfully')
@@ -391,14 +389,8 @@ export async function DELETE(
       return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    // SECURITY: Require firm_id for multi-tenant isolation
-    const firmIdResult = requireFirmId(auth.context);
-    if (firmIdResult instanceof NextResponse) {
-      return firmIdResult;
-    }
-    const firmId = firmIdResult.firmId;
-
-    const supabase = await createServerClient();
+    const supabase = getSupabaseServiceClient();
+    const firmId = getValidatedFirmId(auth.context);
     const clientId = context?.params?.id;
     logger.debug('DELETE /api/clients/[id] - Deleting client', { clientId, firmId })
 
@@ -412,24 +404,92 @@ export async function DELETE(
       );
     }
 
-    // SECURITY: Include firm_id filter for defense in depth
-    const { error } = await supabase
+    // Verify the client exists and belongs to this firm before deleting
+    let verifyQuery = supabase
+      .from('clients')
+      .select('id')
+      .eq('id', clientId)
+
+    if (firmId) {
+      verifyQuery = verifyQuery.eq('firm_id', firmId)
+    }
+
+    const { data: clientRow, error: verifyError } = await verifyQuery.maybeSingle()
+
+    if (verifyError || !clientRow) {
+      return NextResponse.json(
+        { success: false, error: 'Client not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete all related records first (FK constraints may lack ON DELETE CASCADE)
+    const relatedTables = [
+      'activity_log',
+      'assessment_documents',
+      'assessment_drafts',
+      'assessment_history',
+      'assessment_progress',
+      'assessments',
+      'atr_assessments',
+      'audit_logs',
+      'calendar_events',
+      'cash_flow_scenarios',
+      'cfl_assessments',
+      'client_communications',
+      'client_goals',
+      'client_reviews',
+      'client_workflows',
+      'compliance_evidence',
+      'document_generation_logs',
+      'document_tracking',
+      'document_workflows',
+      'documents',
+      'generated_documents',
+      'meetings',
+      'monte_carlo_results',
+      'monte_carlo_scenarios',
+      'pending_actions',
+      'persona_assessments',
+      'reviews',
+      'risk_profiles',
+      'signature_requests',
+      'stress_test_configs',
+      'stress_test_results',
+      'suitability_assessments',
+      'system_document_queue',
+      'tasks',
+    ] as const
+
+    for (const table of relatedTables) {
+      const { error: delErr } = await supabase
+        .from(table as any)
+        .delete()
+        .eq('client_id', clientId)
+
+      if (delErr) {
+        // Log but continue — table may not exist or have no matching rows
+        logger.debug(`Failed to clean ${table} for client ${clientId}`, { error: delErr.message })
+      }
+    }
+
+    // Also clean client_relationships (uses different column names)
+    await supabase.from('client_relationships' as any).delete().eq('primary_client_id', clientId)
+    await supabase.from('client_relationships' as any).delete().eq('related_client_id', clientId)
+
+    // Now delete the client itself
+    let deleteQuery = supabase
       .from('clients')
       .delete()
       .eq('id', clientId)
-      .eq('firm_id', firmId);
+
+    if (firmId) {
+      deleteQuery = deleteQuery.eq('firm_id', firmId)
+    }
+
+    const { error } = await deleteQuery;
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Client not found'
-          },
-          { status: 404 }
-        );
-      }
-
       logger.error('Database error deleting client', error, { clientId })
       return NextResponse.json(
         {

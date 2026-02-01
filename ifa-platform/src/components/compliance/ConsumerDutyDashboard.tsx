@@ -34,6 +34,8 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
+import type { WorkflowItem } from './workflow'
 import {
   PieChart,
   Pie,
@@ -150,7 +152,7 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
   const [tableExists, setTableExists] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [activeView, setActiveView] = useState<'overview' | 'clients' | 'charts'>('clients')
+  const [activeView, setActiveView] = useState<'overview' | 'clients' | 'charts' | 'workflow'>('clients')
   const [selectedClient, setSelectedClient] = useState<ConsumerDutyStatus | null>(null)
   const [wizardClient, setWizardClient] = useState<{ id: string; name: string } | null>(null)
 
@@ -565,6 +567,11 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
     setSelectedClient(null)
   }
 
+  const handleWorkflowStatusChange = async (item: WorkflowItem, status: string) => {
+    if (item.status === status) return
+    await updateField(item.sourceId, 'overall_status', status)
+  }
+
   // Create merged list of ALL clients with their Consumer Duty status
   // Clients without records get default values displayed
   const allClientsWithStatus = allClients.map(client => {
@@ -609,6 +616,17 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
     const matchesFilter = filterStatus === 'all' || r.overall_status === filterStatus
     return matchesSearch && matchesFilter
   })
+
+  const workflowItems: WorkflowItem[] = filteredRecords.map((record) => ({
+    id: record.id,
+    sourceType: 'consumer_duty',
+    sourceId: record.id,
+    title: getClientName(record),
+    subtitle: record.clients?.client_ref || undefined,
+    status: record.overall_status,
+    dueDate: record.next_review_date,
+    clientId: record.client_id,
+  }))
 
   // Count of clients without saved records (for info display)
   const clientsWithoutRecordCount = allClients.filter(
@@ -865,6 +883,12 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
               className={`px-3 py-2 text-sm ${activeView === 'charts' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
             >
               Charts
+            </button>
+            <button
+              onClick={() => setActiveView('workflow')}
+              className={`px-3 py-2 text-sm ${activeView === 'workflow' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Workflow
             </button>
           </div>
         </div>
@@ -1221,6 +1245,44 @@ CREATE POLICY "Allow all" ON consumer_duty_status FOR ALL USING (true);`}
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Workflow View */}
+      {activeView === 'workflow' && (
+        <div className="space-y-4">
+          {clientsWithoutRecordCount > 0 && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-3">
+                  <Info className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <p className="text-sm text-blue-800">
+                      <span className="font-medium">{clientsWithoutRecordCount} client(s)</span> showing default values.
+                      Changes will automatically save and create their Consumer Duty record.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <WorkflowBoard
+            columns={WORKFLOW_CONFIGS.consumer_duty.stages}
+            items={workflowItems}
+            onItemClick={async (item) => {
+              const record = allClientsWithStatus.find(r => r.id === item.sourceId)
+              if (!record) return
+              if (record.id.startsWith('virtual-')) {
+                const clientId = record.id.replace('virtual-', '')
+                const newRecord = await createRecordForClient(clientId)
+                if (newRecord) setSelectedClient(newRecord)
+              } else {
+                setSelectedClient(record)
+              }
+            }}
+            onStatusChange={handleWorkflowStatusChange}
+          />
+        </div>
       )}
 
       {/* Charts View */}

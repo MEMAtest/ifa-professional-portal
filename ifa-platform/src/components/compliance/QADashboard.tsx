@@ -23,7 +23,9 @@ import {
   MoreVertical,
   X,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  LayoutGrid,
+  List
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -32,6 +34,8 @@ import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
 import FileReviewModal from './FileReviewModal'
+import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
+import type { WorkflowItem } from './workflow'
 
 // Types
 interface Profile {
@@ -97,6 +101,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
   const [selectedReview, setSelectedReview] = useState<FileReview | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
+  const [viewMode, setViewMode] = useState<'table' | 'workflow'>('table')
 
   // Drill down modal state
   const [drillDownData, setDrillDownData] = useState<{
@@ -185,14 +190,6 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     loadReviews()
   }, [loadReviews])
 
-  // Filter reviews by search term
-  const filteredReviews = reviews.filter(review => {
-    if (!searchTerm) return true
-    const clientName = getClientName(review)
-    return clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           review.review_type.toLowerCase().includes(searchTerm.toLowerCase())
-  })
-
   const getClientName = (review: FileReview): string => {
     if (!review.clients?.personal_details) return 'Unknown Client'
     const { firstName, lastName, title } = review.clients.personal_details
@@ -203,6 +200,62 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
   const getProfileName = (profile: Profile | null | undefined): string => {
     if (!profile) return 'Not Assigned'
     return `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
+  }
+
+  // Filter reviews by search term
+  const filteredReviews = reviews.filter(review => {
+    if (!searchTerm) return true
+    const clientName = getClientName(review)
+    return clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           review.review_type.toLowerCase().includes(searchTerm.toLowerCase())
+  })
+
+  const mapRiskToPriority = (risk: FileReview['risk_rating']) => {
+    if (risk === 'critical') return 'urgent'
+    if (risk === 'high') return 'high'
+    if (risk === 'medium') return 'medium'
+    return 'low'
+  }
+
+  const workflowItems: WorkflowItem[] = filteredReviews.map((review) => ({
+    id: review.id,
+    sourceType: 'file_review',
+    sourceId: review.id,
+    title: getClientName(review),
+    subtitle: review.review_type.replace('_', ' '),
+    status: review.status,
+    priority: mapRiskToPriority(review.risk_rating),
+    ownerId: review.reviewer_id,
+    ownerName: getProfileName(review.reviewer),
+    commentCount: 0,
+    dueDate: review.due_date || undefined,
+    clientId: review.client_id,
+  }))
+
+  const handleWorkflowStatusChange = async (item: WorkflowItem, status: string) => {
+    try {
+      const updatePayload: Record<string, any> = { status }
+      if (['approved', 'rejected'].includes(status)) {
+        updatePayload.completed_at = new Date().toISOString()
+      }
+      if (['pending', 'in_progress'].includes(status)) {
+        updatePayload.completed_at = null
+      }
+      const { error } = await supabase
+        .from('file_reviews')
+        .update(updatePayload)
+        .eq('id', item.id)
+      if (error) throw error
+      await loadReviews()
+      onStatsChange?.()
+    } catch (error) {
+      console.error('Error updating review status:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update review status',
+        variant: 'destructive'
+      })
+    }
   }
 
   const getStatusBadge = (status: FileReview['status']) => {
@@ -475,7 +528,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
       </div>
 
       {/* Header with actions */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center space-x-4">
           {/* Search */}
           <div className="relative">
@@ -490,10 +543,28 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
           </div>
         </div>
 
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Review
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('table')}
+          >
+            <List className="mr-2 h-4 w-4" />
+            Table
+          </Button>
+          <Button
+            variant={viewMode === 'workflow' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('workflow')}
+          >
+            <LayoutGrid className="mr-2 h-4 w-4" />
+            Workflow
+          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Review
+          </Button>
+        </div>
       </div>
 
       {/* Filter Tabs */}
@@ -520,8 +591,32 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
         ))}
       </div>
 
+      {viewMode === 'workflow' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <ClipboardCheck className="h-5 w-5" />
+              <span>File Reviews Workflow</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WorkflowBoard
+              columns={WORKFLOW_CONFIGS.file_review.stages}
+              items={workflowItems}
+              onItemClick={(item) => {
+                const review = reviews.find((r) => r.id === item.id)
+                if (review) handleViewReview(review)
+              }}
+              onStatusChange={handleWorkflowStatusChange}
+              emptyMessage="No file reviews in this workflow"
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Reviews List */}
-      <Card>
+      {viewMode === 'table' && (
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <ClipboardCheck className="h-5 w-5" />
@@ -638,7 +733,8 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
             </div>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
       {/* Review Detail Modal */}
       {showReviewModal && selectedReview && (

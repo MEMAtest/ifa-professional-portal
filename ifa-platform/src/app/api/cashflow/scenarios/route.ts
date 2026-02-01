@@ -1,15 +1,14 @@
-import { createClient } from "@/lib/supabase/server"
 // src/app/api/cash-flow/scenarios/route.ts
 // Fixed route for cash flow scenarios with correct column names
 
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
-
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
@@ -52,7 +51,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     const body = await request.json();
     

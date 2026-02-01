@@ -9,9 +9,9 @@
 // - Scopes to the current user's firm when possible
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/db'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { normalizeAssessmentType } from '@/lib/assessments/routing'
 
@@ -21,10 +21,7 @@ export const runtime = 'nodejs'
 const DEFAULT_FIRM_ID = process.env.DEFAULT_FIRM_ID || null
 
 function getServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) throw new Error('Supabase credentials missing')
-  return createSupabaseClient<Database>(url, key)
+  return getSupabaseServiceClient()
 }
 
 async function fetchFirmClientIds(supabase: ReturnType<typeof getServiceClient>, firmId: string): Promise<string[]> {
@@ -53,35 +50,18 @@ export async function GET(request: NextRequest) {
 
   try {
     step = 'auth'
-    const authSupabase = await createServerClient()
-    const {
-      data: { user }
-    } = await authSupabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const user = auth.context.user
 
     const url = new URL(request.url)
     const limitParam = Number(url.searchParams.get('limit') || 5)
     const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 5
 
-    // Determine firm scope (best-effort)
-    let firmId: string | null =
-      (user.user_metadata as any)?.firm_id || (user.user_metadata as any)?.firmId || null
-
-    if (!firmId) {
-      const { data: profile, error: profileError } = await authSupabase
-        .from('profiles')
-        .select('firm_id')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profileError) {
-        logger.warn('Could not resolve firm_id from profile', { profileError: profileError.message })
-      }
-      firmId = profile?.firm_id ?? null
-    }
+    // Determine firm scope from auth context
+    let firmId: string | null = auth.context.firmId
 
     if (!firmId && DEFAULT_FIRM_ID) {
       firmId = DEFAULT_FIRM_ID

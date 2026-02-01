@@ -3,8 +3,7 @@
 // All data from live APIs - no hardcoded values
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 const CACHE_KEY = 'market_data_cache_v2'
 
 interface DataPoint<T> {
@@ -497,7 +496,7 @@ async function fetchBrentOil(): Promise<DataPoint<number>> {
 // ============================================
 async function getCachedData(): Promise<MarketData | null> {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const { data, error } = await supabase
       .from('app_cache')
       .select('data, updated_at')
@@ -513,7 +512,7 @@ async function getCachedData(): Promise<MarketData | null> {
 
 async function setCachedData(marketData: MarketData): Promise<void> {
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     await supabase
       .from('app_cache')
       .upsert({

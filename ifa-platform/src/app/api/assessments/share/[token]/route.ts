@@ -1,11 +1,11 @@
 // src/app/api/assessments/share/[token]/route.ts
 // API for validating tokens and submitting assessment responses
 
-import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { logger, getErrorMessage } from '@/lib/errors'
 import { createAuditLogger, getClientIP, getUserAgent } from '@/lib/audit'
 import { notifyAssessmentCompleted } from '@/lib/notifications/notificationService'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +23,7 @@ export async function GET(
 ) {
   try {
     const { token } = await params
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Find the share by token
     const { data: share, error: queryError } = await supabase
@@ -131,7 +131,7 @@ export async function POST(
 ) {
   try {
     const { token } = await params
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Find the share
     const { data: share, error: queryError } = await supabase
@@ -345,7 +345,7 @@ export async function PATCH(
 ) {
   try {
     const { token } = await params
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     const body = await request.json()
     const { status } = body

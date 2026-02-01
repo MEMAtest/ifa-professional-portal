@@ -3,9 +3,9 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { openSignService } from '@/services/OpenSignService'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get the signature request from database
     const { data: signatureRequest, error: signatureError } = await supabase

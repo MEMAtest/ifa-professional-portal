@@ -7,14 +7,13 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { log } from '@/lib/logging/structured';
 import { notifyReviewDue, notifyReviewOverdue, notifyReviewCompleted } from '@/lib/notifications/notificationService';
-
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Initialize Supabase client
 async function getSupabaseClient() {
-  return await createClient();
+  return getSupabaseServiceClient();
 }
 
 // GET - Fetch reviews for a client

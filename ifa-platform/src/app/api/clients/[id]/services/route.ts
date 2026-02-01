@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic'
 // API route for client services - uses service client to bypass RLS
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 
 interface ClientServicesPayload {
   client_id: string
@@ -33,7 +33,7 @@ export async function GET(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = await createServerClient()
+    const supabase = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -98,7 +98,7 @@ export async function POST(
   }
 
   try {
-    const supabase = await createServerClient()
+    const supabase = getSupabaseServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })

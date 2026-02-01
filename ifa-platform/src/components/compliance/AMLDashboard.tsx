@@ -27,7 +27,8 @@ import {
   ChevronDown,
   Info,
   PlayCircle,
-  Calendar
+  Calendar,
+  LayoutGrid
 } from 'lucide-react'
 import AMLRiskWizard from './AMLRiskWizard'
 import { createClient } from '@/lib/supabase/client'
@@ -37,6 +38,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
+import type { WorkflowItem } from './workflow'
 import {
   PieChart as RechartsPie,
   Pie,
@@ -144,7 +147,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
   const [editData, setEditData] = useState<Partial<AMLClientStatus>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRisk, setFilterRisk] = useState<string>('all')
-  const [activeView, setActiveView] = useState<'table' | 'charts'>('table')
+  const [activeView, setActiveView] = useState<'table' | 'charts' | 'workflow'>('table')
 
   // Risk Assessment Wizard state
   const [showWizard, setShowWizard] = useState(false)
@@ -819,6 +822,63 @@ export default function AMLDashboard({ onStatsChange }: Props) {
     return matchesSearch && matchesFilter
   })
 
+  const mapRiskToPriority = (risk: AMLClientStatus['risk_rating']) => {
+    if (risk === 'enhanced_due_diligence') return 'urgent'
+    if (risk === 'high') return 'high'
+    if (risk === 'medium') return 'medium'
+    return 'low'
+  }
+
+  const workflowItems: WorkflowItem[] = filteredRecords.map((record: any) => {
+    const clientName = record.clients
+      ? `${record.clients.personal_details?.firstName || ''} ${record.clients.personal_details?.lastName || ''}`.trim()
+      : 'Client'
+    return {
+      id: record.id,
+      sourceType: 'aml_check',
+      sourceId: record.id,
+      title: clientName || record.clients?.client_ref || 'Client',
+      subtitle: record.clients?.client_ref || '',
+      status: record.id_verification,
+      priority: mapRiskToPriority(record.risk_rating),
+      ownerId: null,
+      ownerName: 'Adviser',
+      commentCount: 0,
+      dueDate: record.next_review_date || undefined,
+      clientId: record.client_id,
+      metadata: { isVirtual: record._isVirtual },
+    }
+  })
+
+  const handleWorkflowStatusChange = async (item: WorkflowItem, status: string) => {
+    const record = filteredRecords.find((r: any) => r.id === item.id)
+    if (record?._isVirtual) {
+      toast({
+        title: 'AML record required',
+        description: 'Create an AML record for this client before updating status.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('aml_client_status')
+        .update({ id_verification: status, updated_at: new Date().toISOString() })
+        .eq('id', item.id)
+      if (error) throw error
+      await loadData()
+      onStatsChange?.()
+    } catch (error) {
+      console.error('Error updating AML status:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update AML status',
+        variant: 'destructive'
+      })
+    }
+  }
+
   // Count of clients without AML records (for stats)
   const clientsWithoutAMLCount = allClients.filter(
     client => !amlRecords.some(r => r.client_id === client.id)
@@ -1070,6 +1130,17 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
             >
               <BarChart3 className="h-4 w-4 inline mr-2" />
               Charts
+            </button>
+            <button
+              onClick={() => setActiveView('workflow')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeView === 'workflow'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4 inline mr-2" />
+              Workflow
             </button>
           </div>
 
@@ -1340,6 +1411,29 @@ CREATE POLICY "Allow all" ON aml_client_status FOR ALL USING (true);`}
             </Card>
           </div>
         </div>
+      )}
+
+      {activeView === 'workflow' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Shield className="h-5 w-5" />
+              <span>AML Workflow ({filteredRecords.length})</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WorkflowBoard
+              columns={WORKFLOW_CONFIGS.aml_check.stages}
+              items={workflowItems}
+              onItemClick={(item) => {
+                const record = filteredRecords.find((r: any) => r.id === item.id)
+                if (record) openWizardForClient(record)
+              }}
+              onStatusChange={handleWorkflowStatusChange}
+              emptyMessage="No AML items in this workflow"
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* Table View */}

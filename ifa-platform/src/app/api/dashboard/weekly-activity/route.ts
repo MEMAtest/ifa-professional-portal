@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import { log } from '@/lib/logging/structured';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ interface WeeklyStats {
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = await createClient()
+  const supabase = getSupabaseServiceClient()
   try {
     log.debug('GET /api/dashboard/weekly-activity - Fetching weekly data');
     
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Helper function to get clients for a specific day
-async function getClientsForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getClientsForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
     const { count, error } = await supabase
       .from('clients')
@@ -131,7 +131,7 @@ async function getClientsForDay(supabase: ReturnType<typeof createClient> extend
 }
 
 // Helper function to get assessments for a specific day
-async function getAssessmentsForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getAssessmentsForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
     // Try suitability_assessments first, then fall back to assessments table
     const { count, error } = await supabase
@@ -164,7 +164,7 @@ async function getAssessmentsForDay(supabase: ReturnType<typeof createClient> ex
 
 // Helper function to get documents for a specific day
 async function getDocumentsForDay(
-  supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
   dayStart: Date,
   dayEnd: Date
 ): Promise<number> {
@@ -209,7 +209,7 @@ async function getDocumentsForDay(
 }
 
 // Helper function to get Monte Carlo simulations for a specific day
-async function getMonteCarloForDay(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getMonteCarloForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date): Promise<number> {
   try {
     const { count, error } = await supabase
       .from('monte_carlo_results')

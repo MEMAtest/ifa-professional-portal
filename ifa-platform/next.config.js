@@ -45,13 +45,25 @@ const nextConfig = {
     // `Component is not a constructor` in Route Handlers.
     serverComponentsExternalPackages: [
       '@react-pdf/renderer',
-      '@react-pdf/reconciler'
+      '@react-pdf/reconciler',
+      'pdf-to-img',
+      'pdfjs-dist',
+      'tesseract.js',
     ],
     // Prevent build-time API calls
     outputFileTracingExcludes: {
       '*': [
         'node_modules/@swc/core-linux-x64-gnu',
         'node_modules/@swc/core-linux-x64-musl',
+      ],
+    },
+    // Ensure native render deps are bundled for PDF extraction
+    outputFileTracingIncludes: {
+      '*': [
+        'node_modules/pdf-to-img/**',
+        'node_modules/pdfjs-dist/**',
+        'node_modules/@napi-rs/canvas/**',
+        'node_modules/@napi-rs/canvas-*/**',
       ],
     },
   },

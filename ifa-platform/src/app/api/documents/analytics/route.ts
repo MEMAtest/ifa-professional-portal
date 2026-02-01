@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Calculate analytics from your real database
 async function calculateRealAnalytics(supabase: any, firmId: string | null, filters?: any) {
@@ -341,7 +341,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const firmId = auth.context?.firmId || null
 
     const { searchParams } = new URL(request.url)
@@ -423,7 +423,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
     const firmId = auth.context?.firmId || null
 
     const body = await request.json()

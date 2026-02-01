@@ -5,9 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { createClient } from '@/lib/supabase/server'
 import { rateLimit } from '@/lib/security/rateLimit'
 import type { FirmUser } from '@/modules/firm/types/user.types'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export async function GET(request: NextRequest) {
   // Rate limit: 100 requests per minute per IP
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       return firmIdResult
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get all profiles in the firm with user email
     const { data: profiles, error } = await supabase
