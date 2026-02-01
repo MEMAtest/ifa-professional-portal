@@ -41,7 +41,7 @@ export default function WorkflowBoard({
       {columns.map((column) => {
         const columnItems = itemsByStatus[column.id] || []
         return (
-          <div key={column.id} className="flex-1 min-w-[240px]">
+          <div key={column.id} className="flex-1 min-w-0 md:min-w-[240px] max-w-full">
             <div
               className="rounded-lg border border-gray-200 bg-gray-50 p-3"
               style={{ borderTop: `4px solid ${column.color}` }}

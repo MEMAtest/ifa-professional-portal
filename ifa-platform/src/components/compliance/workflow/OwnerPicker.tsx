@@ -20,22 +20,35 @@ interface OwnerPickerProps {
 export default function OwnerPicker({ value, firmId, onChange, compact }: OwnerPickerProps) {
   const supabase = createClient()
   const [owners, setOwners] = useState<OwnerOption[]>([])
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     let isMounted = true
     const loadOwners = async () => {
-      let query = supabase
-        .from('profiles')
-        .select('id, first_name, last_name, avatar_url')
-        .order('first_name')
+      try {
+        let query = supabase
+          .from('profiles')
+          .select('id, first_name, last_name, avatar_url')
+          .order('first_name')
 
-      if (firmId) {
-        query = query.eq('firm_id', firmId)
-      }
+        if (firmId) {
+          query = query.eq('firm_id', firmId)
+        }
 
-      const { data } = await query
-      if (isMounted) {
+        const { data, error: queryError } = await query
+        if (!isMounted) return
+        if (queryError) {
+          console.error('OwnerPicker: Failed to load profiles', queryError)
+          setError(true)
+          return
+        }
         setOwners(data || [])
+        setError(false)
+      } catch (err) {
+        if (isMounted) {
+          console.error('OwnerPicker: Unexpected error', err)
+          setError(true)
+        }
       }
     }
 
@@ -49,11 +62,12 @@ export default function OwnerPicker({ value, firmId, onChange, compact }: OwnerP
     <select
       value={value || ''}
       onChange={(e) => onChange(e.target.value || null)}
-      className={`w-full rounded-md border border-gray-200 bg-white px-2 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none ${
-        compact ? 'py-1 text-xs' : ''
-      }`}
+      aria-label="Assign owner"
+      className={`w-full rounded-md border bg-white px-2 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none ${
+        error ? 'border-red-300' : 'border-gray-200'
+      } ${compact ? 'py-1 text-xs' : ''}`}
     >
-      <option value="">Unassigned</option>
+      <option value="">{error ? 'Failed to load' : 'Unassigned'}</option>
       {owners.map((owner) => {
         const name = `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unknown'
         return (

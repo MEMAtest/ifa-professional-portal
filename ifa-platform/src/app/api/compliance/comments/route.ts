@@ -50,6 +50,27 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseServiceClient()
+
+    // Verify the source record belongs to this firm
+    const sourceTableMap: Record<string, string> = {
+      complaint: 'complaint_register',
+      breach: 'breach_register',
+      vulnerability: 'vulnerability_register',
+      file_review: 'file_reviews',
+    }
+    const sourceTable = sourceTableMap[sourceType]
+    if (sourceTable) {
+      const { data: sourceRecord } = await supabase
+        .from(sourceTable)
+        .select('id')
+        .eq('id', sourceId)
+        .eq('firm_id', firmIdResult.firmId)
+        .maybeSingle()
+      if (!sourceRecord) {
+        return NextResponse.json({ error: 'Source record not found in your firm' }, { status: 403 })
+      }
+    }
+
     const { data: comments, error } = await supabase
       .from('compliance_comments_with_user')
       .select('*')
@@ -104,6 +125,27 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseServiceClient()
+
+    // Verify the source record belongs to this firm
+    const sourceTableMap: Record<string, string> = {
+      complaint: 'complaint_register',
+      breach: 'breach_register',
+      vulnerability: 'vulnerability_register',
+      file_review: 'file_reviews',
+    }
+    const sourceTable = sourceTableMap[sourceType]
+    if (sourceTable) {
+      const { data: sourceRecord } = await supabase
+        .from(sourceTable)
+        .select('id')
+        .eq('id', sourceId)
+        .eq('firm_id', firmIdResult.firmId)
+        .maybeSingle()
+      if (!sourceRecord) {
+        return NextResponse.json({ error: 'Source record not found in your firm' }, { status: 403 })
+      }
+    }
+
     const { data: inserted, error: insertError } = await supabase
       .from('compliance_comments')
       .insert({

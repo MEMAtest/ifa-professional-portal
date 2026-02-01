@@ -59,9 +59,14 @@ export async function GET(request: NextRequest) {
     }
 
     const firmResult = requireFirmId(authResult.context)
-    const firmId = firmResult instanceof NextResponse ? authResult.context.firmId : firmResult.firmId
-    const userId = authResult.context.userId
-    const hasFirmId = typeof firmId === 'string' && firmId.trim().length > 0
+    if (firmResult instanceof NextResponse) {
+      return firmResult
+    }
+    const firmId = firmResult.firmId
+
+    if (!firmId) {
+      return NextResponse.json({ error: 'Firm context required' }, { status: 400 })
+    }
 
     const url = new URL(request.url)
     const sectionParam = url.searchParams.get('section') || 'all'
@@ -78,38 +83,21 @@ export async function GET(request: NextRequest) {
     const tasks: Promise<any[]>[] = []
 
     if (requestedSections.includes('complaint')) {
-      const complaintQuery = hasFirmId
-        ? supabase
-            .from('complaint_register')
-            .select(`
-              id,
-              reference_number,
-              status,
-              priority,
-              complaint_date,
-              resolution_date,
-              client_id,
-              assigned_to,
-              clients(id, personal_details, client_ref),
-              assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-            `)
-            .eq('firm_id', firmId)
-        : supabase
-            .from('complaint_register')
-            .select(`
-              id,
-              reference_number,
-              status,
-              priority,
-              complaint_date,
-              resolution_date,
-              client_id,
-              assigned_to,
-              created_by,
-              clients(id, personal_details, client_ref),
-              assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-            `)
-            .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
+      const complaintQuery = supabase
+        .from('complaint_register')
+        .select(`
+          id,
+          reference_number,
+          status,
+          priority,
+          complaint_date,
+          resolution_date,
+          client_id,
+          assigned_to,
+          clients(id, personal_details, client_ref),
+          assigned_user:assigned_to(id, first_name, last_name, avatar_url)
+        `)
+        .eq('firm_id', firmId)
       tasks.push(
         safeQuery(
           complaintQuery,
@@ -134,38 +122,21 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('breach')) {
-      const breachQuery = hasFirmId
-        ? supabase
-            .from('breach_register')
-            .select(`
-              id,
-              reference_number,
-              status,
-              priority,
-              breach_date,
-              remediation_date,
-              severity,
-              affected_clients,
-              assigned_to,
-              assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-            `)
-            .eq('firm_id', firmId)
-        : supabase
-            .from('breach_register')
-            .select(`
-              id,
-              reference_number,
-              status,
-              priority,
-              breach_date,
-              remediation_date,
-              severity,
-              affected_clients,
-              assigned_to,
-              created_by,
-              assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-            `)
-            .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
+      const breachQuery = supabase
+        .from('breach_register')
+        .select(`
+          id,
+          reference_number,
+          status,
+          priority,
+          breach_date,
+          remediation_date,
+          severity,
+          affected_clients,
+          assigned_to,
+          assigned_user:assigned_to(id, first_name, last_name, avatar_url)
+        `)
+        .eq('firm_id', firmId)
       tasks.push(
         safeQuery(
           breachQuery,
@@ -190,38 +161,21 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('vulnerability')) {
-      const vulnerabilityQuery = hasFirmId
-        ? supabase
-            .from('vulnerability_register')
-            .select(`
-              id,
-              client_id,
-              status,
-              priority,
-              vulnerability_type,
-              severity,
-              next_review_date,
-              assigned_to,
-              clients(id, personal_details, client_ref),
-              assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-            `)
-            .eq('firm_id', firmId)
-        : supabase
-            .from('vulnerability_register')
-            .select(`
-              id,
-              client_id,
-              status,
-              priority,
-              vulnerability_type,
-              severity,
-              next_review_date,
-              assigned_to,
-              created_by,
-              clients(id, personal_details, client_ref),
-              assigned_user:assigned_to(id, first_name, last_name, avatar_url)
-            `)
-            .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
+      const vulnerabilityQuery = supabase
+        .from('vulnerability_register')
+        .select(`
+          id,
+          client_id,
+          status,
+          priority,
+          vulnerability_type,
+          severity,
+          next_review_date,
+          assigned_to,
+          clients(id, personal_details, client_ref),
+          assigned_user:assigned_to(id, first_name, last_name, avatar_url)
+        `)
+        .eq('firm_id', firmId)
       tasks.push(
         safeQuery(
           vulnerabilityQuery,
@@ -246,37 +200,21 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('file_review')) {
-      const fileReviewQuery = hasFirmId
-        ? supabase
-            .from('file_reviews')
-            .select(`
-              id,
-              client_id,
-              status,
-              review_type,
-              risk_rating,
-              due_date,
-              reviewer_id,
-              adviser_id,
-              clients(id, personal_details, client_ref),
-              reviewer:reviewer_id(id, first_name, last_name, avatar_url)
-            `)
-            .eq('firm_id', firmId)
-        : supabase
-            .from('file_reviews')
-            .select(`
-              id,
-              client_id,
-              status,
-              review_type,
-              risk_rating,
-              due_date,
-              reviewer_id,
-              adviser_id,
-              clients(id, personal_details, client_ref),
-              reviewer:reviewer_id(id, first_name, last_name, avatar_url)
-            `)
-            .or(`reviewer_id.eq.${userId},adviser_id.eq.${userId}`)
+      const fileReviewQuery = supabase
+        .from('file_reviews')
+        .select(`
+          id,
+          client_id,
+          status,
+          review_type,
+          risk_rating,
+          due_date,
+          reviewer_id,
+          adviser_id,
+          clients(id, personal_details, client_ref),
+          reviewer:reviewer_id(id, first_name, last_name, avatar_url)
+        `)
+        .eq('firm_id', firmId)
       tasks.push(
         safeQuery(
           fileReviewQuery,
@@ -301,33 +239,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('aml_check')) {
-      const amlQuery = hasFirmId
-        ? supabase
-            .from('aml_client_status')
-            .select(`
-              id,
-              client_id,
-              id_verification,
-              risk_rating,
-              next_review_date,
-              updated_at,
-              created_at,
-              clients!inner(id, personal_details, client_ref, firm_id)
-            `)
-            .eq('clients.firm_id', firmId)
-        : supabase
-            .from('aml_client_status')
-            .select(`
-              id,
-              client_id,
-              id_verification,
-              risk_rating,
-              next_review_date,
-              updated_at,
-              created_at,
-              clients!inner(id, personal_details, client_ref, advisor_id)
-            `)
-            .eq('clients.advisor_id', userId)
+      const amlQuery = supabase
+        .from('aml_client_status')
+        .select(`
+          id,
+          client_id,
+          id_verification,
+          risk_rating,
+          next_review_date,
+          updated_at,
+          created_at,
+          clients!inner(id, personal_details, client_ref, firm_id)
+        `)
+        .eq('clients.firm_id', firmId)
       tasks.push(
         safeQuery(
           amlQuery,
@@ -349,31 +273,18 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('consumer_duty')) {
-      const consumerDutyQuery = hasFirmId
-        ? supabase
-            .from('consumer_duty_status')
-            .select(`
-              id,
-              client_id,
-              overall_status,
-              next_review_date,
-              updated_at,
-              created_at,
-              clients!inner(id, personal_details, client_ref, firm_id)
-            `)
-            .eq('clients.firm_id', firmId)
-        : supabase
-            .from('consumer_duty_status')
-            .select(`
-              id,
-              client_id,
-              overall_status,
-              next_review_date,
-              updated_at,
-              created_at,
-              clients!inner(id, personal_details, client_ref, advisor_id)
-            `)
-            .eq('clients.advisor_id', userId)
+      const consumerDutyQuery = supabase
+        .from('consumer_duty_status')
+        .select(`
+          id,
+          client_id,
+          overall_status,
+          next_review_date,
+          updated_at,
+          created_at,
+          clients!inner(id, personal_details, client_ref, firm_id)
+        `)
+        .eq('clients.firm_id', firmId)
       tasks.push(
         safeQuery(
           consumerDutyQuery,
@@ -394,33 +305,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (requestedSections.includes('risk_assessment')) {
-      const riskQuery = hasFirmId
-        ? supabase
-            .from('risk_profiles')
-            .select(`
-              id,
-              client_id,
-              final_risk_level,
-              final_risk_category,
-              updated_at,
-              created_at,
-              clients!inner(id, personal_details, client_ref, firm_id)
-            `)
-            .eq('clients.firm_id', firmId)
-            .order('updated_at', { ascending: false })
-        : supabase
-            .from('risk_profiles')
-            .select(`
-              id,
-              client_id,
-              final_risk_level,
-              final_risk_category,
-              updated_at,
-              created_at,
-              clients!inner(id, personal_details, client_ref, advisor_id)
-            `)
-            .eq('clients.advisor_id', userId)
-            .order('updated_at', { ascending: false })
+      const riskQuery = supabase
+        .from('risk_profiles')
+        .select(`
+          id,
+          client_id,
+          final_risk_level,
+          final_risk_category,
+          updated_at,
+          created_at,
+          clients!inner(id, personal_details, client_ref, firm_id)
+        `)
+        .eq('clients.firm_id', firmId)
+        .order('updated_at', { ascending: false })
       tasks.push(
         safeQuery(
           riskQuery,

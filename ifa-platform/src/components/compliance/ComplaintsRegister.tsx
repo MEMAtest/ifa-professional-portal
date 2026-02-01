@@ -93,9 +93,6 @@ interface Props {
 export default function ComplaintsRegister({ onStatsChange }: Props) {
   const supabase = createClient()
   const { toast } = useToast()
-  const [showTaskModal, setShowTaskModal] = useState(false)
-  const createTask = useCreateTask()
-  const { data: linkedTasks } = useSourceTasks('complaint', complaint.id)
 
   const [complaints, setComplaints] = useState<Complaint[]>([])
   const [loading, setLoading] = useState(true)
@@ -964,6 +961,9 @@ function ComplaintDetailModal({
 }) {
   const supabase = createClient()
   const { toast } = useToast()
+  const [showTaskModal, setShowTaskModal] = useState(false)
+  const createTask = useCreateTask()
+  const { data: linkedTasks } = useSourceTasks('complaint', complaint.id)
 
   const [formData, setFormData] = useState({
     status: complaint.status,

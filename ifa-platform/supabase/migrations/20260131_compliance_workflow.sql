@@ -104,6 +104,7 @@ ALTER TABLE compliance_comments
 
 CREATE INDEX IF NOT EXISTS idx_compliance_comments_source ON compliance_comments(source_type, source_id);
 CREATE INDEX IF NOT EXISTS idx_compliance_comments_user ON compliance_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_comments_firm ON compliance_comments(firm_id);
 
 -- Auto-update updated_at
 DROP TRIGGER IF EXISTS update_compliance_comments_updated_at ON compliance_comments;

@@ -53,7 +53,7 @@ export default function WorkflowDetailPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <div className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-xl">
+      <div className="h-full w-full sm:max-w-xl overflow-y-auto bg-white p-4 sm:p-6 shadow-xl">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{item.title}</h2>

@@ -30,9 +30,13 @@ export default function WorkflowCard({ item, stages, onClick, onStatusChange }: 
       }`}
       role="button"
       tabIndex={0}
+      aria-label={`${item.title}${item.subtitle ? ` - ${item.subtitle}` : ''}`}
       onClick={() => onClick?.(item)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onClick?.(item)
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.(item)
+        }
       }}
     >
       <div className="flex items-start justify-between gap-3">

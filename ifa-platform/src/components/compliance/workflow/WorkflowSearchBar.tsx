@@ -47,6 +47,7 @@ export default function WorkflowSearchBar({
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search..."
+            aria-label="Search workflow items"
             className="pl-9"
           />
         </div>
@@ -55,6 +56,7 @@ export default function WorkflowSearchBar({
             key={filter.id}
             value={filter.value}
             onChange={(e) => onFilterChange?.(filter.id, e.target.value)}
+            aria-label={filter.label}
             className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
           >
             {filter.options.map((option) => (

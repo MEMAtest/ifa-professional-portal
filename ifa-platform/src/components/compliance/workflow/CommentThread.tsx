@@ -118,13 +118,22 @@ export default function CommentThread({ sourceType, sourceId }: CommentThreadPro
       </div>
 
       <form onSubmit={handleSubmit} className="mt-3 flex items-center gap-2">
-        <input
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Add a comment..."
-          className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-        />
-        <Button type="submit" size="sm" disabled={posting || !content.trim()}>
+        <div className="relative flex-1">
+          <input
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            maxLength={2000}
+            placeholder="Add a comment..."
+            aria-label="Add a comment"
+            className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          />
+          {content.length > 1800 && (
+            <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs ${content.length >= 2000 ? 'text-red-500' : 'text-gray-400'}`}>
+              {content.length}/2000
+            </span>
+          )}
+        </div>
+        <Button type="submit" size="sm" disabled={posting || !content.trim() || content.length > 2000}>
           {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </form>
