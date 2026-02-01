@@ -2,7 +2,7 @@
 // ✅ FIXED VERSION - Uses correct database columns
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Settings,
   User,
@@ -266,11 +266,17 @@ export default function SettingsPage() {
     }
   }, [createMockData, loadFirmSettings, loadConsumerDutySettings, loadUserProfile])
 
+  const hasLoadedRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (user) {
-      loadSettings()
+    if (!user?.id) {
+      hasLoadedRef.current = null
+      return
     }
-  }, [user, loadSettings])
+    if (hasLoadedRef.current === user.id) return
+    hasLoadedRef.current = user.id
+    loadSettings()
+  }, [user?.id, loadSettings])
 
   const handleSaveProfile = async () => {
     try {

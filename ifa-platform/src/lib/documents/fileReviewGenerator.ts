@@ -109,7 +109,7 @@ function truncate(text: string, maxChars: number): string {
   return text.slice(0, maxChars)
 }
 
-function normalizeTaskTitle(value: string): string {
+export function normalizeTaskTitle(value: string): string {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -232,12 +232,11 @@ export function parseGapsIntoTasks(reviewMarkdown: string): SuggestedTask[] {
   if (current) bullets.push(current)
 
   return bullets
-    .map((text, index) => {
+    .map((text, index): SuggestedTask => {
       const classification = classifyTaskFromText(text)
       return {
         id: `ai_gap_${index + 1}`,
         title: text,
-        description: undefined,
         type: classification.type,
         priority: classification.priority,
         source: 'ai_parsed',

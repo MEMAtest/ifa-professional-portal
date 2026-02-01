@@ -12,6 +12,7 @@ import { createRequestLogger } from '@/lib/logging/structured'
 import {
   buildFileReviewPrompt,
   generateDeterministicTasks,
+  normalizeTaskTitle,
   parseFileReviewResponse,
   parseGapsIntoTasks,
   type SuggestedTask,
@@ -27,7 +28,7 @@ interface AIConfig {
 }
 
 const AI_TIMEOUT_MS = 120_000
-const AI_MAX_TOKENS = 8000
+const AI_MAX_TOKENS = 12000
 
 function getAIConfig(): AIConfig {
   const provider = (process.env.AI_PROVIDER || 'mock') as AIProvider
@@ -216,14 +217,6 @@ function generateMockFileReview(
   ].join('\n')
 }
 
-function normalizeTaskTitle(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 function shouldSkipAiTask(aiTitle: string, deterministic: SuggestedTask[]): boolean {
   const lowered = aiTitle.toLowerCase()
   if (/\batr\b|\battitude to risk\b/.test(lowered)) {
@@ -288,10 +281,7 @@ export async function POST(request: NextRequest, context: { params: { id: string
       .from('documents')
       .select('id, status')
       .eq('client_id', clientId)
-
-    if (effectiveFirmId) {
-      allDocsQuery = allDocsQuery.eq('firm_id', effectiveFirmId)
-    }
+      .eq('firm_id', effectiveFirmId)
 
     const { data: allDocuments, error: allDocsError } = await allDocsQuery
 
@@ -305,10 +295,7 @@ export async function POST(request: NextRequest, context: { params: { id: string
       .select('id, file_name, name, metadata, status')
       .eq('client_id', clientId)
       .eq('status', 'analyzed')
-
-    if (effectiveFirmId) {
-      docsQuery = docsQuery.eq('firm_id', effectiveFirmId)
-    }
+      .eq('firm_id', effectiveFirmId)
 
     const { data: documents, error: docError } = await docsQuery
 
@@ -346,19 +333,19 @@ export async function POST(request: NextRequest, context: { params: { id: string
       .from('suitability_assessments')
       .select('id, total_score, status, created_at')
       .eq('client_id', clientId)
-    if (effectiveFirmId) suitQ = suitQ.eq('firm_id', effectiveFirmId)
+    suitQ = suitQ.eq('firm_id', effectiveFirmId)
 
     let atrQ = supabase
       .from('atr_assessments')
       .select('id, total_score, risk_category, status, created_at')
       .eq('client_id', clientId)
-    if (effectiveFirmId) atrQ = atrQ.eq('firm_id', effectiveFirmId)
+      .eq('firm_id', effectiveFirmId)
 
     let cflQ = supabase
       .from('cfl_assessments')
       .select('id, total_score, risk_category, status, created_at')
       .eq('client_id', clientId)
-    if (effectiveFirmId) cflQ = cflQ.eq('firm_id', effectiveFirmId)
+      .eq('firm_id', effectiveFirmId)
 
     const [
       suitabilityResult,

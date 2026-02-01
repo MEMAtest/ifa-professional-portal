@@ -60,7 +60,7 @@ export async function GET(
     }
 
     // Format the history to match what useClientAssessments expects
-    const formattedHistory = (historyData || []).map((entry: AssessmentHistory) => ({
+    const formattedHistory = (historyData || []).map((entry: any) => ({
       id: entry.id,
       assessmentType: entry.assessment_type,
       action: entry.action,

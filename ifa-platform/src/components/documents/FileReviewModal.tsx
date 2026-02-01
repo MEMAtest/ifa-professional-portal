@@ -231,18 +231,16 @@ export function FileReviewModal({ clientId, clientName, isOpen, onClose }: FileR
       completedAt: markReviewComplete ? now : undefined,
     })
 
-    const hasDeterministic = (keyword: string) =>
-      suggestedTasks.some(
-        (task) => task.source === 'deterministic' && task.title.toLowerCase().includes(keyword)
-      )
+    const hasDeterministicId = (taskId: string) =>
+      suggestedTasks.some((task) => task.id === taskId)
 
-    if (hasDeterministic('suitability')) {
+    if (hasDeterministicId('det_suitability')) {
       steps.push({ id: 'suitability', label: 'Complete suitability report', done: false })
     }
-    if (hasDeterministic('atr')) {
+    if (hasDeterministicId('det_atr')) {
       steps.push({ id: 'atr', label: 'Complete ATR assessment', done: false })
     }
-    if (hasDeterministic('cfl')) {
+    if (hasDeterministicId('det_cfl')) {
       steps.push({ id: 'cfl', label: 'Complete CFL assessment', done: false })
     }
 
@@ -293,8 +291,11 @@ export function FileReviewModal({ clientId, clientName, isOpen, onClose }: FileR
       setWorkflowSteps(workflow.steps)
 
       if (scheduleNextReview) {
+        const today = new Date().toISOString().split('T')[0]
         if (!nextReviewDate) {
           setScheduleError('Please choose a next review date.')
+        } else if (nextReviewDate <= today) {
+          setScheduleError('Next review date must be in the future.')
         } else {
           const reviewPayload = {
             clientId,
@@ -311,6 +312,8 @@ export function FileReviewModal({ clientId, clientName, isOpen, onClose }: FileR
           if (!reviewResponse.ok) {
             const reviewData = await reviewResponse.json().catch(() => ({}))
             setScheduleError(reviewData?.error || 'Failed to schedule next review')
+          } else {
+            setScheduleError(null)
           }
         }
       }
@@ -657,8 +660,8 @@ export function FileReviewModal({ clientId, clientName, isOpen, onClose }: FileR
                             className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700"
                           >
                             <option value="annual">Annual</option>
-                            <option value="semi_annual">Semi-Annual</option>
-                            <option value="quarterly">Quarterly</option>
+                            <option value="periodic">Periodic</option>
+                            <option value="regulatory">Regulatory</option>
                             <option value="ad_hoc">Ad Hoc</option>
                           </select>
                         </div>
