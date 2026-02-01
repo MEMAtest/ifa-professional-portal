@@ -2,8 +2,7 @@
 // COMPLETE UPDATED VERSION - NO ASSUMPTIONS
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { AssessmentHistory } from '@/types/assessment';
-import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured';
+import { createRequestLogger } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 
@@ -76,7 +75,7 @@ export async function GET(
 
     // Group by assessment type for summary (keep your existing logic)
     const summary: Record<string, any> = {};
-    (historyData || []).forEach((entry: AssessmentHistory) => {
+    (historyData || []).forEach((entry: any) => {
       if (!summary[entry.assessment_type]) {
         summary[entry.assessment_type] = {
           type: entry.assessment_type,
