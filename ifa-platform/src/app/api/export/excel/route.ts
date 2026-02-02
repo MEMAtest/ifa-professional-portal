@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 // ================================================================
 // src/app/api/export/excel/route.ts
 // API Route for Excel generation

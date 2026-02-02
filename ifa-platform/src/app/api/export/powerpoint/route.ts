@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 // ================================================================
 // src/app/api/export/powerpoint/route.ts
 // API Route for PowerPoint generation (server-side only)

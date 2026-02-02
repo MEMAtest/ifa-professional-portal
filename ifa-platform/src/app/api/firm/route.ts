@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 /**
  * Firm API Route
  * GET /api/firm - Get current user's firm

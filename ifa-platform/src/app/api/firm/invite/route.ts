@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 /**
  * User Invitation API Route
  * GET /api/firm/invite - Get pending invitations

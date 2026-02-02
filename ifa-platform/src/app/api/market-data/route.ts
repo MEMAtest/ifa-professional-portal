@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 // src/app/api/market-data/route.ts
 // Server-side API route for fetching market data with full transparency
 // All data from live APIs - no hardcoded values

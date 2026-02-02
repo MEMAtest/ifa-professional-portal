@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { NotificationService } from '@/lib/notifications/notificationService'

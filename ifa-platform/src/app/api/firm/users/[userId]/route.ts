@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 /**
  * Individual User API Route
  * GET /api/firm/users/[userId] - Get a specific user
