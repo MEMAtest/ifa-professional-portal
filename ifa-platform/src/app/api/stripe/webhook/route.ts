@@ -7,8 +7,6 @@ import { getStripeClient } from '@/lib/billing/stripeClient'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billing/firmBilling'
 
-export const dynamic = 'force-dynamic'
-
 function parseStripeDate(value?: number | null): string | null {
   if (!value) return null
   const date = new Date(value * 1000)
