@@ -6,6 +6,7 @@
 import { createContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { useFirm } from '@/modules/firm/hooks/useFirm'
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
@@ -32,7 +33,7 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev)
   const closeSidebar = () => setIsSidebarOpen(false)
 
-  // Define pages that don't need layout (public/client-facing pages)
+  // Define pages that don't need layout (public/client-facing pages + onboarding)
   const isPublicPage = pathname === '/login' ||
                        pathname === '/' ||
                        pathname === '/marketing' ||
@@ -44,12 +45,30 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
                        pathname === '/contact' ||
                        pathname === '/blog' ||
                        pathname.startsWith('/blog/') ||
-                       pathname.startsWith('/client/')
+                       pathname.startsWith('/client/') ||
+                       pathname === '/onboarding'
+
+  // Fetch firm data to check onboarding status
+  const { firm } = useFirm()
+  const isOnboardingRoute = pathname === '/onboarding'
+
+  // Check if admin user needs onboarding redirect
+  const firmSettings = firm?.settings as any
+  const onboardingCompleted = firmSettings?.onboarding?.completed === true
+  const isAdminUser = user?.role === 'admin'
+  const shouldRedirectToOnboarding = Boolean(
+    user && isAdminUser && !isPlatformAdmin && !onboardingCompleted && !isOnboardingRoute && !isPublicPage
+  )
 
   useEffect(() => {
     if (!shouldRedirectToAdmin) return
     router.replace('/admin')
   }, [shouldRedirectToAdmin, router])
+
+  useEffect(() => {
+    if (!shouldRedirectToOnboarding) return
+    router.replace('/onboarding')
+  }, [shouldRedirectToOnboarding, router])
 
   if (loading) {
     return (

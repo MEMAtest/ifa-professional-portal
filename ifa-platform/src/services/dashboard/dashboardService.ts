@@ -2,11 +2,26 @@ import type { Client } from '@/types/client'
 import type { ActivityItem, WeeklyStats } from '@/components/dashboard/types'
 import type { DashboardEvent, UpcomingEventsFilter } from '@/lib/dashboard/types'
 import {
-  generateMockWeeklyData,
   mapActivityLogEntries,
   mapUpcomingReviews,
   transformClientData
 } from '@/lib/dashboard/data'
+
+const emptyWeeklyStats = (): WeeklyStats => {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const now = new Date()
+  const emptyChart = days.map((day, index) => ({
+    day,
+    value: 0,
+    date: new Date(now.getTime() - (6 - index) * 24 * 60 * 60 * 1000).toISOString()
+  }))
+  return {
+    clientsChart: emptyChart,
+    assessmentsChart: emptyChart.map(d => ({ ...d })),
+    documentsChart: emptyChart.map(d => ({ ...d })),
+    monteCarloChart: emptyChart.map(d => ({ ...d })),
+  }
+}
 
 export const fetchClients = async (limit = 1000): Promise<Client[]> => {
   try {
@@ -25,14 +40,14 @@ export const fetchWeeklyActivity = async (): Promise<WeeklyStats> => {
   try {
     const response = await fetch('/api/dashboard/weekly-activity')
     if (!response.ok) {
-      return generateMockWeeklyData()
+      return emptyWeeklyStats()
     }
 
     const data = await response.json()
     return data.weeklyStats
   } catch (error) {
     console.error('Error fetching weekly activity:', error)
-    return generateMockWeeklyData()
+    return emptyWeeklyStats()
   }
 }
 

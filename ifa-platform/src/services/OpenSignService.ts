@@ -2,6 +2,8 @@
 // OPENSIGN SERVICE - COMPLETE INTEGRATION
 // ================================================================
 
+import { log } from '@/lib/logging/structured'
+
 export interface OpenSignConfig {
   apiKey: string
   apiUrl: string
@@ -62,7 +64,7 @@ export class OpenSignService {
     this.mockMode = this.config.apiKey.startsWith('test.') || this.config.apiKey.startsWith('mock.')
 
     if (!this.config.apiKey) {
-      console.warn('OpenSign API key not configured - service will run in disabled mode')
+      log.warn('OpenSign API key not configured - service will run in disabled mode')
       this.initialized = false
       return
     }
@@ -70,7 +72,7 @@ export class OpenSignService {
     this.initialized = true
 
     if (this.mockMode) {
-      console.log('OpenSign Service running in MOCK MODE')
+      log.info('OpenSign Service running in MOCK MODE')
     }
   }
 
@@ -308,7 +310,7 @@ export class OpenSignService {
    */
   async getDocumentStatus(documentId: string): Promise<OpenSignDocument | null> {
     if (!this.initialized) {
-      console.warn('OpenSign service not initialized - cannot get document status')
+      log.warn('OpenSign service not initialized - cannot get document status')
       return null
     }
 
@@ -331,7 +333,7 @@ export class OpenSignService {
         metadata: result.metadata
       }
     } catch (error) {
-      console.error('Error getting document status:', error)
+      log.error('Error getting document status', error instanceof Error ? error : undefined)
       return null
     }
   }
@@ -382,7 +384,7 @@ export class OpenSignService {
       const arrayBuffer = await response.arrayBuffer()
       return Buffer.from(arrayBuffer)
     } catch (error) {
-      console.error('Error downloading document:', error)
+      log.error('Error downloading document', error instanceof Error ? error : undefined)
       return null
     }
   }
@@ -392,7 +394,7 @@ export class OpenSignService {
    */
   async listDocuments(limit = 10, offset = 0): Promise<OpenSignDocument[]> {
     if (!this.initialized) {
-      console.warn('OpenSign service not initialized - cannot list documents')
+      log.warn('OpenSign service not initialized - cannot list documents')
       return []
     }
 
@@ -415,7 +417,7 @@ export class OpenSignService {
         metadata: doc.metadata
       }))
     } catch (error) {
-      console.error('Error listing documents:', error)
+      log.error('Error listing documents', error instanceof Error ? error : undefined)
       return []
     }
   }
@@ -461,7 +463,7 @@ export class OpenSignService {
       })
       return true
     } catch (error) {
-      console.error('Error resending mail:', error)
+      log.error('Error resending mail', error instanceof Error ? error : undefined)
       return false
     }
   }
@@ -476,7 +478,7 @@ export class OpenSignService {
       })
       return true
     } catch (error) {
-      console.error('Error deleting document:', error)
+      log.error('Error deleting document', error instanceof Error ? error : undefined)
       return false
     }
   }
@@ -499,7 +501,7 @@ export class OpenSignService {
         used: result.used || 0
       }
     } catch (error) {
-      console.error('Error getting credits:', error)
+      log.error('Error getting credits', error instanceof Error ? error : undefined)
       return null
     }
   }

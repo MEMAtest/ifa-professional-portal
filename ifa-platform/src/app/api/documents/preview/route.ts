@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Simple template population for preview
-    let content = template.template_content
+    let content = template.template_content ?? ''
     Object.entries(variables).forEach(([key, value]) => {
       const regex = new RegExp(`{{${key}}}`, 'g')
       content = content.replace(regex, String(value))

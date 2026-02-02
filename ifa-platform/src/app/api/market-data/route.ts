@@ -504,7 +504,7 @@ async function getCachedData(): Promise<MarketData | null> {
       .single()
 
     if (error || !data) return null
-    return data.data as MarketData
+    return data.data as unknown as MarketData
   } catch {
     return null
   }
@@ -517,7 +517,7 @@ async function setCachedData(marketData: MarketData): Promise<void> {
       .from('app_cache')
       .upsert({
         key: CACHE_KEY,
-        data: marketData,
+        data: marketData as unknown as import('@/types/db').Json,
         updated_at: new Date().toISOString()
       }, { onConflict: 'key' })
   } catch (error) {

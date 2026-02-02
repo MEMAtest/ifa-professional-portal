@@ -28,7 +28,27 @@ interface AIConfig {
 }
 
 const AI_TIMEOUT_MS = 120_000
-const AI_MAX_TOKENS = 12000
+const DEFAULT_MAX_TOKENS = 8_000
+const DEEPSEEK_CHAT_MAX_TOKENS = 8_000
+const DEEPSEEK_REASONER_MAX_TOKENS = 8_000
+
+function getMaxTokens(config: AIConfig): number {
+  const override =
+    process.env.FILE_REVIEW_MAX_TOKENS ||
+    process.env.DEEPSEEK_FILE_REVIEW_MAX_TOKENS
+  if (override) {
+    const parsed = Number(override)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.floor(parsed)
+    }
+  }
+
+  if (config.provider !== 'deepseek') return DEFAULT_MAX_TOKENS
+  if (config.model.toLowerCase().includes('reasoner')) {
+    return DEEPSEEK_REASONER_MAX_TOKENS
+  }
+  return DEEPSEEK_CHAT_MAX_TOKENS
+}
 
 function getAIConfig(): AIConfig {
   const provider = (process.env.AI_PROVIDER || 'mock') as AIProvider
@@ -66,6 +86,7 @@ async function callOpenAICompatible(
   config: AIConfig,
   systemPrompt: string,
   userMessage: string,
+  maxTokens: number,
   logger: ReturnType<typeof createRequestLogger>
 ): Promise<string> {
   const response = await fetch(config.apiUrl, {
@@ -81,7 +102,7 @@ async function callOpenAICompatible(
         { role: 'user', content: userMessage },
       ],
       temperature: 0.3,
-      max_tokens: AI_MAX_TOKENS,
+      max_tokens: maxTokens,
     }),
     signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   })
@@ -104,6 +125,7 @@ async function callAnthropic(
   config: AIConfig,
   systemPrompt: string,
   userMessage: string,
+  maxTokens: number,
   logger: ReturnType<typeof createRequestLogger>
 ): Promise<string> {
   const response = await fetch(config.apiUrl, {
@@ -118,7 +140,7 @@ async function callAnthropic(
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
       temperature: 0.3,
-      max_tokens: AI_MAX_TOKENS,
+      max_tokens: maxTokens,
     }),
     signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   })
@@ -365,21 +387,36 @@ export async function POST(request: NextRequest, context: { params: { id: string
 
     const { systemPrompt, userMessage } = buildFileReviewPrompt(clientProfile, docAnalyses, assessments)
 
-    const config = getAIConfig()
+    const baseConfig = getAIConfig()
+    let config: AIConfig = {
+      provider: 'deepseek',
+      apiKey: process.env.DEEPSEEK_API_KEY || baseConfig.apiKey,
+      apiUrl: 'https://api.deepseek.com/v1/chat/completions',
+      model:
+        process.env.DEEPSEEK_FILE_REVIEW_MODEL ||
+        process.env.DEEPSEEK_MODEL ||
+        'deepseek-reasoner',
+    }
     if (config.provider !== 'mock' && !config.apiKey) {
-      return NextResponse.json(
-        { success: false, error: 'AI API key not configured' },
-        { status: 500 }
-      )
+      if (process.env.NODE_ENV !== 'production') {
+        logger.warn('AI API key missing; falling back to mock provider', { provider: config.provider })
+        config = { provider: 'mock', apiKey: null, apiUrl: '', model: 'mock' }
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'AI API key not configured' },
+          { status: 500 }
+        )
+      }
     }
 
+    const maxTokens = getMaxTokens(config)
     let raw = ''
     if (config.provider === 'anthropic') {
-      raw = await callAnthropic(config, systemPrompt, userMessage, logger)
+      raw = await callAnthropic(config, systemPrompt, userMessage, maxTokens, logger)
     } else if (config.provider === 'mock') {
       raw = generateMockFileReview(clientProfile, docAnalyses, assessments)
     } else {
-      raw = await callOpenAICompatible(config, systemPrompt, userMessage, logger)
+      raw = await callOpenAICompatible(config, systemPrompt, userMessage, maxTokens, logger)
     }
     const review = parseFileReviewResponse(raw)
     const deterministicTasks = generateDeterministicTasks(assessments, clientProfile)

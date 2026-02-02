@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import SourceBadge from './TaskHub/SourceBadge'
 import type { TaskWithDetails, TaskStatus } from '../types'
 import {
   TASK_PRIORITY_COLORS,
@@ -59,8 +60,9 @@ export function TaskCard({
     ? `${task.clientFirstName} ${task.clientLastName || ''}`.trim()
     : null
 
-  // Close menu when clicking outside
+  // Close menu when clicking outside — only attach listener while menu is open
   useEffect(() => {
+    if (!menuOpen) return
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false)
@@ -68,7 +70,7 @@ export function TaskCard({
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [menuOpen])
 
   const handleComplete = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -92,7 +94,7 @@ export function TaskCard({
     return (
       <div
         className={cn(
-          'flex items-center gap-3 p-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors cursor-pointer',
+          'p-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors cursor-pointer',
           isOverdue && 'border-red-200 bg-red-50',
           task.status === 'completed' && 'opacity-60'
         )}
@@ -100,36 +102,66 @@ export function TaskCard({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <button
-          onClick={handleComplete}
-          className="flex-shrink-0"
-          disabled={task.status === 'completed'}
-        >
-          {task.status === 'completed' ? (
-            <CheckCircle2 className="h-5 w-5 text-green-500" />
-          ) : (
-            <Circle className={cn('h-5 w-5', isHovered ? 'text-blue-600' : 'text-gray-400')} />
-          )}
-        </button>
-
-        <div className="flex-1 min-w-0">
-          <p className={cn('text-sm font-medium truncate', task.status === 'completed' && 'line-through text-gray-500')}>
+        {/* Row 1: checkbox + title + priority */}
+        <div className="flex items-start gap-2">
+          <button
+            onClick={handleComplete}
+            className="flex-shrink-0 mt-0.5"
+            disabled={task.status === 'completed'}
+          >
+            {task.status === 'completed' ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : (
+              <Circle className={cn('h-4 w-4', isHovered ? 'text-blue-600' : 'text-gray-400')} />
+            )}
+          </button>
+          <p className={cn('flex-1 text-sm font-medium leading-snug', task.status === 'completed' && 'line-through text-gray-500')}>
             {task.title}
           </p>
+          <Badge className={cn('flex-shrink-0 text-[10px] px-1.5 py-0', TASK_PRIORITY_COLORS[task.priority])}>
+            {TASK_PRIORITY_LABELS[task.priority]}
+          </Badge>
+        </div>
+
+        {/* Row 2: metadata */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs text-gray-500">
           {task.dueDate && (
-            <p className={cn(
-              'text-xs',
-              isOverdue ? 'text-red-600 font-medium' : isDueToday ? 'text-amber-600' : 'text-gray-500'
-            )}>
-              {isOverdue ? 'Overdue: ' : isDueToday ? 'Today: ' : ''}
-              {format(new Date(task.dueDate), 'MMM d')}
-            </p>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1',
+                isOverdue && 'text-red-600 font-medium',
+                isDueToday && !isOverdue && 'text-amber-600 font-medium'
+              )}
+              title={format(new Date(task.dueDate), 'MMMM d, yyyy')}
+            >
+              {isOverdue && <AlertTriangle className="h-3 w-3" />}
+              <Clock className="h-3 w-3" />
+              {isOverdue
+                ? `Overdue ${formatDistanceToNow(new Date(task.dueDate), { addSuffix: false })}`
+                : isDueToday
+                  ? 'Due today'
+                  : format(new Date(task.dueDate), 'MMM d, yyyy')}
+            </span>
+          )}
+          {assigneeName && (
+            <span className="inline-flex items-center gap-1">
+              <User className="h-3 w-3" />
+              {assigneeName}
+            </span>
+          )}
+          {clientName && (
+            <span className="inline-flex items-center gap-1 text-gray-400">
+              Client: <span className="text-gray-600">{clientName}</span>
+            </span>
           )}
         </div>
 
-        <Badge className={cn('flex-shrink-0', TASK_PRIORITY_COLORS[task.priority])}>
-          {task.priority}
-        </Badge>
+        {/* Row 3: badges */}
+        {task.sourceType && (
+          <div className="mt-1.5 pl-6">
+            <SourceBadge sourceType={task.sourceType} />
+          </div>
+        )}
       </div>
     )
   }
@@ -278,6 +310,7 @@ export function TaskCard({
             <Badge variant="secondary" className="text-xs">
               {TASK_TYPE_LABELS[task.type]}
             </Badge>
+            {task.sourceType && <SourceBadge sourceType={task.sourceType} />}
             {task.requiresSignOff && (
               <Badge className="text-xs text-purple-700 bg-purple-50 border-purple-200">
                 Sign-off required

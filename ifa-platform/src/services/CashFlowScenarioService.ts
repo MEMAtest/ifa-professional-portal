@@ -2,6 +2,7 @@
 // ✅ COMPLETE FIXED VERSION - All queries use correct Supabase syntax
 
 import { createClient } from '@/lib/supabase/client';
+import { log } from '@/lib/logging/structured';
 import type { CashFlowScenario, CashFlowProjection, ClientGoal, ScenarioSummary, ClientOption } from '@/types/cash-flow-scenario';
 
 export class CashFlowScenarioService {
@@ -24,13 +25,13 @@ export class CashFlowScenarioService {
         .order('updated_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching active scenarios:', error);
+        log.error('Error fetching active scenarios', error);
         throw error;
       }
 
       return { data: data || [], error: null };
     } catch (error) {
-      console.error('Error in getActiveScenarios:', error);
+      log.error('Error in getActiveScenarios', error instanceof Error ? error : undefined);
       return { data: [], error };
     }
   }
@@ -62,7 +63,7 @@ export class CashFlowScenarioService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching dashboard scenarios:', error);
+      log.error('Error fetching dashboard scenarios', error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -122,7 +123,7 @@ export class CashFlowScenarioService {
             }
           }
         } catch (e) {
-          console.warn('Could not parse personal details:', e);
+          log.warn('Could not parse personal details', { error: e });
         }
 
         return {
@@ -133,7 +134,7 @@ export class CashFlowScenarioService {
         };
       });
     } catch (error) {
-      console.error('Error fetching clients with scenarios:', error);
+      log.error('Error fetching clients with scenarios', error instanceof Error ? error : undefined);
       throw new Error('Failed to load clients');
     }
   }
@@ -154,7 +155,7 @@ export class CashFlowScenarioService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching client scenarios:', error);
+      log.error('Error fetching client scenarios', error instanceof Error ? error : undefined);
       throw new Error('Failed to load scenarios');
     }
   }
@@ -188,7 +189,7 @@ export class CashFlowScenarioService {
           projections = data;
         }
       } catch (e) {
-        console.warn('Projections table may not exist:', e);
+        log.warn('Projections table may not exist', { error: e });
       }
 
       // Get related goals
@@ -204,7 +205,7 @@ export class CashFlowScenarioService {
           goals = data;
         }
       } catch (e) {
-        console.warn('Goals table may not exist:', e);
+        log.warn('Goals table may not exist', { error: e });
       }
 
       // Calculate summary metrics
@@ -223,7 +224,7 @@ export class CashFlowScenarioService {
         shortfallRisk
       };
     } catch (error) {
-      console.error('Error fetching scenario summary:', error);
+      log.error('Error fetching scenario summary', error instanceof Error ? error : undefined);
       throw new Error('Failed to load scenario details');
     }
   }
@@ -320,13 +321,13 @@ export class CashFlowScenarioService {
             date: new Date().toISOString()
           });
       } catch (activityError) {
-        console.warn('Failed to save cash flow activity:', activityError);
+        log.warn('Failed to save cash flow activity', { error: activityError });
         // Don't fail the request if activity logging fails
       }
 
       return data;
     } catch (error) {
-      console.error('Error creating scenario:', error);
+      log.error('Error creating scenario', error instanceof Error ? error : undefined);
       throw new Error('Failed to create scenario');
     }
   }
@@ -407,7 +408,7 @@ export class CashFlowScenarioService {
         assumption_basis: 'Default assumptions based on current market conditions'
       } as any);
     } catch (error) {
-      console.error('Error ensuring client scenario:', error);
+      log.error('Error ensuring client scenario', error instanceof Error ? error : undefined);
       throw new Error('Failed to create default scenario');
     }
   }
@@ -462,13 +463,13 @@ export class CashFlowScenarioService {
         .limit(1);
 
       if (error) {
-        console.warn('Error fetching Monte Carlo results:', error);
+        log.warn('Error fetching Monte Carlo results', { error });
         return null;
       }
       
       return data?.[0] || null;
     } catch (error) {
-      console.error('Error fetching Monte Carlo results:', error);
+      log.error('Error fetching Monte Carlo results', error instanceof Error ? error : undefined);
       return null;
     }
   }
@@ -495,7 +496,7 @@ export class CashFlowScenarioService {
         updated_at: item.updated_at
       }));
     } catch (error) {
-      console.error('Error fetching scenarios summary:', error);
+      log.error('Error fetching scenarios summary', error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -517,7 +518,7 @@ export class CashFlowScenarioService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating last analysis date:', error);
+      log.error('Error updating last analysis date', error instanceof Error ? error : undefined);
     }
   }
 }

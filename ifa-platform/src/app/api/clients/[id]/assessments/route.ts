@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 
 interface AssessmentShare {
   id: string
@@ -48,17 +48,33 @@ export async function GET(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const firmId = getValidatedFirmId(auth.context)
+    if (!firmId) {
+      return NextResponse.json({ error: 'Firm ID required' }, { status: 403 })
+    }
+
+    const supabase: any = getSupabaseServiceClient()
 
     const clientId = context?.params?.id
 
     if (!clientId || clientId === 'undefined') {
       return NextResponse.json({ error: 'Client ID is required' }, { status: 400 })
+    }
+
+    const { data: client, error: clientError } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('id', clientId)
+      .eq('firm_id', firmId)
+      .single()
+
+    if (clientError || !client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
     logger.debug('Fetching assessments for client', { clientId })
@@ -164,12 +180,17 @@ export async function PATCH(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const firmId = getValidatedFirmId(auth.context)
+    if (!firmId) {
+      return NextResponse.json({ error: 'Firm ID required' }, { status: 403 })
+    }
+
+    const supabase: any = getSupabaseServiceClient()
 
     const clientId = context?.params?.id
     const body = await request.json()
@@ -188,6 +209,7 @@ export async function PATCH(
         })
         .eq('id', shareId)
         .eq('client_id', clientId)
+        .eq('firm_id', firmId)
 
       if (error) {
         logger.error('Error revoking assessment share', error)

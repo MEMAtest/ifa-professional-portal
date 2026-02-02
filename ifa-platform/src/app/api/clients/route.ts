@@ -41,9 +41,11 @@ export async function GET(request: NextRequest) {
       .from('clients')
       .select('*', { count: 'exact' })
 
-    if (firmId) {
-      query = query.eq('firm_id', firmId)
+    if (!firmId) {
+      logger.warn('GET /api/clients - No firm_id available, refusing to return unscoped data')
+      return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
     }
+    query = query.eq('firm_id', firmId)
     
     // Apply filters
     if (status.length > 0) {

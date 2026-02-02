@@ -44,9 +44,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const supabase = getSupabaseServiceClient()
 
-    // Get the user profile
-    const { data: profile, error } = await supabase
-      .from('profiles')
+    // Get the user profile (status column not in generated types)
+    const { data: profile, error } = await (supabase
+      .from('profiles') as any)
       .select(`
         id,
         first_name,
@@ -68,8 +68,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Get email using RPC function
-    const { data: emailData } = await supabase
+    // Get email using RPC function (not in generated types)
+    const { data: emailData } = await (supabase as any)
       .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
 
     const userEmail = emailData?.find((e: { user_id: string; email: string }) => e.user_id === userId)?.email || ''
@@ -190,8 +190,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Verify user belongs to the same firm and get current values for rollback
-    const { data: existingProfile } = await supabase
-      .from('profiles')
+    const { data: existingProfile } = await (supabase
+      .from('profiles') as any)
       .select('firm_id, role, status, first_name, last_name, phone')
       .eq('id', userId)
       .single()
@@ -229,9 +229,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Update the profile
-    const { data: profile, error } = await supabase
-      .from('profiles')
+    // Update the profile (status column not in generated types)
+    const { data: profile, error } = await (supabase
+      .from('profiles') as any)
       .update(updateData)
       .eq('id', userId)
       .eq('firm_id', firmIdResult.firmId)
@@ -271,8 +271,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       if ((postUpdateAdminCount ?? 0) < 1) {
         // Race condition detected! Rollback ALL changes (not just role/status)
         console.warn('[User API] Race condition detected - rolling back admin demotion')
-        await supabase
-          .from('profiles')
+        await (supabase
+          .from('profiles') as any)
           .update({
             role: existingProfile.role,
             status: existingProfile.status,
@@ -373,8 +373,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Get email using RPC function
-    const { data: emailData } = await supabase
+    // Get email using RPC function (not in generated types)
+    const { data: emailData } = await (supabase as any)
       .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
 
     const userEmail = emailData?.find((e: { user_id: string; email: string }) => e.user_id === userId)?.email || ''
@@ -441,8 +441,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const supabase = getSupabaseServiceClient()
 
     // Verify user belongs to the same firm and get role
-    const { data: existingProfile } = await supabase
-      .from('profiles')
+    const { data: existingProfile } = await (supabase
+      .from('profiles') as any)
       .select('firm_id, status, role')
       .eq('id', userId)
       .single()
@@ -488,7 +488,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     if ((clientCount ?? 0) > 0 && !confirmOrphan) {
       // Return 409 Conflict with client info so UI can prompt for reassignment
-      const clientNames = (assignedClients ?? []).map((c: { id: string; personal_details: Record<string, unknown> | null }) => {
+      const clientNames = (assignedClients ?? []).map((c: any) => {
         const pd = c.personal_details
         if (!pd) return 'Unknown'
         const firstName = (pd.firstName || pd.first_name || '') as string
@@ -521,8 +521,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       : 'User'
 
     // Soft delete - set status to deactivated
-    const { error } = await supabase
-      .from('profiles')
+    const { error } = await (supabase
+      .from('profiles') as any)
       .update({
         status: 'deactivated',
         updated_at: new Date().toISOString(),
@@ -550,8 +550,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       if ((postDeleteAdminCount ?? 0) < 1) {
         // Race condition detected! Rollback the deactivation
         console.warn('[User API] Race condition in DELETE - rolling back admin deactivation')
-        await supabase
-          .from('profiles')
+        await (supabase
+          .from('profiles') as any)
           .update({
             status: existingProfile.status,
             updated_at: new Date().toISOString()

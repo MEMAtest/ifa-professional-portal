@@ -17,8 +17,13 @@ export async function POST(request: NextRequest) {
     if (auth.success) {
       supabase = getSupabaseServiceClient()
       firmId = auth.context?.firmId || null
+
+      // SECURITY: Require firm context for user-authenticated requests
+      if (!firmId) {
+        return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+      }
     } else {
-      // Service token fallback
+      // Service token fallback - intentional admin operation across all firms
       const token = request.headers.get('x-backfill-token')
       const expected = process.env.BACKFILL_TOKEN
       if (!token || !expected || token !== expected) {
@@ -45,6 +50,8 @@ export async function POST(request: NextRequest) {
       .or('type.is.null,type.eq.,type.ilike.unknown')
       .limit(500)
 
+    // Always scope to firm for user-authenticated requests;
+    // service token path (firmId === null) intentionally operates across all firms
     if (firmId) {
       query = query.eq('firm_id', firmId)
     }

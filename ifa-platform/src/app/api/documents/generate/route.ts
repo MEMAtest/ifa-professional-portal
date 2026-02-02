@@ -78,17 +78,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
       ...(body.metadata || {}),
     }
 
+    const isFileReview = (metadata as any)?.type === 'file_review'
+    const category = (metadata as any)?.category || (isFileReview ? 'Compliance' : 'Generated')
+    const documentType = (metadata as any)?.document_type || (isFileReview ? 'compliance_document' : 'generated_document')
+    const type = (metadata as any)?.type || (isFileReview ? 'file_review' : 'generated')
+
     // Create document record in database
     const { data: document, error: dbError } = await supabase
       .from('documents')
       .insert({
         name: body.title,
         description: `Generated document from template`,
+        category,
         file_name: fileName,
         file_path: filePath,
         storage_path: filePath,
         file_type: 'application/pdf',
         mime_type: 'application/pdf',
+        type,
+        document_type: documentType,
         firm_id: firmId,
         client_id: body.clientId || null,
         created_by: userId,

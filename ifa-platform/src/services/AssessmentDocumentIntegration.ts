@@ -272,6 +272,8 @@ export class AssessmentDocumentIntegration {
           due_date: followUpDate.toISOString(),
           priority: 'medium',
           status: 'pending',
+          source_type: 'assessment',
+          source_id: assessment.assessmentId,
           metadata: {
             assessment_id: assessment.assessmentId,
             assessment_type: assessment.assessmentType

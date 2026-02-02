@@ -95,8 +95,8 @@ export async function POST(request: NextRequest) {
 
     logger.debug('CREATE SIGNATURE: Creating signature request', { clientId: signatureRequestData.client_id, documentId: signatureRequestData.document_id })
 
-    const { data: signatureRequest, error: insertError } = await supabase
-      .from('signature_requests')
+    const { data: signatureRequest, error: insertError } = await (supabase
+      .from('signature_requests') as any)
       .insert(signatureRequestData)
       .select()
       .single()
@@ -138,8 +138,8 @@ export async function POST(request: NextRequest) {
       logger.info('CREATE SIGNATURE: Email sent successfully')
 
       // Update signature request status to 'sent' after successful email
-      const { error: updateError } = await supabase
-        .from('signature_requests')
+      const { error: updateError } = await (supabase
+        .from('signature_requests') as any)
         .update({
           status: 'sent',
           sent_at: new Date().toISOString()

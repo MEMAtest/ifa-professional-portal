@@ -4,6 +4,7 @@
 // ===================================================================
 
 import { createClient } from '@/lib/supabase/client'
+import { log } from '@/lib/logging/structured'
 import { normalizeIsoCountryCode } from '@/lib/isoCountries'
 import type { 
   Client, 
@@ -65,7 +66,7 @@ export class ClientService {
         totalPages: json.totalPages || Math.ceil((json.total || 0) / limit)
       }
     } catch (error) {
-      console.error('Error fetching clients:', error)
+      log.error('Error fetching clients', error)
       return {
         clients: [],
         total: 0,
@@ -98,7 +99,7 @@ export class ClientService {
       if (error instanceof Error && error.message.includes('not found')) {
         throw error
       } else {
-        console.error('Unexpected error in getClientById:', error)
+        log.error('Unexpected error in getClientById', error)
         throw error
       }
     }
@@ -125,12 +126,12 @@ export class ClientService {
           created_at: new Date().toISOString()
         })
       } catch (workflowError) {
-        console.warn('Could not create client workflow (table may not exist):', workflowError)
+        log.warn('Could not create client workflow (table may not exist)', { error: workflowError })
       }
 
       return client
     } catch (error) {
-      console.error('Error creating client:', error)
+      log.error('Error creating client', error)
       throw error
     }
   }
@@ -176,7 +177,7 @@ export class ClientService {
 
       return this.transformDbClient(data)
     } catch (error) {
-      console.error('Error updating client:', error)
+      log.error('Error updating client', error)
       throw error
     }
   }
@@ -189,7 +190,7 @@ export class ClientService {
         throw new Error(data.error || data.details || 'Failed to delete client')
       }
     } catch (error) {
-      console.error('Error deleting client:', error)
+      log.error('Error deleting client', error)
       throw error
     }
   }
@@ -218,7 +219,7 @@ export class ClientService {
         suggestions: []
       }
     } catch (error) {
-      console.error('Error searching clients:', error)
+      log.error('Error searching clients', error)
       return {
         clients: [],
         total: 0,
@@ -262,7 +263,7 @@ export class ClientService {
         clientsByRiskLevel: stats.byRiskLevel || {}
       }
     } catch (error) {
-      console.error('Error fetching client statistics:', error)
+      log.error('Error fetching client statistics', error)
       const emptyStatusCounts = {
         prospect: 0, active: 0, review_due: 0, inactive: 0, archived: 0
       }
@@ -298,7 +299,7 @@ export class ClientService {
 
       return data || []
     } catch (error) {
-      console.error('Error fetching client reviews:', error)
+      log.error('Error fetching client reviews', error)
       return []
     }
   }
@@ -319,7 +320,7 @@ export class ClientService {
 
       return data
     } catch (error) {
-      console.error('Error creating client review:', error)
+      log.error('Error creating client review', error)
       throw error
     }
   }
@@ -334,7 +335,7 @@ export class ClientService {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.warn('Communications table may not exist:', error)
+        log.warn('Communications table may not exist', { error })
         return []
       }
 
@@ -354,7 +355,7 @@ export class ClientService {
         method: comm.method
       }))
     } catch (error) {
-      console.warn('Error in getClientCommunications:', error)
+      log.warn('Error in getClientCommunications', { error })
       return []
     }
   }
@@ -398,7 +399,7 @@ export class ClientService {
         method: data.method
       }
     } catch (error) {
-      console.error('Error creating client communication:', error)
+      log.error('Error creating client communication', error)
       throw error
     }
   }
@@ -432,7 +433,7 @@ export class ClientService {
         expiryDate: data.expiry_date
       }
     } catch (error) {
-      console.error('Error linking client document:', error)
+      log.error('Error linking client document', error)
       throw error
     }
   }
@@ -446,22 +447,22 @@ export class ClientService {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.warn('Audit logs table may not exist:', error)
+        log.warn('Audit logs table may not exist', { error })
         return []
       }
 
-      return (data || []).map((log: any) => ({
-        id: log.id,
-        clientId: log.client_id,
-        action: log.action,
-        details: log.details || {},
-        performedBy: log.performed_by || log.user_id,
-        timestamp: log.created_at,
-        resource: log.resource,
-        createdAt: log.created_at
+      return (data || []).map((entry: any) => ({
+        id: entry.id,
+        clientId: entry.client_id,
+        action: entry.action,
+        details: entry.details || {},
+        performedBy: entry.performed_by || entry.user_id,
+        timestamp: entry.created_at,
+        resource: entry.resource,
+        createdAt: entry.created_at
       }))
     } catch (error) {
-      console.warn('Error fetching audit log:', error)
+      log.warn('Error fetching audit log', { error })
       return []
     }
   }
@@ -557,7 +558,7 @@ export class ClientService {
       }
 
     } catch (error) {
-      console.error('Error during batch migration:', error)
+      log.error('Error during batch migration', error)
       throw error
     }
   }
@@ -578,10 +579,10 @@ export class ClientService {
 
       if (error) {
         // Don't throw, just log
-        console.warn('Workflow creation failed (table may not exist):', error.message)
+        log.warn('Workflow creation failed (table may not exist)', { error: error.message })
       }
     } catch (error) {
-      console.warn('Workflow operation failed:', error)
+      log.warn('Workflow operation failed', { error })
     }
   }
 
@@ -598,10 +599,10 @@ export class ClientService {
         .eq('status', 'in_progress')
 
       if (error) {
-        console.warn('Workflow update failed (table may not exist):', error.message)
+        log.warn('Workflow update failed (table may not exist)', { error: error.message })
       }
     } catch (error) {
-      console.warn('Workflow operation failed:', error)
+      log.warn('Workflow operation failed', { error })
     }
   }
 

@@ -39,9 +39,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    // Get all profiles in the firm with user email
-    const { data: profiles, error } = await supabase
-      .from('profiles')
+    // Get all profiles in the firm with user email (status column not in generated types)
+    const { data: profiles, error } = await (supabase
+      .from('profiles') as any)
       .select(`
         id,
         first_name,
@@ -63,8 +63,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
-    // Get emails using RPC function (SECURITY DEFINER to access auth.users)
-    const { data: emailData } = await supabase
+    // Get emails using RPC function (SECURITY DEFINER to access auth.users, not in generated types)
+    const { data: emailData } = await (supabase as any)
       .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
 
     // Create a map of user_id -> email for quick lookup

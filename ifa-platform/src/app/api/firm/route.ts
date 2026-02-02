@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import type { Firm, FirmUpdateInput } from '@/modules/firm/types/firm.types'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,6 +20,12 @@ export async function GET(request: NextRequest) {
 
     const firmIdResult = requireFirmId(authResult.context)
     if (firmIdResult instanceof NextResponse) {
+      log.error('[Firm API] requireFirmId failed — no valid firm_id', {
+        userId: authResult.context.userId,
+        email: authResult.context.email,
+        role: authResult.context.role,
+        firmId: authResult.context.firmId,
+      })
       return firmIdResult
     }
 
@@ -31,7 +38,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('[Firm API] Error fetching firm:', error)
+      log.error('[Firm API] Error fetching firm', error)
       return NextResponse.json({ error: 'Failed to fetch firm' }, { status: 500 })
     }
 
@@ -44,16 +51,16 @@ export async function GET(request: NextRequest) {
       id: firm.id,
       name: firm.name,
       fcaNumber: firm.fca_number ?? undefined,
-      address: firm.address as Firm['address'],
-      settings: firm.settings as Firm['settings'],
+      address: firm.address as unknown as Firm['address'],
+      settings: firm.settings as unknown as Firm['settings'],
       subscriptionTier: (firm.subscription_tier ?? 'starter') as Firm['subscriptionTier'],
-      createdAt: new Date(firm.created_at),
-      updatedAt: new Date(firm.updated_at),
+      createdAt: new Date(firm.created_at || Date.now()),
+      updatedAt: new Date(firm.updated_at || Date.now()),
     }
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[Firm API] Unexpected error:', error)
+    log.error('[Firm API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -114,7 +121,8 @@ export async function PUT(request: NextRequest) {
 
       const currentSettings = (currentFirm?.settings ?? {}) as Record<string, unknown>
 
-      // Merge settings
+      // Merge settings — preserve all known nested keys so partial updates
+      // don't accidentally drop sibling properties (e.g. onboarding.completed)
       updateData.settings = {
         ...currentSettings,
         ...body.settings,
@@ -134,6 +142,10 @@ export async function PUT(request: NextRequest) {
           ...(currentSettings.features as Record<string, unknown> ?? {}),
           ...(body.settings.features ?? {}),
         },
+        onboarding: {
+          ...(currentSettings.onboarding as Record<string, unknown> ?? {}),
+          ...((body.settings as any).onboarding ?? {}),
+        },
       }
     }
 
@@ -145,7 +157,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('[Firm API] Error updating firm:', error)
+      log.error('[Firm API] Error updating firm', error)
       return NextResponse.json({ error: 'Failed to update firm' }, { status: 500 })
     }
 
@@ -154,16 +166,16 @@ export async function PUT(request: NextRequest) {
       id: firm.id,
       name: firm.name,
       fcaNumber: firm.fca_number ?? undefined,
-      address: firm.address as Firm['address'],
-      settings: firm.settings as Firm['settings'],
+      address: firm.address as unknown as Firm['address'],
+      settings: firm.settings as unknown as Firm['settings'],
       subscriptionTier: (firm.subscription_tier ?? 'starter') as Firm['subscriptionTier'],
-      createdAt: new Date(firm.created_at),
-      updatedAt: new Date(firm.updated_at),
+      createdAt: new Date(firm.created_at || Date.now()),
+      updatedAt: new Date(firm.updated_at || Date.now()),
     }
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[Firm API] Unexpected error:', error)
+    log.error('[Firm API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

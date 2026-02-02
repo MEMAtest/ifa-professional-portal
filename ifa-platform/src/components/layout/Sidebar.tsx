@@ -103,6 +103,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     advancedAnalysisCount: 0
   });
   const [monteCarloCount, setMonteCarloCount] = useState(0);
+  const [overdueTaskCount, setOverdueTaskCount] = useState(0);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     'Assessment Tools': true
   });
@@ -145,7 +146,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
       title: 'Dashboard',
       items: [
         { name: 'Overview', href: '/dashboard', icon: BarChart3 },
-        { name: 'Tasks', href: '/tasks', icon: CheckSquare },
+        { name: 'Task Hub', href: '/tasks', icon: CheckSquare },
         { name: 'AI Insights', href: '/dashboard/ai-insights', icon: Brain },
       ],
     },
@@ -353,6 +354,15 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
           .select('*', { count: 'exact', head: true });
 
         setMonteCarloCount(mcCount || 0);
+
+        // Fetch overdue task count
+        const { count: overdueCount } = await supabase
+          .from('tasks')
+          .select('id', { count: 'exact', head: true })
+          .lt('due_date', new Date().toISOString())
+          .not('status', 'in', '("completed","cancelled")');
+
+        setOverdueTaskCount(overdueCount || 0);
       } catch (error) {
         console.error('Error fetching sidebar stats:', error);
       }
@@ -375,6 +385,17 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
   const navigationWithCounts = isPlatformAdmin
     ? navigation
     : navigation.map(section => {
+        if (section.title === 'Dashboard') {
+          return {
+            ...section,
+            items: section.items.map(item => {
+              if (item.name === 'Task Hub') {
+                return { ...item, count: overdueTaskCount > 0 ? overdueTaskCount : undefined };
+              }
+              return item;
+            })
+          };
+        }
         if (section.title === 'Financial Analysis') {
           return {
             ...section,

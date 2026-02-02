@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 interface AggregatedActivity {
   id: string
@@ -40,6 +41,13 @@ interface ClientRow {
 // GET - Fetch activity log for a client OR recent activities for dashboard
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmIdResult = requireFirmId(authResult.context)
+    if (firmIdResult instanceof NextResponse) return firmIdResult
+
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
     const recent = searchParams.get('recent');
@@ -50,6 +58,14 @@ export async function GET(request: NextRequest) {
 
     // If requesting recent activities across all clients - aggregate from multiple sources
     if (recent === 'true') {
+      // Fetch firm's client IDs for scoping
+      const { data: firmClients } = await supabase
+        .from('clients').select('id').eq('firm_id', firmIdResult.firmId)
+      const firmClientIds = (firmClients || []).map((c: any) => c.id)
+      if (firmClientIds.length === 0) {
+        return NextResponse.json({ data: [] })
+      }
+
       const allActivities: AggregatedActivity[] = []
 
       // 1. Fetch from activity_log table
@@ -63,6 +79,7 @@ export async function GET(request: NextRequest) {
             client_ref
           )
         `)
+        .in('client_id', firmClientIds)
         .order('date', { ascending: false })
         .limit(50);
 
@@ -99,6 +116,7 @@ export async function GET(request: NextRequest) {
             client_ref
           )
         `)
+        .in('client_id', firmClientIds)
         .order('communication_date', { ascending: false })
         .limit(30);
 
@@ -135,6 +153,7 @@ export async function GET(request: NextRequest) {
             client_ref
           )
         `)
+        .in('client_id', firmClientIds)
         .order('updated_at', { ascending: false })
         .limit(30);
 
@@ -161,6 +180,7 @@ export async function GET(request: NextRequest) {
       const { data: clientsData } = await supabase
         .from('clients')
         .select('id, personal_details, client_ref, created_at, updated_at')
+        .in('id', firmClientIds)
         .order('updated_at', { ascending: false })
         .limit(20);
 
@@ -202,6 +222,7 @@ export async function GET(request: NextRequest) {
             client_ref
           )
         `)
+        .in('client_id', firmClientIds)
         .order('updated_at', { ascending: false })
         .limit(20);
 
@@ -235,6 +256,7 @@ export async function GET(request: NextRequest) {
           scenario_name,
           created_at
         `)
+        .in('client_id', firmClientIds)
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -343,6 +365,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Verify client belongs to firm
+    const { data: clientRecord } = await supabase
+      .from('clients').select('id').eq('id', clientId).eq('firm_id', firmIdResult.firmId).single()
+    if (!clientRecord) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
+
     const { data, error, count } = await supabase
       .from('activity_log')
       .select('*', { count: 'exact' })
@@ -376,10 +405,17 @@ export async function GET(request: NextRequest) {
 // POST - Create new activity log entry
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmIdResult = requireFirmId(authResult.context)
+    if (firmIdResult instanceof NextResponse) return firmIdResult
+
     const body = await request.json();
-    const { 
-      clientId, 
-      action, 
+    const {
+      clientId,
+      action,
       type,
       userName
     } = body;
@@ -390,6 +426,13 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields' },
         { status: 400 }
       );
+    }
+
+    const supabaseForCheck = getSupabaseServiceClient()
+    const { data: clientRecord } = await supabaseForCheck
+      .from('clients').select('id').eq('id', clientId).eq('firm_id', firmIdResult.firmId).single()
+    if (!clientRecord) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
     const supabase = getSupabaseServiceClient();  // FIXED: Using await, no parameters

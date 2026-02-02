@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0')
 
     // Build query with firm_id filter for multi-tenant isolation
-    let query = supabase
-      .from('signature_requests')
+    let query = (supabase
+      .from('signature_requests') as any)
       .select(`
         *,
         clients:client_id (

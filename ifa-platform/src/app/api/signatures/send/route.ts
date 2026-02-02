@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseServiceClient()
 
     // Get the signature request from database
-    const { data: signatureRequest, error: signatureError } = await supabase
-      .from('signature_requests')
+    const { data: signatureRequest, error: signatureError } = await (supabase
+      .from('signature_requests') as any)
       .select('*')
       .eq('id', signatureRequestId)
       .single()
@@ -97,8 +97,8 @@ export async function POST(request: NextRequest) {
 
     // Update signature request status
     log.info('SEND SIGNATURE: Updating status to sent')
-    const { data: updatedRequest, error: updateError } = await supabase
-      .from('signature_requests')
+    const { data: updatedRequest, error: updateError } = await (supabase
+      .from('signature_requests') as any)
       .update({
         status: 'sent',
         opensign_metadata: {

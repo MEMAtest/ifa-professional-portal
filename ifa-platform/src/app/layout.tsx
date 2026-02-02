@@ -7,6 +7,7 @@ import Providers from './providers'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SmartLayoutWrapper } from '@/components/layout/SmartLayoutWrapper'
 import { EnvironmentBanner } from '@/components/layout/EnvironmentBanner'
+import { Toaster } from '@/components/ui/toaster'
 
 // METADATA - Updated for Plannetic
 export const metadata: Metadata = {
@@ -85,6 +86,7 @@ export default function RootLayout({
               {children}
             </SmartLayoutWrapper>
           </AuthProvider>
+          <Toaster />
         </Providers>
       </body>
     </html>

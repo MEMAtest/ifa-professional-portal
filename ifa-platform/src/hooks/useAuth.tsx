@@ -5,10 +5,12 @@
 // ================================================================
 
 'use client'
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { User, AuthState, LoginCredentials, SignUpData } from '@/types/auth'
 import type { Session } from '@supabase/supabase-js'
+import { log } from '@/lib/logging/structured'
 
 // ================================================================
 // CONTEXT SETUP
@@ -42,17 +44,19 @@ export const useAuth = () => {
 // ================================================================
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const supabase = createClient() // ✅ FIX: Create supabase client here
+  const supabase = createClient()
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const previousUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     let isMounted = true
 
     const getInitialSession = async () => {
       try {
-        console.log('🔍 Getting initial session...')
+        log.debug('Getting initial session')
         
         // Add timeout to prevent hanging
         const timeoutPromise = new Promise((_, reject) => {
@@ -69,14 +73,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isMounted) return
         
         if (error) {
-          console.error('❌ Session error:', error)
+          log.error('Session error', error)
           setError(`Failed to load session: ${error.message}`)
           setLoading(false)
           return
         }
         
         if (session?.user) {
-          console.log('✅ Session found, creating user profile from metadata...')
+          log.debug('Session found, creating user profile from metadata')
           
           // ================================================================
           // 🔧 CRITICAL FIX: Create user WITHOUT database query
@@ -102,15 +106,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           setUser(simpleUser)
           setError(null)
-          console.log('✅ Auth initialized successfully (no database query)')
+          log.info('Auth initialized successfully (no database query)')
         } else {
-          console.log('ℹ️ No session found')
+          log.info('No session found')
           setUser(null)
           setError(null)
         }
         
       } catch (err) {
-        console.error('❌ Auth initialization error:', err)
+        log.error('Auth initialization error', err instanceof Error ? err : undefined)
         if (isMounted) {
           setError(err instanceof Error ? err.message : 'Failed to initialize authentication')
         }
@@ -131,13 +135,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       async (event: string, session: Session | null) => {
         if (!isMounted) return
 
-        console.log('🔄 Auth state changed:', event)
-        
+        log.info('Auth state changed', { event })
+
         try {
           if (session?.user) {
             const authUser = session.user
             const metadata = authUser.user_metadata || {}
-            
+
+            // Clear all cached data when the user changes (account switch)
+            if (previousUserIdRef.current && previousUserIdRef.current !== authUser.id) {
+              log.info('User changed, clearing query cache')
+              queryClient.clear()
+            }
+            previousUserIdRef.current = authUser.id
+
             const simpleUser: User = {
               id: authUser.id,
               email: authUser.email || '',
@@ -151,14 +162,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               createdAt: authUser.created_at,
               updatedAt: authUser.updated_at || authUser.created_at
             }
-            
+
             setUser(simpleUser)
           } else {
+            // User signed out — clear all cached data
+            if (previousUserIdRef.current) {
+              log.info('User signed out, clearing query cache')
+              queryClient.clear()
+              previousUserIdRef.current = null
+            }
             setUser(null)
           }
           setError(null)
         } catch (err) {
-          console.error('❌ Auth state change error:', err)
+          log.error('Auth state change error', err instanceof Error ? err : undefined)
           setError('Authentication error occurred')
         }
       }
@@ -168,7 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [supabase]) // Add supabase to dependencies
+  }, [supabase, queryClient])
 
   // ================================================================
   // AUTH METHODS - SIMPLIFIED
@@ -179,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true)
       setError(null)
       
-      console.log('🔐 Signing in user...')
+      log.debug('Signing in user')
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
@@ -187,16 +204,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
 
       if (error) {
-        console.error('❌ Sign in error:', error)
+        log.error('Sign in error', error)
         setError(error.message)
         return { error: error.message }
       }
 
-      console.log('✅ Sign in successful')
+      log.info('Sign in successful')
       return {}
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign in'
-      console.error('❌ Sign in error:', err)
+      log.error('Sign in error', err instanceof Error ? err : undefined)
       setError(errorMessage)
       return { error: errorMessage }
     } finally {
@@ -209,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true)
       setError(null)
       
-      console.log('📝 Signing up user...')
+      log.debug('Signing up user')
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
@@ -227,16 +244,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
 
       if (authError) {
-        console.error('❌ Sign up error:', authError)
+        log.error('Sign up error', authError)
         setError(authError.message)
         return { error: authError.message }
       }
 
-      console.log('✅ Sign up successful')
+      log.info('Sign up successful')
       return {}
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign up'
-      console.error('❌ Sign up error:', err)
+      log.error('Sign up error', err instanceof Error ? err : undefined)
       setError(errorMessage)
       return { error: errorMessage }
     } finally {
@@ -247,15 +264,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       setLoading(true)
-      console.log('🚪 Signing out...')
-      
+      log.debug('Signing out')
+
       await supabase.auth.signOut()
+      queryClient.clear()
+      previousUserIdRef.current = null
       setUser(null)
       setError(null)
-      
-      console.log('✅ Sign out successful')
+
+      log.info('Sign out successful')
     } catch (err) {
-      console.error('❌ Sign out error:', err)
+      log.error('Sign out error', err instanceof Error ? err : undefined)
       setError('Failed to sign out')
     } finally {
       setLoading(false)
@@ -266,7 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (!user) return { error: 'No user logged in' }
 
-      console.log('📝 Updating user profile...')
+      log.debug('Updating user profile')
 
       const { error } = await supabase.auth.updateUser({
         data: {
@@ -278,18 +297,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
 
       if (error) {
-        console.error('❌ Profile update error:', error)
+        log.error('Profile update error', error)
         return { error: error.message }
       }
 
       // Update local user state
       setUser(prev => prev ? { ...prev, ...updates } : null)
-      console.log('✅ Profile updated successfully')
+      log.info('Profile updated successfully')
       
       return {}
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update profile'
-      console.error('❌ Profile update error:', err)
+      log.error('Profile update error', err instanceof Error ? err : undefined)
       return { error: errorMessage }
     }
   }

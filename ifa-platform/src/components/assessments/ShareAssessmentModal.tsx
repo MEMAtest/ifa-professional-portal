@@ -40,6 +40,7 @@ interface ShareAssessmentModalProps {
   clientId: string
   clientName: string
   clientEmail?: string
+  clientContactInfo?: Record<string, any>
   onShareCreated?: (share: any) => void
 }
 
@@ -69,6 +70,7 @@ export default function ShareAssessmentModal({
   clientId,
   clientName,
   clientEmail: initialEmail = '',
+  clientContactInfo,
   onShareCreated
 }: ShareAssessmentModalProps) {
   const { toast } = useToast()
@@ -125,6 +127,27 @@ export default function ShareAssessmentModal({
 
       if (onShareCreated) {
         onShareCreated(data.share)
+      }
+
+      if (clientEmail && clientEmail !== initialEmail) {
+        try {
+          await fetch(`/api/clients/${clientId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contactInfo: {
+                ...(clientContactInfo || {}),
+                email: clientEmail
+              }
+            })
+          })
+        } catch (saveError) {
+          toast({
+            title: 'Email not saved',
+            description: 'Assessment sent, but the client email could not be saved.',
+            variant: 'destructive'
+          })
+        }
       }
 
       toast({

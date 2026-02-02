@@ -16,11 +16,12 @@ export async function POST(request: NextRequest) {
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const userId = authResult.context.userId
+    const userEmail = authResult.context.email
 
     const payload = await request.json().catch(() => ({}))
     const requestedDays = Number(payload?.days ?? 2)
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     const { data: profileData, error: profileError } = await service
       .from('profiles')
       .select('firm_id, first_name, last_name')
-      .eq('id', user.id)
+      .eq('id', userId)
       .maybeSingle()
 
     // Cast to handle schema variations
@@ -61,8 +62,8 @@ export async function POST(request: NextRequest) {
     if (firmId) {
       clientsQuery = clientsQuery.eq('firm_id', firmId)
     } else {
-      logger.info('Backfill using advisor_id fallback', { userId: user.id })
-      clientsQuery = clientsQuery.eq('advisor_id', user.id)
+      logger.info('Backfill using advisor_id fallback', { userId: userId })
+      clientsQuery = clientsQuery.eq('advisor_id', userId)
     }
 
     const { data: clients, error: clientsError } = await clientsQuery
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
     const { data: existingNotifications } = await service
       .from('notifications')
       .select('entity_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('type', 'profile_updated')
       .gte('created_at', cutoff)
 
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     const nowIso = new Date().toISOString()
     const profileName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
-    const userName = (profileName || user.email || '').trim() || null
+    const userName = (profileName || userEmail || '').trim() || null
 
     const notificationsToInsert = []
     const activitiesToInsert = []
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     for (const client of clients as ClientRow[]) {
       if (!notifiedClientIds.has(client.id)) {
         notificationsToInsert.push({
-          user_id: user.id,
+          user_id: userId,
           firm_id: firmId,
           client_id: client.id,
           entity_type: 'client',

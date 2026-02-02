@@ -179,6 +179,123 @@ ${bodyContent}`
   return wrapHtml(parsed.subject, body)
 }
 
+/**
+ * Convert markdown to HTML for preview rendering.
+ * Handles headings, bold, italic, lists, tables, and paragraphs.
+ */
+function markdownToHtml(markdown: string): string {
+  const lines = markdown.split('\n')
+  const output: string[] = []
+  let inList = false
+  let listType = ''
+
+  const closeList = () => {
+    if (inList) {
+      output.push(listType === 'ol' ? '</ol>' : '</ul>')
+      inList = false
+    }
+  }
+
+  const inline = (text: string): string => {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:3px;font-size:0.9em;">$1</code>')
+  }
+
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Empty line
+    if (!line.trim()) {
+      closeList()
+      i++
+      continue
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)/)
+    if (headingMatch) {
+      closeList()
+      const level = headingMatch[1].length
+      output.push(`<h${level}>${inline(headingMatch[2])}</h${level}>`)
+      i++
+      continue
+    }
+
+    // Table (detect header + separator)
+    if (line.includes('|') && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) {
+      closeList()
+      const splitRow = (row: string) =>
+        row.split('|').map(c => c.trim()).filter(c => c.length > 0)
+
+      const headers = splitRow(line)
+      output.push('<table><thead><tr>')
+      headers.forEach(h => output.push(`<th>${inline(h)}</th>`))
+      output.push('</tr></thead><tbody>')
+
+      i += 2 // skip header and separator
+      while (i < lines.length && lines[i].includes('|')) {
+        const cells = splitRow(lines[i])
+        output.push('<tr>')
+        cells.forEach(c => output.push(`<td>${inline(c)}</td>`))
+        output.push('</tr>')
+        i++
+      }
+      output.push('</tbody></table>')
+      continue
+    }
+
+    // Unordered list
+    const ulMatch = line.match(/^\s*[-*]\s+(.*)/)
+    if (ulMatch) {
+      if (!inList || listType !== 'ul') {
+        closeList()
+        output.push('<ul>')
+        inList = true
+        listType = 'ul'
+      }
+      output.push(`<li>${inline(ulMatch[1])}</li>`)
+      i++
+      continue
+    }
+
+    // Ordered list
+    const olMatch = line.match(/^\s*\d+\.\s+(.*)/)
+    if (olMatch) {
+      if (!inList || listType !== 'ol') {
+        closeList()
+        output.push('<ol>')
+        inList = true
+        listType = 'ol'
+      }
+      output.push(`<li>${inline(olMatch[1])}</li>`)
+      i++
+      continue
+    }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) {
+      closeList()
+      output.push('<hr />')
+      i++
+      continue
+    }
+
+    // Paragraph
+    closeList()
+    output.push(`<p>${inline(line)}</p>`)
+    i++
+  }
+
+  closeList()
+  return output.join('\n')
+}
+
 function getEffectiveMimeType(document: Record<string, any>): string {
   const mime = document.file_type || document.mime_type || ''
   if (mime && mime !== 'application/octet-stream') return mime
@@ -355,6 +472,34 @@ export async function GET(
       headers.set('Cache-Control', 'no-cache')
 
       return new NextResponse(htmlContent, { headers })
+    }
+
+    // Option 5: File review documents with reviewMarkdown in metadata
+    if (meta?.reviewMarkdown) {
+      log.info('Rendering file review markdown', { documentId })
+      const markdownHtml = markdownToHtml(meta.reviewMarkdown as string)
+      const title = document.name || 'File Review'
+      const generatedAt = meta.generatedAt
+        ? new Date(meta.generatedAt as string).toLocaleDateString('en-GB', {
+            day: 'numeric', month: 'long', year: 'numeric'
+          })
+        : ''
+      const docsAnalyzed = meta.documentsAnalyzed || 0
+      const totalDocs = meta.totalDocuments || 0
+
+      const headerHtml = `
+        <div class="doc-title">
+          ${escapeHtml(title)}
+          ${generatedAt ? `<br/><small style="color:#6b7280;">Generated ${escapeHtml(generatedAt)} &mdash; ${docsAnalyzed} of ${totalDocs} documents analysed</small>` : ''}
+        </div>`
+
+      const fullHtml = wrapHtml(title, headerHtml + markdownHtml)
+
+      const headers = new Headers()
+      headers.set('Content-Type', 'text/html; charset=utf-8')
+      headers.set('Content-Security-Policy', PREVIEW_CSP)
+      headers.set('Cache-Control', 'no-cache')
+      return new NextResponse(fullHtml, { headers })
     }
 
     // No displayable content found

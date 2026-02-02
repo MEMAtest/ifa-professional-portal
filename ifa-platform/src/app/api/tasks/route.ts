@@ -27,6 +27,10 @@ const ALLOWED_SOURCE_TYPES: TaskSourceType[] = [
   'aml_check',
   'consumer_duty',
   'risk_assessment',
+  'bulk_upload',
+  'manual',
+  'document',
+  'assessment',
 ]
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -60,7 +64,7 @@ export async function GET(request: NextRequest) {
     const sourceTypeParam = url.searchParams.get('sourceType') || undefined
     const sourceIdParam = url.searchParams.get('sourceId') || undefined
 
-    if ((sourceTypeParam && !sourceIdParam) || (!sourceTypeParam && sourceIdParam)) {
+    if (!sourceTypeParam && sourceIdParam) {
       return NextResponse.json({ error: 'sourceType and sourceId must be provided together' }, { status: 400 })
     }
 
@@ -96,7 +100,8 @@ export async function GET(request: NextRequest) {
       search: url.searchParams.get('search') || undefined,
     }
 
-    const supabase: any = getSupabaseServiceClient()
+    // Service client typed as any — Supabase codegen does not cover all custom tables
+    const supabase = getSupabaseServiceClient() as any
 
     // Build query
     let query = supabase
@@ -151,7 +156,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (params.sourceType) {
-      query = query.eq('source_type', params.sourceType)
+      if (params.sourceType === 'manual') {
+        query = query.is('source_type', null)
+      } else {
+        query = query.eq('source_type', params.sourceType)
+      }
     }
 
     if (params.sourceId) {
@@ -176,15 +185,20 @@ export async function GET(request: NextRequest) {
     if (params.overdue) {
       query = query
         .lt('due_date', new Date().toISOString())
-        .not('status', 'in', '("completed","cancelled")')
+        .not('status', 'in', '("completed", "cancelled")')
     }
 
     if (params.search) {
-      // Sanitize search input to prevent SQL injection via ILIKE wildcards
+      // Sanitize search: trim, limit length, escape LIKE wildcards
       const sanitizedSearch = params.search
-        .replace(/[%_\\]/g, '\\$&')  // Escape special LIKE characters
-        .substring(0, 100)           // Limit length
-      query = query.ilike('title', `%${sanitizedSearch}%`)
+        .trim()
+        .substring(0, 100)
+        .replace(/\\/g, '\\\\')  // Escape backslash first
+        .replace(/%/g, '\\%')    // Escape percent
+        .replace(/_/g, '\\_')    // Escape underscore
+      if (sanitizedSearch.length > 0) {
+        query = query.ilike('title', `%${sanitizedSearch}%`)
+      }
     }
 
     // Apply sorting
@@ -210,20 +224,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
     }
 
-    // Get comment counts for all returned tasks (efficient batch query)
+    // Get comment counts for all returned tasks
+    // Uses a grouped count query instead of fetching all comment rows
     const taskIds = (tasks || []).map((t: any) => t.id)
     let commentCounts: Record<string, number> = {}
 
     if (taskIds.length > 0) {
-      const { data: comments } = await supabase
+      const { data: countRows } = await supabase
         .from('task_comments')
-        .select('task_id')
+        .select('task_id', { count: 'exact', head: false })
         .in('task_id', taskIds)
 
-      // Count comments per task
-      if (comments) {
-        commentCounts = comments.reduce((acc: Record<string, number>, comment: any) => {
-          acc[comment.task_id] = (acc[comment.task_id] || 0) + 1
+      // Count comments per task from the returned rows
+      if (countRows) {
+        commentCounts = (countRows as any[]).reduce((acc: Record<string, number>, row: any) => {
+          acc[row.task_id] = (acc[row.task_id] || 0) + 1
           return acc
         }, {})
       }
@@ -342,15 +357,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate metadata size (prevent DoS via large payloads)
+    const MAX_METADATA_BYTES = 10_000 // 10KB
     if (body.metadata) {
       const metadataStr = JSON.stringify(body.metadata)
-      if (metadataStr.length > 10000) { // 10KB limit
-        return NextResponse.json({ error: 'Metadata too large (max 10KB)' }, { status: 400 })
+      if (metadataStr.length > MAX_METADATA_BYTES) {
+        return NextResponse.json({ error: `Metadata too large (max ${MAX_METADATA_BYTES / 1000}KB)` }, { status: 400 })
       }
     }
 
-    const supabase: any = getSupabaseServiceClient()
-    const supabaseService: any = getSupabaseServiceClient()
+    // Service client typed as any — Supabase codegen does not cover all custom tables
+    const supabase = getSupabaseServiceClient() as any
 
     // Verify client belongs to firm if clientId provided
     let client: { id: string; personal_details?: Record<string, any>; client_ref?: string | null } | null = null
@@ -420,7 +436,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Log activity
-    await supabaseService
+    await supabase
       .from('activity_log')
       .insert({
         id: crypto.randomUUID(),
@@ -440,7 +456,7 @@ export async function POST(request: NextRequest) {
 
     // Create notification if task is assigned to someone else
     if (assignedTo && assignedTo !== authResult.context.userId) {
-      await supabaseService
+      await supabase
         .from('notifications')
         .insert({
           id: crypto.randomUUID(),

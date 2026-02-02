@@ -37,6 +37,8 @@ export async function fetchTasks(params: TaskListParams = {}): Promise<TaskListR
   if (params.clientId) searchParams.set('clientId', params.clientId)
   if (params.sourceType) searchParams.set('sourceType', params.sourceType)
   if (params.sourceId) searchParams.set('sourceId', params.sourceId)
+  if (params.dueBefore) searchParams.set('dueBefore', params.dueBefore)
+  if (params.dueAfter) searchParams.set('dueAfter', params.dueAfter)
   if (params.overdue) searchParams.set('overdue', 'true')
   if (params.search) searchParams.set('search', params.search)
 

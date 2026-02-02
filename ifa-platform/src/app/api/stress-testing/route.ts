@@ -396,7 +396,7 @@ export async function POST(request: NextRequest) {
       },
       cashFlowScenario: {
         id: cashFlowScenario.id,
-        name: cashFlowScenario.scenario_name || cashFlowScenario.name
+        name: cashFlowScenario.scenario_name || (cashFlowScenario as any).name
       }
     });
 

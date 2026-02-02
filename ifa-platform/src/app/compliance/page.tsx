@@ -38,6 +38,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
@@ -150,7 +151,7 @@ export default function ComplianceHubPage() {
   const router = useRouter()
 
   // State
-  const [activeTab, setActiveTab] = useState<TabType>('qa-reviews')
+  const [activeTab, setActiveTab] = useState<TabType>('workflow-hub')
   const [showScoreBreakdown, setShowScoreBreakdown] = useState(false)
   const [registersSubTab, setRegistersSubTab] = useState<string>('complaints')
   const [qaFilter, setQaFilter] = useState<string | undefined>(undefined)
@@ -336,6 +337,13 @@ export default function ComplianceHubPage() {
 
   const tabs = [
     {
+      key: 'workflow-hub' as TabType,
+      label: 'Workflow Hub',
+      icon: LayoutGrid,
+      badge: undefined,
+      badgeColor: 'secondary'
+    },
+    {
       key: 'qa-reviews' as TabType,
       label: 'QA & File Reviews',
       icon: ClipboardCheck,
@@ -369,13 +377,6 @@ export default function ComplianceHubPage() {
       key: 'prod-services' as TabType,
       label: 'PROD & Services',
       icon: FileText,
-      badge: undefined,
-      badgeColor: 'secondary'
-    },
-    {
-      key: 'workflow-hub' as TabType,
-      label: 'Workflow Hub',
-      icon: LayoutGrid,
       badge: undefined,
       badgeColor: 'secondary'
     },
@@ -433,43 +434,67 @@ export default function ComplianceHubPage() {
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-600">Compliance Score</p>
-                  <AlertCircle className="h-4 w-4 text-gray-400" />
+                  <Tooltip
+                    position="left"
+                    maxWidth={320}
+                    content={(
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold">What this means</p>
+                        <p className="text-xs leading-relaxed text-gray-100/90">
+                          A quick health signal based on open complaints, open breaches, overdue QA reviews, and
+                          QA pass rate. It helps you spot risk hotspots at a glance.
+                        </p>
+                        <p className="text-xs leading-relaxed text-gray-100/80">
+                          This is not a regulatory metric — just an internal prioritisation aid.
+                        </p>
+                      </div>
+                    )}
+                  >
+                    <span className="inline-flex items-center justify-center rounded-full border border-gray-200 p-1 text-gray-400 hover:text-gray-600">
+                      <AlertCircle className="h-4 w-4" />
+                    </span>
+                  </Tooltip>
                 </div>
                 <p className={`text-2xl font-bold ${getScoreColor(stats.complianceScore)}`}>
                   {stats.complianceScore}%
                 </p>
               </div>
             </div>
-            {/* Score Breakdown - Always visible */}
-            <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
-              {stats.openComplaints > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-red-600">Complaints ({stats.openComplaints})</span>
-                  <span className="text-red-600">−{Math.min(stats.openComplaints * 5, 20)} pts</span>
-                </div>
-              )}
-              {stats.openBreaches > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-red-600">Breaches ({stats.openBreaches})</span>
-                  <span className="text-red-600">−{Math.min(stats.openBreaches * 10, 30)} pts</span>
-                </div>
-              )}
-              {stats.overdueReviews > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-yellow-600">Overdue Reviews ({stats.overdueReviews})</span>
-                  <span className="text-yellow-600">−{Math.min(stats.overdueReviews * 3, 15)} pts</span>
-                </div>
-              )}
-              {stats.passRate < 100 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-yellow-600">Pass Rate ({stats.passRate}%)</span>
-                  <span className="text-yellow-600">−{Math.round((100 - stats.passRate) * 0.35)} pts</span>
-                </div>
-              )}
-              {stats.complianceScore === 100 && (
-                <p className="text-xs text-green-600">All clear - no deductions</p>
-              )}
+            <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+              <span>Click to view breakdown</span>
+              <span>{showScoreBreakdown ? 'Hide' : 'Show'}</span>
             </div>
+            {showScoreBreakdown && (
+              <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
+                {stats.openComplaints > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-red-600">Complaints ({stats.openComplaints})</span>
+                    <span className="text-red-600">−{Math.min(stats.openComplaints * 5, 20)} pts</span>
+                  </div>
+                )}
+                {stats.openBreaches > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-red-600">Breaches ({stats.openBreaches})</span>
+                    <span className="text-red-600">−{Math.min(stats.openBreaches * 10, 30)} pts</span>
+                  </div>
+                )}
+                {stats.overdueReviews > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-yellow-600">Overdue Reviews ({stats.overdueReviews})</span>
+                    <span className="text-yellow-600">−{Math.min(stats.overdueReviews * 3, 15)} pts</span>
+                  </div>
+                )}
+                {stats.passRate < 100 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-yellow-600">Pass Rate ({stats.passRate}%)</span>
+                    <span className="text-yellow-600">−{Math.round((100 - stats.passRate) * 0.35)} pts</span>
+                  </div>
+                )}
+                {stats.complianceScore === 100 && (
+                  <p className="text-xs text-green-600">All clear - no deductions</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

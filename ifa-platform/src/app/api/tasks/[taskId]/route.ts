@@ -28,6 +28,10 @@ const ALLOWED_SOURCE_TYPES: TaskSourceType[] = [
   'aml_check',
   'consumer_duty',
   'risk_assessment',
+  'bulk_upload',
+  'manual',
+  'document',
+  'assessment',
 ]
 
 interface RouteContext {

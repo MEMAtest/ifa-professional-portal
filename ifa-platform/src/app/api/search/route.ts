@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function searchClients(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
   query: string,
   limit: number,
   firmId: string
@@ -131,7 +131,7 @@ async function searchClients(
 
   // Filter in memory for now to debug
   const searchLower = query.toLowerCase()
-  const filteredClients = (allClients || []).filter((client: ClientRow) => {
+  const filteredClients = (allClients || []).filter((client: any) => {
     const firstName = (client.personal_details?.firstName || '').toLowerCase()
     const lastName = (client.personal_details?.lastName || '').toLowerCase()
     const clientRef = (client.client_ref || '').toLowerCase()
@@ -148,7 +148,7 @@ async function searchClients(
   const data = filteredClients
   const error = null
 
-  return ((data || []) as ClientRow[]).map((client) => {
+  return ((data || []) as unknown as ClientRow[]).map((client) => {
     const firstName = client.personal_details?.firstName || ''
     const lastName = client.personal_details?.lastName || ''
     const email = client.contact_info?.email || ''
@@ -168,7 +168,7 @@ async function searchClients(
 }
 
 async function searchDocuments(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
   query: string,
   limit: number,
   firmId: string
@@ -182,8 +182,8 @@ async function searchDocuments(
   ].join(',')
 
   // SECURITY: Filter by firm_id for multi-tenant isolation
-  const { data, error } = await supabase
-    .from('documents')
+  const { data, error } = await (supabase
+    .from('documents') as any)
     .select(`
       id,
       name,
@@ -226,7 +226,7 @@ async function searchDocuments(
 }
 
 async function searchAssessments(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
   query: string,
   limit: number,
   firmId: string
@@ -253,7 +253,7 @@ async function searchAssessments(
   }
 
   // Filter suitability assessments by client name matching
-  const suitabilityResults: SearchResult[] = ((suitabilityData || []) as AssessmentRow[])
+  const suitabilityResults: SearchResult[] = ((suitabilityData || []) as unknown as AssessmentRow[])
     .filter((assessment) => {
       if (!assessment.clients) return false
       const firstName = assessment.clients.personal_details?.firstName || ''
@@ -306,7 +306,7 @@ async function searchAssessments(
   }
 
   // Filter ATR assessments by client name matching
-  const atrResults: SearchResult[] = ((atrData || []) as AssessmentRow[])
+  const atrResults: SearchResult[] = ((atrData || []) as unknown as AssessmentRow[])
     .filter((assessment) => {
       if (!assessment.clients) return false
       const firstName = assessment.clients.personal_details?.firstName || ''

@@ -46,17 +46,19 @@ export async function GET(
       );
     }
 
-    // Fetch client with firm_id filter when available
-    let query = supabase
+    // SECURITY: Require firm context to prevent cross-tenant data access
+    if (!firmId) {
+      logger.warn('GET /api/clients/[id] - No firm_id available, refusing to return unscoped data')
+      return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+    }
+
+    // Fetch client with mandatory firm_id filter
+    const { data: client, error } = await supabase
       .from('clients')
       .select('*')
       .eq('id', clientId)
-
-    if (firmId) {
-      query = query.eq('firm_id', firmId)
-    }
-
-    const { data: client, error } = await query.single();
+      .eq('firm_id', firmId)
+      .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -156,17 +158,19 @@ export async function PATCH(
     // ========================================
     const expectedUpdatedAt = updates.expectedUpdatedAt || updates._expectedUpdatedAt;
 
+    // SECURITY: Require firm context to prevent cross-tenant data access
+    if (!firmId) {
+      logger.warn('PATCH /api/clients/[id] - No firm_id available, refusing to return unscoped data')
+      return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+    }
+
     // Fetch existing client for comparison
-    let prevQuery = supabase
+    const { data: previousClient, error: previousError } = await supabase
       .from('clients')
       .select('personal_details, status, updated_at, firm_id')
       .eq('id', clientId)
-
-    if (firmId) {
-      prevQuery = prevQuery.eq('firm_id', firmId)
-    }
-
-    const { data: previousClient, error: previousError } = await prevQuery.maybeSingle()
+      .eq('firm_id', firmId)
+      .maybeSingle()
 
     if (previousError) {
       logger.warn('Unable to fetch existing client for comparison', { clientId, error: previousError.message })
@@ -213,16 +217,13 @@ export async function PATCH(
     if (updates.status) updateData.status = updates.status;
     if (updates.clientRef) updateData.client_ref = updates.clientRef;
 
-    let updateQuery = supabase
+    const { data: client, error } = await supabase
       .from('clients')
       .update(updateData)
       .eq('id', clientId)
-
-    if (firmId) {
-      updateQuery = updateQuery.eq('firm_id', firmId)
-    }
-
-    const { data: client, error } = await updateQuery.select().single();
+      .eq('firm_id', firmId)
+      .select()
+      .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -404,17 +405,19 @@ export async function DELETE(
       );
     }
 
+    // SECURITY: Require firm context to prevent cross-tenant data access
+    if (!firmId) {
+      logger.warn('DELETE /api/clients/[id] - No firm_id available, refusing to return unscoped data')
+      return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+    }
+
     // Verify the client exists and belongs to this firm before deleting
-    let verifyQuery = supabase
+    const { data: clientRow, error: verifyError } = await supabase
       .from('clients')
       .select('id')
       .eq('id', clientId)
-
-    if (firmId) {
-      verifyQuery = verifyQuery.eq('firm_id', firmId)
-    }
-
-    const { data: clientRow, error: verifyError } = await verifyQuery.maybeSingle()
+      .eq('firm_id', firmId)
+      .maybeSingle()
 
     if (verifyError || !clientRow) {
       return NextResponse.json(
@@ -474,20 +477,15 @@ export async function DELETE(
     }
 
     // Also clean client_relationships (uses different column names)
-    await supabase.from('client_relationships' as any).delete().eq('primary_client_id', clientId)
-    await supabase.from('client_relationships' as any).delete().eq('related_client_id', clientId)
+    await supabase.from('client_relationships').delete().eq('primary_client_id', clientId)
+    await supabase.from('client_relationships').delete().eq('related_client_id', clientId)
 
     // Now delete the client itself
-    let deleteQuery = supabase
+    const { error } = await supabase
       .from('clients')
       .delete()
       .eq('id', clientId)
-
-    if (firmId) {
-      deleteQuery = deleteQuery.eq('firm_id', firmId)
-    }
-
-    const { error } = await deleteQuery;
+      .eq('firm_id', firmId);
 
     if (error) {
       logger.error('Database error deleting client', error, { clientId })

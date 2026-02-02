@@ -27,19 +27,23 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabaseServiceClient();
   const firmId = getValidatedFirmId(auth.context);
+
+  // SECURITY: Require firm context to prevent cross-tenant data access
+  if (!firmId) {
+    log.warn('GET /api/clients/statistics - No firm_id available, refusing to return unscoped data')
+    return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+  }
+
   try {
     log.debug('GET /api/clients/statistics - Fetching statistics');
-    
+
     const searchParams = request.nextUrl.searchParams;
     const advisorId = searchParams.get('advisorId');
-    
+
     let query = supabase
       .from('clients')
-      .select('*', { count: 'exact' });
-
-    if (firmId) {
-      query = query.eq('firm_id', firmId);
-    }
+      .select('*', { count: 'exact' })
+      .eq('firm_id', firmId);
 
     if (advisorId) {
       query = query.eq('advisor_id', advisorId);
@@ -130,6 +134,7 @@ export async function GET(request: NextRequest) {
     const { count: recentCount } = await supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
+      .eq('firm_id', firmId)
       .gte('created_at', thirtyDaysAgo.toISOString());
     
     stats.recentlyAdded = recentCount || 0;

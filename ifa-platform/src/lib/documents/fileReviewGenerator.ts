@@ -101,6 +101,7 @@ Rules:
 - When referencing source documents in tables, use the actual file name (abbreviated if long), NOT document numbers like "Doc 1" or "Document 3". For example, write "Bucknill_pension.pdf" not "Doc 1".
 - Do NOT use markdown bold (**text**) inside table cells. Use plain text only in tables.
 - If assessment data shows "Not completed", flag this as a critical gap in the Gaps & Recommendations section. Do NOT treat default risk profile scores (e.g. attitudeToRisk = 5) from the client profile as verified assessment results — these are system defaults, not evidence of a completed assessment.
+- If risk profile values appear only in the client profile without completed assessments, label them as "system default (unverified)" and avoid presenting them as assessed results.
 - The review should enable anyone reading it to fully understand the client, their file contents, and why advice was given. Prioritise completeness of information extraction over regulatory assessment.`
 
 function truncate(text: string, maxChars: number): string {
@@ -231,12 +232,21 @@ export function parseGapsIntoTasks(reviewMarkdown: string): SuggestedTask[] {
   }
   if (current) bullets.push(current)
 
+  const stripMarkdown = (input: string) =>
+    input
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[_*]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
   return bullets
     .map((text, index): SuggestedTask => {
-      const classification = classifyTaskFromText(text)
+      const cleaned = stripMarkdown(text)
+      const classification = classifyTaskFromText(cleaned)
       return {
         id: `ai_gap_${index + 1}`,
-        title: text,
+        title: cleaned,
         type: classification.type,
         priority: classification.priority,
         source: 'ai_parsed',

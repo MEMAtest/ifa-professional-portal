@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 // ===================================================================
-// FIXED API ROUTE: Get Client Documents with Assessment Filtering
+// API ROUTE: Get Client Documents with Assessment Filtering
 // File: src/app/api/documents/client/[clientId]/route.ts
 // ===================================================================
 
@@ -16,7 +16,7 @@ export async function GET(
 ) {
   try {
     const { clientId } = params
-    
+
     if (!clientId) {
       return NextResponse.json(
         { error: 'Client ID is required' },
@@ -24,7 +24,6 @@ export async function GET(
       )
     }
 
-    // ✅ ADDED: Extract query parameters for filtering
     const searchParams = request.nextUrl.searchParams
     const assessmentId = searchParams.get('assessmentId')
     const assessmentType = searchParams.get('assessmentType')
@@ -39,102 +38,119 @@ export async function GET(
 
     const supabase = getSupabaseServiceClient()
 
-    // Start building the query
-    // Try to select with signature_requests, but handle gracefully if relationship doesn't exist
-    let selectFields = '*'
+    // ---------------------------------------------------------------
+    // Two-step query: First get all matching IDs (lightweight), then
+    // fetch full document data. This avoids a known issue where
+    // select('*') on rows with large JSONB metadata can silently
+    // drop rows from the PostgREST response.
+    // ---------------------------------------------------------------
 
-    // Check if signature_requests table/relationship exists by trying a simple query first
-    const { error: relationError } = await supabase
+    // Step 1: Get all matching document IDs with a lightweight query
+    let idQuery = supabase
       .from('documents')
       .select('id')
-      .limit(1)
-
-    // If documents table works, try with signature_requests join
-    if (!relationError) {
-      const { error: joinError } = await supabase
-        .from('documents')
-        .select('*, signature_requests(*)')
-        .limit(1)
-
-      // Only include join if it works
-      if (!joinError) {
-        selectFields = `
-          *,
-          signature_requests (
-            id,
-            status,
-            docuseal_submission_id,
-            sent_at,
-            completed_at
-          )
-        `
-      }
-    }
-
-    let query = supabase
-      .from('documents')
-      .select(selectFields)
       .eq('client_id', clientId)
 
-    // ✅ ADDED: Apply filters based on query parameters
+    // Apply assessment filters to the ID query too
     if (assessmentId) {
-      // Filter by specific assessment ID (most specific)
-      query = query.eq('assessment_id', assessmentId)
-      log.debug('Filtering by assessment_id', { assessmentId })
+      idQuery = idQuery.eq('assessment_id', assessmentId)
     } else if (assessmentType && assessmentVersion) {
-      // Filter by assessment type and version (e.g., ATR version 3)
-      query = query
+      idQuery = idQuery
         .eq('document_type', `${assessmentType}_report`)
         .eq('assessment_version', Number(assessmentVersion))
-      log.debug('Filtering by type and version', { assessmentType, assessmentVersion })
     } else if (assessmentType) {
-      // Filter by assessment type only (e.g., all ATR documents)
-      query = query.eq('document_type', `${assessmentType}_report`)
-      log.debug('Filtering by type only', { assessmentType })
+      idQuery = idQuery.eq('document_type', `${assessmentType}_report`)
     }
 
-    // Execute query with ordering
-    query = query.order('created_at', { ascending: false })
+    const { data: idRows, error: idError } = await idQuery
 
-    const { data: documents, error } = await query
-
-    if (error) {
-      log.error('Database error', error)
+    if (idError) {
+      log.error('Database error fetching document IDs', idError)
       return NextResponse.json(
-        { 
-          error: 'Failed to fetch documents',
-          details: error.message 
-        },
+        { error: 'Failed to fetch documents', details: idError.message },
         { status: 500 }
       )
     }
 
-    // ✅ Handle case where no documents found (not an error, just empty)
-    if (!documents || documents.length === 0) {
+    const allIds = idRows?.map((r: any) => r.id) || []
+
+    if (allIds.length === 0) {
       log.debug('No documents found for criteria', {
-        clientId,
-        assessmentId,
-        assessmentType
+        clientId, assessmentId, assessmentType
       })
-      
       return NextResponse.json({
         success: true,
         documents: [],
         count: 0,
-        message: assessmentId 
-          ? 'No document found for this assessment version' 
+        message: assessmentId
+          ? 'No document found for this assessment version'
           : 'No documents found for this client'
       })
     }
 
-    // ✅ FIXED: Add proper typing for doc parameter
-    const transformedDocuments = documents.map((doc: any) => ({
+    // Step 2: Fetch full document data using the known IDs
+    // Use .in('id', ids) instead of .eq('client_id', ...) to ensure
+    // we get exactly the documents we know exist.
+    const { data: documents, error } = await supabase
+      .from('documents')
+      .select('*')
+      .in('id', allIds)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      log.error('Database error fetching document details', error)
+      return NextResponse.json(
+        { error: 'Failed to fetch documents', details: error.message },
+        { status: 500 }
+      )
+    }
+
+    // Step 3: Check for missing documents and fetch them individually
+    let allDocuments = documents || []
+
+    if (allDocuments.length < allIds.length) {
+      const foundIds = new Set(allDocuments.map((d: any) => d.id))
+      const missingIds = allIds.filter(id => !foundIds.has(id))
+
+      log.warn('Some documents missing from bulk query, fetching individually', {
+        expected: allIds.length,
+        got: allDocuments.length,
+        missingCount: missingIds.length
+      })
+
+      // Fetch missing documents one by one (they may have large metadata)
+      for (const missingId of missingIds) {
+        const { data: doc, error: singleError } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('id', missingId)
+          .single()
+
+        if (doc && !singleError) {
+          allDocuments.push(doc)
+        } else {
+          log.warn('Could not fetch individual document', {
+            id: missingId,
+            error: singleError?.message
+          })
+        }
+      }
+
+      // Re-sort after adding individually fetched docs
+      allDocuments.sort((a: any, b: any) => {
+        const dateA = new Date(a.created_at || 0).getTime()
+        const dateB = new Date(b.created_at || 0).getTime()
+        return dateB - dateA
+      })
+    }
+
+    // Transform documents
+    const transformedDocuments = allDocuments.map((doc: any) => ({
       ...doc,
       signature_status: doc.signature_requests?.[0]?.status || null,
       signature_request_id: doc.signature_requests?.[0]?.id || null,
       sent_at: doc.signature_requests?.[0]?.sent_at || null,
       completed_at: doc.signature_requests?.[0]?.completed_at || null,
-      // ✅ ADDED: Include assessment info for debugging
       assessment_info: {
         assessment_id: doc.assessment_id,
         assessment_version: doc.assessment_version,
@@ -142,12 +158,12 @@ export async function GET(
       }
     }))
 
-    // ✅ ADDED: If filtering by assessmentId, return single document object for convenience
+    // If filtering by assessmentId, return single document object for convenience
     if (assessmentId && transformedDocuments.length === 1) {
       return NextResponse.json({
         success: true,
-        document: transformedDocuments[0],  // Singular for single assessment
-        documents: transformedDocuments,     // Keep array for compatibility
+        document: transformedDocuments[0],
+        documents: transformedDocuments,
         count: 1
       })
     }
@@ -167,7 +183,7 @@ export async function GET(
   } catch (error) {
     log.error('API Get documents error', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error'
       },

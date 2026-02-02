@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     // Process the webhook using the database function
     logger.debug('Processing webhook via database function', { event, documentId: data.id })
-    const { data: result, error: processError } = await supabase
+    const { data: result, error: processError } = await (supabase as any)
       .rpc('process_signature_webhook', {
         p_opensign_document_id: data.id,
         p_event_type: event,
@@ -107,8 +107,8 @@ export async function POST(request: NextRequest) {
       // Send notification for signature completion
       try {
         // Fetch the signature request to get client and advisor info
-        const { data: sigRequest } = await supabase
-          .from('signature_requests')
+        const { data: sigRequest } = await (supabase
+          .from('signature_requests') as any)
           .select('client_id, document_id, documents(name), clients(first_name, last_name, advisor_id)')
           .eq('id', result.signature_request_id)
           .single()

@@ -408,6 +408,7 @@ export function ClientDetailPage(props: { clientId: string }) {
           clientId={client.id}
           clientName={clientName}
           clientEmail={clientEmail}
+          clientContactInfo={client.contactInfo}
           onShareCreated={(share) => {
             toast({
               title: 'Assessment Sent',

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { X, Plus, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -32,8 +32,6 @@ export default function WorkflowDetailPanel({
   const createTask = useCreateTask()
   const { data: linkedTasks } = useSourceTasks(item?.sourceType, item?.sourceId)
 
-  if (!open || !item) return null
-
   const handleOwnerChange = async (value: string | null) => {
     await onUpdate?.({ ownerId: value })
   }
@@ -42,7 +40,12 @@ export default function WorkflowDetailPanel({
     await onUpdate?.({ priority: value })
   }
 
+  const handleStatusChange = async (value: string) => {
+    await onUpdate?.({ status: value })
+  }
+
   const handleCreateTask = async (input: any) => {
+    if (!item) return
     await createTask.mutateAsync({
       ...input,
       sourceType: item.sourceType,
@@ -51,9 +54,29 @@ export default function WorkflowDetailPanel({
     })
   }
 
+  useEffect(() => {
+    if (!open) return
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  if (!open || !item) return null
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
-      <div className="h-full w-full sm:max-w-xl overflow-y-auto bg-white p-4 sm:p-6 shadow-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40"
+      onClick={() => {
+        if (showCreateTask) return
+        onClose()
+      }}
+    >
+      <div
+        className="my-6 max-h-[90vh] w-full sm:max-w-xl overflow-y-auto rounded-l-2xl bg-white p-4 shadow-xl sm:p-6"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{item.title}</h2>
@@ -66,6 +89,23 @@ export default function WorkflowDetailPanel({
 
         <div className="mt-4 space-y-4">
           <StatusPipeline stages={stages} currentStage={item.status} />
+
+          {stages.length > 0 && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-sm font-semibold text-gray-800">Status</div>
+              <select
+                value={item.status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="mt-2 w-full rounded-md border border-gray-200 bg-white px-2 py-2 text-sm"
+              >
+                {stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <div className="text-sm font-semibold text-gray-800">Owner</div>

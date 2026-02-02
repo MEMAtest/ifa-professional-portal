@@ -30,9 +30,9 @@ export async function GET(
 
     const supabase = getSupabaseServiceClient()
 
-    // Get the signature request from database
-    const { data: signatureRequest, error: signatureError } = await supabase
-      .from('signature_requests')
+    // Get the signature request from database (status not in generated types)
+    const { data: signatureRequest, error: signatureError } = await (supabase
+      .from('signature_requests') as any)
       .select(`
         *,
         generated_documents!inner(

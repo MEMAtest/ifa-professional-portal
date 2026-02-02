@@ -1,30 +1,21 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, RefreshCw } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import {
   WorkflowBoard,
+  WorkflowDetailPanel,
   WorkflowSearchBar,
+  WORKFLOW_CONFIGS,
   SECTION_BADGES
 } from './workflow'
 import type { WorkflowItem, WorkflowSourceType } from './workflow'
 
 type HubStatus = 'needs_action' | 'in_progress' | 'under_review' | 'resolved'
-
-interface ActivityItem {
-  id: string
-  action: string
-  date: string
-  type?: string
-  user_name?: string | null
-  clientName?: string | null
-  clientRef?: string | null
-}
 
 const HUB_COLUMNS = [
   { id: 'needs_action', label: 'Needs Action', color: '#ef4444' },
@@ -41,6 +32,91 @@ const HUB_STATUS_OPTIONS = [
   { value: 'resolved', label: 'Resolved' },
 ]
 
+const HUB_STATUS_TO_SOURCE: Record<WorkflowSourceType, Record<HubStatus, string>> = {
+  complaint: {
+    needs_action: 'open',
+    in_progress: 'investigating',
+    under_review: 'escalated',
+    resolved: 'resolved',
+  },
+  breach: {
+    needs_action: 'open',
+    in_progress: 'investigating',
+    under_review: 'remediated',
+    resolved: 'closed',
+  },
+  vulnerability: {
+    needs_action: 'active',
+    in_progress: 'monitoring',
+    under_review: 'monitoring',
+    resolved: 'resolved',
+  },
+  file_review: {
+    needs_action: 'pending',
+    in_progress: 'in_progress',
+    under_review: 'escalated',
+    resolved: 'approved',
+  },
+  aml_check: {
+    needs_action: 'not_started',
+    in_progress: 'pending',
+    under_review: 'pending',
+    resolved: 'verified',
+  },
+  consumer_duty: {
+    needs_action: 'needs_attention',
+    in_progress: 'mostly_compliant',
+    under_review: 'non_compliant',
+    resolved: 'fully_compliant',
+  },
+  risk_assessment: {
+    needs_action: 'overdue',
+    in_progress: 'current',
+    under_review: 'due_soon',
+    resolved: 'recent',
+  },
+}
+
+const STATUS_FIELD: Record<WorkflowSourceType, string | null> = {
+  complaint: 'status',
+  breach: 'status',
+  vulnerability: 'status',
+  file_review: 'status',
+  aml_check: 'id_verification',
+  consumer_duty: 'overall_status',
+  risk_assessment: null,
+}
+
+const TABLE_BY_SOURCE: Record<WorkflowSourceType, string | null> = {
+  complaint: 'complaint_register',
+  breach: 'breach_register',
+  vulnerability: 'vulnerability_register',
+  file_review: 'file_reviews',
+  aml_check: 'aml_client_status',
+  consumer_duty: 'consumer_duty_status',
+  risk_assessment: null,
+}
+
+const OWNER_FIELD: Record<WorkflowSourceType, string | null> = {
+  complaint: 'assigned_to',
+  breach: 'assigned_to',
+  vulnerability: 'assigned_to',
+  file_review: 'reviewer_id',
+  aml_check: null,
+  consumer_duty: null,
+  risk_assessment: null,
+}
+
+const PRIORITY_FIELD: Record<WorkflowSourceType, string | null> = {
+  complaint: 'priority',
+  breach: 'priority',
+  vulnerability: 'priority',
+  file_review: null,
+  aml_check: null,
+  consumer_duty: null,
+  risk_assessment: null,
+}
+
 const SECTION_OPTIONS = [
   { value: 'all', label: 'All Sections' },
   ...Object.entries(SECTION_BADGES).map(([key, value]) => ({
@@ -49,27 +125,21 @@ const SECTION_OPTIONS = [
   }))
 ]
 
-function formatActivityTime(timestamp?: string | null) {
-  if (!timestamp) return ''
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  })
-}
-
 export default function ComplianceWorkflowHub() {
-  const { user } = useAuth()
+  const supabase = createClient()
   const { toast } = useToast()
+  const toastRef = useRef(toast)
+  const didLoadRef = useRef(false)
   const [items, setItems] = useState<WorkflowItem[]>([])
-  const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [activityLoading, setActivityLoading] = useState(true)
   const [searchValue, setSearchValue] = useState('')
   const [sectionFilter, setSectionFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [myItemsOnly, setMyItemsOnly] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<WorkflowItem | null>(null)
+
+  useEffect(() => {
+    toastRef.current = toast
+  }, [toast])
 
   const mapToHubStatus = useCallback((sourceType: WorkflowSourceType, rawStatus: string): HubStatus => {
     switch (sourceType) {
@@ -122,7 +192,7 @@ export default function ComplianceWorkflowHub() {
       setItems(data.items || [])
     } catch (error) {
       console.error('Workflow hub load error:', error)
-      toast({
+      toastRef.current({
         title: 'Error',
         description: 'Failed to load workflow hub data',
         variant: 'destructive'
@@ -130,36 +200,23 @@ export default function ComplianceWorkflowHub() {
     } finally {
       setLoading(false)
     }
-  }, [toast])
-
-  const loadActivity = useCallback(async () => {
-    try {
-      setActivityLoading(true)
-      const response = await fetch('/api/activity-log?recent=true&limit=12')
-      if (!response.ok) {
-        throw new Error('Failed to load activity')
-      }
-      const data = await response.json()
-      const items = data?.activities || data?.data || data || []
-      setActivity(items)
-    } catch (error) {
-      console.error('Workflow hub activity error:', error)
-    } finally {
-      setActivityLoading(false)
-    }
   }, [])
 
   useEffect(() => {
+    if (didLoadRef.current) return
+    didLoadRef.current = true
     loadItems()
-    loadActivity()
-  }, [loadItems, loadActivity])
+  }, [loadItems])
 
   const mappedItems = useMemo(() => {
     return items.map((item) => {
       const badge = SECTION_BADGES[item.sourceType]
+      const hubStatus = mapToHubStatus(item.sourceType, item.status)
       return {
         ...item,
-        status: mapToHubStatus(item.sourceType, item.status),
+        sourceStatus: item.status,
+        hubStatus,
+        status: hubStatus,
         sectionLabel: badge?.label,
         sectionColor: badge?.className,
       }
@@ -170,7 +227,6 @@ export default function ComplianceWorkflowHub() {
     return mappedItems.filter((item) => {
       if (sectionFilter !== 'all' && item.sourceType !== sectionFilter) return false
       if (statusFilter !== 'all' && item.status !== statusFilter) return false
-      if (myItemsOnly && user?.id && item.ownerId !== user.id) return false
       if (!searchValue) return true
       const haystack = [
         item.title,
@@ -183,7 +239,7 @@ export default function ComplianceWorkflowHub() {
         .toLowerCase()
       return haystack.includes(searchValue.toLowerCase())
     })
-  }, [mappedItems, sectionFilter, statusFilter, myItemsOnly, user?.id, searchValue])
+  }, [mappedItems, sectionFilter, statusFilter, searchValue])
 
   const sectionCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -193,6 +249,117 @@ export default function ComplianceWorkflowHub() {
     return counts
   }, [mappedItems])
 
+  const detailItem = useMemo(() => {
+    if (!selectedItem) return null
+    const sourceStatus = selectedItem.sourceStatus || selectedItem.status
+    return {
+      ...selectedItem,
+      status: sourceStatus,
+    }
+  }, [selectedItem])
+
+  const detailStages = useMemo(() => {
+    if (!selectedItem) return []
+    return WORKFLOW_CONFIGS[selectedItem.sourceType]?.stages || []
+  }, [selectedItem])
+
+  const handleHubStatusChange = useCallback(async (item: WorkflowItem, nextHubStatus: string) => {
+    const hubStatus = nextHubStatus as HubStatus
+    const targetStatus = HUB_STATUS_TO_SOURCE[item.sourceType]?.[hubStatus]
+    const table = TABLE_BY_SOURCE[item.sourceType]
+    const field = STATUS_FIELD[item.sourceType]
+
+    if (!table || !field || !targetStatus) {
+      toastRef.current({
+        title: 'Status update unavailable',
+        description: 'This item cannot be updated from the hub view.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from(table)
+        .update({ [field]: targetStatus })
+        .eq('id', item.sourceId)
+      if (error) throw error
+
+      setItems((prev) =>
+        prev.map((current) =>
+          current.sourceType === item.sourceType && current.sourceId === item.sourceId
+            ? { ...current, status: targetStatus }
+            : current
+        )
+      )
+    } catch (error) {
+      console.error('Workflow hub status update error:', error)
+      toastRef.current({
+        title: 'Error',
+        description: 'Failed to update item status',
+        variant: 'destructive',
+      })
+    }
+  }, [supabase])
+
+  const handleDetailUpdate = useCallback(async (updates: Partial<WorkflowItem>) => {
+    if (!selectedItem) return
+    const table = TABLE_BY_SOURCE[selectedItem.sourceType]
+    if (!table) return
+
+    const payload: Record<string, any> = {}
+    const ownerField = OWNER_FIELD[selectedItem.sourceType]
+    const priorityField = PRIORITY_FIELD[selectedItem.sourceType]
+    const statusField = STATUS_FIELD[selectedItem.sourceType]
+
+    if (ownerField && updates.ownerId !== undefined) {
+      payload[ownerField] = updates.ownerId
+    }
+
+    if (priorityField && updates.priority !== undefined) {
+      payload[priorityField] = updates.priority
+    }
+
+    if (updates.status !== undefined) {
+      if (!statusField) {
+        toastRef.current({
+          title: 'Status update unavailable',
+          description: 'This item cannot be updated from the hub view.',
+          variant: 'destructive',
+        })
+        return
+      }
+      payload[statusField] = updates.status
+    }
+
+    if (!Object.keys(payload).length) return
+
+    try {
+      const { error } = await supabase
+        .from(table)
+        .update(payload)
+        .eq('id', selectedItem.sourceId)
+      if (error) throw error
+
+      setItems((prev) =>
+        prev.map((current) =>
+          current.sourceType === selectedItem.sourceType && current.sourceId === selectedItem.sourceId
+            ? { ...current, ...('status' in updates ? { status: updates.status } : {}), ...(updates.ownerId !== undefined ? { ownerId: updates.ownerId } : {}), ...(updates.priority !== undefined ? { priority: updates.priority } : {}) }
+            : current
+        )
+      )
+      setSelectedItem((prev) => (prev ? { ...prev, ...updates } : prev))
+      await loadItems()
+    } catch (error) {
+      console.error('Workflow hub update error:', error)
+      toastRef.current({
+        title: 'Error',
+        description: 'Failed to update workflow item',
+        variant: 'destructive',
+      })
+    }
+  }, [loadItems, selectedItem, supabase])
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -200,7 +367,7 @@ export default function ComplianceWorkflowHub() {
           <h2 className="text-xl font-semibold text-gray-900">Workflow Hub</h2>
           <p className="text-sm text-gray-500">Unified view of compliance actions across registers</p>
         </div>
-        <Button variant="outline" onClick={() => { loadItems(); loadActivity(); }}>
+        <Button variant="outline" onClick={() => { loadItems(); }}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
@@ -208,7 +375,12 @@ export default function ComplianceWorkflowHub() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         {Object.entries(SECTION_BADGES).map(([key, value]) => (
-          <Card key={key}>
+          <Card
+            key={key}
+            role="button"
+            className={`cursor-pointer transition ${sectionFilter === key ? 'ring-2 ring-blue-500' : ''}`}
+            onClick={() => setSectionFilter(sectionFilter === key ? 'all' : key)}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <span className={`rounded px-2 py-1 text-xs font-medium ${value.className}`}>{value.label}</span>
@@ -230,54 +402,28 @@ export default function ComplianceWorkflowHub() {
           if (id === 'section') setSectionFilter(value)
           if (id === 'status') setStatusFilter(value)
         }}
-        myItemsOnly={myItemsOnly}
-        onToggleMyItems={setMyItemsOnly}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <WorkflowBoard
-            columns={HUB_COLUMNS}
-            items={filteredItems}
-            isLoading={loading}
-            emptyMessage="No workflow items found"
-          />
-        </div>
-        <div className="lg:col-span-1">
-          <Card className="h-full">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="h-4 w-4 text-blue-500" />
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activityLoading ? (
-                <div className="text-sm text-gray-500">Loading activity...</div>
-              ) : activity.length === 0 ? (
-                <div className="text-sm text-gray-500">No recent activity.</div>
-              ) : (
-                <div className="space-y-4">
-                  {activity.slice(0, 10).map((event) => (
-                    <div key={event.id} className="border-b border-gray-100 pb-3 last:border-none last:pb-0">
-                      <p className="text-sm text-gray-800">{event.action}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                        {event.clientName && (
-                          <Badge variant="outline" className="text-xs">
-                            {event.clientName}
-                          </Badge>
-                        )}
-                        {event.user_name && <span>{event.user_name}</span>}
-                        <span>{formatActivityTime(event.date)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      <div className="min-w-0">
+        <WorkflowBoard
+          columns={HUB_COLUMNS}
+          items={filteredItems}
+          isLoading={loading}
+          onItemClick={(item) => setSelectedItem(item)}
+          onSectionClick={(item) => setSectionFilter(item.sourceType)}
+          onStatusChange={handleHubStatusChange}
+          emptyMessage="No workflow items found"
+        />
       </div>
+
+      <WorkflowDetailPanel
+        open={Boolean(detailItem)}
+        item={detailItem}
+        stages={detailStages}
+        sourceType={detailItem?.sourceType || 'complaint'}
+        onClose={() => setSelectedItem(null)}
+        onUpdate={handleDetailUpdate}
+      />
     </div>
   )
 }

@@ -79,17 +79,14 @@ export function useFirmSeats() {
     staleTime: 60 * 1000, // 1 minute
   })
 
-  const canAddUser = query.data
-    ? query.data.currentSeats < query.data.maxSeats
-    : false
-
-  const seatsRemaining = query.data
-    ? query.data.maxSeats - query.data.currentSeats
-    : 0
+  const maxSeats = query.data?.maxSeats ?? 3
+  const currentSeats = query.data?.currentSeats ?? 0
+  const canAddUser = currentSeats < maxSeats
+  const seatsRemaining = maxSeats - currentSeats
 
   return {
-    maxSeats: query.data?.maxSeats ?? 0,
-    currentSeats: query.data?.currentSeats ?? 0,
+    maxSeats,
+    currentSeats,
     canAddUser,
     seatsRemaining,
     isLoading: query.isLoading,

@@ -173,6 +173,8 @@ export class ClientLifecycleService {
             description: 'Generate and send initial client service agreement for signature',
             due_date: new Date().toISOString(),
             status: 'pending',
+            source_type: 'document',
+            source_id: template.id,
             metadata: { template_id: template.id }
           });
       }

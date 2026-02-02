@@ -386,9 +386,13 @@ function getContrastColor(hexColor: string): string {
 /**
  * Get sender name with firm branding (escaped)
  */
-export function getBrandedSender(branding: EmailBranding, defaultDomain: string = 'resend.dev'): string {
+export function getBrandedSender(branding: EmailBranding, defaultDomain: string = 'plannetic.com'): string {
   const domain = process.env.EMAIL_FROM_DOMAIN || defaultDomain
-  // Escape firm name to prevent header injection
-  const safeFirmName = branding.firmName.replace(/[<>"'\r\n]/g, '')
-  return `${safeFirmName} <noreply@${domain}>`
+  // Whitelist approach: only allow safe characters to prevent header injection
+  // Strips control chars (\0, \v, \f, \r, \n), angle brackets, quotes, and unicode line separators
+  const safeFirmName = branding.firmName
+    .replace(/[^\w\s\-&.,()]/g, '')
+    .trim()
+    .slice(0, 100)
+  return `${safeFirmName || 'Plannetic'} <noreply@${domain}>`
 }

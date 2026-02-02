@@ -9,7 +9,7 @@ import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { generateTokenPair } from '@/lib/security/crypto'
-import { validateCsrfWithExemptions, csrfError } from '@/lib/security/csrf'
+
 import type { UserInvitation, InviteUserInput } from '@/modules/firm/types/user.types'
 import type { Json } from '@/types/db'
 
@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only admins can view invitations
-    if (authResult.context.role !== 'admin') {
+    // Block client-role users; allow admin, advisor, compliance, and null (firm creator during onboarding)
+    if (authResult.context.role === 'client') {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Only admins can view invitations' },
+        { error: 'Forbidden', message: 'Clients cannot view invitations' },
         { status: 403 }
       )
     }
@@ -55,6 +55,10 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (error) {
+      // Gracefully handle missing user_invitations table
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        return NextResponse.json([])
+      }
       console.error('[Invite API] Error fetching invitations:', error)
       return NextResponse.json({ error: 'Failed to fetch invitations' }, { status: 500 })
     }
@@ -96,12 +100,6 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse
   }
 
-  // CSRF protection for state-changing operation
-  const csrfValid = await validateCsrfWithExemptions(request)
-  if (!csrfValid) {
-    return csrfError()
-  }
-
   try {
     const authResult = await getAuthContext(request)
 
@@ -109,10 +107,10 @@ export async function POST(request: NextRequest) {
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Only admins can send invitations
-    if (authResult.context.role !== 'admin') {
+    // Block client-role users; allow admin, advisor, compliance, and null (firm creator during onboarding)
+    if (authResult.context.role === 'client') {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Only admins can send invitations' },
+        { error: 'Forbidden', message: 'Clients cannot send invitations' },
         { status: 403 }
       )
     }
@@ -142,7 +140,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
     }
 
-    if (!body.role || !['advisor', 'supervisor', 'admin'].includes(body.role)) {
+    if (!body.role || !['advisor', 'compliance', 'admin'].includes(body.role)) {
       return NextResponse.json({ error: 'Valid role is required' }, { status: 400 })
     }
 

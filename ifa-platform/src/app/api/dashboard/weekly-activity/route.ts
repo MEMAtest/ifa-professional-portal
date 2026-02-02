@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import { log } from '@/lib/logging/structured';
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,37 @@ interface WeeklyStats {
 export async function GET(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmIdResult = requireFirmId(authResult.context)
+    if (firmIdResult instanceof NextResponse) return firmIdResult
+
+    // Fetch firm's client IDs once for scoping
+    const { data: firmClients } = await supabase
+      .from('clients').select('id').eq('firm_id', firmIdResult.firmId)
+    const firmClientIds = (firmClients || []).map((c: any) => c.id)
+
+    // If no clients, return zeros without querying
+    if (firmClientIds.length === 0) {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+      const emptyChart = days.map((day, i) => {
+        const d = new Date()
+        d.setDate(d.getDate() - 6 + i)
+        return { day, value: 0, date: d.toISOString() }
+      })
+      return NextResponse.json({
+        success: true,
+        weeklyStats: {
+          clientsChart: emptyChart,
+          assessmentsChart: emptyChart.map(d => ({ ...d })),
+          documentsChart: emptyChart.map(d => ({ ...d })),
+          monteCarloChart: emptyChart.map(d => ({ ...d })),
+        }
+      })
+    }
+
     log.debug('GET /api/dashboard/weekly-activity - Fetching weekly data');
     
     // Get the last 7 days
@@ -51,16 +83,16 @@ export async function GET(request: NextRequest) {
       const dayName = days[currentDate.getDay() === 0 ? 6 : currentDate.getDay() - 1]; // Adjust for Monday start
       
       // Fetch clients onboarded this day
-      const clientsCount = await getClientsForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
-      
+      const clientsCount = await getClientsForDay(supabase, dayStart, dayEnd, firmClientIds);
+
       // Fetch assessments completed this day
-      const assessmentsCount = await getAssessmentsForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
-      
+      const assessmentsCount = await getAssessmentsForDay(supabase, dayStart, dayEnd, firmClientIds);
+
       // Fetch documents generated this day
-      const documentsCount = await getDocumentsForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
-      
+      const documentsCount = await getDocumentsForDay(supabase, dayStart, dayEnd, firmClientIds);
+
       // Fetch Monte Carlo simulations this day
-      const monteCarloCount = await getMonteCarloForDay(supabase, dayStart, dayEnd); // ✅ PASS supabase
+      const monteCarloCount = await getMonteCarloForDay(supabase, dayStart, dayEnd, firmClientIds);
       
       weeklyStats.clientsChart.push({
         day: dayName,
@@ -110,11 +142,12 @@ export async function GET(request: NextRequest) {
 }
 
 // Helper function to get clients for a specific day
-async function getClientsForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getClientsForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date, firmClientIds: string[]): Promise<number> {
   try {
     const { count, error } = await supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
+      .in('id', firmClientIds)
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 
@@ -131,12 +164,13 @@ async function getClientsForDay(supabase: ReturnType<typeof getSupabaseServiceCl
 }
 
 // Helper function to get assessments for a specific day
-async function getAssessmentsForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getAssessmentsForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date, firmClientIds: string[]): Promise<number> {
   try {
     // Try suitability_assessments first, then fall back to assessments table
     const { count, error } = await supabase
       .from('suitability_assessments')
       .select('*', { count: 'exact', head: true })
+      .in('client_id', firmClientIds)
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 
@@ -145,6 +179,7 @@ async function getAssessmentsForDay(supabase: ReturnType<typeof getSupabaseServi
       const { count: altCount, error: altError } = await supabase
         .from('assessments')
         .select('*', { count: 'exact', head: true })
+        .in('client_id', firmClientIds)
         .gte('created_at', dayStart.toISOString())
         .lte('created_at', dayEnd.toISOString());
 
@@ -166,13 +201,15 @@ async function getAssessmentsForDay(supabase: ReturnType<typeof getSupabaseServi
 async function getDocumentsForDay(
   supabase: ReturnType<typeof getSupabaseServiceClient>,
   dayStart: Date,
-  dayEnd: Date
+  dayEnd: Date,
+  firmClientIds: string[]
 ): Promise<number> {
   try {
     // Primary source: documents table (used by assessment report generation)
     const { count: docsCount, error: docsError } = await supabase
       .from('documents')
       .select('*', { count: 'exact', head: true })
+      .in('client_id', firmClientIds)
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 
@@ -180,6 +217,7 @@ async function getDocumentsForDay(
       const { count: generatedCount, error: generatedError } = await supabase
         .from('generated_documents')
         .select('*', { count: 'exact', head: true })
+        .in('client_id', firmClientIds)
         .gte('created_at', dayStart.toISOString())
         .lte('created_at', dayEnd.toISOString());
 
@@ -190,6 +228,7 @@ async function getDocumentsForDay(
     const { count: generatedCount, error: generatedError } = await supabase
       .from('generated_documents')
       .select('*', { count: 'exact', head: true })
+      .in('client_id', firmClientIds)
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 
@@ -209,11 +248,12 @@ async function getDocumentsForDay(
 }
 
 // Helper function to get Monte Carlo simulations for a specific day
-async function getMonteCarloForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date): Promise<number> {
+async function getMonteCarloForDay(supabase: ReturnType<typeof getSupabaseServiceClient>, dayStart: Date, dayEnd: Date, firmClientIds: string[]): Promise<number> {
   try {
     const { count, error } = await supabase
       .from('monte_carlo_results')
       .select('*', { count: 'exact', head: true })
+      .in('client_id', firmClientIds)
       .gte('created_at', dayStart.toISOString())
       .lte('created_at', dayEnd.toISOString());
 

@@ -5,15 +5,35 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await getAuthContext(request)
+    if (!authResult.success || !authResult.context) {
+      return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmIdResult = requireFirmId(authResult.context)
+    if (firmIdResult instanceof NextResponse) return firmIdResult
+
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '20')
     const filter = searchParams.get('filter') || 'outstanding'
 
     const supabase = getSupabaseServiceClient()
+
+    // Fetch firm's client IDs for scoping
+    const { data: firmClients, error: clientError } = await supabase
+      .from('clients').select('id').eq('firm_id', firmIdResult.firmId)
+    if (clientError) {
+      log.error('Failed to fetch firm clients', clientError)
+      return NextResponse.json({ error: 'Failed to fetch firm clients' }, { status: 500 })
+    }
+    const firmClientIds = (firmClients || []).map((c: any) => c.id)
+    if (firmClientIds.length === 0) {
+      return NextResponse.json({ success: true, data: [], count: 0, filter })
+    }
 
     // Get current date for filtering
     const now = new Date()
@@ -22,7 +42,7 @@ export async function GET(request: NextRequest) {
     const futureLimit = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // 30 days ahead
     const outstandingLimit = endOfMonth > futureLimit ? endOfMonth : futureLimit
 
-    // Fetch pending and overdue reviews with client info
+    // Fetch pending and overdue reviews with client info — scoped to firm
     let query = supabase
       .from('client_reviews')
       .select(`
@@ -37,6 +57,7 @@ export async function GET(request: NextRequest) {
           personal_details
         )
       `)
+      .in('client_id', firmClientIds)
 
     // Exclude completed reviews, but allow null status to pass through
     query = query.or('status.is.null,status.neq.completed')
@@ -59,6 +80,14 @@ export async function GET(request: NextRequest) {
       .order('due_date', { ascending: true })
       .limit(limit)
 
+    if (error) {
+      log.error('Error fetching upcoming reviews', error)
+      return NextResponse.json(
+        { error: 'Failed to fetch upcoming reviews' },
+        { status: 500 }
+      )
+    }
+
     const upcomingReviews = [...(reviews || [])]
 
     const passesFilter = (dueDate: string) => {
@@ -75,48 +104,24 @@ export async function GET(request: NextRequest) {
       return due <= outstandingLimit
     }
 
-    // Pull firm-level PROD review task from firm settings, if available
-    const { data: authData } = await supabase.auth.getUser()
-    const authUser = authData?.user
-    const metadataFirmId = authUser?.user_metadata?.firm_id || authUser?.user_metadata?.firmId
-    let resolvedFirmId = metadataFirmId || null
+    // Pull firm-level PROD review task from firm settings
+    const { data: firmData } = await supabase
+      .from('firms')
+      .select('settings')
+      .eq('id', firmIdResult.firmId)
+      .maybeSingle()
 
-    if (!resolvedFirmId && authUser?.id) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('firm_id')
-        .eq('id', authUser.id)
-        .maybeSingle()
-      resolvedFirmId = profile?.firm_id || null
-    }
-
-    if (resolvedFirmId) {
-      const { data: firmData } = await supabase
-        .from('firms')
-        .select('settings')
-        .eq('id', resolvedFirmId)
-        .maybeSingle()
-
-      const reviewTask = (firmData?.settings as any)?.services_prod?.reviewTask
-      if (reviewTask?.due_date && passesFilter(reviewTask.due_date)) {
-        upcomingReviews.push({
-          id: `firm-prod-${reviewTask.version || 'current'}`,
-          client_id: null,
-          review_type: 'prod_policy',
-          due_date: reviewTask.due_date,
-          status: reviewTask.status || 'pending',
-          created_at: reviewTask.created_at || new Date().toISOString(),
-          clients: null
-        } as any)
-      }
-    }
-
-    if (error) {
-      log.error('Error fetching upcoming reviews', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch upcoming reviews' },
-        { status: 500 }
-      )
+    const reviewTask = (firmData?.settings as any)?.services_prod?.reviewTask
+    if (reviewTask?.due_date && passesFilter(reviewTask.due_date)) {
+      upcomingReviews.push({
+        id: `firm-prod-${reviewTask.version || 'current'}`,
+        client_id: null,
+        review_type: 'prod_policy',
+        due_date: reviewTask.due_date,
+        status: reviewTask.status || 'pending',
+        created_at: reviewTask.created_at || new Date().toISOString(),
+        clients: null
+      } as any)
     }
 
     // Format response with client names

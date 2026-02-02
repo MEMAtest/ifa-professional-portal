@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   FileText,
   FileSpreadsheet,
@@ -31,6 +32,7 @@ import { TagEditor } from '@/components/documents/TagEditor'
 import { FileReviewModal } from './FileReviewModal'
 import { renderMarkdown } from '@/lib/documents/markdownRenderer'
 import { generateFileReviewPDF, generateFileReviewDOCX } from '@/lib/documents/fileReviewExport'
+import { useToast } from '@/hooks/use-toast'
 
 interface DocumentMetadata {
   type?: string
@@ -281,6 +283,10 @@ function ExpandedAnalysis({ doc }: { doc: UploadedDocument }) {
 }
 
 export function ClientUploadedDocuments({ clientId, clientName }: { clientId: string; clientName?: string }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const fromBulk = searchParams.get('from') === 'bulk'
+  const bulkClientRef = searchParams.get('clientRef')
   const [documents, setDocuments] = useState<UploadedDocument[]>([])
   const [fileReviews, setFileReviews] = useState<FileReviewDocument[]>([])
   const [loading, setLoading] = useState(true)
@@ -308,14 +314,64 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
   const [workflowUpdatingId, setWorkflowUpdatingId] = useState<string | null>(null)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [profileSyncing, setProfileSyncing] = useState(false)
+  const [profileSyncMessage, setProfileSyncMessage] = useState<string | null>(null)
+  const [profileSyncDetails, setProfileSyncDetails] = useState<{
+    personal_details?: string[]
+    contact_info?: string[]
+    financial_profile?: string[]
+    totalUpdated?: number
+  } | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const actionErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { toast } = useToast()
 
   const showActionError = useCallback((msg: string) => {
     setActionError(msg)
     if (actionErrorTimer.current) clearTimeout(actionErrorTimer.current)
     actionErrorTimer.current = setTimeout(() => setActionError(null), 4000)
   }, [])
+
+  const handlePopulateProfile = useCallback(async () => {
+    setProfileSyncing(true)
+    setProfileSyncMessage('Analysing documents and updating missing profile fields...')
+    setProfileSyncDetails(null)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/populate-profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || 'Failed to update client profile')
+      }
+      const totalUpdated = typeof data?.totalUpdated === 'number' ? data.totalUpdated : null
+      setProfileSyncDetails(
+        data?.updatedFields
+          ? { ...data.updatedFields, totalUpdated: totalUpdated ?? undefined }
+          : null
+      )
+      if (totalUpdated && totalUpdated > 0) {
+        setProfileSyncMessage(`Updated ${totalUpdated} profile fields from analysed documents.`)
+        toast({
+          title: 'Profile updated',
+          description: `Updated ${totalUpdated} field${totalUpdated === 1 ? '' : 's'} from analysed documents.`,
+        })
+      } else {
+        setProfileSyncMessage('No new profile fields were found in the analysed documents.')
+        toast({
+          title: 'No changes detected',
+          description: 'The analysed documents did not contain new profile fields to update.',
+        })
+      }
+    } catch (err) {
+      setProfileSyncMessage(null)
+      showActionError(err instanceof Error ? err.message : 'Failed to update client profile')
+    } finally {
+      setProfileSyncing(false)
+    }
+  }, [clientId, showActionError, toast])
 
   const fetchDocuments = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -326,7 +382,13 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
       if (data.success) {
         const allDocs: UploadedDocument[] = data.documents || []
         const reviews = allDocs
-          .filter((d) => d.metadata?.type === 'file_review') as FileReviewDocument[]
+          .filter((d) => {
+            if (d.metadata?.type === 'file_review') return true
+            if (d.type === 'file_review') return true
+            if (d.document_type === 'compliance_document' && (d as any).category === 'Compliance') return true
+            if (typeof d.name === 'string' && d.name.startsWith('File Review -')) return true
+            return false
+          }) as FileReviewDocument[]
         reviews.sort((a, b) => {
           const aDate = new Date(a.metadata?.generatedAt || a.created_at || 0).getTime()
           const bDate = new Date(b.metadata?.generatedAt || b.created_at || 0).getTime()
@@ -557,10 +619,23 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
           {analysedCount > 0 && (
             <button
               onClick={() => setShowFileReview(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                fileReviews.length > 0
+                  ? 'text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100'
+                  : 'text-white bg-indigo-600 hover:bg-indigo-700'
+              }`}
             >
-              <FileText className="h-3.5 w-3.5" />
-              File Review
+              {fileReviews.length > 0 ? (
+                <>
+                  <Eye className="h-3.5 w-3.5" />
+                  View File Review
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5" />
+                  File Review
+                </>
+              )}
             </button>
           )}
           {failedCount > 0 && (
@@ -593,6 +668,121 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
           )}
         </div>
       </div>
+
+      {fromBulk && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-gray-800">Returned from Bulk Setup</p>
+            <p className="text-xs text-gray-600">
+              {bulkClientRef ? `Client ref: ${bulkClientRef}. ` : ''}Use Back to Bulk Setup to revisit the upload summary.
+            </p>
+          </div>
+          <button
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"
+          >
+            Back to Bulk Setup
+          </button>
+        </div>
+      )}
+
+      {analysedCount > 0 && (
+        <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-blue-900">Update client profile from documents</p>
+            <p className="text-xs text-blue-800">
+              This fills missing fields in the Client Details sections using analysed document evidence.
+            </p>
+            <div className="mt-2 space-y-1 text-[11px] text-blue-900">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 border border-emerald-200">
+                  Personal details
+                </span>
+                <span className="text-blue-800">
+                  Name, date of birth, gender, nationality, marital status, dependants, employment status, occupation, retirement age.
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 border border-sky-200">
+                  Contact information
+                </span>
+                <span className="text-blue-800">
+                  Email, phone, mobile, preferred contact method.
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 border border-amber-200">
+                  Address
+                </span>
+                <span className="text-blue-800">
+                  Address lines, city, county, postcode, country.
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 border border-violet-200">
+                  Financial profile
+                </span>
+                <span className="text-blue-800">
+                  Annual income, monthly expenses, net worth, liquid assets, investment timeframe.
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 border border-rose-200">
+                  Pensions & investments
+                </span>
+                <span className="text-blue-800">
+                  Investment objectives, existing investments, pension arrangements, insurance policies.
+                </span>
+              </div>
+            </div>
+            <p className="mt-1 text-[11px] text-blue-800">
+              Only empty fields are filled. Existing data is never overwritten.
+            </p>
+            {profileSyncMessage && (
+              <p className="mt-1 text-xs text-blue-900">{profileSyncMessage}</p>
+            )}
+            {profileSyncDetails && (profileSyncDetails.totalUpdated || 0) > 0 && (
+              <div className="mt-2 text-[11px] text-blue-900">
+                <p className="font-medium">Updated fields this run:</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {(profileSyncDetails.personal_details || []).map((field) => (
+                    <span key={`pd-${field}`} className="rounded-full bg-white/70 px-2 py-0.5 border border-blue-200">
+                      {field}
+                    </span>
+                  ))}
+                  {(profileSyncDetails.contact_info || []).map((field) => (
+                    <span key={`ci-${field}`} className="rounded-full bg-white/70 px-2 py-0.5 border border-blue-200">
+                      {field}
+                    </span>
+                  ))}
+                  {(profileSyncDetails.financial_profile || []).map((field) => (
+                    <span key={`fp-${field}`} className="rounded-full bg-white/70 px-2 py-0.5 border border-blue-200">
+                      {field}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handlePopulateProfile}
+            disabled={profileSyncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60"
+          >
+            {profileSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <User className="h-3.5 w-3.5" />}
+            {profileSyncing ? 'Updating...' : 'Update Profile'}
+          </button>
+        </div>
+      )}
+
+      {analysedCount > 0 && fileReviews.length === 0 && (
+        <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+          <p className="text-sm font-medium text-indigo-900">File review ready</p>
+          <p className="mt-1 text-sm text-indigo-800">
+            Select File Review to generate the compliance review for this client using the analysed documents.
+          </p>
+        </div>
+      )}
 
       {/* Action error banner */}
       {actionError && (
@@ -799,12 +989,20 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
         </div>
       )}
 
-      <DocumentPreviewModal documentId={previewDocId} onClose={() => setPreviewDocId(null)} />
+      <DocumentPreviewModal
+        documentId={previewDocId}
+        onClose={() => setPreviewDocId(null)}
+        onReuploaded={() => fetchDocuments(true)}
+      />
       <FileReviewModal
         clientId={clientId}
         clientName={clientName || 'Client'}
         isOpen={showFileReview}
-        onClose={() => setShowFileReview(false)}
+        onClose={() => {
+          setShowFileReview(false)
+          fetchDocuments(true)
+        }}
+        onSaved={() => fetchDocuments(true)}
       />
       {reviewPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
@@ -942,11 +1140,19 @@ function DocumentRow({
           <StatusBadge status={doc.status} />
         </td>
         <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-          <TagEditor
-            documentId={doc.id}
-            currentTags={tags}
-            onTagsUpdated={onTagsUpdated}
-          />
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {doc.metadata?.ai_analysis?.classification && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 whitespace-nowrap">
+                <Tag className="h-3 w-3" />
+                {CLASSIFICATION_LABELS[doc.metadata.ai_analysis.classification] || doc.metadata.ai_analysis.classification}
+              </span>
+            )}
+            <TagEditor
+              documentId={doc.id}
+              currentTags={tags}
+              onTagsUpdated={onTagsUpdated}
+            />
+          </div>
         </td>
         <td className="px-4 py-2.5 text-gray-500 text-xs">
           {formatFileSize(doc.file_size || 0)}

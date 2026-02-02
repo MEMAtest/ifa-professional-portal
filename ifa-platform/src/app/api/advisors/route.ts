@@ -18,19 +18,19 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseServiceClient()
     const firmId = getValidatedFirmId(auth.context)
 
-    // Query advisors/profiles
-    let query = supabase
+    // SECURITY: Require firm context to prevent cross-tenant data access
+    if (!firmId) {
+      log.warn('GET /api/advisors - No firm_id available, refusing to return unscoped data')
+      return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+    }
+
+    // Query advisors/profiles with mandatory firm_id filter
+    const { data: advisors, error } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, role, firm_id')
       .in('role', ['advisor', 'admin', 'senior_advisor'])
+      .eq('firm_id', firmId)
       .order('first_name')
-
-    // Filter by firm if available
-    if (firmId) {
-      query = query.eq('firm_id', firmId)
-    }
-
-    const { data: advisors, error } = await query
 
     if (error) {
       log.error('Error fetching advisors', error)

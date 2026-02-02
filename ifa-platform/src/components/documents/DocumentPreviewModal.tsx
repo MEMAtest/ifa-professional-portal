@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import {
   X,
   Loader2,
@@ -15,6 +15,7 @@ import {
   DollarSign,
   MapPin,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 
 interface DocumentData {
@@ -25,6 +26,7 @@ interface DocumentData {
   mime_type: string
   file_size: number
   status: string
+  client_id?: string
   metadata?: {
     extracted_text?: string
     extracted_text_length?: number
@@ -78,12 +80,19 @@ function formatCurrency(amount: number, currency: string): string {
 export interface DocumentPreviewModalProps {
   documentId: string | null
   onClose: () => void
+  onReuploaded?: () => void
 }
 
-export function DocumentPreviewModal({ documentId, onClose }: DocumentPreviewModalProps) {
+const MAX_REUPLOAD_SIZE = 15 * 1024 * 1024
+
+export function DocumentPreviewModal({ documentId, onClose, onReuploaded }: DocumentPreviewModalProps) {
   const [doc, setDoc] = useState<DocumentData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reuploading, setReuploading] = useState(false)
+  const [reuploadError, setReuploadError] = useState<string | null>(null)
+  const [reuploadSuccess, setReuploadSuccess] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!documentId) return
@@ -130,6 +139,58 @@ export function DocumentPreviewModal({ documentId, onClose }: DocumentPreviewMod
       (analysis.entities.referenceNumbers?.length ?? 0) > 0
     : false
 
+  const handleReuploadFile = async (file: File) => {
+    if (!doc) return
+    setReuploadError(null)
+    setReuploadSuccess(null)
+
+    if (file.size > MAX_REUPLOAD_SIZE) {
+      setReuploadError(`File exceeds ${MAX_REUPLOAD_SIZE / 1024 / 1024}MB limit.`)
+      return
+    }
+
+    if (!doc.client_id) {
+      setReuploadError('Client ID missing for this document. Please retry from the client documents page.')
+      return
+    }
+
+    setReuploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('name', doc.name || file.name)
+      formData.append('client_id', doc.client_id)
+      formData.append('metadata', JSON.stringify({
+        replaced_document_id: doc.id,
+        original_file_name: doc.file_name,
+      }))
+
+      const uploadRes = await fetch('/api/documents/upload', { method: 'POST', body: formData })
+      const uploadData = await uploadRes.json().catch(() => ({}))
+      if (!uploadRes.ok || !uploadData.success) {
+        throw new Error(uploadData?.error || 'Failed to upload replacement file')
+      }
+
+      await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+      setReuploadSuccess('Replacement uploaded. The new document will reprocess shortly.')
+      onReuploaded?.()
+      setTimeout(() => {
+        onClose()
+      }, 800)
+    } catch (err) {
+      setReuploadError(err instanceof Error ? err.message : 'Failed to replace file')
+    } finally {
+      setReuploading(false)
+    }
+  }
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    handleReuploadFile(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -146,6 +207,23 @@ export function DocumentPreviewModal({ documentId, onClose }: DocumentPreviewMod
             </h2>
           </div>
           <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileChange}
+              accept=".pdf,.doc,.docx,.xlsx,.msg,.eml,.txt,.png,.jpg,.jpeg,.gif"
+            />
+            {doc && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={reuploading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${reuploading ? 'animate-spin' : ''}`} />
+                Replace file
+              </button>
+            )}
             {doc && (
               <a
                 href={`/api/documents/download/${doc.id}`}
@@ -226,6 +304,13 @@ export function DocumentPreviewModal({ documentId, onClose }: DocumentPreviewMod
                 <span className="text-xs font-medium text-gray-500 uppercase">Extracted Content & Analysis</span>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {(reuploadError || reuploadSuccess) && (
+                  <div className={`p-3 rounded-lg ${reuploadError ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                    <p className={`text-sm ${reuploadError ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {reuploadError || reuploadSuccess}
+                    </p>
+                  </div>
+                )}
                 {/* AI Analysis section */}
                 {analysis ? (
                   <>

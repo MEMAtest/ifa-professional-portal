@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { User } from '@supabase/supabase-js'
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js'
 
@@ -239,6 +240,12 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
     }
 
     if (authError || !user) {
+      console.debug('[Auth] Authentication failed', {
+        hasCookieHeader: !!request.headers.get('cookie'),
+        hasAuthHeader: !!authHeader,
+        authErrorMessage: authError?.message || null,
+        tokenCandidatesCount: tokenCandidates.length,
+      })
       return {
         success: false,
         error: 'Unauthorized - Please log in',
@@ -250,11 +257,22 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
     }
 
     // Get user profile with role and firm info
-    const { data: profile } = await (supabase as any)
+    // Use the service client to bypass RLS — we already verified the user's identity above.
+    const serviceClient = getSupabaseServiceClient()
+    const { data: profile, error: profileError } = await serviceClient
       .from('profiles')
-      .select('role, firm_id, advisor_id')
+      .select('role, firm_id')
       .eq('id', user.id)
       .single()
+
+    if (profileError) {
+      console.debug('[Auth] Profile lookup failed', {
+        userId: user.id,
+        email: user.email,
+        errorCode: profileError.code,
+        errorMessage: profileError.message,
+      })
+    }
 
     const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
     const metadataRole = (metadata.role as string | undefined) ?? null
@@ -279,7 +297,7 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
       email: user.email,
       role: normalizeOptionalString(profile?.role) || normalizeOptionalString(metadataRole),
       firmId,
-      advisorId: normalizeOptionalString(profile?.advisor_id) || normalizeOptionalString(metadataAdvisorId) || user.id
+      advisorId: normalizeOptionalString(metadataAdvisorId) || user.id
     }
 
     return {

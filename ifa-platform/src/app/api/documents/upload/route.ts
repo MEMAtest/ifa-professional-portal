@@ -6,8 +6,8 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
-// Max file size: 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+// Max file size: 15MB
+const MAX_FILE_SIZE = 15 * 1024 * 1024
 
 // Allowed file types for upload
 const ALLOWED_MIME_TYPES = [

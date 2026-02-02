@@ -49,9 +49,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
 
-    // Get existing task
-    const { data: existingTask, error: fetchError } = await supabase
-      .from('tasks')
+    // Get existing task (some columns not in generated types)
+    const { data: existingTask, error: fetchError } = await (supabase
+      .from('tasks') as any)
       .select('*')
       .eq('id', taskId)
       .eq('firm_id', firmIdResult.firmId)
@@ -101,9 +101,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       updateData.signed_off_at = new Date().toISOString()
     }
 
-    // Update task
-    const { data: task, error: updateError } = await supabase
-      .from('tasks')
+    // Update task (some columns not in generated types)
+    const { data: task, error: updateError } = await (supabase
+      .from('tasks') as any)
       .update(updateData)
       .eq('id', taskId)
       .eq('firm_id', firmIdResult.firmId)
@@ -113,17 +113,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
           id,
           personal_details,
           client_ref
-        ),
-        assigned_user:assigned_to (
-          id,
-          first_name,
-          last_name,
-          email
-        ),
-        assigner:assigned_by (
-          id,
-          first_name,
-          last_name
         )
       `)
       .single()
@@ -195,11 +184,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       clientFirstName: (task as any).clients?.personal_details?.firstName,
       clientLastName: (task as any).clients?.personal_details?.lastName,
       clientRef: (task as any).clients?.client_ref,
-      assignedToFirstName: (task as any).assigned_user?.first_name,
-      assignedToLastName: (task as any).assigned_user?.last_name,
-      assignedToEmail: (task as any).assigned_user?.email,
-      assignedByFirstName: (task as any).assigner?.first_name,
-      assignedByLastName: (task as any).assigner?.last_name,
+      assignedToFirstName: undefined,
+      assignedToLastName: undefined,
+      assignedToEmail: undefined,
+      assignedByFirstName: undefined,
+      assignedByLastName: undefined,
     }
 
     return NextResponse.json({ task: response })

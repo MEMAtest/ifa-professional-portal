@@ -190,6 +190,14 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     loadReviews()
   }, [loadReviews])
 
+  useEffect(() => {
+    if (!selectedReview) return
+    const refreshed = reviews.find((review) => review.id === selectedReview.id)
+    if (refreshed) {
+      setSelectedReview(refreshed)
+    }
+  }, [reviews, selectedReview])
+
   const getClientName = (review: FileReview): string => {
     if (!review.clients?.personal_details) return 'Unknown Client'
     const { firstName, lastName, title } = review.clients.personal_details

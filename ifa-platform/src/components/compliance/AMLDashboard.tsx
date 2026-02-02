@@ -852,7 +852,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
 
   const handleWorkflowStatusChange = async (item: WorkflowItem, status: string) => {
     const record = filteredRecords.find((r: any) => r.id === item.id)
-    if (record?._isVirtual) {
+    if ((record as any)?._isVirtual) {
       toast({
         title: 'AML record required',
         description: 'Create an AML record for this client before updating status.',

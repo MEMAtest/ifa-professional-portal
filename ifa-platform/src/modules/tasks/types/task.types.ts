@@ -35,6 +35,10 @@ export type TaskSourceType =
   | 'aml_check'
   | 'consumer_duty'
   | 'risk_assessment'
+  | 'bulk_upload'
+  | 'manual'
+  | 'document'
+  | 'assessment'
 
 // ============================================
 // CORE INTERFACES
@@ -251,6 +255,34 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   client_follow_up: 'Client Follow-up',
   deadline: 'Deadline',
   meeting: 'Meeting',
+}
+
+export const TASK_SOURCE_LABELS: Record<string, string> = {
+  complaint: 'Complaint',
+  breach: 'Breach',
+  vulnerability: 'Vulnerability',
+  file_review: 'QA Review',
+  aml_check: 'AML/CTF',
+  consumer_duty: 'Consumer Duty',
+  risk_assessment: 'Risk',
+  bulk_upload: 'Bulk Upload',
+  manual: 'Manual',
+  document: 'Document',
+  assessment: 'Assessment',
+}
+
+export const TASK_SOURCE_COLORS: Record<string, string> = {
+  complaint: 'bg-rose-100 text-rose-700',
+  breach: 'bg-amber-100 text-amber-700',
+  file_review: 'bg-sky-100 text-sky-700',
+  aml_check: 'bg-violet-100 text-violet-700',
+  consumer_duty: 'bg-emerald-100 text-emerald-700',
+  vulnerability: 'bg-pink-100 text-pink-700',
+  risk_assessment: 'bg-indigo-100 text-indigo-700',
+  bulk_upload: 'bg-teal-100 text-teal-700',
+  manual: 'bg-gray-100 text-gray-600',
+  document: 'bg-blue-100 text-blue-700',
+  assessment: 'bg-purple-100 text-purple-700',
 }
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {

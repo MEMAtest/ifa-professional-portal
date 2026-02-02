@@ -99,7 +99,7 @@ export function useSourceTasks(
 ) {
   return useQuery({
     queryKey: taskKeys.sourceTasks(sourceType || 'unknown', sourceId || 'unknown', params),
-    queryFn: () => fetchSourceTasks(sourceType, sourceId || '', params),
+    queryFn: () => fetchSourceTasks(sourceType as any, sourceId || '', params),
     staleTime: 30 * 1000,
     enabled: !!sourceType && !!sourceId,
   })

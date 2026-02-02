@@ -36,6 +36,7 @@ import {
   Shield,
   Clock
 } from 'lucide-react'
+import { DocumentPreviewModal } from '@/components/documents/DocumentPreviewModal'
 
 // Professional Document Type Icons
 const PdfIcon = ({ className = "h-12 w-12" }: { className?: string }) => (
@@ -594,6 +595,7 @@ export default function DocumentsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null)
 
   const { documents, loading, error, uploadDocument, deleteDocument } = useDocuments()
   const { categories, loading: categoriesLoading } = useDocumentCategories()
@@ -1004,11 +1006,20 @@ export default function DocumentsPage() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => setPreviewDocId(document.id)}>
                       <EyeIcon className="h-4 w-4 mr-1" />
                       View
                     </Button>
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const a = window.document.createElement('a')
+                        a.href = `/api/documents/download/${document.id}`
+                        a.download = document.file_name || document.name || 'document'
+                        a.click()
+                      }}
+                    >
                       <DownloadIcon className="h-4 w-4 mr-1" />
                       Download
                     </Button>
@@ -1034,6 +1045,10 @@ export default function DocumentsPage() {
           onUpload={handleUpload}
           categories={categories}
           categoriesLoading={categoriesLoading}
+        />
+        <DocumentPreviewModal
+          documentId={previewDocId}
+          onClose={() => setPreviewDocId(null)}
         />
       </div>
     </Layout>

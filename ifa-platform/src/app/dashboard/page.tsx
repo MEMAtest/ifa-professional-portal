@@ -29,6 +29,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts'
 import { RegionClientsModal } from '@/components/dashboard/RegionClientsModal'
+import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist'
 import { useDashboardData } from '@/components/dashboard/hooks/useDashboardData'
 import {
   getActivityIcon,
@@ -90,6 +91,9 @@ export default function DashboardPage() {
             Here&apos;s what&apos;s happening with your clients today.
           </p>
         </div>
+
+        {/* Onboarding Checklist (shown until setup is complete) */}
+        <OnboardingChecklist />
 
         {/* FIXED: Working Quick Actions */}
         <DashboardQuickActions

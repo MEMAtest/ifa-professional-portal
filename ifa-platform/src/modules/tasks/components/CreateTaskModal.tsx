@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import {
@@ -62,6 +62,11 @@ export function CreateTaskModal({
     setSelectedTemplate(null)
     setErrors({})
   }
+
+  useEffect(() => {
+    if (!open) return
+    resetForm()
+  }, [open, defaultAssigneeId, defaultClientId])
 
   const handleTemplateSelect = (templateId: string) => {
     const template = TASK_TEMPLATES.find((t) => t.id === templateId)

@@ -31,8 +31,8 @@ export async function GET(
     const supabase = getSupabaseServiceClient()
 
     // Get the signature request from database
-    const { data: signatureRequest, error: signatureError } = await supabase
-      .from('signature_requests')
+    const { data: signatureRequest, error: signatureError } = await (supabase
+      .from('signature_requests') as any)
       .select(`
         *,
         generated_documents!inner(
@@ -71,8 +71,8 @@ export async function GET(
           newStatus: openSignStatus.status
         })
 
-        const { error: updateError } = await supabase
-          .from('signature_requests')
+        const { error: updateError } = await (supabase
+          .from('signature_requests') as any)
           .update({
             status: openSignStatus.status,
             download_url: openSignStatus.downloadUrl || signatureRequest.download_url,

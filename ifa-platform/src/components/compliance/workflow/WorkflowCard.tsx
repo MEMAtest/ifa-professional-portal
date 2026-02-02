@@ -16,21 +16,33 @@ interface WorkflowCardProps {
   item: WorkflowItem
   stages: WorkflowStage[]
   onClick?: (item: WorkflowItem) => void
+  onSectionClick?: (item: WorkflowItem) => void
   onStatusChange?: (item: WorkflowItem, status: string) => void
+  onDragStart?: (item: WorkflowItem, event: React.DragEvent<HTMLDivElement>) => void
 }
 
-export default function WorkflowCard({ item, stages, onClick, onStatusChange }: WorkflowCardProps) {
+export default function WorkflowCard({
+  item,
+  stages,
+  onClick,
+  onSectionClick,
+  onStatusChange,
+  onDragStart,
+}: WorkflowCardProps) {
   const priorityStyle = item.priority ? PRIORITY_STYLES[item.priority] : null
   const isOverdue = item.dueDate ? new Date(item.dueDate) < new Date() : false
+  const isDraggable = Boolean(onDragStart)
 
   return (
     <div
-      className={`rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md ${
+      className={`${isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} overflow-hidden rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md ${
         priorityStyle ? `border-l-4 ${priorityStyle.border}` : ''
       }`}
       role="button"
       tabIndex={0}
       aria-label={`${item.title}${item.subtitle ? ` - ${item.subtitle}` : ''}`}
+      draggable={Boolean(onDragStart)}
+      onDragStart={(event) => onDragStart?.(item, event)}
       onClick={() => onClick?.(item)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -39,26 +51,35 @@ export default function WorkflowCard({ item, stages, onClick, onStatusChange }: 
         }
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-gray-900">{item.title}</p>
-            {item.sectionLabel && item.sectionColor && (
-              <span className={`rounded px-2 py-0.5 text-xs font-medium ${item.sectionColor}`}>
-                {item.sectionLabel}
-              </span>
-            )}
-          </div>
-          {item.subtitle && (
-            <p className="text-xs text-gray-500">{item.subtitle}</p>
+      <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.title}</p>
+
+      {(item.sectionLabel && item.sectionColor) || priorityStyle ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {item.sectionLabel && item.sectionColor && (
+            <button
+              type="button"
+              className={`rounded px-2 py-0.5 text-xs font-medium ${item.sectionColor}`}
+              onClick={(event) => {
+                event.stopPropagation()
+                onSectionClick?.(item)
+              }}
+            >
+              {item.sectionLabel}
+            </button>
+          )}
+          {priorityStyle && (
+            <span
+              className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium leading-none ${priorityStyle.badge}`}
+            >
+              {priorityStyle.label}
+            </span>
           )}
         </div>
-        {priorityStyle && (
-          <span className={`rounded px-2 py-0.5 text-xs font-medium ${priorityStyle.badge}`}>
-            {priorityStyle.label}
-          </span>
-        )}
-      </div>
+      ) : null}
+
+      {item.subtitle && (
+        <p className="mt-1 text-xs text-gray-500 line-clamp-1">{item.subtitle}</p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-600">
         <span className="inline-flex items-center gap-1">
@@ -82,10 +103,13 @@ export default function WorkflowCard({ item, stages, onClick, onStatusChange }: 
       </div>
 
       {onStatusChange && (
-        <div className="mt-3">
+        <div className="mt-3 space-y-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Move to</span>
           <select
             value={item.status}
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             onChange={(e) => onStatusChange(item, e.target.value)}
             className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"
           >

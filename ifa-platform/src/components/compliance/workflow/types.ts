@@ -1,6 +1,14 @@
-import type { TaskSourceType, TaskPriority } from '@/modules/tasks/types'
+import type { TaskPriority } from '@/modules/tasks/types'
 
-export type WorkflowSourceType = TaskSourceType
+/** Compliance-relevant subset of TaskSourceType */
+export type WorkflowSourceType =
+  | 'complaint'
+  | 'breach'
+  | 'vulnerability'
+  | 'file_review'
+  | 'aml_check'
+  | 'consumer_duty'
+  | 'risk_assessment'
 export type WorkflowPriority = TaskPriority
 
 export interface WorkflowStage {
@@ -16,6 +24,8 @@ export interface WorkflowItem {
   title: string
   subtitle?: string
   status: string
+  sourceStatus?: string
+  hubStatus?: string
   priority?: WorkflowPriority | null
   ownerId?: string | null
   ownerName?: string

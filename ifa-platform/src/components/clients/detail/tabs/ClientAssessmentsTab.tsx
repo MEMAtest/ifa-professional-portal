@@ -71,6 +71,15 @@ const STATUS_CONFIG: Record<string, { icon: React.ElementType; color: string; bg
   revoked: { icon: XCircle, color: 'text-red-600', bgColor: 'bg-red-100', label: 'Revoked' }
 }
 
+const formatDateTime = (value: string) =>
+  formatDate(value, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
 export function ClientAssessmentsTab({
   clientId,
   clientName,
@@ -286,7 +295,7 @@ export function ClientAssessmentsTab({
                           <p className="text-sm font-semibold text-gray-900">
                             {ASSESSMENT_LABELS[share.assessment_type] || share.assessment_type}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">Sent {formatDate(share.created_at)}</p>
+                          <p className="text-xs text-gray-500 mt-1">Sent {formatDateTime(share.created_at)}</p>
                         </div>
                         <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
                           <StatusIcon className="h-3 w-3" />
@@ -294,6 +303,12 @@ export function ClientAssessmentsTab({
                         </div>
                       </div>
                       <div className="mt-3 text-xs text-gray-600">
+                        Sent to: {share.client_email || '—'}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-600">
+                        Sent: {formatDateTime(share.created_at)}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-600">
                         Expires: {share.status === 'completed' ? '-' : formatDate(share.expires_at)}
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
@@ -348,6 +363,7 @@ export function ClientAssessmentsTab({
                     <tr className="border-b text-left text-sm text-gray-500">
                       <th className="pb-3 font-medium">Type</th>
                       <th className="pb-3 font-medium">Sent</th>
+                      <th className="pb-3 font-medium">Sent To</th>
                       <th className="pb-3 font-medium">Status</th>
                       <th className="pb-3 font-medium">Expires</th>
                       <th className="pb-3 font-medium text-right">Actions</th>
@@ -367,7 +383,10 @@ export function ClientAssessmentsTab({
                             </span>
                           </td>
                           <td className="py-3 text-gray-600">
-                            {formatDate(share.created_at)}
+                            {formatDateTime(share.created_at)}
+                          </td>
+                          <td className="py-3 text-gray-600">
+                            {share.client_email || '—'}
                           </td>
                           <td className="py-3">
                             <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>

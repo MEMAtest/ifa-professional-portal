@@ -20,7 +20,7 @@ import {
   Edit,
   Calendar,
   User,
-  DollarSign,
+  PoundSterling,
   ExternalLink,
   X,
   FileText,
@@ -192,7 +192,7 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
     }
   }
 
-  const getClientName = (complaint: Complaint): string => {
+  function getClientName(complaint: Complaint): string {
     if (!complaint.clients?.personal_details) return 'Unknown Client'
     const { firstName, lastName, title } = complaint.clients.personal_details
     return `${title ? title + ' ' : ''}${firstName || ''} ${lastName || ''}`.trim() ||
@@ -244,13 +244,13 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
     }).format(amount)
   }
 
-  const getOwnerName = (complaint: Complaint): string => {
+  function getOwnerName(complaint: Complaint): string {
     const owner = complaint.assigned_user
     if (!owner) return 'Unassigned'
     return `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unassigned'
   }
 
-  const getComplaintDueDate = (complaint: Complaint): string => {
+  function getComplaintDueDate(complaint: Complaint): string {
     const base = new Date(complaint.complaint_date)
     const due = new Date(base.getTime() + 56 * 24 * 60 * 60 * 1000)
     return due.toISOString()
@@ -398,7 +398,7 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
                 <p className="text-xs text-gray-500 uppercase">Total Redress</p>
                 <p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalRedress)}</p>
               </div>
-              <DollarSign className="h-8 w-8 text-red-500" />
+              <PoundSterling className="h-8 w-8 text-red-500" />
             </div>
           </CardContent>
         </Card>

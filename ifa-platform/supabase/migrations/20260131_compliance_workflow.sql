@@ -43,6 +43,23 @@ ALTER TABLE complaint_register
   ADD CONSTRAINT complaint_register_priority_check
   CHECK (priority IN ('low', 'medium', 'high', 'urgent'));
 
+-- Ensure assigned_to FK exists even if column was added earlier without it
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attnum = ANY (c.conkey) AND a.attrelid = c.conrelid
+    WHERE c.conrelid = 'complaint_register'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'assigned_to'
+  ) THEN
+    ALTER TABLE complaint_register
+      ADD CONSTRAINT complaint_register_assigned_to_fkey
+      FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_complaints_assigned_to ON complaint_register(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_complaints_priority ON complaint_register(priority);
 
@@ -55,6 +72,22 @@ ALTER TABLE breach_register
 ALTER TABLE breach_register
   ADD CONSTRAINT breach_register_priority_check
   CHECK (priority IN ('low', 'medium', 'high', 'urgent'));
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attnum = ANY (c.conkey) AND a.attrelid = c.conrelid
+    WHERE c.conrelid = 'breach_register'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'assigned_to'
+  ) THEN
+    ALTER TABLE breach_register
+      ADD CONSTRAINT breach_register_assigned_to_fkey
+      FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_breaches_assigned_to ON breach_register(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_breaches_priority ON breach_register(priority);
@@ -69,8 +102,54 @@ ALTER TABLE vulnerability_register
   ADD CONSTRAINT vulnerability_register_priority_check
   CHECK (priority IN ('low', 'medium', 'high', 'urgent'));
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attnum = ANY (c.conkey) AND a.attrelid = c.conrelid
+    WHERE c.conrelid = 'vulnerability_register'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'assigned_to'
+  ) THEN
+    ALTER TABLE vulnerability_register
+      ADD CONSTRAINT vulnerability_register_assigned_to_fkey
+      FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_vulnerability_assigned_to ON vulnerability_register(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_vulnerability_priority ON vulnerability_register(priority);
+
+-- Reviewer/adviser relationships used for workflow ownership
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attnum = ANY (c.conkey) AND a.attrelid = c.conrelid
+    WHERE c.conrelid = 'file_reviews'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'reviewer_id'
+  ) THEN
+    ALTER TABLE file_reviews
+      ADD CONSTRAINT file_reviews_reviewer_id_fkey
+      FOREIGN KEY (reviewer_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attnum = ANY (c.conkey) AND a.attrelid = c.conrelid
+    WHERE c.conrelid = 'file_reviews'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'adviser_id'
+  ) THEN
+    ALTER TABLE file_reviews
+      ADD CONSTRAINT file_reviews_adviser_id_fkey
+      FOREIGN KEY (adviser_id) REFERENCES profiles(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- ============================================
 -- 3) Compliance comments table

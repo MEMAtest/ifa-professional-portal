@@ -6,7 +6,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Building2, Upload, Save, Palette, FileText, AlertCircle } from 'lucide-react'
+import { Building2, Upload, Save, Palette, FileText, AlertCircle, Search, Loader2, CheckCircle2 } from 'lucide-react'
 import { useFirm, useFirmSeats } from '../hooks/useFirm'
 import { usePermissions } from '../hooks/usePermissions'
 import { Button } from '@/components/ui/Button'
@@ -18,6 +18,42 @@ export function FirmSettingsPanel() {
   const { maxSeats, currentSeats, seatsRemaining } = useFirmSeats()
   const { canEditFirm, isAdmin } = usePermissions()
   const { toast } = useToast()
+
+  // FCA Lookup state
+  const [fcaLookup, setFcaLookup] = useState<{
+    status: 'idle' | 'loading' | 'found' | 'not_found' | 'error'
+    data?: { frn: string; name: string; status: string; address?: { line1?: string; town?: string; postcode?: string } | null }
+  }>({ status: 'idle' })
+
+  const handleFCALookup = async () => {
+    const frn = formData.fcaNumber.trim()
+    if (!frn || !/^\d{4,10}$/.test(frn)) return
+    setFcaLookup({ status: 'loading' })
+    try {
+      const response = await fetch(`/api/firm/fca-lookup/${frn}`)
+      if (response.status === 404) { setFcaLookup({ status: 'not_found' }); return }
+      if (!response.ok) { setFcaLookup({ status: 'error' }); return }
+      const data = await response.json()
+      setFcaLookup({ status: 'found', data: data.firm })
+    } catch {
+      setFcaLookup({ status: 'error' })
+    }
+  }
+
+  const handleFCAAutoFill = () => {
+    if (!fcaLookup.data) return
+    setFormData((prev) => ({
+      ...prev,
+      name: fcaLookup.data!.name || prev.name,
+      address: {
+        ...prev.address,
+        line1: fcaLookup.data!.address?.line1 || prev.address.line1,
+        city: fcaLookup.data!.address?.town || prev.address.city,
+        postcode: fcaLookup.data!.address?.postcode || prev.address.postcode,
+      },
+    }))
+    toast({ title: 'Details auto-filled from FCA Register' })
+  }
 
   // Local form state
   const [formData, setFormData] = useState({
@@ -174,13 +210,57 @@ export function FirmSettingsPanel() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 FCA Number
               </label>
-              <input
-                type="text"
-                value={formData.fcaNumber}
-                onChange={(e) => setFormData({ ...formData, fcaNumber: e.target.value })}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., 123456"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.fcaNumber}
+                  onChange={(e) => {
+                    setFormData({ ...formData, fcaNumber: e.target.value })
+                    setFcaLookup({ status: 'idle' })
+                  }}
+                  className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., 123456"
+                />
+                <button
+                  type="button"
+                  onClick={handleFCALookup}
+                  disabled={fcaLookup.status === 'loading' || !formData.fcaNumber.trim()}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 disabled:opacity-50"
+                >
+                  {fcaLookup.status === 'loading' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                  Lookup
+                </button>
+              </div>
+              {fcaLookup.status === 'found' && fcaLookup.data && (
+                <div className="mt-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                      <p className="font-medium text-green-800">{fcaLookup.data.name}</p>
+                      <p className="text-green-700">
+                        Status: {fcaLookup.data.status}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleFCAAutoFill}
+                        className="mt-1 text-blue-600 hover:text-blue-800 underline text-xs font-medium"
+                      >
+                        Auto-fill from FCA Register?
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {fcaLookup.status === 'not_found' && (
+                <p className="mt-2 text-sm text-yellow-600">FRN not found on FCA Register</p>
+              )}
+              {fcaLookup.status === 'error' && (
+                <p className="mt-2 text-sm text-gray-500">FCA Register unavailable</p>
+              )}
             </div>
           </div>
 

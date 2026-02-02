@@ -43,26 +43,20 @@ export async function checkAuthentication(request: NextRequest) {
 }
 
 /**
- * Alternative: Check authentication using cookies (for SSR)
+ * Check authentication using cookies (for SSR)
+ * Uses the proper getAuthContext helper from apiAuth.
  */
 export async function checkAuthenticationFromCookies(request: NextRequest) {
-  const supabase = getSupabaseServiceClient()
   try {
-    // Get the session from cookies
-    const cookieHeader = request.headers.get('cookie');
-    
-    if (!cookieHeader) {
-      return { user: null, error: new Error('No cookies found') };
+    const authResult = await getAuthContext(request)
+
+    if (!authResult.success || !authResult.context) {
+      return { user: null, error: new Error(authResult.error || 'Not authenticated') }
     }
 
-    // For now, return a mock user since we can't access cookies directly
-    // In production, you'd parse the Supabase session cookie
-    return { 
-      user: { id: 'authenticated-user-id' }, 
-      error: null 
-    };
+    return { user: authResult.context.user, error: null }
   } catch (error) {
-    return { user: null, error };
+    return { user: null, error }
   }
 }
 

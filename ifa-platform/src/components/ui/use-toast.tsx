@@ -17,7 +17,7 @@ type Toast = ToastProps & {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
-const addToRemoveQueue = (toastId: string) => {
+const addToRemoveQueue = (toastId: string, duration = 5000) => {
   if (toastTimeouts.has(toastId)) {
     return;
   }
@@ -28,7 +28,7 @@ const addToRemoveQueue = (toastId: string) => {
       type: "REMOVE_TOAST",
       toastId: toastId,
     });
-  }, 5000);
+  }, duration);
 
   toastTimeouts.set(toastId, timeout);
 };
@@ -165,6 +165,8 @@ function toast({ ...props }: Toast2) {
     },
   });
 
+  addToRemoveQueue(id, props.duration ?? 5000);
+
   return {
     id: id,
     dismiss,
@@ -183,12 +185,19 @@ function useToast() {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+  }, []); // Subscribe once, unsubscribe on unmount
 
   return {
     ...state,
     toast,
-    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+    dismiss: (toastId?: string) => {
+      dispatch({ type: "DISMISS_TOAST", toastId })
+      if (toastId) {
+        addToRemoveQueue(toastId, 0)
+      } else {
+        memoryState.toasts.forEach((t) => addToRemoveQueue(t.id, 0))
+      }
+    },
   };
 }
 

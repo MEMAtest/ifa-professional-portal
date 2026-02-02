@@ -62,20 +62,24 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // This will refresh session if expired - required for Server Components.
-  // Never let transient Supabase/network issues take the whole app down.
+  // Refresh session if expired - required for Server Components.
+  // On auth failure, redirect to login for page routes.
   try {
-    await supabase.auth.getUser()
-  } catch (error) {
-    console.warn('[middleware] supabase.auth.getUser failed:', error)
-    return response
-  }
+    const { data: { user }, error } = await supabase.auth.getUser()
 
-  // Add any additional middleware logic here
-  // For example, protecting routes:
-  // if (!user && request.nextUrl.pathname.startsWith('/protected')) {
-  //   return NextResponse.redirect(new URL('/login', request.url))
-  // }
+    if (error || !user) {
+      // Auth failed — redirect to login
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('redirect', request.nextUrl.pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+  } catch (error) {
+    // Transient errors (network, Supabase outage) — redirect to login
+    // rather than silently serving a protected page.
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', request.nextUrl.pathname)
+    return NextResponse.redirect(loginUrl)
+  }
 
   return response
 }

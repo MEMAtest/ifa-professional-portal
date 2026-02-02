@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
         log.error('Documents fallback query error', fallbackError)
         throw new Error(`Database query failed: ${fallbackError.message}`)
       }
-      docs = fallbackDocs
+      docs = fallbackDocs as any
     }
 
     // SECURITY: Removed bypass logic that would retry without firm filter
@@ -255,8 +255,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert into documents table
-    const { data: newDocument, error } = await supabase
-      .from('documents')
+    const { data: newDocument, error } = await (supabase
+      .from('documents') as any)
       .insert({
         name: body.name,
         description: body.description || '',

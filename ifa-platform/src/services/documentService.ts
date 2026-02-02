@@ -2,6 +2,7 @@
 // FIXED: Uses the correct client-side Supabase helper and types.
 
 import { createClient } from '@/lib/supabase/client'
+import { log } from '@/lib/logging/structured'
 import type { Database, DbInsert, DbRow, DbUpdate } from '@/types/db'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -99,7 +100,7 @@ export class DocumentService {
       const { data: { user }, error } = await this.supabase.auth.getUser()
       
       if (error) {
-        console.error('Auth error:', error)
+        log.error('Auth error', error)
         throw new Error(`Authentication error: ${error.message}`)
       }
 
@@ -144,7 +145,7 @@ export class DocumentService {
         userId: user.id 
       }
     } catch (error) {
-      console.error('getCurrentUserContext error:', error)
+      log.error('getCurrentUserContext error', error)
       throw error
     }
   }
@@ -152,9 +153,9 @@ export class DocumentService {
   // Get documents with proper error handling
   async getDocuments(): Promise<Document[]> {
     try {
-      console.log('Getting documents...')
+      log.debug('Getting documents...')
       const { user, firmId } = await this.getCurrentUserContext()
-      console.log('User context:', { userId: user.id, firmId })
+      log.debug('User context', { userId: user.id, firmId })
 
       const { data, error } = await this.supabase
         .from('documents')
@@ -173,15 +174,15 @@ export class DocumentService {
         .limit(50)
 
       if (error) {
-        console.error('Supabase query error:', error)
+        log.error('Supabase query error', error)
         throw new Error(`Database query failed: ${error.message}`)
       }
 
-      console.log(`Successfully fetched ${data?.length || 0} documents`)
+      log.debug(`Successfully fetched ${data?.length || 0} documents`)
       // Cast as any first to bypass the type checking, then to Document[]
       return (data as any) || []
     } catch (error) {
-      console.error('Get documents error:', error)
+      log.error('Get documents error', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
       throw new Error(`Failed to fetch documents: ${errorMessage}`)
     }
@@ -201,7 +202,7 @@ export class DocumentService {
 
       return (data || []) as DocumentCategory[]
     } catch (error) {
-      console.error('Get categories error:', error)
+      log.error('Get categories error', error)
       throw error
     }
   }
@@ -209,14 +210,14 @@ export class DocumentService {
   // Upload document with robust error handling
   async uploadDocument(uploadData: DocumentUpload): Promise<Document> {
     try {
-      console.log('Starting document upload...')
+      log.info('Starting document upload...')
       const { user, firmId } = await this.getCurrentUserContext()
       
       // 1. Upload file to Supabase storage
       const fileName = `${Date.now()}-${uploadData.file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
       const filePath = `${firmId}/${fileName}`
 
-      console.log('Uploading file to storage:', filePath)
+      log.debug('Uploading file to storage', { filePath })
       const { data: uploadResult, error: uploadError } = await this.supabase.storage
         .from('documents')
         .upload(filePath, uploadData.file, {
@@ -225,11 +226,11 @@ export class DocumentService {
         })
 
       if (uploadError) {
-        console.error('Storage upload error:', uploadError)
+        log.error('Storage upload error', uploadError)
         throw new Error(`File upload failed: ${uploadError.message}`)
       }
 
-      console.log('File uploaded successfully:', uploadResult.path)
+      log.info('File uploaded successfully', { path: uploadResult.path })
 
       // 2. Create document record - matching database schema exactly
       const documentData: DocumentInsert = {
@@ -253,7 +254,7 @@ export class DocumentService {
         metadata: {}
       }
 
-      console.log('Creating document record:', documentData)
+      log.debug('Creating document record', { documentData })
       const { data: document, error: dbError } = await this.supabase
         .from('documents')
         .insert(documentData)
@@ -269,7 +270,7 @@ export class DocumentService {
         .single()
 
       if (dbError) {
-        console.error('Database insert error:', dbError)
+        log.error('Database insert error', dbError)
         // Clean up uploaded file if database insert fails
         await this.supabase.storage
           .from('documents')
@@ -278,7 +279,7 @@ export class DocumentService {
         throw new Error(`Database insert failed: ${dbError.message}`)
       }
 
-      console.log('Document created successfully:', document.id)
+      log.info('Document created successfully', { documentId: document.id })
 
       // 3. Log audit trail (don't fail if this fails)
       try {
@@ -288,12 +289,12 @@ export class DocumentService {
           client_name: uploadData.clientName
         })
       } catch (auditError) {
-        console.warn('Audit log failed:', auditError)
+        log.warn('Audit log failed', { error: auditError })
       }
 
       return document as any
     } catch (error) {
-      console.error('Upload document error:', error)
+      log.error('Upload document error', error)
       throw error
     }
   }
@@ -328,7 +329,7 @@ export class DocumentService {
 
       return data as any
     } catch (error) {
-      console.error('Get document error:', error)
+      log.error('Get document error', error)
       throw error
     }
   }
@@ -370,12 +371,12 @@ export class DocumentService {
       try {
         await this.logAuditEvent(id, 'updated', updateData)
       } catch (auditError) {
-        console.warn('Audit log failed:', auditError)
+        log.warn('Audit log failed', { error: auditError })
       }
 
       return data as any
     } catch (error) {
-      console.error('Update document error:', error)
+      log.error('Update document error', error)
       throw error
     }
   }
@@ -404,10 +405,10 @@ export class DocumentService {
       try {
         await this.logAuditEvent(id, 'deleted', {})
       } catch (auditError) {
-        console.warn('Audit log failed:', auditError)
+        log.warn('Audit log failed', { error: auditError })
       }
     } catch (error) {
-      console.error('Delete document error:', error)
+      log.error('Delete document error', error)
       throw error
     }
   }
@@ -425,7 +426,7 @@ export class DocumentService {
 
       return data.signedUrl
     } catch (error) {
-      console.error('Get download URL error:', error)
+      log.error('Get download URL error', error)
       throw error
     }
   }
@@ -452,7 +453,7 @@ export class DocumentService {
 
       return (data || []) as SignatureRequest[]
     } catch (error) {
-      console.error('Get signature requests error:', error)
+      log.error('Get signature requests error', error)
       throw error
     }
   }
@@ -495,7 +496,7 @@ export class DocumentService {
 
       return data as SignatureRequest
     } catch (error) {
-      console.error('Create signature request error:', error)
+      log.error('Create signature request error', error)
       throw error
     }
   }
@@ -523,7 +524,7 @@ export class DocumentService {
         .eq('firm_id', firmId)
 
       if (sigsError) {
-        console.warn('Failed to fetch signature analytics:', sigsError)
+        log.warn('Failed to fetch signature analytics', { error: sigsError })
       }
 
       const currentMonth = new Date()
@@ -566,7 +567,7 @@ export class DocumentService {
           created_at: item.created_at!
         }))
       } catch (activityError) {
-        console.warn('Failed to fetch recent activity:', activityError)
+        log.warn('Failed to fetch recent activity', { error: activityError })
       }
 
       return {
@@ -579,7 +580,7 @@ export class DocumentService {
         recentActivity
       }
     } catch (error) {
-      console.error('Get analytics error:', error)
+      log.error('Get analytics error', error)
       throw error
     }
   }
@@ -641,7 +642,7 @@ export class DocumentService {
 
       return (data as any) || []
     } catch (error) {
-      console.error('Search documents error:', error)
+      log.error('Search documents error', error)
       throw error
     }
   }
@@ -667,7 +668,7 @@ export class DocumentService {
         .insert(auditData)
     } catch (error) {
       // Don't throw on audit log failures, just log them
-      console.error('Audit log error:', error)
+      log.error('Audit log error', error)
     }
   }
 }
