@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic';
 
@@ -30,9 +31,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       log.error('Cash flow scenarios error:', error);
       return NextResponse.json({ 
-        error: error.message,
-        hint: error.hint,
-        details: error.details
+        error: 'Failed to fetch scenarios'
       }, { status: 400 });
     }
 
@@ -45,7 +44,7 @@ export async function GET(request: NextRequest) {
     log.error('Cash flow route error:', error);
     return NextResponse.json({ 
       error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: ''
     }, { status: 500 });
   }
 }
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     
     if (!body.clientId) {
       return NextResponse.json({ 
@@ -80,7 +79,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       log.error('Create scenario error:', error);
       return NextResponse.json({ 
-        error: error.message 
+        error: 'Failed to create scenario'
       }, { status: 400 });
     }
 

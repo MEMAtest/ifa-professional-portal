@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { TaskPriority, TaskSourceType } from '@/modules/tasks/types'
+import { log } from '@/lib/logging/structured'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,12 +42,16 @@ async function safeQuery<T>(promise: Promise<{ data: T[] | null; error: any }>, 
   try {
     const { data, error } = await promise
     if (error) {
-      console.warn(`[Compliance Workflow] ${label} query failed:`, error.message || error)
+      log.warn(`[Compliance Workflow] ${label} query failed`, {
+        error: error?.message || String(error)
+      })
       return []
     }
     return data || []
   } catch (error) {
-    console.warn(`[Compliance Workflow] ${label} query error:`, error)
+    log.warn(`[Compliance Workflow] ${label} query error`, {
+      error: error instanceof Error ? error.message : String(error)
+    })
     return []
   }
 }
@@ -329,7 +334,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ items: enrichedItems })
   } catch (error) {
-    console.error('[Compliance Workflow] Unexpected error:', error)
+    log.error('[Compliance Workflow] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

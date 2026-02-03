@@ -6,6 +6,7 @@ import type Stripe from 'stripe'
 import { getStripeClient } from '@/lib/billing/stripeClient'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billing/firmBilling'
+import { log } from '@/lib/logging/structured'
 
 function parseStripeDate(value?: number | null): string | null {
   if (!value) return null
@@ -22,7 +23,7 @@ async function findFirmByCustomerId(customerId: string) {
     .contains('settings', { billing: { stripeCustomerId: customerId } })
 
   if (error) {
-    console.error('[Stripe Webhook] Failed to lookup firm:', error)
+    log.error('[Stripe Webhook] Failed to lookup firm', error)
     return null
   }
 
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
   } catch (error) {
-    console.error('[Stripe Webhook] Signature verification failed:', error)
+    log.error('[Stripe Webhook] Signature verification failed', error)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('[Stripe Webhook] Handler error:', error)
+    log.error('[Stripe Webhook] Handler error', error)
     return NextResponse.json({ error: 'Webhook handler error' }, { status: 500 })
   }
 }

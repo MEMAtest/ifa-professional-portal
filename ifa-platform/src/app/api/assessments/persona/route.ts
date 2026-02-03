@@ -10,6 +10,7 @@ import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { isUUID } from '@/lib/utils'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -132,7 +133,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       log.error('Persona database fetch error', error, { clientId })
-      return NextResponse.json({ error: 'Failed to fetch Persona data', message: error.message, success: false }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch Persona data', success: false }, { status: 500 })
     }
 
     const { count: versionCount } = await supabase
@@ -151,7 +152,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     log.error('Persona GET route error', error)
     return NextResponse.json(
-      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error', success: false },
+      { error: 'Internal server error', message: '', success: false },
       { status: 500 }
     )
   }
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const {
       clientId,
       personaLevel,
@@ -225,7 +226,7 @@ export async function POST(request: NextRequest) {
 
     if (versionError && versionError.code !== 'PGRST116') {
       return NextResponse.json(
-        { error: 'Failed to fetch version information', message: versionError.message, success: false },
+        { error: 'Failed to fetch version information', success: false },
         { status: 500 }
       )
     }
@@ -275,7 +276,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       log.error('Persona create error', insertError, { clientId })
-      return NextResponse.json({ error: 'Failed to create Persona assessment', message: insertError.message, success: false }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create Persona assessment', success: false }, { status: 500 })
     }
 
     await writeAssessmentProgress({
@@ -301,9 +302,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error('Persona POST route error', error)
     return NextResponse.json(
-      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error', success: false },
+      { error: 'Internal server error', message: '', success: false },
       { status: 500 }
     )
   }
 }
-

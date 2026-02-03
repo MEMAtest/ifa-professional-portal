@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
       if (metaError && metaError.code !== 'PGRST116') {
         return NextResponse.json(
-          { success: false, error: metaError.message || 'Failed to fetch suitability assessment' },
+          { success: false, error: 'Failed to fetch suitability assessment' },
           { status: 500 }
         )
       }
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 
       if (error && error.code !== 'PGRST116') {
         return NextResponse.json(
-          { success: false, error: error.message || 'Failed to fetch suitability assessment' },
+          { success: false, error: 'Failed to fetch suitability assessment' },
           { status: 500 }
         )
       }
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
 
     if (completedError && completedError.code !== 'PGRST116') {
       return NextResponse.json(
-        { success: false, error: completedError.message || 'Failed to fetch suitability assessment' },
+        { success: false, error: 'Failed to fetch suitability assessment' },
         { status: 500 }
       )
     }
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
 
     if (currentError && currentError.code !== 'PGRST116') {
       return NextResponse.json(
-        { success: false, error: currentError.message || 'Failed to fetch suitability assessment' },
+        { success: false, error: 'Failed to fetch suitability assessment' },
         { status: 500 }
       )
     }
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

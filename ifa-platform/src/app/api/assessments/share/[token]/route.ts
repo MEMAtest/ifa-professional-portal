@@ -7,6 +7,7 @@ import { createAuditLogger, getClientIP, getUserAgent } from '@/lib/audit'
 import { notifyAssessmentCompleted } from '@/lib/notifications/notificationService'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -176,7 +177,7 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { responses, scores, summary } = body
 
     if (!responses) {
@@ -355,7 +356,7 @@ export async function PATCH(
     // Cast to any: assessment_shares table not yet in generated Supabase types
     const supabase: any = getSupabaseServiceClient()
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { status } = body
 
     if (!['started'].includes(status)) {

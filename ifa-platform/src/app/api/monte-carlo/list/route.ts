@@ -88,14 +88,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error: unknown) {
     log.error('Monte Carlo list API error', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : undefined;
-
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
+        error: 'Failed to list Monte Carlo scenarios',
         timestamp: new Date().toISOString()
       },
       { status: 500 }

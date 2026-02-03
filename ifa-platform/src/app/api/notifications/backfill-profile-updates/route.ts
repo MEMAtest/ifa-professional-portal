@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 type ClientRow = {
   id: string
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     const userId = authResult.context.userId
     const userEmail = authResult.context.email
 
-    const payload = await request.json().catch(() => ({}))
+    const payload = await parseRequestBody(request, undefined, { allowEmpty: true })
     const requestedDays = Number(payload?.days ?? 2)
     const days = Number.isFinite(requestedDays)
       ? Math.min(Math.max(requestedDays, 1), 30)
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       logger.error('Backfill failed to fetch profile', profileError)
-      return NextResponse.json({ success: false, error: profileError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: 'Failed to fetch profile' }, { status: 500 })
     }
 
     const firmId = profile?.firm_id ?? null
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     if (clientsError) {
       logger.error('Backfill failed to fetch clients', clientsError)
-      return NextResponse.json({ success: false, error: clientsError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: 'Failed to fetch clients' }, { status: 500 })
     }
 
     if (!clients || clients.length === 0) {
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
         .insert(notificationsToInsert)
       if (insertError) {
         logger.error('Backfill failed to insert notifications', insertError)
-        return NextResponse.json({ success: false, error: insertError.message }, { status: 500 })
+        return NextResponse.json({ success: false, error: 'Failed to insert notifications' }, { status: 500 })
       }
     }
 
@@ -171,7 +172,7 @@ export async function POST(request: NextRequest) {
         .insert(activitiesToInsert)
       if (activityError) {
         logger.error('Backfill failed to insert activity logs', activityError)
-        return NextResponse.json({ success: false, error: activityError.message }, { status: 500 })
+        return NextResponse.json({ success: false, error: 'Failed to insert activity logs' }, { status: 500 })
       }
     }
 
@@ -187,7 +188,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: ''
       },
       { status: 500 }
     )

@@ -5,15 +5,21 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { log } from '@/lib/logging/structured'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { extractText } from '@/lib/documents/textExtractor'
 import { analyzeDocument, readPageImages } from '@/lib/documents/aiAnalyzer'
+import { parseRequestBody } from '@/app/api/utils'
 
 const MAX_BATCH_SIZE = 50
 const CONCURRENCY = 3
 const TIMEOUT_MS = 55_000 // Stop before Vercel's 60s limit
+
+const requestSchema = z.object({
+  documentIds: z.array(z.string().min(1)).min(1).max(MAX_BATCH_SIZE)
+})
 
 interface ExtractionResult {
   documentId: string
@@ -96,15 +102,16 @@ async function processDocument(
   try {
     extraction = await extractText(buffer, mimeType, fileName)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Text extraction failed'
+    const rawMsg = err instanceof Error ? err.message : 'Text extraction failed'
+    const publicMsg = 'Text extraction failed'
     await supabase
       .from('documents')
       .update({
         status: 'failed',
-        metadata: { ...((doc.metadata as any) || {}), extraction_error: msg },
+        metadata: { ...((doc.metadata as any) || {}), extraction_error: rawMsg },
       } as any)
       .eq('id', documentId)
-    return { documentId, status: 'failed', error: msg }
+    return { documentId, status: 'failed', error: publicMsg }
   }
 
   // 4b. Visual reading fallback for low-quality scans
@@ -168,6 +175,7 @@ async function processDocument(
   } catch (aiErr) {
     // Text extraction succeeded but AI failed — store text, mark as extracted
     const aiMsg = aiErr instanceof Error ? aiErr.message : 'AI analysis failed'
+    const publicMsg = 'AI analysis failed'
     log.error('AI analysis failed for document', { documentId, error: aiMsg })
 
     await supabase
@@ -181,7 +189,7 @@ async function processDocument(
       } as any)
       .eq('id', documentId)
 
-    return { documentId, status: 'extracted', error: aiMsg }
+    return { documentId, status: 'extracted', error: publicMsg }
   }
 }
 
@@ -195,19 +203,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request, requestSchema)
     const documentIds: string[] = body.documentIds
-
-    if (!Array.isArray(documentIds) || documentIds.length === 0) {
-      return NextResponse.json({ error: 'documentIds array is required' }, { status: 400 })
-    }
-
-    if (documentIds.length > MAX_BATCH_SIZE) {
-      return NextResponse.json(
-        { error: `Maximum ${MAX_BATCH_SIZE} documents per batch` },
-        { status: 400 }
-      )
-    }
 
     // Validate document IDs are strings (UUIDs expected)
     const validIds = documentIds.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 100)
@@ -244,7 +241,7 @@ export async function POST(request: NextRequest) {
           results.push({
             documentId: failedId,
             status: 'failed',
-            error: result.reason?.message || 'Unknown error',
+            error: 'Extraction failed',
           })
         }
       }
@@ -272,7 +269,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error('Document extraction API error', error)
     return NextResponse.json(
-      { error: 'Failed to process documents', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to process documents' },
       { status: 500 }
     )
   }

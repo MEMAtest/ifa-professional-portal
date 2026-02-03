@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function GET(request: NextRequest) {
   // Verify authentication
@@ -30,8 +31,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     // Get query parameters
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')))
     const category_id = searchParams.get('category_id')
     const client_id = searchParams.get('client_id')
     const status = searchParams.get('status')
@@ -207,7 +208,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to fetch documents',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
 
   try {
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const firmId = auth.context?.firmId
     if (!firmId) {
       return NextResponse.json(
@@ -283,7 +284,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       log.error('Document creation error', error)
-      throw new Error(`Failed to create document: ${error.message}`)
+      throw new Error('Failed to create document')
     }
 
     return NextResponse.json({
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to create document',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

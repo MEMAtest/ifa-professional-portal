@@ -16,11 +16,13 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { hashToken } from '@/lib/security/crypto'
 import type { AcceptInviteInput } from '@/modules/firm/types/user.types'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Saga state for tracking completed steps and enabling rollback
 interface SagaState {
@@ -29,6 +31,13 @@ interface SagaState {
   invitationAccepted?: boolean
   seatAllocated?: boolean
 }
+
+const requestSchema = z.object({
+  token: z.string().min(1),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  password: z.string().min(1)
+})
 
 // Rollback function to undo completed steps on failure
 async function rollbackSaga(
@@ -100,7 +109,7 @@ export async function POST(request: NextRequest) {
   let invitationId: string | undefined
 
   try {
-    const body: AcceptInviteInput = await request.json()
+    const body: AcceptInviteInput = await parseRequestBody(request, requestSchema)
     const { token, firstName, lastName, password } = body
 
     // ========================================
@@ -270,7 +279,7 @@ export async function POST(request: NextRequest) {
       }
     } else if (acceptResult && !acceptResult.success) {
       return NextResponse.json(
-        { error: acceptResult.message || 'Invitation validation failed' },
+        { error: 'Invitation validation failed' },
         { status: 400 }
       )
     }
@@ -303,7 +312,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: 'Failed to create account: ' + createError.message },
+        { error: 'Failed to create account' },
         { status: 500 }
       )
     }
@@ -431,7 +440,7 @@ export async function POST(request: NextRequest) {
     if (Object.keys(sagaState).length > 0) {
       try {
         const supabaseAdmin: any = getSupabaseServiceClient()
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        const errorMessage = ''
         await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Unexpected error: ${errorMessage}`)
       } catch (rollbackErr) {
         log.error('[Accept Invite] Rollback failed', rollbackErr)

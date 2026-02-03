@@ -7,10 +7,28 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { log } from '@/lib/logging/structured';
 import { notifyReviewDue, notifyReviewOverdue, notifyReviewCompleted } from '@/lib/notifications/notificationService';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
+
+const reviewSchema = z.object({
+  clientId: z.string().uuid(),
+  reviewType: z.string().min(1),
+  dueDate: z.string().min(1),
+  status: z.enum(['scheduled', 'in_progress', 'completed', 'overdue']).optional(),
+  reviewSummary: z.string().optional(),
+  recommendations: z.unknown().optional(),
+  nextReviewDate: z.string().optional()
+})
+
+const reviewUpdateSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(['scheduled', 'in_progress', 'completed', 'overdue']).optional(),
+  completed_date: z.string().optional()
+}).passthrough()
 
 // Initialize Supabase client
 async function getSupabaseClient() {
@@ -64,7 +82,7 @@ export async function GET(request: NextRequest) {
     const updatedData = await Promise.all(
       (data || []).map(async (review: any) => {
         if (
-          review.status === 'pending' &&
+          review.status === 'scheduled' &&
           review.due_date &&
           new Date(review.due_date) < now
         ) {
@@ -131,7 +149,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json();
+    const body = await parseRequestBody(request, reviewSchema);
     const { 
       clientId, 
       reviewType, 
@@ -167,11 +185,7 @@ export async function POST(request: NextRequest) {
     }
 
     const allowedStatuses = new Set(['scheduled', 'in_progress', 'completed', 'overdue'])
-    const normalizedStatus = allowedStatuses.has(status)
-      ? status
-      : status === 'pending'
-        ? 'scheduled'
-        : 'scheduled'
+    const normalizedStatus = status && allowedStatuses.has(status) ? status : 'scheduled'
 
     // Create the review
     const { data, error } = await (supabase
@@ -191,7 +205,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      log.error('Error creating review', error);
+      log.error('Error creating review', { error: error.message });
       return NextResponse.json(
         { error: 'Failed to create review' },
         { status: 500 }
@@ -259,7 +273,7 @@ export async function PATCH(request: NextRequest) {
     const firmIdResult = requireFirmId(authResult.context)
     if (firmIdResult instanceof NextResponse) return firmIdResult
 
-    const body = await request.json();
+    const body = await parseRequestBody(request, reviewUpdateSchema);
     const { id, ...updates } = body;
 
     if (!id) {

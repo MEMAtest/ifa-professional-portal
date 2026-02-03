@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRequestLogger } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -128,7 +129,7 @@ export async function POST(
   try {
     const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { assessmentType, assessmentId, action, changes, metadata } = body;
 
     // Validate required fields

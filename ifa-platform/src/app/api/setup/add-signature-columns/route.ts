@@ -4,8 +4,9 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,22 +14,13 @@ export async function POST(request: NextRequest) {
   log.info('Adding missing columns to signature_requests table')
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseServiceKey) {
-      return NextResponse.json({
-        success: false,
-        error: 'Service role key not configured'
-      }, { status: 500 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+    if (!isPlatformAdminUser(auth.context)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     // SQL to add missing columns
     const alterTableSQL = `
@@ -93,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_signature_requests_status ON signature_requests(s
     log.error('Setup error', error)
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to generate SQL'
     }, { status: 500 })
   }
 }

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import type { SearchResult, SearchResponse } from '@/types/search'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 // Type definitions for database query results
 interface ClientRow {
@@ -103,9 +104,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Search error:', error)
+    log.error('Search error:', error)
     return NextResponse.json(
-      { error: 'Search failed', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Search failed' },
       { status: 500 }
     )
   }
@@ -125,7 +126,7 @@ async function searchClients(
     .limit(100)
 
   if (fetchError) {
-    console.error('Client fetch error:', fetchError)
+    log.error('Client fetch error:', fetchError)
     return []
   }
 
@@ -201,7 +202,7 @@ async function searchDocuments(
     .limit(limit)
 
   if (error) {
-    console.error('Document search error:', error)
+    log.error('Document search error:', error)
     return []
   }
 
@@ -249,7 +250,7 @@ async function searchAssessments(
     .limit(100)
 
   if (suitabilityError) {
-    console.error('Suitability assessment search error:', suitabilityError)
+    log.error('Suitability assessment search error:', suitabilityError)
   }
 
   // Filter suitability assessments by client name matching
@@ -302,7 +303,7 @@ async function searchAssessments(
     .limit(100)
 
   if (atrError) {
-    console.error('ATR assessment search error:', atrError)
+    log.error('ATR assessment search error:', atrError)
   }
 
   // Filter ATR assessments by client name matching

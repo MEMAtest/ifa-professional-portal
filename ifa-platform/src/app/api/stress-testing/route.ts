@@ -4,13 +4,15 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/auth/apiAuth';
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
 import { createRequestLogger } from '@/lib/logging/structured';
 import { StressTestingEngine } from '@/services/StressTestingEngine';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { notifyStressTestCompleted } from '@/lib/notifications/notificationService';
 import { normalizeIsoCountryCode } from '@/lib/isoCountries';
+import { requireClientAccess } from '@/lib/auth/requireClientAccess';
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -31,12 +33,16 @@ const normalizeScenarioForEngine = (scenario: Record<string, any>) => {
  */
 export async function GET(request: NextRequest) {
   const auth = await getAuthContext(request);
-  if (!auth.success) {
-    return auth.response!;
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const firmResult = requireFirmId(auth.context)
+  if (!('firmId' in firmResult)) {
+    return firmResult
   }
 
   const supabase = getSupabaseServiceClient();
-  const supabaseService = getSupabaseServiceClient();
   const logger = createRequestLogger(request);
 
   try {
@@ -61,6 +67,14 @@ export async function GET(request: NextRequest) {
     if (action === 'results' && clientId) {
       logger.info('GET /api/stress-testing - Fetching results for client', { clientId });
 
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) return access.response
+
       // Get client's cash flow scenarios for context
       const { data: cashFlowScenarios, error: cfError } = await supabase
         .from('cash_flow_scenarios')
@@ -72,8 +86,7 @@ export async function GET(request: NextRequest) {
         logger.error('Error fetching cash flow scenarios', cfError);
         return NextResponse.json({
           success: false,
-          error: 'Failed to fetch cash flow data',
-          details: cfError.message
+          error: 'Failed to fetch cash flow data'
         }, { status: 500 });
       }
 
@@ -88,8 +101,7 @@ export async function GET(request: NextRequest) {
         logger.error('Error fetching client', clientError);
         return NextResponse.json({
           success: false,
-          error: 'Client not found',
-          details: clientError.message
+          error: 'Client not found'
         }, { status: 404 });
       }
 
@@ -112,8 +124,7 @@ export async function GET(request: NextRequest) {
     logger.error('GET /api/stress-testing error', error);
     return NextResponse.json({
       success: false,
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
@@ -124,8 +135,13 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   const auth = await getAuthContext(request);
-  if (!auth.success) {
-    return auth.response!;
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const firmResult = requireFirmId(auth.context)
+  if (!('firmId' in firmResult)) {
+    return firmResult
   }
 
   const supabase = getSupabaseServiceClient();
@@ -134,7 +150,7 @@ export async function POST(request: NextRequest) {
   const authContext = auth.context;
 
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { clientId, scenarioIds, cashFlowScenarioId, customParameters, severity, duration } = body;
 
     if (!clientId) {
@@ -150,6 +166,14 @@ export async function POST(request: NextRequest) {
         error: 'At least one stress scenario must be selected'
       }, { status: 400 });
     }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) return access.response
 
     logger.info('POST /api/stress-testing - Running stress tests', {
       clientId,
@@ -404,8 +428,7 @@ export async function POST(request: NextRequest) {
     logger.error('POST /api/stress-testing error', error);
     return NextResponse.json({
       success: false,
-      error: 'Failed to run stress tests',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to run stress tests'
     }, { status: 500 });
   }
 }

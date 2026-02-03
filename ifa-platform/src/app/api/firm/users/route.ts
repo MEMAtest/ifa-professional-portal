@@ -10,6 +10,7 @@ import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { rateLimit } from '@/lib/security/rateLimit'
 import type { FirmUser } from '@/modules/firm/types/user.types'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   // Rate limit: 100 requests per minute per IP
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('[Users API] Error fetching users:', error)
+      log.error('[Users API] Error fetching users:', error)
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(users)
   } catch (error) {
-    console.error('[Users API] Unexpected error:', error)
+    log.error('[Users API] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

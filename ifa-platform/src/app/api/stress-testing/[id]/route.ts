@@ -60,8 +60,7 @@ export async function GET(
     logger.error('GET /api/stress-testing/[id] error', error);
     return NextResponse.json({
       success: false,
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }

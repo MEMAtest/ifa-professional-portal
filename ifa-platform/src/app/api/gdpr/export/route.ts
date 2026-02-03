@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 export const dynamic = 'force-dynamic'
 
@@ -332,7 +333,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[GDPR Export] Error:', error)
+    log.error('[GDPR Export] Error:', error)
     return NextResponse.json(
       { error: 'Internal server error', message: 'Failed to export data' },
       { status: 500 }

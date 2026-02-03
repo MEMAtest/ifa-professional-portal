@@ -24,7 +24,7 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   const { user, loading } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
-  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role })
+  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role, isPlatformAdmin: user?.isPlatformAdmin })
   const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
   const shouldRedirectToAdmin = Boolean(user && isPlatformAdmin && !isAdminRoute)
 

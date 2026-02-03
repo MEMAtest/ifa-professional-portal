@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'
@@ -14,6 +15,13 @@ import { generateTokenPair } from '@/lib/security/crypto'
 
 import type { UserInvitation, InviteUserInput } from '@/modules/firm/types/user.types'
 import type { Json } from '@/types/db'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
+
+const inviteSchema = z.object({
+  email: z.string().min(1),
+  role: z.enum(['advisor', 'compliance', 'admin'])
+})
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,7 +69,7 @@ export async function GET(request: NextRequest) {
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
         return NextResponse.json([])
       }
-      console.error('[Invite API] Error fetching invitations:', error)
+      log.error('[Invite API] Error fetching invitations:', error)
       return NextResponse.json({ error: 'Failed to fetch invitations' }, { status: 500 })
     }
 
@@ -90,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[Invite API] Unexpected error:', error)
+    log.error('[Invite API] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -122,7 +130,7 @@ export async function POST(request: NextRequest) {
       return firmIdResult
     }
 
-    const body: InviteUserInput = await request.json()
+    const body: InviteUserInput = await parseRequestBody(request, inviteSchema)
 
     // Validate email with RFC 5322 compliant regex
     // This catches most common email format issues while being permissive enough for real-world use
@@ -166,7 +174,7 @@ export async function POST(request: NextRequest) {
       })
 
       if (listError) {
-        console.error('[Invite API] Error checking existing users:', listError)
+        log.error('[Invite API] Error checking existing users:', listError)
         // Don't fail silently - return error to prevent duplicate invites
         return NextResponse.json({ error: 'Failed to validate email' }, { status: 500 })
       }
@@ -188,7 +196,7 @@ export async function POST(request: NextRequest) {
 
       // Safety limit to prevent infinite loops (100,000 users max)
       if (page > 100) {
-        console.warn('[Invite API] Hit pagination safety limit')
+        log.warn('[Invite API] Hit pagination safety limit')
         break
       }
     }
@@ -225,7 +233,9 @@ export async function POST(request: NextRequest) {
       }) as { data: CreateInvitationResult | null; error: any }
 
     if (rpcError) {
-      console.warn('[Invite API] Atomic invitation creation failed, using fallback:', rpcError)
+      log.warn('[Invite API] Atomic invitation creation failed, using fallback', {
+        error: rpcError?.message || String(rpcError)
+      })
 
       // Fallback to manual checks (less safe but functional)
       const { data: firm } = await supabase
@@ -297,7 +307,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error || !manualInvitation) {
-        console.error('[Invite API] Error creating invitation:', error)
+        log.error('[Invite API] Error creating invitation:', error)
         return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
       }
 
@@ -309,13 +319,19 @@ export async function POST(request: NextRequest) {
         'INVITATION_EXISTS': 400,
         'FIRM_NOT_FOUND': 404,
       }
+      const errorMessageMap: Record<string, string> = {
+        'SEAT_LIMIT_REACHED': 'Seat limit reached',
+        'INVITATION_EXISTS': 'Invitation already pending for this email',
+        'FIRM_NOT_FOUND': 'Firm not found'
+      }
       const errorCode = createResult.error || 'UNKNOWN'
       const statusCode = errorMap[errorCode] || 400
+      const publicMessage = errorMessageMap[errorCode] || 'Failed to create invitation'
 
       return NextResponse.json(
         {
-          error: errorCode === 'SEAT_LIMIT_REACHED' ? 'Seat limit reached' : createResult.message,
-          message: createResult.message,
+          error: publicMessage,
+          message: publicMessage,
           currentSeats: createResult.currentSeats,
           maxSeats: createResult.maxSeats,
         },
@@ -330,14 +346,14 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (fetchError || !createdInvitation) {
-        console.error('[Invite API] Error fetching created invitation:', fetchError)
+        log.error('[Invite API] Error fetching created invitation:', fetchError)
         return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
       }
 
       invitation = createdInvitation
     } else {
       // Unexpected response from RPC - should not happen
-      console.error('[Invite API] Unexpected RPC response:', createResult)
+      log.error('[Invite API] Unexpected RPC response:', createResult)
       return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
     }
 
@@ -391,15 +407,17 @@ export async function POST(request: NextRequest) {
 
       if (emailResponse.ok) {
         emailSent = true
-        console.log('[Invite API] Invitation email sent successfully')
+        log.info('[Invite API] Invitation email sent successfully')
       } else {
         const emailResult = await emailResponse.json().catch(() => ({}))
         emailError = emailResult.error || 'Failed to send email'
-        console.warn('[Invite API] Failed to send invitation email:', emailError)
+        log.warn('[Invite API] Failed to send invitation email', { error: emailError })
       }
     } catch (emailErr) {
       emailError = emailErr instanceof Error ? emailErr.message : 'Email service unavailable'
-      console.warn('[Invite API] Email sending failed:', emailErr)
+      log.warn('[Invite API] Email sending failed', {
+        error: emailErr instanceof Error ? emailErr.message : String(emailErr)
+      })
     }
 
     // ========================================
@@ -426,7 +444,9 @@ export async function POST(request: NextRequest) {
       })
 
     if (activityError) {
-      console.warn('[Invite API] Failed to log invitation activity:', activityError)
+      log.warn('[Invite API] Failed to log invitation activity', {
+        error: activityError instanceof Error ? activityError.message : String(activityError)
+      })
     }
 
     // ========================================
@@ -441,7 +461,7 @@ export async function POST(request: NextRequest) {
         .delete()
         .eq('id', invitation.id)
 
-      console.error('[Invite API] Email failed - invitation deleted for security')
+      log.error('[Invite API] Email failed - invitation deleted for security')
 
       return NextResponse.json(
         {
@@ -470,7 +490,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, { status: 201 })
   } catch (error) {
-    console.error('[Invite API] Unexpected error:', error)
+    log.error('[Invite API] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

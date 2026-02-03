@@ -1,18 +1,35 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import type { DbInsert } from '@/types/db'
+import type { ScenarioType } from '@/types/cashflow'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { clientService } from '@/services/ClientService'
 import { AssessmentService } from '@/services/AssessmentService'
 import { CashFlowDataService } from '@/services/CashFlowDataService'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
+
+const requestSchema = z.object({
+  clientId: z.string().min(1),
+  scenarioType: z.enum([
+    'base',
+    'optimistic',
+    'pessimistic',
+    'stress',
+    'early_retirement',
+    'high_inflation',
+    'capacity_for_loss'
+  ]).optional()
+})
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
-    const { clientId, scenarioType = 'base' } = body
+    const body = await parseRequestBody(req, requestSchema)
+    const clientId = body.clientId
+    const scenarioType: ScenarioType = body.scenarioType ?? 'base'
     if (!clientId) {
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
     }
@@ -44,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       log.error('Cashflow insert error:', error)
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
     // Save activity to activity_log for Activity Timeline

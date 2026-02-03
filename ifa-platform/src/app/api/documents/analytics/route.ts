@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Calculate analytics from your real database
 async function calculateRealAnalytics(supabase: any, firmId: string | null, filters?: any) {
@@ -405,7 +406,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to fetch analytics',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -426,7 +427,7 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseServiceClient()
     const firmId = auth.context?.firmId || null
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
 
     switch (body.action) {
       case 'refresh':
@@ -460,7 +461,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

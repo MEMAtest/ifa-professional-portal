@@ -24,7 +24,7 @@ export async function requireClientAccess({ supabase, clientId, ctx, select = '*
     }
   }
 
-  if (ctx.role !== ROLES.ADMIN) {
+  if (ctx.role !== ROLES.ADMIN && ctx.role !== ROLES.OWNER) {
     if (ctx.firmId && (client as any).firm_id && ctx.firmId !== (client as any).firm_id) {
       return {
         ok: false as const,
@@ -42,4 +42,3 @@ export async function requireClientAccess({ supabase, clientId, ctx, select = '*
 
   return { ok: true as const, client }
 }
-

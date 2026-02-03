@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface AssessmentShare {
   id: string
@@ -193,7 +194,7 @@ export async function PATCH(
     const supabase: any = getSupabaseServiceClient()
 
     const clientId = context?.params?.id
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { shareId, action } = body
 
     if (!shareId) {

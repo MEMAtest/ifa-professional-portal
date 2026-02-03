@@ -1,9 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import jsPDF from 'jspdf'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface SimulationResult {
   id?: string
@@ -53,17 +56,6 @@ interface GenerateMonteCarloReportRequest {
   options?: ReportOptions
 }
 
-function getSupabaseServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    throw new Error('Supabase credentials are not configured')
-  }
-
-  return createSupabaseClient(url, key)
-}
-
 // Professional color palette
 const COLORS = {
   primary: '#1e3a5f',
@@ -109,7 +101,17 @@ const getSuccessStatus = (probability: number): {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: GenerateMonteCarloReportRequest = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body: GenerateMonteCarloReportRequest = await parseRequestBody(request)
     const { scenarioId, clientId, resultId, simulationResult, options = {} } = body
 
     // Handle direct simulation result OR fetch from database
@@ -117,6 +119,21 @@ export async function POST(request: NextRequest) {
     let clientName = 'Client'
 
     if (simulationResult) {
+      if (!clientId && !simulationResult.clientId) {
+        return NextResponse.json({ error: 'clientId is required for simulationResult' }, { status: 400 })
+      }
+      const resolvedClientId = clientId || simulationResult.clientId
+      const supabase = getSupabaseServiceClient()
+      const access = await requireClientAccess({
+        supabase,
+        clientId: resolvedClientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+
       // Direct simulation result provided
       result = simulationResult
       clientName = simulationResult.clientName || 'Client'
@@ -124,10 +141,21 @@ export async function POST(request: NextRequest) {
       // Fetch from database
       const supabase = getSupabaseServiceClient()
 
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+
       const { data: scenario, error: scenarioError } = await supabase
         .from('monte_carlo_scenarios')
         .select('*')
         .eq('id', scenarioId)
+        .eq('client_id', clientId)
         .maybeSingle()
 
       if (scenarioError || !scenario) {
@@ -153,31 +181,39 @@ export async function POST(request: NextRequest) {
         .from('clients')
         .select('*')
         .eq('id', clientId)
+        .eq('firm_id', firmId)
         .maybeSingle()
 
       if (clientError || !client) {
         return NextResponse.json({ error: 'Client not found' }, { status: 404 })
       }
 
-      clientName = `${client.personal_details?.firstName || ''} ${client.personal_details?.lastName || ''}`.trim() || 'Client'
+      const clientRecord = client as any
+      clientName = `${clientRecord.personal_details?.firstName || ''} ${clientRecord.personal_details?.lastName || ''}`.trim() || 'Client'
+
+      const resultRecord = resultData as any
+      const scenarioRecord = scenario as any
+      const initialWealth = scenarioRecord.initial_wealth ?? 0
+      const withdrawalAmount = scenarioRecord.withdrawal_amount ?? 0
+      const withdrawalRate = initialWealth > 0 ? (withdrawalAmount / initialWealth) * 100 : 0
 
       result = {
         clientId,
         clientName,
-        simulationCount: resultData?.simulation_count || 5000,
-        successProbability: resultData?.success_probability || 0,
-        medianFinalWealth: resultData?.confidence_intervals?.p50 || 0,
-        p10FinalWealth: resultData?.confidence_intervals?.p10 || 0,
-        p90FinalWealth: resultData?.confidence_intervals?.p90 || 0,
-        maxDrawdown: resultData?.maximum_drawdown || 0,
-        initialWealth: scenario.initial_wealth || 0,
-        withdrawalAmount: scenario.withdrawal_amount || 0,
-        withdrawalRate: (scenario.withdrawal_amount / scenario.initial_wealth) * 100 || 4,
-        timeHorizon: scenario.time_horizon || 25,
-        expectedReturn: scenario.expected_return || 6,
-        volatility: scenario.volatility || 12,
-        inflationRate: scenario.inflation_rate || 2.5,
-        runDate: resultData?.created_at || new Date().toISOString()
+        simulationCount: resultRecord?.simulation_count || 5000,
+        successProbability: resultRecord?.success_probability || 0,
+        medianFinalWealth: resultRecord?.confidence_intervals?.p50 || 0,
+        p10FinalWealth: resultRecord?.confidence_intervals?.p10 || 0,
+        p90FinalWealth: resultRecord?.confidence_intervals?.p90 || 0,
+        maxDrawdown: resultRecord?.maximum_drawdown || 0,
+        initialWealth,
+        withdrawalAmount,
+        withdrawalRate: withdrawalRate || 4,
+        timeHorizon: scenarioRecord.time_horizon || 25,
+        expectedReturn: scenarioRecord.expected_return || 6,
+        volatility: scenarioRecord.volatility || 12,
+        inflationRate: scenarioRecord.inflation_rate || 2.5,
+        runDate: resultRecord?.created_at || new Date().toISOString()
       }
     } else {
       return NextResponse.json(
@@ -259,7 +295,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error('generate-monte-carlo-report error', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: '' },
       { status: 500 }
     )
   }

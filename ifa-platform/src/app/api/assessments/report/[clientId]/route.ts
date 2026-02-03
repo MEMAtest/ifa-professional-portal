@@ -10,6 +10,7 @@ import * as XLSX from 'xlsx';
 import { clientService } from '@/services/ClientService';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -52,7 +53,7 @@ export async function POST(
 ) {
   try {
     const clientId = params.clientId;
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { format = 'pdf', includeHistory = true, assessmentTypes = [] } = body;
     
     // Create Supabase client

@@ -9,7 +9,7 @@ interface Review {
   review_type: string;
   due_date: string;
   completed_date?: string;
-  status: 'completed' | 'pending' | 'cancelled' | 'overdue';
+  status: 'completed' | 'scheduled' | 'cancelled' | 'overdue';
   review_summary?: string;
   next_review_date?: string;
 }
@@ -86,7 +86,7 @@ export function ReviewsTab({ reviews, dataLoading, onEditReview, onScheduleRevie
         <CardContent>
           {(() => {
             const upcomingReview = reviews.find(
-              (review) => review.status === 'pending' || review.status === 'overdue'
+              (review) => review.status === 'scheduled' || review.status === 'overdue'
             );
 
             if (upcomingReview) {

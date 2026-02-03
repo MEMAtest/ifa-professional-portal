@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { log } from '@/lib/logging/structured';
+import { parseRequestBody } from '@/app/api/utils'
 
 // Review type configurations
 const REVIEW_EVENT_CONFIG = {
@@ -157,7 +158,7 @@ export async function GET(request: NextRequest) {
 // POST - Create calendar event
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { 
       title,
       description,
@@ -255,7 +256,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Update calendar event
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { id, ...updates } = body;
 
     if (!id) {

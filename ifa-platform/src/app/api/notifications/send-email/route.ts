@@ -14,6 +14,7 @@ import {
   getBrandedSender,
   type EmailBranding
 } from '@/lib/email/brandingHelper'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Lazy initialize SES client to avoid build-time errors
 let sesClient: SESv2Client | null = null
@@ -874,7 +875,7 @@ export async function POST(request: NextRequest) {
   if (rateLimitResponse) return rateLimitResponse
 
   try {
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { type, recipient, cc, data, firmId } = body
 
     // Validate required fields
@@ -1118,7 +1119,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to send email',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -1157,7 +1158,7 @@ export async function GET(request: NextRequest) {
         }))
         sentCount++
       } catch (error) {
-        log.error('Failed to send weekly report', { email: advisor.email, error: error instanceof Error ? error.message : 'Unknown' })
+        log.error('Failed to send weekly report', { email: advisor.email, error: '' })
       }
     }
     

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import type { SuitabilityFormData } from '@/types/suitability'
 import { mapSuitabilityFormDataToAssessmentUpdate } from '@/lib/suitability/mappers'
 import { getAuthContext } from '@/lib/auth/apiAuth'
@@ -13,6 +14,7 @@ import { mapSuitabilityToClientVulnerability } from '@/lib/suitability/vulnerabi
 import { mapSuitabilityToClientFinancials, mergeFinancialProfiles } from '@/lib/suitability/financials/mapSuitabilityToClientFinancials'
 import { mapSuitabilityToClientContactInfo } from '@/lib/suitability/contact/mapSuitabilityToClientContactInfo'
 import { notifyAssessmentCompleted } from '@/lib/notifications/notificationService'
+import { parseRequestBody } from '@/app/api/utils'
 
 type FinalizePayload = {
   assessmentId?: string
@@ -20,6 +22,13 @@ type FinalizePayload = {
   formData?: SuitabilityFormData
   completionPercentage?: number
 }
+
+const requestSchema = z.object({
+  assessmentId: z.string().optional(),
+  clientId: z.string().min(1),
+  formData: z.any().optional(),
+  completionPercentage: z.number().optional()
+})
 
 async function upsertByClientAndType(
   supabase: ReturnType<typeof getSupabaseServiceClient>,
@@ -58,7 +67,7 @@ export async function POST(req: NextRequest) {
   logger.info('Suitability finalize started', metadata)
 
   try {
-    const body: FinalizePayload = await req.json()
+    const body: FinalizePayload = await parseRequestBody(req, requestSchema)
     const { assessmentId, clientId, formData, completionPercentage } = body
     if (!clientId) {
       logger.warn('Missing clientId in request', { assessmentId })
@@ -389,7 +398,7 @@ export async function POST(req: NextRequest) {
     logger.error('Suitability finalize failed', error, { clientId: 'unknown' })
     logger.logRequestComplete(500)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: '' },
       { status: 500 }
     )
   }

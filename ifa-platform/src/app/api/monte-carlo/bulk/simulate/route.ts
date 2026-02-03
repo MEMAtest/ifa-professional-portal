@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // ✅ SAFE BODY PARSING
     let body: any;
     try {
-      body = await request.json();
+      body = await parseRequestBody(request);
     } catch (parseError) {
       clearTimeout(timeoutId);
       return NextResponse.json(
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           results.push({
             scenario_id: scenario.scenario_id,
             success: false,
-            error: saveResponse.error ?? 'Unknown error'
+            error: 'Failed to save simulation results'
           });
           failureCount++;
         }
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         results.push({
           scenario_id: scenario.scenario_id,
           success: false,
-          error: scenarioError instanceof Error ? scenarioError.message : 'Unknown simulation error'
+          error: 'Simulation error'
         });
         failureCount++;
       }
@@ -169,15 +170,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   } catch (error: unknown) {
     log.error('Monte Carlo bulk simulation API error', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : undefined;
-
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
+        error: 'Bulk simulation failed',
         timestamp: new Date().toISOString()
       },
       { status: 500 }
@@ -252,7 +248,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error: unknown) {
     log.error('Monte Carlo bulk simulation info API error', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorMessage = '';
 
     return NextResponse.json(
       {

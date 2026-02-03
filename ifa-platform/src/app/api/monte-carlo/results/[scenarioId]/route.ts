@@ -2,16 +2,15 @@
 // ✅ FIXED: Returns results in array format as expected by frontend
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
+import { requireClientAccess } from '@/lib/auth/requireClientAccess';
+import { parseRequestBody } from '@/app/api/utils'
+import { z } from 'zod'
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 interface ResultsRouteParams {
   params: {
@@ -28,6 +27,15 @@ export async function GET(
   { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized', success: false, results: [] }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult as NextResponse;
+    }
+
     const { scenarioId } = params;
 
     if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
@@ -43,6 +51,8 @@ export async function GET(
 
     const cleanScenarioId = scenarioId.trim();
 
+    const supabase = getSupabaseServiceClient();
+
     // Try to get results by scenario_id (TEXT field)
     const { data: results, error: resultsError } = await supabase
       .from('monte_carlo_results')
@@ -53,6 +63,18 @@ export async function GET(
 
     // If we found results by scenario_id, return them as array
     if (!resultsError && results && results.length > 0) {
+      const clientId = results[0]?.client_id
+      if (clientId) {
+        const access = await requireClientAccess({
+          supabase,
+          clientId,
+          ctx: auth.context,
+          select: 'id, firm_id, advisor_id'
+        })
+        if (!access.ok) {
+          return access.response as NextResponse
+        }
+      }
       return NextResponse.json({
         success: true,
         results: results, // Return as array format
@@ -72,7 +94,7 @@ export async function GET(
       .limit(1);
 
     if (clientError) {
-      log.error('Monte Carlo results fetch error', clientError);
+      log.error('Monte Carlo results fetch error', { error: clientError.message });
       return NextResponse.json(
         { 
           success: false, 
@@ -99,6 +121,19 @@ export async function GET(
     }
 
     // Return found results as array
+    const clientId = resultsByClient[0]?.client_id
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response as NextResponse
+      }
+    }
+
     return NextResponse.json({
       success: true,
       results: resultsByClient, // Return as array format
@@ -109,14 +144,13 @@ export async function GET(
     });
 
   } catch (error: unknown) {
-    log.error('Monte Carlo results API error', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('Monte Carlo results API error', { error: errorMessage });
 
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: 'Internal server error',
         results: [], // Always include results array
         timestamp: new Date().toISOString()
       },
@@ -134,6 +168,15 @@ export async function PATCH(
   { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized', success: false }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult as NextResponse;
+    }
+
     const { scenarioId } = params;
 
     if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
@@ -148,30 +191,38 @@ export async function PATCH(
 
     const cleanScenarioId = scenarioId.trim();
 
-    let body: any;
-    try {
-      body = await request.json();
-    } catch (parseError) {
+    const statusSchema = z.object({
+      status: z.enum(['pending', 'running', 'completed', 'failed'])
+    })
+
+    const parsedBody = await parseRequestBody(request, statusSchema)
+    const { status } = parsedBody
+
+    const supabase = getSupabaseServiceClient()
+
+    const { data: existingResult, error: existingError } = await supabase
+      .from('monte_carlo_results')
+      .select('id, client_id')
+      .eq('scenario_id', cleanScenarioId)
+      .single()
+
+    if (existingError || !existingResult) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid JSON in request body' 
-        },
-        { status: 400 }
-      );
+        { success: false, error: 'Scenario not found' },
+        { status: 404 }
+      )
     }
 
-    const { status } = body;
-
-    const validStatuses = ['pending', 'running', 'completed', 'failed'];
-    if (!status || !validStatuses.includes(status)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
-        },
-        { status: 400 }
-      );
+    if (existingResult.client_id) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId: existingResult.client_id,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response as NextResponse
+      }
     }
 
     // Update in monte_carlo_results table
@@ -186,7 +237,7 @@ export async function PATCH(
       .single();
 
     if (error) {
-      log.error('Failed to update status for scenario', { scenarioId: cleanScenarioId, error });
+      log.error('Failed to update status for scenario', { scenarioId: cleanScenarioId, error: error.message });
       return NextResponse.json(
         {
           success: false,
@@ -210,14 +261,13 @@ export async function PATCH(
     );
 
   } catch (error: unknown) {
-    log.error('Monte Carlo update status API error', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('Monte Carlo update status API error', { error: errorMessage });
 
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: 'Internal server error',
         timestamp: new Date().toISOString()
       },
       { status: 500 }
@@ -234,6 +284,15 @@ export async function POST(
   { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized', success: false }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult as NextResponse;
+    }
+
     const { scenarioId } = params;
 
     if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
@@ -248,22 +307,34 @@ export async function POST(
 
     const cleanScenarioId = scenarioId.trim();
 
-    let body: any;
-    try {
-      body = await request.json();
-    } catch (parseError) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Invalid JSON in request body' 
-        },
-        { status: 400 }
-      );
+    const createSchema = z.object({
+      client_id: z.string().uuid(),
+      simulation_count: z.coerce.number().int().positive().optional(),
+      success_probability: z.coerce.number().optional(),
+      shortfall_risk: z.coerce.number().optional(),
+      median_outcome: z.coerce.number().optional(),
+      confidence_intervals: z.any().optional(),
+      calculation_status: z.enum(['pending', 'running', 'completed', 'failed']).optional(),
+      calculation_params: z.any().optional()
+    })
+
+    const body = await parseRequestBody(request, createSchema)
+
+    const supabase = getSupabaseServiceClient()
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId: body.client_id,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response as NextResponse
     }
 
     // Create new result record
-    const { data, error } = await supabase
-      .from('monte_carlo_results')
+    const { data, error } = await (supabase
+      .from('monte_carlo_results') as any)
       .insert({
         scenario_id: cleanScenarioId,
         client_id: body.client_id,
@@ -282,7 +353,7 @@ export async function POST(
       .single();
 
     if (error) {
-      log.error('Failed to create results for scenario', { scenarioId: cleanScenarioId, error });
+      log.error('Failed to create results for scenario', { scenarioId: cleanScenarioId, error: error.message });
       return NextResponse.json(
         {
           success: false,
@@ -303,14 +374,13 @@ export async function POST(
     );
 
   } catch (error: unknown) {
-    log.error('Monte Carlo create results API error', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('Monte Carlo create results API error', { error: errorMessage });
 
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: 'Internal server error',
         timestamp: new Date().toISOString()
       },
       { status: 500 }
@@ -327,6 +397,15 @@ export async function DELETE(
   { params }: ResultsRouteParams
 ): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized', success: false }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult as NextResponse;
+    }
+
     const { scenarioId } = params;
 
     if (!scenarioId || typeof scenarioId !== 'string' || scenarioId.trim() === '') {
@@ -341,6 +420,33 @@ export async function DELETE(
 
     const cleanScenarioId = scenarioId.trim();
 
+    const supabase = getSupabaseServiceClient()
+
+    const { data: existingResult, error: existingError } = await supabase
+      .from('monte_carlo_results')
+      .select('id, client_id')
+      .eq('scenario_id', cleanScenarioId)
+      .single()
+
+    if (existingError || !existingResult) {
+      return NextResponse.json(
+        { success: false, error: 'Scenario not found' },
+        { status: 404 }
+      )
+    }
+
+    if (existingResult.client_id) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId: existingResult.client_id,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response as NextResponse
+      }
+    }
+
     // Delete results
     const { error } = await supabase
       .from('monte_carlo_results')
@@ -348,7 +454,7 @@ export async function DELETE(
       .eq('scenario_id', cleanScenarioId);
 
     if (error) {
-      log.error('Failed to delete results for scenario', { scenarioId: cleanScenarioId, error });
+      log.error('Failed to delete results for scenario', { scenarioId: cleanScenarioId, error: error.message });
       return NextResponse.json(
         {
           success: false,
@@ -368,14 +474,13 @@ export async function DELETE(
     );
 
   } catch (error: unknown) {
-    log.error('Monte Carlo delete results API error', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('Monte Carlo delete results API error', { error: errorMessage });
 
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: 'Internal server error',
         timestamp: new Date().toISOString()
       },
       { status: 500 }

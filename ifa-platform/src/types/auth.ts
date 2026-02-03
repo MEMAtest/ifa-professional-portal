@@ -2,8 +2,8 @@
 export interface User {
   id: string
   email: string
-  role: 'advisor' | 'supervisor' | 'admin'
-  firmId: string
+  role: 'advisor' | 'supervisor' | 'admin' | 'owner' | 'compliance' | 'support' | 'client'
+  firmId: string | null
   firstName: string
   lastName: string
   avatarUrl?: string
@@ -11,6 +11,7 @@ export interface User {
   lastLoginAt?: string
   createdAt: string
   updatedAt: string
+  isPlatformAdmin?: boolean
 }
 
 export interface Firm {

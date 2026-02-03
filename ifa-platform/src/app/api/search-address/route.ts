@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
+import { rateLimit } from '@/lib/security/rateLimit'
 
 // Force this route to be dynamic
 export const dynamic = 'force-dynamic';
@@ -14,39 +15,6 @@ export const dynamic = 'force-dynamic';
 const GETADDRESS_API_KEY = process.env.GETADDRESS_API_KEY;
 // Ordnance Survey Places API key (free tier supported)
 const OS_API_KEY = process.env.OS_API_KEY;
-
-// Rate limiting map
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-// Rate limiting configuration
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute
-
-/**
- * Check rate limit for IP address
- */
-function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
-  const now = Date.now();
-  const userLimit = rateLimitMap.get(ip);
-
-  if (!userLimit || now > userLimit.resetTime) {
-    rateLimitMap.set(ip, {
-      count: 1,
-      resetTime: now + RATE_LIMIT_WINDOW
-    });
-    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1 };
-  }
-
-  if (userLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return { allowed: false, remaining: 0 };
-  }
-
-  userLimit.count++;
-  return {
-    allowed: true,
-    remaining: RATE_LIMIT_MAX_REQUESTS - userLimit.count
-  };
-}
 
 /**
  * GetAddress.io response interface
@@ -705,22 +673,9 @@ async function getStreetsForPostcode(postcode: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get client IP for rate limiting
-    const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown';
-
-    // Check rate limit
-    const rateLimit = checkRateLimit(ip);
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: 'Rate limit exceeded. Try again later.' },
-        {
-          status: 429,
-          headers: {
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': (Date.now() + 60000).toString()
-          }
-        }
-      );
+    const rateLimitResponse = await rateLimit(request, 'address')
+    if (rateLimitResponse) {
+      return rateLimitResponse
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -748,7 +703,6 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(result, {
         headers: {
-          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
           'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
         }
       });
@@ -866,11 +820,6 @@ export async function GET(request: NextRequest) {
           results: [],
           source: 'photon',
           message: 'No addresses found. Try entering a full address (e.g., "10 Downing Street London") or a UK postcode.'
-        },
-        {
-          headers: {
-            'X-RateLimit-Remaining': rateLimit.remaining.toString()
-          }
         }
       );
     }
@@ -882,11 +831,6 @@ export async function GET(request: NextRequest) {
           results: [],
           source: 'photon',
           message: 'No addresses found. Please check the address or postcode and try again.'
-        },
-        {
-          headers: {
-            'X-RateLimit-Remaining': rateLimit.remaining.toString()
-          }
         }
       );
     }
@@ -905,7 +849,6 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
           'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
         }
       }

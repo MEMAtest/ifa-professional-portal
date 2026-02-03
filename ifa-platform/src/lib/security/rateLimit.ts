@@ -82,6 +82,9 @@ const rateLimiters = {
   // Invitation endpoints: 10 requests per hour per IP
   invite: createRateLimiter(10, 3600, 'invite'),
 
+  // Address search endpoints: 30 requests per minute per IP
+  address: createRateLimiter(30, 60, 'address'),
+
   // General API: 100 requests per minute per IP
   api: createRateLimiter(100, 60, 'api'),
 
@@ -99,6 +102,7 @@ interface RateLimitConfig {
 const rateLimitConfigs: Record<RateLimitType, RateLimitConfig> = {
   auth: { requests: 5, windowSeconds: 900 },
   invite: { requests: 10, windowSeconds: 3600 },
+  address: { requests: 30, windowSeconds: 60 },
   api: { requests: 100, windowSeconds: 60 },
   strict: { requests: 3, windowSeconds: 300 },
 }

@@ -4,6 +4,7 @@ import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { checkAuthentication, handleError, validateRequiredFields, createSuccessResponse } from '../utils';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
       return handleError(authError, 'Authentication required');
     }
 
-    const body = await request.json();
+    const body = await parseRequestBody(request);
 
     const validationError = validateRequiredFields(body, [
       'clientId',

@@ -158,7 +158,7 @@ async function getClientsForDay(supabase: ReturnType<typeof getSupabaseServiceCl
 
     return count || 0;
   } catch (error) {
-    log.warn('Error in getClientsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    log.warn('Error in getClientsForDay', { error: '' });
     return 0;
   }
 }
@@ -192,7 +192,7 @@ async function getAssessmentsForDay(supabase: ReturnType<typeof getSupabaseServi
 
     return count || 0;
   } catch (error) {
-    log.warn('Error in getAssessmentsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    log.warn('Error in getAssessmentsForDay', { error: '' });
     return 0;
   }
 }
@@ -242,7 +242,7 @@ async function getDocumentsForDay(
 
     return generatedCount || 0;
   } catch (error) {
-    log.warn('Error in getDocumentsForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    log.warn('Error in getDocumentsForDay', { error: '' });
     return 0;
   }
 }
@@ -264,7 +264,7 @@ async function getMonteCarloForDay(supabase: ReturnType<typeof getSupabaseServic
 
     return count || 0;
   } catch (error) {
-    log.warn('Error in getMonteCarloForDay', { error: error instanceof Error ? error.message : 'Unknown' });
+    log.warn('Error in getMonteCarloForDay', { error: '' });
     return 0;
   }
 }

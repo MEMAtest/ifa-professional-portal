@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 const CACHE_KEY = 'market_data_cache_v2'
 
 interface DataPoint<T> {
@@ -69,7 +70,7 @@ async function fetchFTSE100(): Promise<DataPoint<{ price: number; change: number
       changePercent: Math.round(changePercent * 100) / 100
     }
 
-    console.log(`[FTSE100] ${source} returned: ${result.price} (${result.changePercent}%)`)
+    log.info(`[FTSE100] ${source} returned: ${result.price} (${result.changePercent}%)`)
 
     return {
       value: result,
@@ -77,7 +78,7 @@ async function fetchFTSE100(): Promise<DataPoint<{ price: number; change: number
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[FTSE100] ${source} failed:`, error)
+    log.error(`[FTSE100] ${source} failed:`, error)
     throw error
   }
 }
@@ -105,7 +106,7 @@ async function fetchBoERate(): Promise<DataPoint<number>> {
           const dateStr = parts[0].trim()
           const rate = parseFloat(parts[1])
           if (!isNaN(rate)) {
-            console.log(`[BoE Rate] ${source} returned: ${rate}% from ${dateStr}`)
+            log.info(`[BoE Rate] ${source} returned: ${rate}% from ${dateStr}`)
             return {
               value: rate,
               source: source + ' IADB',
@@ -120,14 +121,14 @@ async function fetchBoERate(): Promise<DataPoint<number>> {
     // Current rate as of Dec 18, 2025: 3.75% (cut from 4.75%)
     // Source: https://www.bankofengland.co.uk/monetary-policy-summary-and-minutes/2025/december-2025
     const knownRate = 3.75
-    console.log(`[BoE Rate] Using known rate: ${knownRate}%`)
+    log.info(`[BoE Rate] Using known rate: ${knownRate}%`)
     return {
       value: knownRate,
       source: source + ' (known rate)',
       lastUpdated: '2025-12-18T00:00:00.000Z' // Date of last rate change
     }
   } catch (error) {
-    console.error(`[BoE Rate] ${source} failed:`, error)
+    log.error(`[BoE Rate] ${source} failed:`, error)
     // Return known rate even on failure
     return {
       value: 3.75,
@@ -165,7 +166,7 @@ async function fetchCPI(): Promise<DataPoint<number>> {
         const cpiValue = parseFloat(latest.observation)
 
         if (!isNaN(cpiValue)) {
-          console.log(`[CPI] ${source} returned: ${cpiValue}% from ${latest.dimensions.time.id}`)
+          log.info(`[CPI] ${source} returned: ${cpiValue}% from ${latest.dimensions.time.id}`)
           return {
             value: cpiValue,
             source,
@@ -179,14 +180,14 @@ async function fetchCPI(): Promise<DataPoint<number>> {
     // Latest UK CPI as of Nov 2025: 2.6%
     // Source: https://www.ons.gov.uk/economy/inflationandpriceindices
     const knownCPI = 2.6
-    console.log(`[CPI] Using known rate: ${knownCPI}%`)
+    log.info(`[CPI] Using known rate: ${knownCPI}%`)
     return {
       value: knownCPI,
       source: source + ' (known rate)',
       lastUpdated: '2025-11-20T00:00:00.000Z' // Approximate date of last release
     }
   } catch (error) {
-    console.error(`[CPI] ${source} failed:`, error)
+    log.error(`[CPI] ${source} failed:`, error)
     // Return known CPI even on failure
     return {
       value: 2.6,
@@ -249,7 +250,7 @@ async function fetchForex(): Promise<DataPoint<{ gbpUsd: number; gbpEur: number 
       gbpEur: parseFloat(eurRate['5. Exchange Rate'])
     }
 
-    console.log(`[Forex] ${source} returned: GBP/USD=${result.gbpUsd}, GBP/EUR=${result.gbpEur}`)
+    log.info(`[Forex] ${source} returned: GBP/USD=${result.gbpUsd}, GBP/EUR=${result.gbpEur}`)
 
     return {
       value: result,
@@ -257,7 +258,7 @@ async function fetchForex(): Promise<DataPoint<{ gbpUsd: number; gbpEur: number 
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[Forex] ${source} failed:`, error)
+    log.error(`[Forex] ${source} failed:`, error)
     throw error
   }
 }
@@ -292,7 +293,7 @@ async function fetchGold(): Promise<DataPoint<number>> {
 
     // Convert to GBP (approximate - using 1.25 USD/GBP)
     const goldGbp = goldUsd / 1.25
-    console.log(`[Gold] ${source} returned: £${goldGbp.toFixed(2)}/oz (from $${goldUsd})`)
+    log.info(`[Gold] ${source} returned: £${goldGbp.toFixed(2)}/oz (from $${goldUsd})`)
 
     return {
       value: Math.round(goldGbp),
@@ -300,7 +301,7 @@ async function fetchGold(): Promise<DataPoint<number>> {
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[Gold] ${source} failed:`, error)
+    log.error(`[Gold] ${source} failed:`, error)
     throw error
   }
 }
@@ -331,7 +332,7 @@ async function fetchFTSE250(): Promise<DataPoint<{ price: number; change: number
     const change = price - previousClose
     const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
 
-    console.log(`[FTSE250] ${source} returned: ${Math.round(price)} (${changePercent.toFixed(2)}%)`)
+    log.info(`[FTSE250] ${source} returned: ${Math.round(price)} (${changePercent.toFixed(2)}%)`)
 
     return {
       value: {
@@ -343,7 +344,7 @@ async function fetchFTSE250(): Promise<DataPoint<{ price: number; change: number
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[FTSE250] ${source} failed:`, error)
+    log.error(`[FTSE250] ${source} failed:`, error)
     throw error
   }
 }
@@ -374,7 +375,7 @@ async function fetchSP500(): Promise<DataPoint<{ price: number; change: number; 
     const change = price - previousClose
     const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
 
-    console.log(`[S&P500] ${source} returned: ${Math.round(price)} (${changePercent.toFixed(2)}%)`)
+    log.info(`[S&P500] ${source} returned: ${Math.round(price)} (${changePercent.toFixed(2)}%)`)
 
     return {
       value: {
@@ -386,7 +387,7 @@ async function fetchSP500(): Promise<DataPoint<{ price: number; change: number; 
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[S&P500] ${source} failed:`, error)
+    log.error(`[S&P500] ${source} failed:`, error)
     throw error
   }
 }
@@ -412,7 +413,7 @@ async function fetchVIX(): Promise<DataPoint<number>> {
 
     if (!vixValue) throw new Error('No VIX data')
 
-    console.log(`[VIX] ${source} returned: ${vixValue.toFixed(2)}`)
+    log.info(`[VIX] ${source} returned: ${vixValue.toFixed(2)}`)
 
     return {
       value: Math.round(vixValue * 100) / 100,
@@ -420,7 +421,7 @@ async function fetchVIX(): Promise<DataPoint<number>> {
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[VIX] ${source} failed:`, error)
+    log.error(`[VIX] ${source} failed:`, error)
     throw error
   }
 }
@@ -446,7 +447,7 @@ async function fetchUS10YR(): Promise<DataPoint<number>> {
 
     if (!yieldValue) throw new Error('No US 10Y data')
 
-    console.log(`[US10YR] ${source} returned: ${yieldValue.toFixed(2)}%`)
+    log.info(`[US10YR] ${source} returned: ${yieldValue.toFixed(2)}%`)
 
     return {
       value: Math.round(yieldValue * 100) / 100,
@@ -454,7 +455,7 @@ async function fetchUS10YR(): Promise<DataPoint<number>> {
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[US10YR] ${source} failed:`, error)
+    log.error(`[US10YR] ${source} failed:`, error)
     throw error
   }
 }
@@ -480,7 +481,7 @@ async function fetchBrentOil(): Promise<DataPoint<number>> {
 
     if (!oilPrice) throw new Error('No Brent data')
 
-    console.log(`[BrentOil] ${source} returned: $${oilPrice.toFixed(2)}/barrel`)
+    log.info(`[BrentOil] ${source} returned: $${oilPrice.toFixed(2)}/barrel`)
 
     return {
       value: Math.round(oilPrice * 100) / 100,
@@ -488,7 +489,7 @@ async function fetchBrentOil(): Promise<DataPoint<number>> {
       lastUpdated: new Date().toISOString()
     }
   } catch (error) {
-    console.error(`[BrentOil] ${source} failed:`, error)
+    log.error(`[BrentOil] ${source} failed:`, error)
     throw error
   }
 }
@@ -523,7 +524,7 @@ async function setCachedData(marketData: MarketData): Promise<void> {
         updated_at: new Date().toISOString()
       }, { onConflict: 'key' })
   } catch (error) {
-    console.error('Error caching market data:', error)
+    log.error('Error caching market data:', error)
   }
 }
 
@@ -531,7 +532,7 @@ async function setCachedData(marketData: MarketData): Promise<void> {
 // MAIN API HANDLER
 // ============================================
 export async function GET() {
-  console.log('\n=== MARKET DATA FETCH STARTED ===')
+  log.info('\n=== MARKET DATA FETCH STARTED ===')
 
   // Get cached data to use as fallback
   const cachedData = await getCachedData()
@@ -552,7 +553,7 @@ export async function GET() {
   } catch (error) {
     if (cachedData?.ftse100) {
       results.ftse100 = { ...cachedData.ftse100, isStale: true }
-      console.log(`[FTSE100] Using cached value from ${cachedData.ftse100.lastUpdated}`)
+      log.info(`[FTSE100] Using cached value from ${cachedData.ftse100.lastUpdated}`)
     } else {
       results.ftse100.error = String(error)
     }
@@ -566,7 +567,7 @@ export async function GET() {
   } catch (error) {
     if (cachedData?.forex) {
       results.forex = { ...cachedData.forex, isStale: true }
-      console.log(`[Forex] Using cached value from ${cachedData.forex.lastUpdated}`)
+      log.info(`[Forex] Using cached value from ${cachedData.forex.lastUpdated}`)
     } else {
       results.forex.error = String(error)
     }
@@ -578,7 +579,7 @@ export async function GET() {
   } catch (error) {
     if (cachedData?.boeRate) {
       results.boeRate = { ...cachedData.boeRate, isStale: true }
-      console.log(`[BoE Rate] Using cached value from ${cachedData.boeRate.lastUpdated}`)
+      log.info(`[BoE Rate] Using cached value from ${cachedData.boeRate.lastUpdated}`)
     } else {
       results.boeRate.error = String(error)
     }
@@ -589,7 +590,7 @@ export async function GET() {
   } catch (error) {
     if (cachedData?.cpi) {
       results.cpi = { ...cachedData.cpi, isStale: true }
-      console.log(`[CPI] Using cached value from ${cachedData.cpi.lastUpdated}`)
+      log.info(`[CPI] Using cached value from ${cachedData.cpi.lastUpdated}`)
     } else {
       results.cpi.error = String(error)
     }
@@ -601,7 +602,7 @@ export async function GET() {
   } catch (error) {
     if (cachedData?.gold) {
       results.gold = { ...cachedData.gold, isStale: true }
-      console.log(`[Gold] Using cached value from ${cachedData.gold.lastUpdated}`)
+      log.info(`[Gold] Using cached value from ${cachedData.gold.lastUpdated}`)
     } else {
       results.gold.error = String(error)
     }
@@ -651,7 +652,7 @@ export async function GET() {
   // Cache the results
   await setCachedData(results)
 
-  console.log('=== MARKET DATA FETCH COMPLETE ===\n')
+  log.info('=== MARKET DATA FETCH COMPLETE ===\n')
 
   return NextResponse.json(results)
 }

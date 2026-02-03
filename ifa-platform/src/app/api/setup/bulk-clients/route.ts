@@ -3,9 +3,10 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { createRequestLogger } from '@/lib/logging/structured'
 import type { BulkClientRequest, BulkClientResponse, BulkClientResult } from '@/types/bulk-setup'
+import { parseRequestBody } from '@/app/api/utils'
 
 const MAX_BATCH_SIZE = 50
 const CLIENT_REF_PATTERN = /^[A-Za-z0-9\-_]{1,50}$/
@@ -105,12 +106,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Add requirePermission(auth.context, 'clients:write') once RLS
-    // and profile resolution are fixed. Currently the profiles table is
-    // unreadable via RLS and the auth user ID may not match a profile row,
-    // so role is always null. The rest of the app has the same limitation.
+    const permissionError = requirePermission(auth.context, 'clients:write')
+    if (permissionError) {
+      return permissionError
+    }
 
-    const body: BulkClientRequest = await request.json()
+    const body: BulkClientRequest = await parseRequestBody(request)
 
     if (!body.clients || !Array.isArray(body.clients)) {
       return NextResponse.json(
@@ -135,7 +136,11 @@ export async function POST(request: NextRequest) {
 
     // Use service client to bypass RLS (matches admin operation pattern)
     const supabase = getSupabaseServiceClient()
-    const firmId = getValidatedFirmId(auth.context)
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const firmId = firmResult.firmId
     const advisorId = auth.context.advisorId || auth.context.userId
 
     // SECURITY: Require firm context to prevent cross-tenant data access
@@ -214,7 +219,7 @@ export async function POST(request: NextRequest) {
           clientRef: client.clientRef,
           clientId: null,
           success: false,
-          error: error.message,
+          error: 'Failed to create client',
         })
         failed++
       } else {
@@ -240,7 +245,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: '',
       },
       { status: 500 }
     )

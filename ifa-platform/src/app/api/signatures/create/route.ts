@@ -4,9 +4,13 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { sendNotificationEmail } from '@/services/emailService'
 import { createRequestLogger } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,12 +32,40 @@ interface CreateSignatureRequest {
   }
 }
 
+const signerSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  role: z.string().optional(),
+})
+
+const requestSchema = z.object({
+  documentId: z.string().optional(),
+  clientId: z.string().optional(),
+  templateId: z.string().optional(),
+  signers: z.array(signerSchema).min(1),
+  options: z.object({
+    expiryDays: z.number().int().min(1).max(365).optional(),
+    autoReminder: z.boolean().optional(),
+    remindOnceInEvery: z.number().int().min(1).max(30).optional(),
+  }).optional()
+})
+
 export async function POST(request: NextRequest) {
   const logger = createRequestLogger(request)
   logger.info('CREATE SIGNATURE: API endpoint called')
 
   try {
-    const body: CreateSignatureRequest = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body: CreateSignatureRequest = await parseRequestBody(request, requestSchema)
     logger.debug('CREATE SIGNATURE: Request body', { documentId: body.documentId, clientId: body.clientId, signerCount: body.signers?.length })
 
     const { documentId, clientId, templateId, signers, options = {} } = body
@@ -73,11 +105,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create service client for database access
-    const supabase = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = getSupabaseServiceClient()
+
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+    }
+
+    if (documentId) {
+      const { data: document, error: documentError } = await supabase
+        .from('documents')
+        .select('id, client_id, firm_id')
+        .eq('id', documentId)
+        .eq('firm_id', firmId)
+        .maybeSingle()
+
+      if (documentError || !document) {
+        return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+      }
+    }
 
     // Calculate expiry date
     const expiryDate = new Date()
@@ -88,6 +141,8 @@ export async function POST(request: NextRequest) {
     const signatureRequestData: any = {
       client_id: clientId || null,
       document_id: documentId || null,
+      firm_id: firmId,
+      created_by: auth.context.userId,
       recipient_name: signers[0]?.name || '',
       recipient_email: signers[0]?.email || '',
       status: 'pending'
@@ -108,14 +163,14 @@ export async function POST(request: NextRequest) {
       if (insertError.message.includes('does not exist') || insertError.code === '42P01') {
         return NextResponse.json({
           success: false,
-          error: 'Signature requests table not yet created. Please run database setup.',
+          error: 'Signature requests table not yet created.',
           code: 'TABLE_NOT_FOUND'
         }, { status: 500 })
       }
 
       return NextResponse.json({
         success: false,
-        error: insertError.message || 'Failed to create signature request'
+        error: 'Failed to create signature request'
       }, { status: 500 })
     }
 
@@ -178,7 +233,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to create signature request'
       },
       { status: 500 }
     )

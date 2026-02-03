@@ -11,14 +11,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { Database } from '@/types/db'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { normalizeAssessmentType } from '@/lib/assessments/routing'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-const DEFAULT_FIRM_ID = process.env.DEFAULT_FIRM_ID || null
 
 function getServiceClient() {
   return getSupabaseServiceClient()
@@ -28,7 +26,7 @@ async function fetchFirmClientIds(supabase: ReturnType<typeof getServiceClient>,
   const { data, error } = await supabase
     .from('clients')
     .select('id')
-    .or(`firm_id.eq.${firmId},firm_id.is.null`)
+    .eq('firm_id', firmId)
     .limit(10000)
 
   if (error) throw error
@@ -60,12 +58,11 @@ export async function GET(request: NextRequest) {
     const limitParam = Number(url.searchParams.get('limit') || 5)
     const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 5
 
-    // Determine firm scope from auth context
-    let firmId: string | null = auth.context.firmId
-
-    if (!firmId && DEFAULT_FIRM_ID) {
-      firmId = DEFAULT_FIRM_ID
+    const firmResult = requireFirmId(auth.context)
+    if (firmResult instanceof NextResponse) {
+      return firmResult
     }
+    const firmId = firmResult.firmId
 
     const supabase = getServiceClient()
 
@@ -73,41 +70,19 @@ export async function GET(request: NextRequest) {
     // may contain legacy duplicates (no unique constraint in some environments).
     const MAX_ROWS = 5000
 
+    step = 'firm_client_ids'
     let firmClientIds: string[] | null = null
-    if (firmId) {
-      step = 'firm_client_ids'
-      try {
-        firmClientIds = await fetchFirmClientIds(supabase, firmId)
-      } catch (e: any) {
-        logger.warn('Failed to fetch firm client IDs; falling back to unscoped incomplete list', {
-          firmId,
-          message: e?.message || String(e)
-        })
-        firmClientIds = null
-        firmId = null
-      }
-    }
-
-    if (firmId && DEFAULT_FIRM_ID && firmId === DEFAULT_FIRM_ID && firmClientIds && firmClientIds.length > 0) {
-      const { count: unscopedClients, error: unscopedClientsError } = await supabase
-        .from('clients')
-        .select('*', { count: 'exact', head: true })
-
-      if (unscopedClientsError) {
-        logger.warn('Could not count clients (unscoped) for fallback check', { message: unscopedClientsError.message })
-      } else if (typeof unscopedClients === 'number' && unscopedClients > 0) {
-        const ratio = firmClientIds.length / unscopedClients
-        if (ratio < 0.6) {
-          logger.warn('Firm client ID list seems incomplete; falling back to unscoped incomplete list', {
-            firmId,
-            firmClientIds: firmClientIds.length,
-            unscopedClients,
-            ratio
-          })
-          firmClientIds = null
-          firmId = null
-        }
-      }
+    try {
+      firmClientIds = await fetchFirmClientIds(supabase, firmId)
+    } catch (e: any) {
+      logger.error('Failed to fetch firm client IDs', {
+        firmId,
+        message: e?.message || String(e)
+      })
+      return NextResponse.json(
+        { success: false, error: 'Failed to resolve firm clients' },
+        { status: 500 }
+      )
     }
 
     step = 'progress_rows'
@@ -119,7 +94,14 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false })
       .limit(MAX_ROWS)
 
-    if (firmClientIds && firmClientIds.length > 0) query = query.in('client_id', firmClientIds)
+    if (firmClientIds && firmClientIds.length > 0) {
+      query = query.in('client_id', firmClientIds)
+    } else {
+      return NextResponse.json(
+        { success: true, assessments: [], count: 0, limit, timestamp: new Date().toISOString() },
+        { status: 200 }
+      )
+    }
 
     const { data: progressRows, error: progressError } = await query
 
@@ -200,11 +182,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: 'Failed to fetch incomplete assessments',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        step,
-        ...(process.env.NODE_ENV !== 'production'
-          ? { stack: error instanceof Error ? error.stack : undefined }
-          : {})
+        step
       },
       { status: 500 }
     )

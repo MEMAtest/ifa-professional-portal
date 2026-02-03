@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface StatusParams {
   params: {
@@ -29,7 +30,7 @@ export async function PUT(request: NextRequest, { params }: StatusParams) {
     }
 
     const { documentId } = params
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { status, signatureRequestId, signedAt, metadata } = body
 
     // Validate status

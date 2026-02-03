@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth';
 import { createRequestLogger } from '@/lib/logging/structured';
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -81,8 +82,7 @@ export async function GET(request: NextRequest) {
       logger.error('Database error fetching clients', error);
       return NextResponse.json({
         success: false,
-        error: 'Failed to fetch clients',
-        details: error.message
+        error: 'Failed to fetch clients'
       }, { status: 500 });
     }
     
@@ -102,8 +102,7 @@ export async function GET(request: NextRequest) {
     logger.error('GET /api/clients error', error);
     return NextResponse.json({
       success: false,
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
@@ -121,7 +120,7 @@ export async function POST(request: NextRequest) {
   try {
     logger.info('POST /api/clients - Creating new client', { firmId });
 
-    const body = await request.json();
+    const body = await parseRequestBody(request);
 
     // Prepare data for database (already in snake_case from frontend)
     const clientData: Record<string, unknown> = {
@@ -148,8 +147,7 @@ export async function POST(request: NextRequest) {
       logger.error('Database error creating client', error);
       return NextResponse.json({
         success: false,
-        error: 'Failed to create client',
-        details: error.message
+        error: 'Failed to create client'
       }, { status: 500 });
     }
 
@@ -165,8 +163,7 @@ export async function POST(request: NextRequest) {
     logger.error('POST /api/clients error', error);
     return NextResponse.json({
       success: false,
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }

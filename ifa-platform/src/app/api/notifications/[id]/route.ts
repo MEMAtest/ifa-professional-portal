@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { NotificationService } from '@/lib/notifications/notificationService'
+import { log } from '@/lib/logging/structured'
 
 /**
  * PATCH /api/notifications/[id]
@@ -22,7 +23,7 @@ export async function PATCH(
     }
 
     const { id } = await params
-    console.log('[PATCH notification] id:', id, 'userId:', authResult.context.userId, 'firmId:', authResult.context.firmId)
+    log.debug('[PATCH notification] request', { id, userId: authResult.context.userId, firmId: authResult.context.firmId })
 
     const success = await NotificationService.markAsRead(
       id,
@@ -30,7 +31,7 @@ export async function PATCH(
       authResult.context.firmId ?? undefined
     )
 
-    console.log('[PATCH notification] success:', success)
+    log.debug('[PATCH notification] success', { id, success })
 
     if (!success) {
       return NextResponse.json(
@@ -41,14 +42,10 @@ export async function PATCH(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('PATCH /api/notifications/[id] error:', error, (error as any)?.cause)
-    const isDev = process.env.NODE_ENV === 'development'
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    const code = (error as any)?.code
+    log.error('PATCH /api/notifications/[id] error', error)
     return NextResponse.json(
       {
-        error: isDev ? message : 'Internal server error',
-        ...(isDev && code ? { code } : {})
+        error: 'Internal server error'
       },
       { status: 500 }
     )
@@ -89,14 +86,10 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('DELETE /api/notifications/[id] error:', error)
-    const isDev = process.env.NODE_ENV === 'development'
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    const code = (error as any)?.code
+    log.error('DELETE /api/notifications/[id] error', error)
     return NextResponse.json(
       {
-        error: isDev ? message : 'Internal server error',
-        ...(isDev && code ? { code } : {})
+        error: 'Internal server error'
       },
       { status: 500 }
     )

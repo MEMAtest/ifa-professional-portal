@@ -4,16 +4,13 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 import path from 'path'
 import { log } from '@/lib/logging/structured'
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Type definitions
 interface GenerateDocumentRequest {
@@ -75,7 +72,17 @@ export async function POST(request: NextRequest) {
   let filePath: string | null = null
 
   try {
-    const body: GenerateDocumentRequest = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body: GenerateDocumentRequest = await parseRequestBody(request)
     const { assessmentType, assessmentId, clientId, reportType = 'standard' } = body
 
     log.info('Document generation requested', {
@@ -93,12 +100,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const supabase = getSupabaseServiceClient() as any
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     // Fetch assessment data
     const assessmentTable = `${assessmentType}_assessments`
     const { data: assessment, error: assessmentError } = await supabase
       .from(assessmentTable)
       .select('*')
       .eq('id', assessmentId)
+      .eq('client_id', clientId)
       .single()
 
     if (assessmentError || !assessment) {
@@ -116,6 +136,7 @@ export async function POST(request: NextRequest) {
       .from('clients')
       .select('*')
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .single()
 
     if (clientError || !client) {
@@ -335,7 +356,7 @@ export async function POST(request: NextRequest) {
     const safeClientName = clientName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)
     const versionString = assessmentData.version_number ? `_v${assessmentData.version_number}` : ''
     const fileName = `${assessmentType}_${reportType}_${safeClientName}${versionString}_${timestamp}.pdf`
-    filePath = `documents/${clientId}/${fileName}`
+    filePath = `firms/${firmId}/documents/${fileName}`
 
     // Upload to storage
     const { error: uploadError } = await supabase.storage
@@ -364,6 +385,7 @@ export async function POST(request: NextRequest) {
 
     const documentRecord = {
       id: documentId,
+      firm_id: firmId,
       client_id: clientId,
       name: documentName,
       client_name: clientName,
@@ -375,6 +397,7 @@ export async function POST(request: NextRequest) {
       mime_type: 'application/pdf',
       type: `${assessmentType}_assessment`,
       category: 'Assessment Reports',
+      created_by: auth.context.userId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       metadata: {

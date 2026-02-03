@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { openSignService } from '@/services/OpenSignService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,16 @@ export async function GET(
   log.debug('DOWNLOAD: API endpoint called for ID:', { id: params.id })
 
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const firmId = firmResult.firmId
+
     const signatureRequestId = params.id
 
     if (!signatureRequestId) {
@@ -43,6 +54,7 @@ export async function GET(
         )
       `)
       .eq('id', signatureRequestId)
+      .eq('firm_id', firmId)
       .single()
 
     if (signatureError || !signatureRequest) {
@@ -114,8 +126,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        error: 'Failed to download signed document'
       },
       { status: 500 }
     )

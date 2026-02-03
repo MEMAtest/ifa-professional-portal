@@ -5,7 +5,7 @@
 // =====================================================
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,42 +42,40 @@ export async function GET() {
   const overallStatus = hasUnhealthy ? 'unhealthy' : hasDegraded ? 'degraded' : 'healthy'
   const statusCode = hasUnhealthy ? 503 : 200
 
-  return NextResponse.json({
-    status: overallStatus,
-    timestamp: new Date().toISOString(),
-    totalLatencyMs: Date.now() - startTime,
-    checks
-  }, { status: statusCode })
+  return NextResponse.json(
+    {
+      status: overallStatus,
+      timestamp: new Date().toISOString(),
+      totalLatencyMs: Date.now() - startTime,
+      checks
+    },
+    { status: statusCode }
+  )
 }
 
 /**
  * Verify required environment variables are set
  */
 function checkEnvironmentVariables(): HealthCheck {
-  const required = [
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'NEXT_PUBLIC_SUPABASE_ANON_KEY'
-  ]
+  const required = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']
+  const optional = ['RESEND_API_KEY', 'NEXT_PUBLIC_APP_URL']
 
-  const missing = required.filter(key => !process.env[key])
+  const hasMissingRequired = required.some((key) => !process.env[key])
+  const hasMissingOptional = optional.some((key) => !process.env[key])
 
-  if (missing.length > 0) {
+  if (hasMissingRequired) {
     return {
       name: 'environment',
       status: 'unhealthy',
-      message: `Missing required env vars: ${missing.join(', ')}`
+      message: 'Missing required configuration'
     }
   }
 
-  // Check optional but important vars
-  const optional = ['RESEND_API_KEY', 'NEXT_PUBLIC_APP_URL']
-  const missingOptional = optional.filter(key => !process.env[key])
-
-  if (missingOptional.length > 0) {
+  if (hasMissingOptional) {
     return {
       name: 'environment',
       status: 'degraded',
-      message: `Missing optional env vars: ${missingOptional.join(', ')}`
+      message: 'Optional configuration missing'
     }
   }
 
@@ -94,18 +92,7 @@ async function checkDatabaseConnection(): Promise<HealthCheck> {
   const startTime = Date.now()
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        name: 'database',
-        status: 'unhealthy',
-        message: 'Database credentials not configured'
-      }
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseServiceClient()
 
     // Simple query to test connectivity
     const { error } = await supabase
@@ -130,7 +117,7 @@ async function checkDatabaseConnection(): Promise<HealthCheck> {
         name: 'database',
         status: 'unhealthy',
         latencyMs,
-        message: error.message
+        message: 'Database error'
       }
     }
 
@@ -155,7 +142,7 @@ async function checkDatabaseConnection(): Promise<HealthCheck> {
       name: 'database',
       status: 'unhealthy',
       latencyMs: Date.now() - startTime,
-      message: error instanceof Error ? error.message : 'Connection failed'
+      message: 'Connection failed'
     }
   }
 }

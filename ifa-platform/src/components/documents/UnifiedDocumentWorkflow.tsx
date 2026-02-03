@@ -31,6 +31,17 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useRef } from 'react'
+import sanitizeHtml from 'sanitize-html'
+
+const sanitizeDocumentHtml = (html: string) =>
+  sanitizeHtml(html, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'style']),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      img: ['src', 'alt', 'width', 'height', 'style'],
+      '*': ['style', 'class', 'id']
+    }
+  })
 
 // ===================================================================
 // TYPES & INTERFACES (FIXED)
@@ -826,7 +837,7 @@ export default function UnifiedDocumentWorkflow() {
               <div className="border-2 border-gray-200 rounded-lg shadow-inner bg-white">
                 <div className="h-[500px] overflow-y-auto p-8">
                   <div 
-                    dangerouslySetInnerHTML={{ __html: generatedDocument.content }} 
+                    dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(generatedDocument.content) }} 
                     className="prose prose-sm max-w-none"
                   />
                 </div>

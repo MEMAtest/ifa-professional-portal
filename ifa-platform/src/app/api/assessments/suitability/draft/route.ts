@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { isUUID } from '@/lib/utils'
 import type { SuitabilityFormData } from '@/types/suitability'
 import {
@@ -11,13 +12,21 @@ import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { saveSuitabilityDraftWithMirrors } from '@/lib/suitability/server/saveSuitabilityDraftWithMirrors'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 type DraftPayload = {
   clientId: string
   assessmentId?: string
-  formData: any
+  formData?: any
   completionPercentage?: number
 }
+
+const requestSchema = z.object({
+  clientId: z.string().min(1),
+  assessmentId: z.string().optional(),
+  formData: z.any(),
+  completionPercentage: z.number().optional()
+})
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    const body: DraftPayload = await req.json()
+    const body: DraftPayload = await parseRequestBody(req, requestSchema)
     const { clientId, assessmentId, formData, completionPercentage } = body
     if (!clientId || !formData) {
       return NextResponse.json({ success: false, error: 'clientId and formData are required' }, { status: 400 })
@@ -68,7 +77,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     log.error('Suitability draft error', error)
-    const message = error instanceof Error ? error.message : 'Internal server error'
+    const message = ''
     const status = typeof (error as any)?.status === 'number' ? (error as any).status : 500
     return NextResponse.json({ success: false, error: message }, { status })
   }
@@ -190,7 +199,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     log.error('Suitability draft fetch error', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { success: false, error: '' },
       { status: 500 }
     )
   }

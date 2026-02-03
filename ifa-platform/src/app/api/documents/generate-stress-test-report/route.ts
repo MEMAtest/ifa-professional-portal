@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jsPDF } from 'jspdf';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 // ================================================================
 // TYPES
@@ -499,7 +501,7 @@ function generateStressTestPdf(
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { results, clientProfile, selectedScenarios, options } = body;
 
     if (!results || results.length === 0) {
@@ -578,7 +580,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (storageError) {
-      console.error('Storage error:', storageError);
+      log.error('Storage error:', storageError);
       // Fall through to inline PDF response
     }
 
@@ -589,9 +591,9 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Stress test report generation error:', error);
+    log.error('Stress test report generation error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to generate report' },
+      { success: false, error: '' },
       { status: 500 }
     );
   }

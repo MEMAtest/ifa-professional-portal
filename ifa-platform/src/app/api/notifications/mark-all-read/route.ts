@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { NotificationService } from '@/lib/notifications/notificationService'
+import { log } from '@/lib/logging/structured'
 
 /**
  * POST /api/notifications/mark-all-read
@@ -25,14 +26,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, count })
   } catch (error) {
-    console.error('POST /api/notifications/mark-all-read error:', error)
-    const isDev = process.env.NODE_ENV === 'development'
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    const code = (error as any)?.code
+    log.error('POST /api/notifications/mark-all-read error', error)
     return NextResponse.json(
       {
-        error: isDev ? message : 'Internal server error',
-        ...(isDev && code ? { code } : {})
+        error: 'Internal server error'
       },
       { status: 500 }
     )

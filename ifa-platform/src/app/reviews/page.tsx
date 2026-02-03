@@ -361,11 +361,11 @@ export default function ReviewsDashboard() {
 
     // Review Types for Bar Chart
     const reviewTypeData = [
-      { type: 'Annual', count: reviews.filter(r => r.review_type === 'annual').length, pending: reviews.filter(r => r.review_type === 'annual' && r.status !== 'completed').length },
-      { type: 'Periodic', count: reviews.filter(r => r.review_type === 'periodic').length, pending: reviews.filter(r => r.review_type === 'periodic' && r.status !== 'completed').length },
-      { type: 'Regulatory', count: reviews.filter(r => r.review_type === 'regulatory').length, pending: reviews.filter(r => r.review_type === 'regulatory' && r.status !== 'completed').length },
-      { type: 'Ad Hoc', count: reviews.filter(r => r.review_type === 'ad_hoc').length, pending: reviews.filter(r => r.review_type === 'ad_hoc' && r.status !== 'completed').length },
-      { type: 'PROD', count: reviews.filter(r => r.review_type === 'prod_policy').length, pending: reviews.filter(r => r.review_type === 'prod_policy' && r.status !== 'completed').length }
+      { type: 'Annual', count: reviews.filter(r => r.review_type === 'annual').length, outstanding: reviews.filter(r => r.review_type === 'annual' && r.status !== 'completed').length },
+      { type: 'Periodic', count: reviews.filter(r => r.review_type === 'periodic').length, outstanding: reviews.filter(r => r.review_type === 'periodic' && r.status !== 'completed').length },
+      { type: 'Regulatory', count: reviews.filter(r => r.review_type === 'regulatory').length, outstanding: reviews.filter(r => r.review_type === 'regulatory' && r.status !== 'completed').length },
+      { type: 'Ad Hoc', count: reviews.filter(r => r.review_type === 'ad_hoc').length, outstanding: reviews.filter(r => r.review_type === 'ad_hoc' && r.status !== 'completed').length },
+      { type: 'PROD', count: reviews.filter(r => r.review_type === 'prod_policy').length, outstanding: reviews.filter(r => r.review_type === 'prod_policy' && r.status !== 'completed').length }
     ]
 
     // Monthly Trend (last 6 months)
@@ -546,7 +546,7 @@ export default function ReviewsDashboard() {
                   ]}
                 />
                 <Bar dataKey="count" fill="#3B82F6" radius={[0, 4, 4, 0]} name="Total" />
-                <Bar dataKey="pending" fill="#F59E0B" radius={[0, 4, 4, 0]} name="Pending" />
+                <Bar dataKey="outstanding" fill="#F59E0B" radius={[0, 4, 4, 0]} name="Outstanding" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

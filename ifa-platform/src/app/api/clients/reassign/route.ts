@@ -12,6 +12,7 @@ import { notifyClientReassigned } from '@/lib/notifications/notificationService'
 import { rateLimit } from '@/lib/security/rateLimit'
 import type { Json } from '@/types/db'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 // UUID validation regex (RFC 4122 compliant)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body: ReassignRequest = await request.json()
+    const body: ReassignRequest = await parseRequestBody(request)
     const { clientIds, newAdvisorId, transferAssessments = false, reason: rawReason } = body
 
     // Sanitize reason field
@@ -441,8 +442,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Internal server error'
       },
       { status: 500 }
     )

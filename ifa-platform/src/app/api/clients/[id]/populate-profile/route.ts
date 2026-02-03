@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface ExtractedProfile {
   personal_details?: Record<string, unknown>
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest, context: { params: { id: string
       return NextResponse.json({ success: false, error: 'Client ID is required' }, { status: 400 })
     }
 
-    const { documentIds } = await request.json().catch(() => ({ documentIds: null }))
+    const { documentIds } = await parseRequestBody(request, undefined, { allowEmpty: true })
 
     const supabase = getSupabaseServiceClient()
 

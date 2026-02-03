@@ -20,7 +20,7 @@ interface Review {
   review_type: string;
   due_date: string;
   completed_date?: string;
-  status: 'completed' | 'pending' | 'cancelled' | 'overdue';
+  status: 'completed' | 'scheduled' | 'cancelled' | 'overdue';
   review_summary?: string;
   changes_made?: any;
   recommendations?: any;

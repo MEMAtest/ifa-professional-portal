@@ -20,6 +20,7 @@ export interface AuthContext {
   role: string | null
   firmId: string | null
   advisorId: string | null
+  isPlatformAdmin?: boolean | null
 }
 
 export interface AuthResult {
@@ -39,11 +40,6 @@ export interface AuthOptions {
 // AUTH HELPER FUNCTIONS
 // ================================================================
 
-function getDefaultFirmId(): string | null {
-  const envDefaultFirmId = process.env.DEFAULT_FIRM_ID ?? process.env.NEXT_PUBLIC_DEFAULT_FIRM_ID
-  return typeof envDefaultFirmId === 'string' && envDefaultFirmId.trim() ? envDefaultFirmId.trim() : null
-}
-
 function normalizeOptionalString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -56,6 +52,16 @@ function normalizeFirmId(value: unknown): string | null {
   // Avoid legacy placeholder values leaking into firm-scoped queries.
   if (trimmed === 'default-firm') return null
   return trimmed
+}
+
+function normalizeOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return null
 }
 
 function decodeBase64Url(value: string): string | null {
@@ -72,6 +78,35 @@ function decodeBase64Url(value: string): string | null {
     }
   } catch {
     // ignore
+  }
+  return null
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+  const decoded = decodeBase64Url(parts[1])
+  if (!decoded) return null
+  try {
+    return JSON.parse(decoded) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function extractClaimValue(claims: Record<string, unknown> | null, paths: string[][]): string | null {
+  if (!claims) return null
+  for (const path of paths) {
+    let current: any = claims
+    for (const key of path) {
+      if (!current || typeof current !== 'object') {
+        current = null
+        break
+      }
+      current = current[key]
+    }
+    const normalized = normalizeOptionalString(current)
+    if (normalized) return normalized
   }
   return null
 }
@@ -259,9 +294,9 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
     // Get user profile with role and firm info
     // Use the service client to bypass RLS — we already verified the user's identity above.
     const serviceClient = getSupabaseServiceClient()
-    const { data: profile, error: profileError } = await serviceClient
-      .from('profiles')
-      .select('role, firm_id')
+    const { data: profile, error: profileError } = await (serviceClient
+      .from('profiles') as any)
+      .select('role, firm_id, is_platform_admin')
       .eq('id', user.id)
       .single()
 
@@ -285,19 +320,51 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
       (metadata.advisorId as string | undefined) ??
       null
 
-    const defaultFirmId = getDefaultFirmId()
+    const claimToken = bearerToken || cookieAccessToken || null
+    const jwtClaims = claimToken ? decodeJwtPayload(claimToken) : null
+    const jwtFirmId = extractClaimValue(jwtClaims, [
+      ['firm_id'],
+      ['firmId'],
+      ['claims', 'firm_id'],
+      ['claims', 'firmId'],
+      ['app_metadata', 'firm_id'],
+      ['user_metadata', 'firm_id'],
+    ])
+    const jwtRole = extractClaimValue(jwtClaims, [
+      ['app_role'],
+      ['claims', 'app_role'],
+      ['role'],
+      ['claims', 'role'],
+      ['app_metadata', 'role'],
+      ['user_metadata', 'role'],
+    ])
+    const jwtIsPlatformAdmin = extractClaimValue(jwtClaims, [
+      ['is_platform_admin'],
+      ['claims', 'is_platform_admin'],
+      ['app_metadata', 'is_platform_admin'],
+      ['user_metadata', 'is_platform_admin'],
+    ])
+
     const firmId =
+      normalizeFirmId(jwtFirmId) ??
       normalizeFirmId(profile?.firm_id) ??
-      normalizeFirmId(metadataFirmId) ??
-      normalizeFirmId(defaultFirmId)
+      normalizeFirmId(metadataFirmId)
 
     const context: AuthContext = {
       user,
       userId: user.id,
       email: user.email,
-      role: normalizeOptionalString(profile?.role) || normalizeOptionalString(metadataRole),
+      role:
+        normalizeOptionalString(jwtRole) ||
+        normalizeOptionalString(profile?.role) ||
+        normalizeOptionalString(metadataRole),
       firmId,
-      advisorId: normalizeOptionalString(metadataAdvisorId) || user.id
+      advisorId: normalizeOptionalString(metadataAdvisorId) || user.id,
+      isPlatformAdmin:
+        normalizeOptionalBoolean(jwtIsPlatformAdmin) ??
+        normalizeOptionalBoolean(profile?.is_platform_admin) ??
+        normalizeOptionalBoolean((metadata as any).is_platform_admin) ??
+        null
     }
 
     return {
@@ -466,7 +533,8 @@ export const ROLES = {
   ADVISOR: 'advisor',
   COMPLIANCE: 'compliance',
   SUPPORT: 'support',
-  CLIENT: 'client'
+  CLIENT: 'client',
+  OWNER: 'owner'
 } as const
 
 export type Role = typeof ROLES[keyof typeof ROLES]
@@ -477,28 +545,28 @@ export type Role = typeof ROLES[keyof typeof ROLES]
 
 export function canAccessClient(authContext: AuthContext, clientAdvisorId: string): boolean {
   // Admins can access all clients
-  if (authContext.role === ROLES.ADMIN) return true
+  if (authContext.role === ROLES.ADMIN || authContext.role === ROLES.OWNER) return true
 
   // Advisors can only access their own clients
   return authContext.advisorId === clientAdvisorId
 }
 
 export function canModifyDocument(authContext: AuthContext, documentAdvisorId: string): boolean {
-  if (authContext.role === ROLES.ADMIN) return true
+  if (authContext.role === ROLES.ADMIN || authContext.role === ROLES.OWNER) return true
   if (authContext.role === ROLES.COMPLIANCE) return true
   return authContext.advisorId === documentAdvisorId
 }
 
 export function isAdmin(authContext: AuthContext): boolean {
-  return authContext.role === ROLES.ADMIN
+  return authContext.role === ROLES.ADMIN || authContext.role === ROLES.OWNER
 }
 
 export function isAdvisor(authContext: AuthContext): boolean {
-  return authContext.role === ROLES.ADVISOR || authContext.role === ROLES.ADMIN
+  return authContext.role === ROLES.ADVISOR || authContext.role === ROLES.ADMIN || authContext.role === ROLES.OWNER
 }
 
 export function isCompliance(authContext: AuthContext): boolean {
-  return authContext.role === ROLES.COMPLIANCE || authContext.role === ROLES.ADMIN
+  return authContext.role === ROLES.COMPLIANCE || authContext.role === ROLES.ADMIN || authContext.role === ROLES.OWNER
 }
 
 // ================================================================
@@ -558,6 +626,13 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   client: [
     'assessments:read',
     'documents:read', 'documents:sign'
+  ],
+  owner: [
+    'clients:read', 'clients:write', 'clients:delete',
+    'assessments:read', 'assessments:write', 'assessments:delete',
+    'documents:read', 'documents:write', 'documents:delete', 'documents:sign',
+    'reports:read', 'reports:generate',
+    'admin:users', 'admin:settings', 'admin:audit'
   ]
 }
 

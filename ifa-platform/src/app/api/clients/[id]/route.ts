@@ -11,6 +11,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyProfileUpdated } from '@/lib/notifications/notificationService'
+import { parseRequestBody } from '@/app/api/utils'
 
 /**
  * GET /api/clients/[id]
@@ -77,8 +78,7 @@ export async function GET(
       return NextResponse.json(
         {
           success: false,
-          error: 'Failed to fetch client',
-          details: error.message
+          error: 'Failed to fetch client'
         },
         { status: 500 }
       );
@@ -108,8 +108,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Internal server error'
       },
       { status: 500 }
     );
@@ -150,7 +149,7 @@ export async function PATCH(
       );
     }
 
-    const updates = await request.json();
+    const updates = await parseRequestBody(request);
 
     // ========================================
     // OPTIMISTIC LOCKING
@@ -240,8 +239,7 @@ export async function PATCH(
       return NextResponse.json(
         {
           success: false,
-          error: 'Failed to update client',
-          details: error.message
+          error: 'Failed to update client'
         },
         { status: 500 }
       );
@@ -364,8 +362,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Internal server error'
       },
       { status: 500 }
     );
@@ -492,8 +489,7 @@ export async function DELETE(
       return NextResponse.json(
         {
           success: false,
-          error: 'Failed to delete client',
-          details: error.message
+          error: 'Failed to delete client'
         },
         { status: 500 }
       );
@@ -515,8 +511,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Internal server error'
       },
       { status: 500 }
     );

@@ -5,7 +5,8 @@
 // ================================================================
 
 import { createClient as createBrowserClient } from '@/lib/supabase/client'
-import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { Database } from '@/types/db'
 
 // ================================================================
@@ -109,13 +110,7 @@ export class AdvisorContextService {
 
   private constructor() {
     if (typeof window === 'undefined') {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const key =
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!url || !key) {
-        throw new Error('Supabase credentials missing for AdvisorContextService')
-      }
-      this.supabase = createSupabaseClient<Database>(url, key)
+      this.supabase = getSupabaseServiceClient()
     } else {
       this.supabase = createBrowserClient()
     }

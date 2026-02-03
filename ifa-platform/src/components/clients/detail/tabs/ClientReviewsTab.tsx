@@ -98,7 +98,7 @@ export function ClientReviewsTab(props: {
         </CardHeader>
         <CardContent>
           {(() => {
-            const upcomingReview = reviews?.find((r: any) => r.status === 'pending' || r.status === 'overdue')
+            const upcomingReview = reviews?.find((r: any) => r.status === 'scheduled' || r.status === 'overdue')
 
             if (upcomingReview) {
               return (
@@ -143,4 +143,3 @@ export function ClientReviewsTab(props: {
     </div>
   )
 }
-

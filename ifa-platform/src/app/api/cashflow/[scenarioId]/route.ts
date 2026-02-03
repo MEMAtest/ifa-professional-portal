@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
 import { handleError, checkAuthentication } from '../../utils';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface RouteParams {
   params: { scenarioId: string };
@@ -61,7 +62,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const { scenarioId } = params;
-    const updates = await request.json();
+    const updates = await parseRequestBody(request);
 
     if (Object.keys(updates).length === 0) {
         return NextResponse.json({ success: false, error: 'Request body cannot be empty.' }, { status: 400 });

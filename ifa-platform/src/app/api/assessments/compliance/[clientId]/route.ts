@@ -8,6 +8,7 @@ import type { Database, DbInsert, DbRow } from '@/types/db';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -209,7 +210,7 @@ export async function POST(
 ) {
   try {
     const clientId = params.clientId;
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { alertId, resolution, notes } = body;
     const supabase = getSupabaseServiceClient();
 
@@ -281,7 +282,7 @@ export async function PATCH(
 ) {
   try {
     const clientId = params.clientId;
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { remindersEnabled, reviewFrequency } = body;
     const supabase = getSupabaseServiceClient();
 

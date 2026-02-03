@@ -108,8 +108,8 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     'Assessment Tools': true
   });
   const isPlatformAdmin = useMemo(
-    () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
-    [user?.email, user?.role]
+    () => isPlatformAdminUser({ email: user?.email, role: user?.role, isPlatformAdmin: user?.isPlatformAdmin }),
+    [user?.email, user?.role, user?.isPlatformAdmin]
   )
 
   // Helper to build assessment URLs with client context

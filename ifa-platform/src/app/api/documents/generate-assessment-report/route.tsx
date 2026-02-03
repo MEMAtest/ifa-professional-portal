@@ -3,11 +3,9 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 // ChartJSNodeCanvas removed - requires native 'canvas' module
 // Charts are generated client-side or omitted from server PDFs
-import type { Database } from '@/types/db'
-import { getAuthContext, canAccessClient, ROLES } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { advisorContextService } from '@/services/AdvisorContextService'
 import { mapSuitabilityAssessmentRowToFormData } from '@/lib/suitability/mappers'
 import type { PulledPlatformData } from '@/types/suitability'
@@ -15,65 +13,40 @@ import { buildSuitabilityReportModel } from '@/lib/suitability/reporting/buildSu
 import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
 import { generateSuitabilityReportAIContent } from '@/services/reportAIService'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 
 import type { GenerateAssessmentReportRequest } from './types'
 import { normalizeSuitabilityReportVariant } from './types'
 import { fetchATRCFLAtOrBefore, fetchPersonaAtOrBefore } from './platformData'
 import { generateCharts, generatePdfWithJsPDF } from './jspdf'
-
-function getSupabaseServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    throw new Error('Supabase credentials are not configured')
-  }
-
-  return createSupabaseClient<Database>(url, key)
-}
-
-async function resolveFirmId(
-  supabase: ReturnType<typeof getSupabaseServiceClient>,
-  client: any,
-  ctx: { firmId?: string | null }
-): Promise<string | null> {
-  if (client?.firm_id) return String(client.firm_id)
-  if (ctx?.firmId) return String(ctx.firmId)
-
-  // Single-firm fallback: pick the first firm in the database (if any).
-  const { data: firm, error } = await supabase
-    .from('firms')
-    .select('id')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (error && error.code !== 'PGRST116') {
-    log.warn('[generate-assessment-report] Failed to resolve default firm', { message: error.message })
-    return null
-  }
-
-  return firm?.id ? String(firm.id) : null
-}
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function POST(request: NextRequest) {
   try {
-    const body: GenerateAssessmentReportRequest = await request.json()
+    // Verify authentication (multi-firm safety)
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return (
+        auth.response ||
+        NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
+      )
+    }
+
+    const ctx = auth.context
+    const firmResult = requireFirmId(ctx)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body: GenerateAssessmentReportRequest = await parseRequestBody(request)
     const { assessmentType, assessmentId, clientId, reportType } = body
 
     if (!assessmentType || !assessmentId || !clientId) {
       return NextResponse.json(
         { error: 'assessmentType, assessmentId, and clientId are required' },
         { status: 400 }
-      )
-    }
-
-    // Verify authentication (multi-firm safety)
-    const auth = await getAuthContext(request)
-    if (!auth.success) {
-      return (
-        auth.response ||
-        NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
       )
     }
 
@@ -85,6 +58,7 @@ export async function POST(request: NextRequest) {
       .from('clients')
       .select('*')
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .maybeSingle()
 
     if (clientError || !client) {
@@ -94,16 +68,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const ctx = auth.context!
-    if (ctx.role !== ROLES.ADMIN) {
-      if (ctx.firmId && client.firm_id && ctx.firmId !== client.firm_id) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-
-      // If a client has an assigned advisor, restrict to that advisor (admin can bypass)
-      if (client.advisor_id && !canAccessClient(ctx, client.advisor_id)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
     }
 
     // Fetch assessment data (suitability handled explicitly)
@@ -136,10 +108,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const firmId = await resolveFirmId(supabase, client, ctx)
-
     const generatedAtISO = new Date().toISOString()
-    const reportContext = await advisorContextService.getReportContext(ctx.userId, firmId ?? undefined)
+    const reportContext = await advisorContextService.getReportContext(ctx.userId, firmId)
 
     let pdfBuffer: ArrayBuffer | Buffer
     let charts: any = {}

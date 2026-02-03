@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getFCAConfig, isFCAApiError } from '@/lib/fca-register'
+import { log } from '@/lib/logging/structured'
 
 async function fcaFetch(url: string, config: { email: string; apiKey: string }) {
   const controller = new AbortController()
@@ -115,10 +116,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ results })
   } catch (error) {
-    console.error('FCA Register search error:', error)
+    log.error('FCA Register search error:', error)
 
     if (isFCAApiError(error)) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return NextResponse.json({ error: 'FCA search failed' }, { status: error.status })
     }
 
     return NextResponse.json({ error: 'Search failed' }, { status: 500 })

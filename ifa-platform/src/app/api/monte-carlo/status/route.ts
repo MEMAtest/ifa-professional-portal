@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           success: false,
           status: 'unhealthy',
-          error: healthResponse?.error || 'Database health check failed',
+          error: 'Database health check failed',
           timestamp: new Date().toISOString()
         },
         { status: 503 }
@@ -105,15 +105,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error: unknown) {
     log.error('Monte Carlo status API error', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : undefined;
-
     return NextResponse.json(
       {
         success: false,
         status: 'error',
-        error: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
+        error: 'Health check failed',
         timestamp: new Date().toISOString()
       },
       { status: 500 }

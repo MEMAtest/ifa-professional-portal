@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 const ALLOWED_TYPES = new Set([
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error('[Logo API] Upload error:', uploadError)
+      log.error('[Logo API] Upload error:', uploadError)
       return NextResponse.json(
         { error: 'Upload failed', message: 'Could not upload logo to storage' },
         { status: 500 }
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (fetchError) {
-      console.error('[Logo API] Error fetching firm:', fetchError)
+      log.error('[Logo API] Error fetching firm:', fetchError)
       return NextResponse.json(
         { error: 'Failed to update firm settings' },
         { status: 500 }
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
       .eq('id', firmIdResult.firmId)
 
     if (updateError) {
-      console.error('[Logo API] Error updating firm settings:', updateError)
+      log.error('[Logo API] Error updating firm settings:', updateError)
       return NextResponse.json(
         { error: 'Failed to save logo URL' },
         { status: 500 }
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data: { logoUrl } })
   } catch (error) {
-    console.error('[Logo API] Unexpected error:', error)
+    log.error('[Logo API] Unexpected error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

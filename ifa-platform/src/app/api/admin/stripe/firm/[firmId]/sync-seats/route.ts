@@ -7,6 +7,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getStripeClient } from '@/lib/billing/stripeClient'
 import { getPlatformBillingConfig, resolveStripePriceConfig } from '@/lib/billing/platformBillingConfig'
 import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billing/firmBilling'
+import { log } from '@/lib/logging/structured'
 
 const DEFAULT_INCLUDED_SEATS = 1
 
@@ -35,7 +36,7 @@ export async function POST(
       .single()
 
     if (firmError || !firm) {
-      console.error('[Stripe Seat Sync] Firm not found:', firmError)
+      log.error('[Stripe Seat Sync] Firm not found:', firmError)
       return NextResponse.json({ error: 'Firm not found' }, { status: 404 })
     }
 
@@ -60,7 +61,7 @@ export async function POST(
       .eq('firm_id', firmId)
 
     if (profilesError) {
-      console.error('[Stripe Seat Sync] Failed to fetch profiles:', profilesError)
+      log.error('[Stripe Seat Sync] Failed to fetch profiles:', profilesError)
       return NextResponse.json({ error: 'Failed to fetch firm users' }, { status: 500 })
     }
 
@@ -132,7 +133,7 @@ export async function POST(
 
     return NextResponse.json({ success: true, billableSeats })
   } catch (error) {
-    console.error('[Stripe Seat Sync] Unexpected error:', error)
+    log.error('[Stripe Seat Sync] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -2,17 +2,36 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body = await parseRequestBody(request)
     const { assessmentType, assessmentId, clientId } = body
+
+    const supabase = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Fetch assessment data
     const assessmentTable = `${assessmentType}_assessments`
@@ -20,6 +39,7 @@ export async function POST(request: NextRequest) {
       .from(assessmentTable)
       .select('*')
       .eq('id', assessmentId)
+      .eq('client_id', clientId)
       .single()
 
     // Fetch client data
@@ -27,6 +47,7 @@ export async function POST(request: NextRequest) {
       .from('clients')
       .select('*')
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .single()
 
     if (!assessment || !client) {

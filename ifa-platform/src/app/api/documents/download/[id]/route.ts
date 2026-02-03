@@ -14,7 +14,14 @@ export async function GET(
 ) {
   // Get auth context for notifications
   const auth = await getAuthContext(request)
-  const userId = auth.context?.userId
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  const userId = auth.context.userId
+  const firmId = auth.context.firmId
+  if (!firmId) {
+    return NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+  }
 
   try {
     const documentId = params.id
@@ -27,6 +34,7 @@ export async function GET(
       .from('documents')
       .select('*')
       .eq('id', documentId)
+      .eq('firm_id', firmId)
       .single()
 
     // Cast to any: document schema has columns not yet in generated types
@@ -154,8 +162,7 @@ export async function GET(
     log.error('Download error', error)
     return NextResponse.json(
       {
-        error: 'Failed to download document',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to download document'
       },
       { status: 500 }
     )

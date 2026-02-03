@@ -300,7 +300,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (error) {
-        log.warn('Could not fetch user names', { error: error instanceof Error ? error.message : 'Unknown' })
+        log.warn('Could not fetch user names', { error: '' })
       }
     }
 
@@ -330,7 +330,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to fetch activity feed',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

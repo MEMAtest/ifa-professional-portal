@@ -11,6 +11,7 @@ import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import type { Firm, FirmUpdateInput } from '@/modules/firm/types/firm.types'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -88,7 +89,7 @@ export async function PUT(request: NextRequest) {
       return firmIdResult
     }
 
-    const body: FirmUpdateInput = await request.json()
+    const body: FirmUpdateInput = await parseRequestBody(request)
     const supabase = getSupabaseServiceClient()
 
     // Build update object

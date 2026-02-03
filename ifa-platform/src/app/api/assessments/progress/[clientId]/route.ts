@@ -2,9 +2,11 @@
 // COMPLETE UNABRIDGED CODE - MATCHES useAssessmentProgress.ts EXACTLY
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/db';
 import { log } from '@/lib/logging/structured';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
+import { requireClientAccess } from '@/lib/auth/requireClientAccess';
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic';
 
@@ -17,21 +19,21 @@ interface AssessmentProgressRecord {
   metadata?: any;
 }
 
-function getServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error('Supabase credentials missing');
-  }
-  return createSupabaseClient<Database>(url, key);
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = getServiceClient();
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult;
+    }
+
+    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
 
     if (!clientId) {
@@ -48,6 +50,16 @@ export async function GET(
         { error: 'Invalid client ID format' },
         { status: 400 }
       );
+    }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    });
+    if (!access.ok) {
+      return access.response;
     }
 
     // Get all assessment progress for the client
@@ -186,8 +198,7 @@ export async function GET(
     log.error('Error in assessment progress GET:', errorDetails);
     return NextResponse.json(
       {
-        error: 'Failed to fetch assessment progress',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to fetch assessment progress'
       },
       { status: 500 }
     );
@@ -199,9 +210,18 @@ export async function POST(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = getServiceClient();
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult;
+    }
+
+    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
-    const body = await request.json();
+    const body = await parseRequestBody(request);
 
     const { 
       assessmentType, 
@@ -215,6 +235,16 @@ export async function POST(
         { error: 'Client ID and assessment type are required' },
         { status: 400 }
       );
+    }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    });
+    if (!access.ok) {
+      return access.response;
     }
 
     const now = new Date().toISOString();

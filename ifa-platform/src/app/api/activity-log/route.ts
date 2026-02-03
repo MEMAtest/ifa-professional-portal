@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface AggregatedActivity {
   id: string
@@ -261,7 +262,7 @@ export async function GET(request: NextRequest) {
         .limit(20);
 
       if (mcError) {
-        console.error('Error fetching Monte Carlo data:', mcError);
+        log.error('Error fetching Monte Carlo data:', mcError);
       }
 
       if (monteCarloData && monteCarloData.length > 0) {
@@ -412,7 +413,7 @@ export async function POST(request: NextRequest) {
     const firmIdResult = requireFirmId(authResult.context)
     if (firmIdResult instanceof NextResponse) return firmIdResult
 
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const {
       clientId,
       action,

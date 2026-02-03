@@ -4,6 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic';
@@ -12,6 +15,15 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
 
@@ -20,6 +32,16 @@ export async function GET(request: NextRequest) {
         { error: 'Client ID is required' },
         { status: 400 }
       );
+    }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
     }
 
     // Use correct table and columns
@@ -70,7 +92,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { 
       clientId, 
       type, 
@@ -91,15 +113,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current user - NO hardcoded fallback for security
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-    const userId = user.id;
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+    const userId = auth.context.userId
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Insert with correct column names
     const { data, error } = await supabase
@@ -125,8 +158,7 @@ export async function POST(request: NextRequest) {
       log.error('Error creating communication', error);
       return NextResponse.json(
         { 
-          error: 'Failed to create communication',
-          details: error.message
+          error: 'Failed to create communication'
         },
         { status: 500 }
       );
@@ -142,7 +174,7 @@ export async function POST(request: NextRequest) {
           action: 'communication_logged',
           type: 'communication',
           date: new Date().toISOString(),
-          user_name: user?.email || 'System'
+          user_name: auth.context?.email || 'System'
         });
     } catch (logError) {
       log.warn('Could not create activity log for communication', { error: logError instanceof Error ? logError.message : 'Unknown' });
@@ -165,7 +197,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
-    const body = await request.json();
+    const body = await parseRequestBody(request);
     const { id, ...updates } = body;
 
     if (!id) {
@@ -198,8 +230,7 @@ export async function PATCH(request: NextRequest) {
       log.error('Error updating communication', error);
       return NextResponse.json(
         { 
-          error: 'Failed to update communication',
-          details: error.message 
+          error: 'Failed to update communication'
         },
         { status: 500 }
       );
@@ -241,8 +272,7 @@ export async function DELETE(request: NextRequest) {
       log.error('Error deleting communication', error);
       return NextResponse.json(
         { 
-          error: 'Failed to delete communication',
-          details: error.message 
+          error: 'Failed to delete communication'
         },
         { status: 500 }
       );

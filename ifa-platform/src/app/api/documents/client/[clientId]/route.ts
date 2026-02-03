@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { log } from '@/lib/logging/structured'
 
 export async function GET(
@@ -15,6 +17,16 @@ export async function GET(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const { clientId } = params
 
     if (!clientId) {
@@ -38,6 +50,16 @@ export async function GET(
 
     const supabase = getSupabaseServiceClient()
 
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     // ---------------------------------------------------------------
     // Two-step query: First get all matching IDs (lightweight), then
     // fetch full document data. This avoids a known issue where
@@ -50,6 +72,7 @@ export async function GET(
       .from('documents')
       .select('id')
       .eq('client_id', clientId)
+      .eq('firm_id', firmId)
 
     // Apply assessment filters to the ID query too
     if (assessmentId) {
@@ -67,7 +90,7 @@ export async function GET(
     if (idError) {
       log.error('Database error fetching document IDs', idError)
       return NextResponse.json(
-        { error: 'Failed to fetch documents', details: idError.message },
+        { error: 'Failed to fetch documents' },
         { status: 500 }
       )
     }
@@ -95,12 +118,13 @@ export async function GET(
       .from('documents')
       .select('*')
       .in('id', allIds)
+      .eq('firm_id', firmId)
       .order('created_at', { ascending: false })
 
     if (error) {
       log.error('Database error fetching document details', error)
       return NextResponse.json(
-        { error: 'Failed to fetch documents', details: error.message },
+        { error: 'Failed to fetch documents' },
         { status: 500 }
       )
     }
@@ -124,6 +148,7 @@ export async function GET(
           .from('documents')
           .select('*')
           .eq('id', missingId)
+          .eq('firm_id', firmId)
           .single()
 
         if (doc && !singleError) {
@@ -184,8 +209,7 @@ export async function GET(
     log.error('API Get documents error', error)
     return NextResponse.json(
       {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Internal server error'
       },
       { status: 500 }
     )

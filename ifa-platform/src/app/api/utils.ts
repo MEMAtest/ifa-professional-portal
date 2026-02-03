@@ -1,5 +1,6 @@
 // src/app/api/utils.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { z, type ZodSchema } from 'zod';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
@@ -66,14 +67,12 @@ export async function checkAuthenticationFromCookies(request: NextRequest) {
 export function handleError(error: any, message: string) {
   log.error(message, error);
 
-  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   const statusCode = error?.status || 500;
-  
+
   return NextResponse.json(
     {
       success: false,
-      error: message,
-      details: errorMessage
+      error: message
     },
     { status: statusCode }
   );
@@ -110,11 +109,7 @@ export function createErrorResponse(error: string, status: number = 400) {
 export function handleApiError(error: unknown) {
   log.error('API Error', error)
 
-  if (error instanceof Error) {
-    return createErrorResponse(error.message, 500)
-  }
-  
-  return createErrorResponse('An unexpected error occurred', 500)
+  return createErrorResponse('Internal server error', 500)
 }
 
 /**
@@ -135,13 +130,33 @@ export function validateRequiredFields(
 /**
  * Parse and validate JSON from request
  */
-export async function parseRequestBody(request: NextRequest): Promise<any> {
+export async function parseRequestBody<T = any>(
+  request: NextRequest,
+  schema?: ZodSchema<T>,
+  options: { allowEmpty?: boolean } = {}
+): Promise<T> {
+  let body: unknown
+
   try {
-    const body = await request.json()
-    return body
+    body = await request.json()
   } catch (error) {
-    throw new Error('Invalid JSON in request body')
+    if (options.allowEmpty) {
+      body = {}
+    } else {
+      throw new Error('Invalid JSON in request body')
+    }
   }
+
+  if (!schema) {
+    return body as T
+  }
+
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
+    throw new Error('Invalid request body')
+  }
+
+  return parsed.data
 }
 
 /**

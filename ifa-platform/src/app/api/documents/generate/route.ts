@@ -10,6 +10,7 @@ import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface GenerateDocumentRequest {
   content: string
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
     }
 
     const supabase: any = getSupabaseServiceClient()
-    const body: GenerateDocumentRequest = await request.json()
+    const body: GenerateDocumentRequest = await parseRequestBody(request)
 
     // Validate required fields
     if (!body.content || !body.title) {
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Document generation failed'
+        error: ''
       },
       { status: 500 }
     )

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { TaskSourceType } from '@/modules/tasks/types'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,13 +82,13 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.error('[Compliance Comments] Fetch error:', error)
+      log.error('[Compliance Comments] Fetch error:', error)
       return NextResponse.json({ error: 'Failed to fetch comments' }, { status: 500 })
     }
 
     return NextResponse.json({ comments: comments || [] })
   } catch (error) {
-    console.error('[Compliance Comments] Unexpected error:', error)
+    log.error('[Compliance Comments] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
       return firmIdResult
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const sourceType = body.sourceType as TaskSourceType | undefined
     const sourceId = body.sourceId as string | undefined
     const content = body.content as string | undefined
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError || !inserted) {
-      console.error('[Compliance Comments] Insert error:', insertError)
+      log.error('[Compliance Comments] Insert error:', insertError)
       return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 })
     }
 
@@ -175,7 +177,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ comment }, { status: 201 })
   } catch (error) {
-    console.error('[Compliance Comments] Unexpected error:', error)
+    log.error('[Compliance Comments] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

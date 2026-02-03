@@ -3,7 +3,7 @@
  * Defines firm user and invitation types
  */
 
-export type UserRole = 'advisor' | 'supervisor' | 'admin'
+export type UserRole = 'advisor' | 'supervisor' | 'compliance' | 'admin'
 export type UserStatus = 'active' | 'invited' | 'deactivated'
 
 export interface FirmUser {

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // ✅ FIXED: Add proper type definitions for metrics
 interface MetricsResponse {
@@ -649,7 +650,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to fetch metrics',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -680,7 +681,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
 
     // Handle different metric operations
     switch (body.action) {
@@ -730,7 +731,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to process metrics request',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

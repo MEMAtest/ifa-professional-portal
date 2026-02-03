@@ -5,13 +5,11 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
-
-const supabase: any = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,10 +35,19 @@ interface AssessmentScores {
 // POST - Save/Submit Consumer Duty Assessment
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body = await parseRequestBody(request)
     const {
       clientId,
-      firmId,
       assessorId,
       answers,
       scores,
@@ -54,6 +61,17 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Client ID is required' },
         { status: 400 }
       )
+    }
+
+    const supabase = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
     }
 
     const now = new Date().toISOString()
@@ -204,6 +222,15 @@ export async function POST(request: NextRequest) {
 // GET - Retrieve Consumer Duty Assessment
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const assessmentId = searchParams.get('assessmentId')
@@ -214,6 +241,19 @@ export async function GET(request: NextRequest) {
         { success: false, error: 'Either clientId or assessmentId is required' },
         { status: 400 }
       )
+    }
+
+    const supabase = getSupabaseServiceClient() as any
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
     }
 
     // Try consumer_duty_assessments first
@@ -329,6 +369,7 @@ export async function GET(request: NextRequest) {
 // Helper function - not exported as Route handler
 // Can be used by importing from a separate utility file if needed
 async function getAssessmentHistory(clientId: string) {
+  const supabase = getSupabaseServiceClient() as any
   const { data, error } = await supabase
     .from('consumer_duty_assessments')
     .select('id, version, overall_score, overall_status, status, assessed_at, assessed_by, created_at')

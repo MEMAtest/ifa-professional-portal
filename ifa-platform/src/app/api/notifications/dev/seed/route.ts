@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { NotificationPriority, NotificationType } from '@/types/notifications'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV !== 'development') {
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     return authResult.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await request.json().catch(() => ({} as Record<string, unknown>))
+  const body = await parseRequestBody(request, undefined, { allowEmpty: true })
 
   const type = (body.type as NotificationType | undefined) ?? 'system'
   const priority = (body.priority as NotificationPriority | undefined) ?? 'normal'
@@ -39,9 +40,8 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error || !notification) {
-    const isDev = process.env.NODE_ENV === 'development'
     return NextResponse.json(
-      { error: isDev ? (error?.message ?? 'Failed to create notification') : 'Failed to create notification' },
+      { error: 'Failed to create notification' },
       { status: 500 }
     )
   }

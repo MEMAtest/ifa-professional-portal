@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 import type {
   CreateTaskInput,
   TaskListParams,
@@ -16,6 +17,7 @@ import type {
   TaskSourceType,
 } from '@/modules/tasks/types'
 import type { Json } from '@/types/db'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -220,7 +222,7 @@ export async function GET(request: NextRequest) {
     const { data: tasks, error, count } = await query
 
     if (error) {
-      console.error('[Tasks API] Error fetching tasks:', error)
+      log.error('[Tasks API] Error fetching tasks', error)
       return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 })
     }
 
@@ -291,7 +293,7 @@ export async function GET(request: NextRequest) {
       hasMore: (count || 0) > offset + (params.perPage || 20),
     })
   } catch (error) {
-    console.error('[Tasks API] Unexpected error:', error)
+    log.error('[Tasks API] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -312,7 +314,7 @@ export async function POST(request: NextRequest) {
       return firmIdResult
     }
 
-    const body: CreateTaskInput = await request.json()
+    const body: CreateTaskInput = await parseRequestBody(request)
 
     // Validate required fields
     if (!body.title || body.title.trim().length === 0) {
@@ -431,7 +433,7 @@ export async function POST(request: NextRequest) {
       .insert(taskPayload)
 
     if (createError) {
-      console.error('[Tasks API] Error creating task:', createError)
+      log.error('[Tasks API] Error creating task', createError)
       return NextResponse.json({ error: 'Failed to create task' }, { status: 500 })
     }
 
@@ -510,7 +512,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ task: response }, { status: 201 })
   } catch (error) {
-    console.error('[Tasks API] Unexpected error:', error)
+    log.error('[Tasks API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

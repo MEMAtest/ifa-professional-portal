@@ -1,4 +1,5 @@
-import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import type { Database } from '@/types/db';
 import type { AssessmentStatus } from '@/types/assessment-status';
 import type { SuitabilityUpdatePayload, SuitabilityFormData } from '@/types/suitability';
@@ -14,17 +15,12 @@ import {
 // Note: using any type here for flexibility
 type AssessmentDataSections = SuitabilityFormData | Record<string, any> | null
 
-// Service client (service role preferred; falls back to anon if not set)
+// Service client (service role required on server)
 function getServiceClient() {
   if (typeof window !== 'undefined') {
     throw new Error('SuitabilityDataService requires a Supabase client in the browser')
   }
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error('Supabase credentials missing');
-  }
-  return createSupabaseClient<Database>(url, key);
+  return getSupabaseServiceClient();
 }
 
 export class SuitabilityDataService {

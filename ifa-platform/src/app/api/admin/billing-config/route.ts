@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 type BillingConfigRow = {
   id: string
@@ -49,13 +51,13 @@ export async function GET(request: NextRequest) {
       .limit(1)
 
     if (error) {
-      console.error('[Billing Config] Failed to fetch config:', error)
+      log.error('[Billing Config] Failed to fetch config:', error)
       return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 })
     }
 
     return NextResponse.json({ config: (data?.[0] as BillingConfigRow | undefined) ?? null })
   } catch (error) {
-    console.error('[Billing Config] Unexpected error:', error)
+    log.error('[Billing Config] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -72,7 +74,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = await request.json().catch(() => ({}))
+    const body = await parseRequestBody(request, undefined, { allowEmpty: true })
     const payload = {
       stripe_base_price_12m_id: normalizeString(body.stripeBasePrice12mId),
       stripe_base_price_24m_id: normalizeString(body.stripeBasePrice24mId),
@@ -92,7 +94,7 @@ export async function PUT(request: NextRequest) {
       .limit(1)
 
     if (existingError) {
-      console.error('[Billing Config] Failed to load existing config:', existingError)
+      log.error('[Billing Config] Failed to load existing config:', existingError)
       return NextResponse.json({ error: 'Failed to load existing config' }, { status: 500 })
     }
 
@@ -107,7 +109,7 @@ export async function PUT(request: NextRequest) {
         .single()
 
       if (updateError || !updated) {
-        console.error('[Billing Config] Failed to update config:', updateError)
+        log.error('[Billing Config] Failed to update config:', updateError)
         return NextResponse.json({ error: 'Failed to update config' }, { status: 500 })
       }
 
@@ -123,7 +125,7 @@ export async function PUT(request: NextRequest) {
         .single()
 
       if (insertError || !inserted) {
-        console.error('[Billing Config] Failed to insert config:', insertError)
+        log.error('[Billing Config] Failed to insert config:', insertError)
         return NextResponse.json({ error: 'Failed to insert config' }, { status: 500 })
       }
 
@@ -132,7 +134,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ config: result })
   } catch (error) {
-    console.error('[Billing Config] Unexpected error:', error)
+    log.error('[Billing Config] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

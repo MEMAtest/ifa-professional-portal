@@ -59,6 +59,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'reviews:assign',
     'reviews:complete',
   ],
+  compliance: [
+    'clients:read',
+    'assessments:read',
+    'firm:read',
+    'compliance:read',
+    'compliance:write',
+    'reviews:read',
+    'reviews:assign',
+    'reviews:complete',
+  ],
   admin: [
     'clients:read',
     'clients:write',

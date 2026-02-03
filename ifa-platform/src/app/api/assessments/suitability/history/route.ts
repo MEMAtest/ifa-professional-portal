@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.json(
-        { success: false, error: error.message || 'Failed to fetch suitability history' },
+        { success: false, error: 'Failed to fetch suitability history' },
         { status: 500 }
       )
     }
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

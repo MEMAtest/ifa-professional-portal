@@ -8,6 +8,8 @@ import { getStripeClient } from '@/lib/billing/stripeClient'
 import { BASE_PLAN_PRICES } from '@/lib/billing/stripeConfig'
 import { getPlatformBillingConfig, resolveStripePriceConfig } from '@/lib/billing/platformBillingConfig'
 import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billing/firmBilling'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 const DEFAULT_INCLUDED_SEATS = 1
 const DEFAULT_SEAT_PRICE = 85
@@ -39,7 +41,7 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const payload = await request.json().catch(() => ({}))
+    const payload = await parseRequestBody(request, undefined, { allowEmpty: true })
     const termMonths = normalizeTerm(payload?.termMonths)
     const requestedSeatPrice = Number(payload?.seatPrice)
     const platformConfig = await getPlatformBillingConfig()
@@ -57,7 +59,7 @@ export async function POST(
       .single()
 
     if (firmError || !firm) {
-      console.error('[Stripe Provision] Firm not found:', firmError)
+      log.error('[Stripe Provision] Firm not found:', firmError)
       return NextResponse.json({ error: 'Firm not found' }, { status: 404 })
     }
 
@@ -72,7 +74,7 @@ export async function POST(
       .eq('firm_id', firmId)
 
     if (profilesError) {
-      console.error('[Stripe Provision] Failed to fetch profiles:', profilesError)
+      log.error('[Stripe Provision] Failed to fetch profiles:', profilesError)
       return NextResponse.json({ error: 'Failed to fetch firm users' }, { status: 500 })
     }
 
@@ -153,7 +155,7 @@ export async function POST(
       .single()
 
     if (updateError || !updatedFirm) {
-      console.error('[Stripe Provision] Failed to update firm settings:', updateError)
+      log.error('[Stripe Provision] Failed to update firm settings:', updateError)
       return NextResponse.json({ error: 'Failed to update firm settings' }, { status: 500 })
     }
 
@@ -167,7 +169,7 @@ export async function POST(
       }
     })
   } catch (error) {
-    console.error('[Stripe Provision] Unexpected error:', error)
+    log.error('[Stripe Provision] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

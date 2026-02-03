@@ -4,6 +4,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import sanitizeHtml from 'sanitize-html'
 import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -478,7 +479,18 @@ export default function TemplateEditorPage() {
                   <div>
                     {/* Preview */}
                     <div className="border rounded-lg p-8 bg-white min-h-[600px]">
-                      <div dangerouslySetInnerHTML={{ __html: processTemplateForPreview() }} />
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizeHtml(processTemplateForPreview(), {
+                            allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'style']),
+                            allowedAttributes: {
+                              ...sanitizeHtml.defaults.allowedAttributes,
+                              img: ['src', 'alt', 'width', 'height', 'style'],
+                              '*': ['style', 'class', 'id']
+                            }
+                          })
+                        }}
+                      />
                     </div>
                   </div>
                 )}

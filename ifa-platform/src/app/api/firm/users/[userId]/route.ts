@@ -12,6 +12,8 @@ import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { FirmUser, UserRole, UserStatus } from '@/modules/firm/types/user.types'
 import type { Json } from '@/types/db'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 // UUID validation regex (RFC 4122 compliant)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -94,7 +96,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json(user)
   } catch (error) {
-    console.error('[User API] GET error:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('[User API] GET error', { error: errorMessage })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -134,7 +137,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return firmIdResult
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { firstName, lastName, phone, role, status } = body
 
     // ========================================
@@ -253,7 +256,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       .single()
 
     if (error) {
-      console.error('[User API] Update error:', error)
+      log.error('[User API] Update error', { error: error.message })
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
     }
 
@@ -272,7 +275,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       if ((postUpdateAdminCount ?? 0) < 1) {
         // Race condition detected! Rollback ALL changes (not just role/status)
-        console.warn('[User API] Race condition detected - rolling back admin demotion')
+        log.warn('[User API] Race condition detected - rolling back admin demotion')
         await (supabase
           .from('profiles') as any)
           .update({
@@ -370,7 +373,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         .insert(activityEntries)
 
       if (activityError) {
-        console.warn('[User API] Failed to log activity:', activityError)
+        log.warn('[User API] Failed to log activity', { error: activityError.message })
         // Don't fail the request - activity logging is non-critical
       }
     }
@@ -399,7 +402,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json(user)
   } catch (error) {
-    console.error('[User API] PUT error:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('[User API] PUT error', { error: errorMessage })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -533,7 +537,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .eq('firm_id', firmIdResult.firmId)
 
     if (error) {
-      console.error('[User API] Deactivate error:', error)
+      log.error('[User API] Deactivate error', { error: error.message })
       return NextResponse.json({ error: 'Failed to deactivate user' }, { status: 500 })
     }
 
@@ -551,7 +555,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
       if ((postDeleteAdminCount ?? 0) < 1) {
         // Race condition detected! Rollback the deactivation
-        console.warn('[User API] Race condition in DELETE - rolling back admin deactivation')
+        log.warn('[User API] Race condition in DELETE - rolling back admin deactivation')
         await (supabase
           .from('profiles') as any)
           .update({
@@ -603,12 +607,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       })
 
     if (activityError) {
-      console.warn('[User API] Failed to log deactivation:', activityError)
+      log.warn('[User API] Failed to log deactivation', { error: activityError.message })
     }
 
     return NextResponse.json({ success: true, message: 'User deactivated' })
   } catch (error) {
-    console.error('[User API] DELETE error:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('[User API] DELETE error', { error: errorMessage })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

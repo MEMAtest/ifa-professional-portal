@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
+import { log } from '@/lib/logging/structured'
 
 type BillingSettings = {
   billingEmail?: string
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       .select('id,name,subscription_tier,settings,created_at,updated_at')
 
     if (firmError) {
-      console.error('[Admin Firms] Error fetching firms:', firmError)
+      log.error('[Admin Firms] Error fetching firms:', firmError)
       return NextResponse.json({ error: 'Failed to fetch firms' }, { status: 500 })
     }
 
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
       .select('firm_id')
 
     if (profileError) {
-      console.error('[Admin Firms] Error fetching profiles:', profileError)
+      log.error('[Admin Firms] Error fetching profiles:', profileError)
       return NextResponse.json({ error: 'Failed to fetch firm users' }, { status: 500 })
     }
 
@@ -113,7 +114,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ firms: response })
   } catch (error) {
-    console.error('[Admin Firms] Unexpected error:', error)
+    log.error('[Admin Firms] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

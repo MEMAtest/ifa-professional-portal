@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getFCAConfig, isFCAApiError } from '@/lib/fca-register'
+import { log } from '@/lib/logging/structured'
 
 interface RouteParams {
   params: Promise<{ frn: string }>
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       config = getFCAConfig()
     } catch {
       return NextResponse.json(
-        { error: 'FCA Register not configured', message: 'FCA API credentials are not set up' },
+        { error: 'FCA Register not available' },
         { status: 503 }
       )
     }
@@ -104,11 +105,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ firm: normalized })
   } catch (error) {
-    console.error('FCA Register firm lookup error:', error)
+    log.error('FCA Register firm lookup error:', error)
 
     if (isFCAApiError(error)) {
       return NextResponse.json(
-        { error: error.message },
+        { error: 'Unable to fetch firm details' },
         { status: error.status }
       )
     }

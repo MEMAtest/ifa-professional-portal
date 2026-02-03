@@ -55,7 +55,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { 
           success: false, 
-          error: cleanupResponse.error || 'Failed to cleanup old results'
+          error: 'Failed to cleanup old results'
         },
         { status: 500 }
       );
@@ -91,14 +91,10 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   } catch (error: unknown) {
     log.error('Monte Carlo cleanup API error', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : undefined;
-
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
+        error: 'Failed to cleanup old results',
         timestamp: new Date().toISOString()
       },
       { status: 500 }
@@ -141,7 +137,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { 
           success: false, 
-          error: scenarios.error || 'Failed to get cleanup statistics'
+          error: 'Failed to get cleanup statistics'
         },
         { status: 500 }
       );
@@ -185,12 +181,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error: unknown) {
     log.error('Monte Carlo cleanup status API error', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
+        error: 'Failed to fetch cleanup status',
         timestamp: new Date().toISOString()
       },
       { status: 500 }

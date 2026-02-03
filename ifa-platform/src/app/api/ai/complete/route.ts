@@ -8,6 +8,7 @@ import { headers } from 'next/headers'
 import { z } from 'zod'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // =====================================================
 // TYPES & VALIDATION
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Parse and validate request
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const validatedData = requestSchema.parse(body)
     
     // Get AI configuration
@@ -367,7 +368,7 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     const responseTime = Date.now() - startTime
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorMessage = ''
     
     // Log failed request
     await logAIRequest(provider, false, responseTime, errorMessage)

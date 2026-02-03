@@ -12,6 +12,7 @@ import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { saveSuitabilityDraftWithMirrors } from '@/lib/suitability/server/saveSuitabilityDraftWithMirrors'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    const body: SavePayload = await request.json()
+    const body: SavePayload = await parseRequestBody(request)
     const { clientId, assessmentId, data, progressPercentage } = body
 
     if (!clientId) {
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

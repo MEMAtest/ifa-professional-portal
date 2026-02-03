@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       log.error('Database query error', error)
-      throw new Error(`Failed to fetch categories: ${error.message}`)
+      throw new Error('Failed to fetch categories')
     }
 
     // ✅ REAL: Get document counts if requested
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to fetch categories',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: 'Internal server error'
       },
       { status: 500 }
     )
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
       return auth.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
     
     if (error) {
       log.error('Category creation error', error)
-      throw new Error(`Failed to create category: ${error.message}`)
+      throw new Error('Failed to create category')
     }
     
     return NextResponse.json({
@@ -206,7 +207,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to create category',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: 'Internal server error'
       },
       { status: 500 }
     )
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
       return auth.response ?? NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -304,7 +305,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to update category',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: 'Internal server error'
       },
       { status: 500 }
     )
@@ -402,7 +403,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to delete category',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: 'Internal server error'
       },
       { status: 500 }
     )

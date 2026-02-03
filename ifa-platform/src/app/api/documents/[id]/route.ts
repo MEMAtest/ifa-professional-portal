@@ -3,14 +3,10 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 // GET - Fetch single document
 export async function GET(
@@ -18,6 +14,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const documentId = params.id
     
     if (!documentId) {
@@ -28,6 +34,8 @@ export async function GET(
     }
 
     log.info('Fetching document', { documentId })
+
+    const supabase = getSupabaseServiceClient()
 
     // Fetch document with related data
     const { data: document, error } = await supabase
@@ -42,48 +50,50 @@ export async function GET(
         )
       `)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
       .single()
 
     if (error || !document) {
       log.error('Document fetch error:', error)
       return NextResponse.json(
         { 
-          error: 'Document not found',
-          details: error?.message 
+          error: 'Document not found'
         },
         { status: 404 }
       )
     }
 
+    const doc = document as any
+
     // Transform the response to ensure all required fields
     const transformedDocument = {
-      id: document.id,
-      name: document.name || 'Untitled Document',
-      client_name: document.client_name || getClientName(document.clients),
-      client_id: document.client_id,
-      file_name: document.file_name,
-      file_path: document.file_path,
-      storage_path: document.storage_path,
-      file_size: document.file_size || 0,
-      file_type: document.file_type || 'pdf',
-      mime_type: document.mime_type || 'application/pdf',
-      type: document.type || document.document_type || 'document',
-      category: document.category || 'General',
-      document_type: document.document_type,
-      status: document.status || 'completed',
-      compliance_status: document.compliance_status || 'pending',
-      created_at: document.created_at,
-      updated_at: document.updated_at,
-      metadata: document.metadata || {},
-      description: document.description,
-      assessment_version: document.assessment_version,
-      version_number: document.version_number || 1,
-      requires_signature: document.requires_signature || false,
-      signature_status: document.signature_status,
-      is_archived: document.is_archived || false,
-      is_template: document.is_template || false,
-      tags: document.tags || [],
-      client: document.clients || null
+      id: doc.id,
+      name: doc.name || 'Untitled Document',
+      client_name: doc.client_name || getClientName(doc.clients),
+      client_id: doc.client_id,
+      file_name: doc.file_name,
+      file_path: doc.file_path,
+      storage_path: doc.storage_path,
+      file_size: doc.file_size || 0,
+      file_type: doc.file_type || 'pdf',
+      mime_type: doc.mime_type || 'application/pdf',
+      type: doc.type || doc.document_type || 'document',
+      category: doc.category || 'General',
+      document_type: doc.document_type,
+      status: doc.status || 'completed',
+      compliance_status: doc.compliance_status || 'pending',
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+      metadata: doc.metadata || {},
+      description: doc.description,
+      assessment_version: doc.assessment_version,
+      version_number: doc.version_number || 1,
+      requires_signature: doc.requires_signature || false,
+      signature_status: doc.signature_status,
+      is_archived: doc.is_archived || false,
+      is_template: doc.is_template || false,
+      tags: doc.tags || [],
+      client: doc.clients || null
     }
 
     log.info('Document fetched successfully', { documentId })
@@ -93,8 +103,7 @@ export async function GET(
     log.error('Document fetch error:', error)
     return NextResponse.json(
       { 
-        error: 'Failed to fetch document',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to fetch document'
       },
       { status: 500 }
     )
@@ -107,8 +116,18 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const documentId = params.id
-    const updates = await request.json()
+    const updates = await parseRequestBody(request)
 
     if (!documentId) {
       return NextResponse.json(
@@ -119,8 +138,10 @@ export async function PUT(
 
     log.info('Updating document', { documentId })
 
+    const supabase = getSupabaseServiceClient()
+
     // Remove fields that shouldn't be updated
-    const { id, created_at, ...updateData } = updates
+    const { id, created_at, firm_id, ...updateData } = updates
 
     // Add updated_at timestamp
     updateData.updated_at = new Date().toISOString()
@@ -129,6 +150,7 @@ export async function PUT(
       .from('documents')
       .update(updateData)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
       .select()
       .single()
 
@@ -136,8 +158,7 @@ export async function PUT(
       log.error('Document update error:', error)
       return NextResponse.json(
         { 
-          error: 'Failed to update document',
-          details: error.message 
+          error: 'Failed to update document'
         },
         { status: 500 }
       )
@@ -154,8 +175,7 @@ export async function PUT(
     log.error('Document update error:', error)
     return NextResponse.json(
       {
-        error: 'Failed to update document',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to update document'
       },
       { status: 500 }
     )
@@ -168,6 +188,16 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const documentId = params.id
 
     if (!documentId) {
@@ -179,19 +209,21 @@ export async function DELETE(
 
     log.info('Deleting document', { documentId })
 
+    const supabase = getSupabaseServiceClient()
+
     // First, get the document to find the file path
     const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select('file_path, storage_path')
       .eq('id', documentId)
+      .eq('firm_id', firmId)
       .single()
 
     if (fetchError) {
       log.error('Document fetch error:', fetchError)
       return NextResponse.json(
         { 
-          error: 'Document not found',
-          details: fetchError.message 
+          error: 'Document not found'
         },
         { status: 404 }
       )
@@ -219,13 +251,13 @@ export async function DELETE(
       .from('documents')
       .delete()
       .eq('id', documentId)
+      .eq('firm_id', firmId)
 
     if (deleteError) {
       log.error('Document deletion error:', deleteError)
       return NextResponse.json(
         { 
-          error: 'Failed to delete document',
-          details: deleteError.message 
+          error: 'Failed to delete document'
         },
         { status: 500 }
       )
@@ -241,8 +273,7 @@ export async function DELETE(
     log.error('Document deletion error:', error)
     return NextResponse.json(
       {
-        error: 'Failed to delete document',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to delete document'
       },
       { status: 500 }
     )

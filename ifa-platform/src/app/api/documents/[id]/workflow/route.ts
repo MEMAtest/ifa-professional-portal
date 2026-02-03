@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, getValidatedFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function PATCH(
   request: NextRequest,
@@ -31,7 +32,7 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Document ID is required' }, { status: 400 })
     }
 
-    const { stepId, done } = await request.json()
+    const { stepId, done } = await parseRequestBody(request)
     if (!stepId || typeof done !== 'boolean') {
       return NextResponse.json({ success: false, error: 'stepId and done are required' }, { status: 400 })
     }
@@ -97,7 +98,7 @@ export async function PATCH(
   } catch (error) {
     logger.error('Workflow update error', error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to update workflow' },
+      { success: false, error: '' },
       { status: 500 }
     )
   }

@@ -8,8 +8,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 import type { UpdateTaskInput, TaskStatus, TaskType, TaskPriority, TaskSourceType } from '@/modules/tasks/types'
 import type { Json } from '@/types/db'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       if (error?.code === 'PGRST116') {
         return NextResponse.json({ error: 'Task not found' }, { status: 404 })
       }
-      console.error('[Tasks API] Error fetching task:', error)
+      log.error('[Tasks API] Error fetching task', error)
       return NextResponse.json({ error: 'Failed to fetch task' }, { status: 500 })
     }
 
@@ -130,7 +132,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ task: response })
   } catch (error) {
-    console.error('[Tasks API] Unexpected error:', error)
+    log.error('[Tasks API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -157,7 +159,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const body: UpdateTaskInput = await request.json()
+    const body: UpdateTaskInput = await parseRequestBody(request)
 
     // Validate title if provided
     if (body.title !== undefined) {
@@ -333,7 +335,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           { status: 409 }
         )
       }
-      console.error('[Tasks API] Error updating task:', updateError)
+      log.error('[Tasks API] Error updating task', updateError)
       return NextResponse.json({ error: 'Failed to update task' }, { status: 500 })
     }
 
@@ -413,7 +415,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ task: response })
   } catch (error) {
-    console.error('[Tasks API] Unexpected error:', error)
+    log.error('[Tasks API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -477,7 +479,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       .eq('firm_id', firmIdResult.firmId)
 
     if (error) {
-      console.error('[Tasks API] Error deleting task:', error)
+      log.error('[Tasks API] Error deleting task', error)
       return NextResponse.json({ error: 'Failed to delete task' }, { status: 500 })
     }
 
@@ -499,7 +501,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('[Tasks API] Unexpected error:', error)
+    log.error('[Tasks API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

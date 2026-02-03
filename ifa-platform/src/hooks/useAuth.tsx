@@ -39,6 +39,117 @@ export const useAuth = () => {
   return context
 }
 
+function decodeBase64Url(value: string): string | null {
+  try {
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    return atob(padded)
+  } catch {
+    return null
+  }
+}
+
+function decodeJwtPayload(token?: string | null): Record<string, any> | null {
+  if (!token) return null
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+  const decoded = decodeBase64Url(parts[1])
+  if (!decoded) return null
+  try {
+    return JSON.parse(decoded)
+  } catch {
+    return null
+  }
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function normalizeOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') return true
+    if (normalized === 'false') return false
+  }
+  return null
+}
+
+function extractClaimValue(claims: Record<string, any> | null, paths: string[][]): string | null {
+  if (!claims) return null
+  for (const path of paths) {
+    let current: any = claims
+    for (const key of path) {
+      if (!current || typeof current !== 'object') {
+        current = null
+        break
+      }
+      current = current[key]
+    }
+    const normalized = normalizeOptionalString(current)
+    if (normalized) return normalized
+  }
+  return null
+}
+
+function buildUserFromSession(authUser: Session['user'], accessToken?: string | null): User {
+  const metadata = authUser.user_metadata || {}
+  const jwtClaims = decodeJwtPayload(accessToken)
+
+  const firmId =
+    normalizeOptionalString(metadata.firm_id) ??
+    normalizeOptionalString(metadata.firmId) ??
+    extractClaimValue(jwtClaims, [
+      ['firm_id'],
+      ['claims', 'firm_id'],
+      ['app_metadata', 'firm_id'],
+      ['user_metadata', 'firm_id']
+    ])
+  const normalizedFirmId = firmId === 'default-firm' ? null : firmId
+
+  const role =
+    normalizeOptionalString(metadata.role) ??
+    extractClaimValue(jwtClaims, [
+      ['app_role'],
+      ['claims', 'app_role'],
+      ['role'],
+      ['claims', 'role'],
+      ['app_metadata', 'role'],
+      ['user_metadata', 'role']
+    ]) ??
+    'advisor'
+
+  const isPlatformAdmin =
+    normalizeOptionalBoolean((metadata as any).is_platform_admin) ??
+    normalizeOptionalBoolean(
+      extractClaimValue(jwtClaims, [
+        ['is_platform_admin'],
+        ['claims', 'is_platform_admin'],
+        ['app_metadata', 'is_platform_admin'],
+        ['user_metadata', 'is_platform_admin']
+      ])
+    ) ??
+    false
+
+  return {
+    id: authUser.id,
+    email: authUser.email || '',
+    role: role as User['role'],
+    firmId: normalizedFirmId,
+    firstName: metadata.first_name || metadata.firstName || '',
+    lastName: metadata.last_name || metadata.lastName || '',
+    avatarUrl: metadata.avatar_url || metadata.avatarUrl,
+    phone: metadata.phone,
+    lastLoginAt: authUser.last_sign_in_at,
+    createdAt: authUser.created_at,
+    updatedAt: authUser.updated_at || authUser.created_at,
+    isPlatformAdmin
+  }
+}
+
 // ================================================================
 // PROVIDER - FIXED TO REMOVE HANGING DATABASE QUERY
 // ================================================================
@@ -81,30 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (session?.user) {
           log.debug('Session found, creating user profile from metadata')
-          
-          // ================================================================
-          // 🔧 CRITICAL FIX: Create user WITHOUT database query
-          // Use only Supabase Auth metadata - no profile table query
-          // ================================================================
-          
-          const authUser = session.user
-          const metadata = authUser.user_metadata || {}
-          
-          const simpleUser: User = {
-            id: authUser.id,
-            email: authUser.email || '',
-            role: (metadata.role as User['role']) || 'advisor',
-            firmId: metadata.firm_id || metadata.firmId || 'default-firm',
-            firstName: metadata.first_name || metadata.firstName || '',
-            lastName: metadata.last_name || metadata.lastName || '',
-            avatarUrl: metadata.avatar_url || metadata.avatarUrl,
-            phone: metadata.phone,
-            lastLoginAt: authUser.last_sign_in_at,
-            createdAt: authUser.created_at,
-            updatedAt: authUser.updated_at || authUser.created_at
-          }
-          
-          setUser(simpleUser)
+          setUser(buildUserFromSession(session.user, session.access_token))
           setError(null)
           log.info('Auth initialized successfully (no database query)')
         } else {
@@ -140,7 +228,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           if (session?.user) {
             const authUser = session.user
-            const metadata = authUser.user_metadata || {}
 
             // Clear all cached data when the user changes (account switch)
             if (previousUserIdRef.current && previousUserIdRef.current !== authUser.id) {
@@ -148,22 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               queryClient.clear()
             }
             previousUserIdRef.current = authUser.id
-
-            const simpleUser: User = {
-              id: authUser.id,
-              email: authUser.email || '',
-              role: (metadata.role as User['role']) || 'advisor',
-              firmId: metadata.firm_id || metadata.firmId || 'default-firm',
-              firstName: metadata.first_name || metadata.firstName || '',
-              lastName: metadata.last_name || metadata.lastName || '',
-              avatarUrl: metadata.avatar_url || metadata.avatarUrl,
-              phone: metadata.phone,
-              lastLoginAt: authUser.last_sign_in_at,
-              createdAt: authUser.created_at,
-              updatedAt: authUser.updated_at || authUser.created_at
-            }
-
-            setUser(simpleUser)
+            setUser(buildUserFromSession(authUser, session.access_token))
           } else {
             // User signed out — clear all cached data
             if (previousUserIdRef.current) {
@@ -235,7 +307,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             first_name: data.firstName,
             last_name: data.lastName,
-            firm_id: 'default-firm',
             role: 'advisor',
             firm_name: data.firmName || '',
             fca_number: data.fcaNumber || ''

@@ -11,6 +11,7 @@ import { getAuthContext } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +58,7 @@ type SubmitPayload = {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: SubmitPayload = await request.json()
+    const body: SubmitPayload = await parseRequestBody(request)
     const { clientId, assessmentId, data, completionPercentage } = body
 
     if (!clientId || !assessmentId) {
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
     if (updateResult.error) {
       log.error('Failed to submit assessment', updateResult.error)
       return NextResponse.json(
-        { success: false, error: 'Failed to submit assessment', details: updateResult.error.message },
+        { success: false, error: 'Failed to submit assessment' },
         { status: 500 }
       )
     }
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requirePermission } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 
 // Max file size: 15MB
@@ -48,6 +48,29 @@ function resolveEffectiveMimeType(file: File): string {
   return mime
 }
 
+function sniffMagic(buffer: Buffer): 'pdf' | 'png' | 'jpeg' | 'gif' | 'zip' | 'ole' | null {
+  if (buffer.length < 4) return null
+  const b0 = buffer[0]
+  const b1 = buffer[1]
+  const b2 = buffer[2]
+  const b3 = buffer[3]
+
+  // PDF: %PDF-
+  if (b0 === 0x25 && b1 === 0x50 && b2 === 0x44 && b3 === 0x46) return 'pdf'
+  // PNG: 89 50 4E 47
+  if (b0 === 0x89 && b1 === 0x50 && b2 === 0x4e && b3 === 0x47) return 'png'
+  // JPEG: FF D8 FF
+  if (b0 === 0xff && b1 === 0xd8 && b2 === 0xff) return 'jpeg'
+  // GIF: GIF8
+  if (b0 === 0x47 && b1 === 0x49 && b2 === 0x46 && b3 === 0x38) return 'gif'
+  // ZIP (docx/xlsx): 50 4B 03 04
+  if (b0 === 0x50 && b1 === 0x4b && b2 === 0x03 && b3 === 0x04) return 'zip'
+  // OLE compound (doc/msg): D0 CF 11 E0
+  if (b0 === 0xd0 && b1 === 0xcf && b2 === 0x11 && b3 === 0xe0) return 'ole'
+
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication
@@ -59,17 +82,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // TODO: Add requirePermission(auth.context, 'documents:write') once RLS
-    // and profile resolution are fixed. Currently the profiles table is
-    // unreadable via RLS and the auth user ID may not match a profile row,
-    // so role is always null. The rest of the app has the same limitation.
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) {
+      return permissionError
+    }
 
     const firmId = auth.context.firmId
     const userId = auth.context.userId
 
-    // If no firmId, allow upload but log warning
+    // Firm context is mandatory for document uploads
     if (!firmId) {
-      log.warn('Document upload without firmId', { userId })
+      log.warn('Document upload blocked: missing firmId', { userId })
+      return NextResponse.json(
+        { success: false, error: 'Firm context required' },
+        { status: 403 }
+      )
     }
 
     // Parse multipart form data
@@ -162,6 +189,36 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
+    // Magic-byte validation for common types
+    const magic = sniffMagic(buffer)
+    const extension = file.name ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : ''
+    const isDocxOrXlsx = extension === '.docx' || extension === '.xlsx'
+    const isDocOrMsg = extension === '.doc' || extension === '.msg'
+
+    if (effectiveMimeType === 'application/pdf' && magic !== 'pdf') {
+      return NextResponse.json({ success: false, error: 'File signature does not match PDF format' }, { status: 400 })
+    }
+    if (effectiveMimeType === 'image/png' && magic !== 'png') {
+      return NextResponse.json({ success: false, error: 'File signature does not match PNG format' }, { status: 400 })
+    }
+    if ((effectiveMimeType === 'image/jpeg' || effectiveMimeType === 'image/jpg') && magic !== 'jpeg') {
+      return NextResponse.json({ success: false, error: 'File signature does not match JPEG format' }, { status: 400 })
+    }
+    if (effectiveMimeType === 'image/gif' && magic !== 'gif') {
+      return NextResponse.json({ success: false, error: 'File signature does not match GIF format' }, { status: 400 })
+    }
+    if (
+      (effectiveMimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        effectiveMimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        isDocxOrXlsx) &&
+      magic !== 'zip'
+    ) {
+      return NextResponse.json({ success: false, error: 'File signature does not match Office Open XML format' }, { status: 400 })
+    }
+    if ((effectiveMimeType === 'application/msword' || effectiveMimeType === 'application/vnd.ms-outlook' || isDocOrMsg) && magic !== 'ole') {
+      return NextResponse.json({ success: false, error: 'File signature does not match legacy Office format' }, { status: 400 })
+    }
+
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from('documents')
@@ -173,7 +230,7 @@ export async function POST(request: NextRequest) {
     if (uploadError) {
       log.error('Document upload to storage failed', { error: uploadError.message, filePath })
       return NextResponse.json(
-        { success: false, error: `Failed to upload file: ${uploadError.message}` },
+        { success: false, error: 'Failed to upload file' },
         { status: 500 }
       )
     }
@@ -242,7 +299,7 @@ export async function POST(request: NextRequest) {
       await supabase.storage.from('documents').remove([filePath])
 
       return NextResponse.json(
-        { success: false, error: `Failed to create document record: ${dbError.message}` },
+        { success: false, error: 'Failed to create document record' },
         { status: 500 }
       )
     }
@@ -290,7 +347,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed'
+        error: 'Upload failed'
       },
       { status: 500 }
     )

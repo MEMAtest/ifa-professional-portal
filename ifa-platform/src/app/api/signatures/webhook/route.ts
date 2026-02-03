@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { notifySignatureCompleted } from '@/lib/notifications/notificationService'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
   logger.info('OpenSign webhook received')
 
   try {
-    const body: OpenSignWebhookEvent = await request.json()
+    const body: OpenSignWebhookEvent = await parseRequestBody(request)
     logger.debug('Webhook event data', { event: body.event, documentId: body.data?.id })
 
     const { event, data } = body
@@ -65,8 +66,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Failed to process webhook',
-          details: processError.message
+          error: 'Failed to process webhook'
         },
         { status: 500 }
       )
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Webhook received but failed to process',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: ''
     })
   }
 }

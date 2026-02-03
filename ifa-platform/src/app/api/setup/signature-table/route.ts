@@ -4,8 +4,10 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
+import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,23 +15,16 @@ export async function POST(request: NextRequest) {
   log.info('Setting up signature_requests table')
 
   try {
-    // Use service role key for table creation
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseServiceKey) {
-      return NextResponse.json({
-        success: false,
-        error: 'Service role key not configured'
-      }, { status: 500 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!isPlatformAdminUser(auth.context)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+    // Use service role key for table creation
+    const supabase = getSupabaseServiceClient()
 
     // Check if table exists by trying to query it
     const { error: checkError } = await supabase
@@ -57,6 +52,8 @@ CREATE TABLE IF NOT EXISTS signature_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id TEXT,
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  firm_id UUID REFERENCES firms(id),
+  created_by UUID REFERENCES profiles(id),
   template_id UUID,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'viewed', 'signed', 'completed', 'expired', 'declined', 'cancelled')),
   opensign_document_id TEXT,
@@ -80,15 +77,18 @@ CREATE INDEX IF NOT EXISTS idx_signature_requests_created_at ON signature_reques
 -- Enable Row Level Security
 ALTER TABLE signature_requests ENABLE ROW LEVEL SECURITY;
 
--- Create policy for authenticated users
-CREATE POLICY "Users can view all signature requests" ON signature_requests
-  FOR SELECT USING (true);
+-- Firm-scoped policies
+CREATE POLICY "signature_requests_select" ON signature_requests
+  FOR SELECT USING (firm_id = public.get_my_firm_id());
 
-CREATE POLICY "Users can insert signature requests" ON signature_requests
-  FOR INSERT WITH CHECK (true);
+CREATE POLICY "signature_requests_insert" ON signature_requests
+  FOR INSERT WITH CHECK (firm_id = public.get_my_firm_id());
 
-CREATE POLICY "Users can update signature requests" ON signature_requests
-  FOR UPDATE USING (true);
+CREATE POLICY "signature_requests_update" ON signature_requests
+  FOR UPDATE USING (firm_id = public.get_my_firm_id());
+
+CREATE POLICY "signature_requests_delete" ON signature_requests
+  FOR DELETE USING (firm_id = public.get_my_firm_id());
 `
 
     return NextResponse.json({
@@ -110,7 +110,7 @@ CREATE POLICY "Users can update signature requests" ON signature_requests
     log.error('Setup error', error)
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to read migration SQL'
     }, { status: 500 })
   }
 }
@@ -118,10 +118,15 @@ CREATE POLICY "Users can update signature requests" ON signature_requests
 export async function GET(request: NextRequest) {
   // Just check if table exists
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!isPlatformAdminUser(auth.context)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = getSupabaseServiceClient()
 
     const { error } = await supabase
       .from('signature_requests')
@@ -130,12 +135,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       tableExists: !error,
-      error: error?.message
+      error: error ? 'Table not found' : null
     })
   } catch (error) {
     return NextResponse.json({
       tableExists: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to create signature tables'
     })
   }
 }

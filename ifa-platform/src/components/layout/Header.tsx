@@ -47,7 +47,11 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
   const pathname = usePathname()
   const searchParams = useSearchParams()
   // Cast role to string for type compatibility with isPlatformAdminUser
-  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role as string | undefined })
+  const isPlatformAdmin = isPlatformAdminUser({
+    email: user?.email,
+    role: user?.role as string | undefined,
+    isPlatformAdmin: user?.isPlatformAdmin
+  })
 
   const handleSignOut = async () => {
     await signOut()

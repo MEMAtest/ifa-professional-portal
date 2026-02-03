@@ -9,6 +9,7 @@ import type { TablesInsert } from '@/types/db';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     const firmId = firmIdResult.firmId;
 
     const supabase = getSupabaseServiceClient();
-    const body = await request.json();
+    const body = await parseRequestBody(request);
 
     const clientId = body.client_id || body.clientId;
 
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       log.error('Assessment save error', error);
       return NextResponse.json(
-        { error: error.message, details: error },
+        { error: 'Failed to save assessment' },
         { status: 400 }
       );
     }
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error('Assessment route error', error);
     return NextResponse.json(
-      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error', message: '' },
       { status: 500 }
     );
   }
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('clientId');
     const assessmentId = searchParams.get('id');
     const limitParam = searchParams.get('limit');
-    const limit = limitParam ? Math.min(50, Math.max(1, Number(limitParam))) : null;
+    const limit = limitParam ? Math.min(50, Math.max(1, Number(limitParam))) : 50;
 
     // Build the query based on parameters
     if (assessmentId) {
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
       if (error) {
         log.error('Assessment fetch error by ID', error, { assessmentId });
         return NextResponse.json(
-          { error: error.message },
+          { error: 'Failed to fetch assessment' },
           { status: 400 }
         );
       }
@@ -184,7 +185,7 @@ export async function GET(request: NextRequest) {
       if (error) {
         log.error('Assessment fetch error by clientId', error, { clientId });
         return NextResponse.json(
-          { error: error.message },
+          { error: 'Failed to fetch assessments' },
           { status: 400 }
         );
       }

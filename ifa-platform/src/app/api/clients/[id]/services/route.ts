@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface ClientServicesPayload {
   client_id: string
@@ -60,7 +61,7 @@ export async function GET(
     if (error) {
       logger.error('Database error fetching client services', error, { clientId })
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch client services', details: error.message },
+        { success: false, error: 'Failed to fetch client services' },
         { status: 500 }
       );
     }
@@ -114,7 +115,7 @@ export async function POST(
       );
     }
 
-    const body = await request.json() as ClientServicesPayload;
+    const body = await parseRequestBody(request) as ClientServicesPayload;
 
     // Validate required fields
     if (!body.client_id || body.client_id !== clientId) {
@@ -166,7 +167,7 @@ export async function POST(
       if (error) {
         logger.error('Database error updating client services', error, { clientId })
         return NextResponse.json(
-          { success: false, error: 'Failed to update client services', details: error.message },
+          { success: false, error: 'Failed to update client services' },
           { status: 500 }
         );
       }
@@ -186,7 +187,7 @@ export async function POST(
       if (error) {
         logger.error('Database error inserting client services', error, { clientId })
         return NextResponse.json(
-          { success: false, error: 'Failed to create client services', details: error.message },
+          { success: false, error: 'Failed to create client services' },
           { status: 500 }
         );
       }

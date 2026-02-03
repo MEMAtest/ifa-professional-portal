@@ -6,7 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 import type { Json } from '@/types/db'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return firmIdResult
     }
 
-    const body: CompleteTaskInput = await request.json().catch(() => ({}))
+    const body: CompleteTaskInput = await parseRequestBody(request, undefined, { allowEmpty: true })
 
     const supabase = getSupabaseServiceClient()
     const supabaseService = getSupabaseServiceClient()
@@ -118,7 +120,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .single()
 
     if (updateError || !task) {
-      console.error('[Tasks API] Error completing task:', updateError)
+      log.error('[Tasks API] Error completing task', updateError)
       return NextResponse.json({ error: 'Failed to complete task' }, { status: 500 })
     }
 
@@ -193,7 +195,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ task: response })
   } catch (error) {
-    console.error('[Tasks API] Unexpected error:', error)
+    log.error('[Tasks API] Unexpected error', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

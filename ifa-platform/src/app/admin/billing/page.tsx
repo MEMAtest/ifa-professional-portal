@@ -92,8 +92,8 @@ export default function AdminBillingPage() {
   const [autoRenewFilter, setAutoRenewFilter] = useState<'all' | 'yes' | 'no'>('all')
 
   const isPlatformAdmin = useMemo(
-    () => isPlatformAdminUser({ email: user?.email, role: user?.role }),
-    [user?.email, user?.role]
+    () => isPlatformAdminUser({ email: user?.email, role: user?.role, isPlatformAdmin: user?.isPlatformAdmin }),
+    [user?.email, user?.role, user?.isPlatformAdmin]
   )
 
   useEffect(() => {

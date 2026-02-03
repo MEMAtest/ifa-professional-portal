@@ -11,6 +11,7 @@ import { isUUID } from '@/lib/utils'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { logger, getErrorMessage } from '@/lib/errors'
 import { notifyATRCompleted } from '@/lib/notifications/notificationService'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,7 +94,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Failed to fetch ATR data',
-          message: error.message,
           success: false
         },
         { status: 500 }
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     const userId = ctx.userId || null
     const supabase = getSupabaseServiceClient()
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     logger.debug('ATR POST body received', { clientId: body.clientId, hasAnswers: !!body.answers })
 
     const {
@@ -286,7 +286,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Failed to create ATR assessment',
-          message: error.message,
           success: false
         },
         { status: 500 }
@@ -392,7 +391,7 @@ export async function PUT(request: NextRequest) {
     const userId = ctx.userId || null
     const supabase = getSupabaseServiceClient()
     
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { 
       assessmentId,
       clientId,
@@ -464,7 +463,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Failed to update ATR assessment',
-          message: error.message,
           success: false
         },
         { status: 500 }
@@ -584,7 +582,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Failed to delete ATR assessment',
-          message: error.message,
           success: false
         },
         { status: 500 }

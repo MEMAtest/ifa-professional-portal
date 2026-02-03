@@ -3,24 +3,43 @@ export const dynamic = 'force-dynamic'
 
 // src/app/api/documents/save-report/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body = await parseRequestBody(request)
     const { clientId, assessmentType, assessmentId, fileName, fileBlob, metadata } = body
+
+    const supabase = getSupabaseServiceClient()
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Convert base64 to buffer
     const base64Data = fileBlob.split(',')[1]
     const buffer = Buffer.from(base64Data, 'base64')
 
     // Upload to Supabase Storage
-    const filePath = `reports/${clientId}/${fileName}`
+    const filePath = `firms/${firmId}/reports/${clientId}/${fileName}`
     const { error: uploadError } = await supabase.storage
       .from('documents')
       .upload(filePath, buffer, {
@@ -35,6 +54,8 @@ export async function POST(request: NextRequest) {
       .from('documents')
       .insert({
         client_id: clientId,
+        firm_id: firmId,
+        created_by: auth.context.userId,
         assessment_id: assessmentId,
         name: fileName,
         type: `${assessmentType}_report`,

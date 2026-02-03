@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 // ===================================================================
 // TYPES
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    const body: BulkActionRequest = await request.json()
+    const body: BulkActionRequest = await parseRequestBody(request)
     const { documentIds, action, actionParams = {} } = body
 
     // Validation
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Bulk operation failed',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -289,7 +290,7 @@ async function processArchiveDocuments(
         documentId: doc.id,
         documentName: doc.name,
         success: false,
-        error: error instanceof Error ? error.message : 'Archive failed'
+        error: ''
       })
     }
   }
@@ -339,7 +340,7 @@ async function processDeleteDocuments(
         documentId: doc.id,
         documentName: doc.name,
         success: false,
-        error: error instanceof Error ? error.message : 'Delete failed'
+        error: ''
       })
     }
   }
@@ -376,7 +377,7 @@ async function processRestoreDocuments(
         documentId: doc.id,
         documentName: doc.name,
         success: false,
-        error: error instanceof Error ? error.message : 'Restore failed'
+        error: ''
       })
     }
   }
@@ -442,7 +443,7 @@ async function processSendDocuments(
         documentId: doc.id,
         documentName: doc.name,
         success: false,
-        error: error instanceof Error ? error.message : 'Send failed'
+        error: ''
       })
     }
   }

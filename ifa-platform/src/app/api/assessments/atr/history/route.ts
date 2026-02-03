@@ -2,18 +2,24 @@
 // Fetches all ATR assessment versions for a client
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 
 export const dynamic = 'force-dynamic'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     
@@ -31,6 +37,17 @@ export async function GET(request: NextRequest) {
         { error: 'Invalid client ID format' },
         { status: 400 }
       )
+    }
+
+    const supabase = getSupabaseServiceClient()
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
     }
 
     log.info('Fetching all ATR assessments for client', { clientId })
@@ -64,7 +81,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       log.error('Error fetching ATR history', error)
       return NextResponse.json(
-        { error: 'Failed to fetch ATR history', message: error.message },
+        { error: 'Failed to fetch ATR history' },
         { status: 500 }
       )
     }
@@ -208,7 +225,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     log.error('ATR history route error', error)
     return NextResponse.json(
-      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

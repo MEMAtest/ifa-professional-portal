@@ -10,6 +10,7 @@ import { createAuditLogger } from '@/lib/audit'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
 import { rateLimit } from '@/lib/security/rateLimit'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Cast to any: users/assessment_shares tables not yet in generated Supabase types
     const supabase: any = getSupabaseServiceClient()
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
 
     // Validate input using Zod schema
     const validationResult = ShareAssessmentInputSchema.safeParse(body)

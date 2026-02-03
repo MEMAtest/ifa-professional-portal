@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { parseRequestBody } from '@/app/api/utils'
 
 // ✅ FIXED: Removed Supabase dependency and created standalone implementation
 
@@ -79,7 +80,7 @@ async function generatePDF(request: PDFGenerationRequest): Promise<PDFGeneration
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'PDF generation failed',
+      error: '',
       processing_time_ms: Date.now() - startTime
     }
   }
@@ -169,7 +170,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: 'Failed to process request',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -178,7 +179,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: PDFGenerationRequest = await request.json()
+    const body: PDFGenerationRequest = await parseRequestBody(request)
     
     // Validate request body
     if (!body.template) {
@@ -257,7 +258,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: 'PDF generation failed',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )
@@ -267,7 +268,7 @@ export async function POST(request: NextRequest) {
 // Handle template validation
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const { template, data } = body
     
     if (!template || !data) {
@@ -345,7 +346,7 @@ export async function PUT(request: NextRequest) {
       {
         success: false,
         error: 'Validation failed',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: ''
       },
       { status: 500 }
     )

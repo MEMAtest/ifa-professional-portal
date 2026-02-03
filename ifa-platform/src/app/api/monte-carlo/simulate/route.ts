@@ -2,34 +2,37 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import { log } from '@/lib/logging/structured';
 import { createMonteCarloEngine } from '@/lib/monte-carlo/engine';
-import { getAuthContext } from '@/lib/auth/apiAuth';
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
 import { notifyMonteCarloCompleted } from '@/lib/notifications/notificationService';
+import { parseRequestBody } from '@/app/api/utils'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
+import { requireClientAccess } from '@/lib/auth/requireClientAccess';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const requestSchema = z.object({
+  scenario_id: z.string().min(1),
+  simulation_count: z.number().int().min(100).max(100000).optional(),
+  seed: z.number().int().optional(),
+});
 
 export async function POST(request: NextRequest) {
-  // Get auth context for notifications
-  const auth = await getAuthContext(request);
-  const userId = auth.context?.userId;
-
   try {
-    const body = await request.json();
-    const { scenario_id, simulation_count = 5000, seed } = body;
+    const auth = await getAuthContext(request);
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+    const firmResult = requireFirmId(auth.context);
+    if (!('firmId' in firmResult)) {
+      return firmResult;
+    }
+
+    const { scenario_id, simulation_count = 5000, seed } = await parseRequestBody(request, requestSchema);
+    const userId = auth.context.userId;
+    const supabase = getSupabaseServiceClient();
 
     log.info('Starting enhanced Monte Carlo', { simulationCount: simulation_count });
-
-    if (!scenario_id) {
-      return NextResponse.json(
-        { success: false, error: 'scenario_id is required' },
-        { status: 400 }
-      );
-    }
 
     // Try to find scenario in cash_flow_scenarios first
     let scenario: any = null;
@@ -66,6 +69,23 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Scenario not found' },
         { status: 404 }
       );
+    }
+
+    if (!scenario.client_id) {
+      return NextResponse.json(
+        { success: false, error: 'Scenario missing client' },
+        { status: 404 }
+      );
+    }
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId: scenario.client_id,
+      ctx: auth.context,
+      select: 'id, firm_id'
+    });
+    if (!access.ok) {
+      return access.response;
     }
 
     const input = buildSimulationInput(scenario, simulation_count);
@@ -145,12 +165,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     log.error('Enhanced simulation failed', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
     return NextResponse.json(
       { 
         success: false, 
-        error: errorMessage,
+        error: 'Monte Carlo simulation failed',
         message: 'Monte Carlo simulation failed'
       },
       { status: 500 }

@@ -94,7 +94,7 @@ export const supabase = getOrCreateBrowserClient({
   }
 })
 
-// Create admin client for server-side operations (if service role key is available)
+// Create admin client for server-side operations (requires service role key)
 export const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createBrowserClient<Database>(
       supabaseUrl,
@@ -109,7 +109,7 @@ export const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
         }
       }
     )
-  : supabase
+  : null
 
 // ================================================================
 // Type exports for use in other files

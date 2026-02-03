@@ -2,51 +2,18 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-
-import type { Database, DbRow } from '@/types/db'
-import { getAuthContext, canAccessClient, ROLES } from '@/lib/auth/apiAuth'
+import type { DbRow } from '@/types/db'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { advisorContextService } from '@/services/AdvisorContextService'
 import { generateClientProfileReportPDF } from '@/lib/pdf-templates/client-profile-report'
 import { buildClientProfileReportModel } from '@/lib/clients/profileReport/buildClientProfileReportModel'
 import { log } from '@/lib/logging/structured'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface GenerateClientProfileRequest {
   clientId: string
-}
-
-function getSupabaseServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    throw new Error('Supabase credentials are not configured')
-  }
-
-  return createSupabaseClient<Database>(url, key)
-}
-
-async function resolveFirmId(
-  supabase: ReturnType<typeof getSupabaseServiceClient>,
-  client: DbRow<'clients'>,
-  ctx: { firmId?: string | null }
-): Promise<string | null> {
-  if (client?.firm_id) return String(client.firm_id)
-  if (ctx?.firmId) return String(ctx.firmId)
-
-  const { data: firm, error } = await supabase
-    .from('firms')
-    .select('id')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (error && error.code !== 'PGRST116') {
-    log.warn('[generate-client-profile] Failed to resolve default firm', { error: error.message })
-    return null
-  }
-
-  return firm?.id ? String(firm.id) : null
 }
 
 type ClientAssessmentTable =
@@ -93,16 +60,21 @@ function safeFileToken(value: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: GenerateClientProfileRequest = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const body: GenerateClientProfileRequest = await parseRequestBody(request)
     const { clientId } = body
 
     if (!clientId) {
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
-    }
-
-    const auth = await getAuthContext(request)
-    if (!auth.success) {
-      return auth.response || NextResponse.json({ error: auth.error || 'Unauthorized' }, { status: 401 })
     }
 
     const ctx = auth.context!
@@ -112,23 +84,24 @@ export async function POST(request: NextRequest) {
       .from('clients')
       .select('*')
       .eq('id', clientId)
+      .eq('firm_id', firmId)
       .maybeSingle()
 
     if (clientError || !client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
-    if (ctx.role !== ROLES.ADMIN) {
-      if (ctx.firmId && client.firm_id && ctx.firmId !== client.firm_id) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-      if (client.advisor_id && !canAccessClient(ctx, client.advisor_id)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
     }
 
-    const firmId = await resolveFirmId(supabase, client, ctx)
-    const reportContext = await advisorContextService.getReportContext(ctx.userId, firmId ?? undefined)
+    const reportContext = await advisorContextService.getReportContext(ctx.userId, firmId)
 
     const [suitability, atr, cfl, persona] = await Promise.all([
       fetchLatestByClientId(supabase, 'suitability_assessments', clientId),

@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const futureLimit = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // 30 days ahead
     const outstandingLimit = endOfMonth > futureLimit ? endOfMonth : futureLimit
 
-    // Fetch pending and overdue reviews with client info — scoped to firm
+    // Fetch scheduled and overdue reviews with client info — scoped to firm
     let query = supabase
       .from('client_reviews')
       .select(`
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
         client_id: null,
         review_type: 'prod_policy',
         due_date: reviewTask.due_date,
-        status: reviewTask.status || 'pending',
+        status: reviewTask.status || 'scheduled',
         created_at: reviewTask.created_at || new Date().toISOString(),
         clients: null
       } as any)

@@ -24,6 +24,17 @@ import Image from 'next/image'
 import { useToast } from '@/components/ui/use-toast'
 import { generatePDF } from '@/lib/pdf/generatePDF'
 import { sendReportEmail } from '@/services/emailService'
+import sanitizeHtml from 'sanitize-html'
+
+const sanitizeReportHtml = (html: string) =>
+  sanitizeHtml(html, {
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'style']),
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      img: ['src', 'alt', 'width', 'height', 'style'],
+      '*': ['style', 'class', 'id']
+    }
+  })
 
 // Import types from your existing assessment types
 import type { 
@@ -533,7 +544,7 @@ export default function ReportGenerationModal({
               ) : (
                 <div 
                   className="prose max-w-none"
-                  dangerouslySetInnerHTML={{ __html: section.content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeReportHtml(section.content) }}
                 />
               )}
             </Card>

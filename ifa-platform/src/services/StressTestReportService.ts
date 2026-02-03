@@ -6,7 +6,7 @@
 import { StressTestingEngine } from './StressTestingEngine';
 import { ClientService } from './ClientService';
 import { createClient } from '@/lib/supabase/client';
-import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js';
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import { advisorContextService } from '@/services/AdvisorContextService';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, DbInsert } from '@/types/db';
@@ -71,12 +71,7 @@ export class StressTestReportService {
     this.clientService = new ClientService();
     // Use server-friendly client when running on the server to avoid localStorage issues
     if (typeof window === 'undefined') {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!url || !key) {
-        throw new Error('Supabase credentials missing for StressTestReportService');
-      }
-      this.supabase = createSupabaseServiceClient<Database>(url, key);
+      this.supabase = getSupabaseServiceClient();
     } else {
       this.supabase = createClient();
     }

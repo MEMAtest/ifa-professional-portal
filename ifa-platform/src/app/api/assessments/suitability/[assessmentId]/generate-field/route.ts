@@ -10,6 +10,7 @@ import { log } from '@/lib/logging/structured'
 import type { PulledPlatformData, SuitabilityFormData } from '@/types/suitability'
 import { buildFieldPrompt } from '@/lib/suitability/ai/fieldPrompts'
 import { isAIGeneratableField } from '@/lib/suitability/ai/fieldRegistry'
+import { parseRequestBody } from '@/app/api/utils'
 
 const requestSchema = z.object({
   clientId: z.string().uuid(),
@@ -60,7 +61,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid assessmentId format' }, { status: 400 })
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const parsed = requestSchema.parse(body)
 
     if (!isAIGeneratableField(parsed.fieldId)) {
@@ -139,8 +140,7 @@ export async function POST(
       provider: aiPayload?.provider
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
     log.error('Field AI generation error', error)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

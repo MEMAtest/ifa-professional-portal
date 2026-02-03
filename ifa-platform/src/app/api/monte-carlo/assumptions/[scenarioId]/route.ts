@@ -64,7 +64,7 @@ export async function GET(
       return NextResponse.json(
         { 
           success: false, 
-          error: response.error || 'Failed to retrieve assumptions',
+          error: isNotFound ? 'Scenario not found' : 'Failed to retrieve assumptions',
           scenarioId: cleanScenarioId
         },
         { status: statusCode }
@@ -93,14 +93,10 @@ export async function GET(
   } catch (error: unknown) {
     log.error('Monte Carlo assumptions API error', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const errorDetails = error instanceof Error ? error.stack : undefined;
-
     return NextResponse.json(
       {
         success: false,
-        error: errorMessage,
-        ...(process.env.NODE_ENV === 'development' && { details: errorDetails }),
+        error: 'Failed to retrieve assumptions',
         timestamp: new Date().toISOString()
       },
       { status: 500 }

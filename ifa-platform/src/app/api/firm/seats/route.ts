@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +48,8 @@ export async function GET(request: NextRequest) {
         pendingInvites = count ?? 0
       }
     } catch (err) {
-      console.debug('[Seats API] user_invitations query skipped:', err instanceof Error ? err.message : err)
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      log.debug('[Seats API] user_invitations query skipped', { error: errorMessage })
     }
 
     const currentSeats = (activeProfiles ?? 0) + pendingInvites
@@ -56,7 +58,8 @@ export async function GET(request: NextRequest) {
       data: { maxSeats, currentSeats }
     })
   } catch (error) {
-    console.error('[Seats API] Unexpected error:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error('[Seats API] Unexpected error', { error: errorMessage })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 import { parseEml, parseMsg } from '@/lib/documents/emailParser'
@@ -329,6 +330,17 @@ export async function GET(
     const documentId = params.id
     log.info('Preview requested for document', { documentId })
 
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const supabase = getSupabaseServiceClient()
 
     // Fetch document record
@@ -336,6 +348,7 @@ export async function GET(
       .from('documents')
       .select('*')
       .eq('id', documentId)
+      .eq('firm_id', firmId)
       .single()
 
     if (error || !document) {
@@ -515,8 +528,7 @@ export async function GET(
     log.error('Preview error', error)
     return NextResponse.json(
       {
-        error: 'Failed to preview document',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to preview document'
       },
       { status: 500 }
     )

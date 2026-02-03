@@ -72,7 +72,7 @@ export function ScheduleReviewModal({
           clientId,
           reviewType: formData.reviewType,
           dueDate: formData.dueDate,
-          status: 'pending',
+          status: 'scheduled',
           reviewSummary: formData.notes
         })
       })

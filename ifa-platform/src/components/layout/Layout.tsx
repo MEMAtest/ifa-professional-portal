@@ -17,7 +17,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isWrappedByRoot = useContext(LayoutContext)
   const pathname = usePathname()
   const router = useRouter()
-  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role })
+  const isPlatformAdmin = isPlatformAdminUser({ email: user?.email, role: user?.role, isPlatformAdmin: user?.isPlatformAdmin })
   const isAdminRoute = pathname === '/admin' || pathname?.startsWith('/admin/')
   const shouldRedirectToAdmin = Boolean(user && isPlatformAdmin && !isAdminRoute)
 

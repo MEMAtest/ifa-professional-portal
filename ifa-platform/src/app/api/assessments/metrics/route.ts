@@ -4,24 +4,14 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import type { Database, DbTableKey } from '@/types/db'
+import type { DbTableKey } from '@/types/db'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { normalizeAssessmentType } from '@/lib/assessments/routing'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-const DEFAULT_FIRM_ID = process.env.DEFAULT_FIRM_ID || null
-
-function getServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !key) throw new Error('Supabase credentials missing')
-  return createSupabaseClient<Database>(url, key)
-}
 
 function bucketRiskLevel(level: unknown): 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High' | null {
   if (typeof level === 'string') {
@@ -102,14 +92,13 @@ function getClientCity(contactInfo: any): string | null {
 }
 
 async function fetchFirmClientIds(
-  supabase: ReturnType<typeof createSupabaseClient<Database>>,
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
   firmId: string
 ): Promise<string[]> {
-  // Single-firm installs historically created clients with `firm_id = null`. We treat those as in-firm.
   const { data, error } = await supabase
     .from('clients')
     .select('id')
-    .or(`firm_id.eq.${firmId},firm_id.is.null`)
+    .eq('firm_id', firmId)
     .limit(10000)
 
   if (error) throw error
@@ -125,39 +114,19 @@ export async function GET(request: NextRequest) {
     logger.info('Metrics API request received')
     step = 'auth'
 
-    const authSupabase = getSupabaseServiceClient()
-    const {
-      data: { user }
-    } = await authSupabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Best-effort firm scope (single-firm installs will still work if null)
-    step = 'resolve_firm'
-    let firmId: string | null =
-      (user.user_metadata as any)?.firm_id || (user.user_metadata as any)?.firmId || null
-
-    if (!firmId) {
-      const { data: profile, error: profileError } = await authSupabase
-        .from('profiles')
-        .select('firm_id')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profileError) {
-        logger.warn('Could not resolve firm_id from profile', { profileError: profileError.message })
-      }
-      firmId = profile?.firm_id ?? null
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
-
-    if (!firmId && DEFAULT_FIRM_ID) {
-      firmId = DEFAULT_FIRM_ID
-    }
+    const { firmId } = firmResult
 
     step = 'create_service_client'
-    const supabase = getServiceClient()
+    const supabase = getSupabaseServiceClient()
 
     // Get current date for calculations
     const now = new Date()
@@ -172,89 +141,27 @@ export async function GET(request: NextRequest) {
 
     // ===== CLIENT COVERAGE METRICS =====
     step = 'count_clients'
-    const { count: unscopedClients, error: unscopedClientsError } = await supabase
+    const { count: totalClients, error: clientsError } = await supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
+      .eq('firm_id', firmId)
 
-    if (unscopedClientsError) {
-      logger.error('Failed to count clients (unscoped)', unscopedClientsError)
+    if (clientsError) {
+      logger.error('Failed to count clients (scoped)', clientsError)
       throw new Error('Failed to fetch client metrics')
-    }
-
-    let scopedClients: number | null = null
-    if (firmId) {
-      // NOTE: In the current single-firm setup we still have legacy clients with `firm_id = null`.
-      // We treat those as belonging to the current firm to keep firm-wide dashboards correct.
-      // When you migrate to true multi-firm, remove the `.or(...is.null)` clause after data is backfilled.
-      const { count, error } = await supabase
-        .from('clients')
-        .select('*', { count: 'exact', head: true })
-        .or(`firm_id.eq.${firmId},firm_id.is.null`)
-
-      if (error) {
-        logger.warn('Failed to count clients (scoped)', { firmId, message: error.message })
-      } else {
-        scopedClients = typeof count === 'number' ? count : null
-      }
-    }
-
-    const unscopedCount = typeof unscopedClients === 'number' ? unscopedClients : 0
-    let totalClients = typeof scopedClients === 'number' ? scopedClients : unscopedCount
-
-    // Single-firm mode safety: if firm scoping looks obviously wrong, fall back to unscoped.
-    // We only do this when the user's firm is the DEFAULT_FIRM_ID (legacy installs).
-    if (
-      firmId &&
-      DEFAULT_FIRM_ID &&
-      firmId === DEFAULT_FIRM_ID &&
-      typeof scopedClients === 'number' &&
-      unscopedCount > 0
-    ) {
-      const ratio = scopedClients / unscopedCount
-      if (scopedClients <= 1 || ratio < 0.6) {
-        logger.warn('Firm scoping returned implausible client count; falling back to unscoped metrics', {
-          firmId,
-          scopedClients,
-          unscopedCount,
-          ratio
-        })
-        firmId = null
-        totalClients = unscopedCount
-      }
     }
 
     // Resolve client IDs for firm scoping (avoids fragile embedded join filters in PostgREST).
     let firmClientIds: string[] | null = null
-    if (firmId) {
-      step = 'fetch_firm_client_ids'
-      try {
-        firmClientIds = await fetchFirmClientIds(supabase, firmId)
-      } catch (e: any) {
-        logger.warn('Failed to fetch firm client IDs; falling back to unscoped metrics', {
-          firmId,
-          message: e?.message || String(e)
-        })
-        firmClientIds = null
-        firmId = null
-      }
-    }
-
-    if (
-      firmId &&
-      DEFAULT_FIRM_ID &&
-      firmId === DEFAULT_FIRM_ID &&
-      firmClientIds &&
-      firmClientIds.length > 0 &&
-      unscopedCount > 0 &&
-      firmClientIds.length / unscopedCount < 0.6
-    ) {
-      logger.warn('Firm client ID list seems incomplete; falling back to unscoped metrics', {
+    step = 'fetch_firm_client_ids'
+    try {
+      firmClientIds = await fetchFirmClientIds(supabase, firmId)
+    } catch (e: any) {
+      logger.warn('Failed to fetch firm client IDs', {
         firmId,
-        firmClientIds: firmClientIds.length,
-        unscopedCount
+        message: e?.message || String(e)
       })
       firmClientIds = null
-      firmId = null
     }
 
     const totalClientCount = firmClientIds ? firmClientIds.length : totalClients || 0
@@ -274,7 +181,7 @@ export async function GET(request: NextRequest) {
     const { data: progressRows, error: progressError } = await progressQuery
     if (progressError) {
       logger.error('Failed to fetch assessment_progress', progressError)
-      warnings.push(`progress_unavailable:${progressError.message}`)
+      warnings.push('progress_unavailable')
     }
 
     // Dedupe by client_id + assessment_type (keep most recent due to ordering)
@@ -489,7 +396,7 @@ export async function GET(request: NextRequest) {
 
       const { data, error } = await q
       if (error) {
-        warnings.push(`compliance_${String(table)}:${error.message}`)
+        warnings.push(`compliance_${String(table)}_unavailable`)
         continue
       }
       for (const row of data || []) {
@@ -528,7 +435,7 @@ export async function GET(request: NextRequest) {
     const { data: clientsWithDetails, error: clientsDetailsError } = await clientsDetailsQuery
     if (clientsDetailsError) {
       logger.error('Failed to fetch client details for insights', clientsDetailsError)
-      warnings.push(`client_insights_unavailable:${clientsDetailsError.message}`)
+      warnings.push('client_insights_unavailable')
     }
 
     const genderDistribution = {
@@ -659,7 +566,7 @@ export async function GET(request: NextRequest) {
         .eq('is_current', true)
       if (firmClientIds && firmClientIds.length > 0) q = q.in('client_id', firmClientIds)
       const { count, error } = await q
-      if (error) warnings.push(`count_${String(table)}:${error.message}`)
+      if (error) warnings.push(`count_${String(table)}_unavailable`)
       return count || 0
     }
 
@@ -678,7 +585,7 @@ export async function GET(request: NextRequest) {
       .not('client_id', 'is', null)
     if (firmClientIds && firmClientIds.length > 0) monteCarloQuery = monteCarloQuery.in('client_id', firmClientIds)
     const { count: monteCarloCount, error: monteCarloError } = await monteCarloQuery
-    if (monteCarloError) warnings.push(`count_monte_carlo_results:${monteCarloError.message}`)
+    if (monteCarloError) warnings.push('count_monte_carlo_results_unavailable')
 
     // ===== VERSION STATS =====
     step = 'version_stats'
@@ -689,7 +596,7 @@ export async function GET(request: NextRequest) {
       .limit(2000)
     if (firmClientIds && firmClientIds.length > 0) versionsQuery = versionsQuery.in('client_id', firmClientIds)
     const { data: atrVersions, error: versionsError } = await versionsQuery
-    if (versionsError) warnings.push(`version_stats:${versionsError.message}`)
+    if (versionsError) warnings.push('version_stats_unavailable')
 
     const maxATRVersion = atrVersions?.[0]?.version || 0
     const averageVersions = atrVersions?.length
@@ -809,11 +716,8 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: 'Failed to fetch metrics',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        step,
-        ...(process.env.NODE_ENV !== 'production'
-          ? { stack: error instanceof Error ? error.stack : undefined }
-          : {})
+        message: '',
+        step
       },
       { status: 500 }
     )

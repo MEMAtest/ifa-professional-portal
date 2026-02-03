@@ -27,6 +27,35 @@ env:
   PLAYWRIGHT_VERSION: '1.57.0'
 
 jobs:
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: --no-git
+
   test:
     name: E2E Tests - ${{ matrix.browser }}
     runs-on: ubuntu-latest
@@ -66,13 +95,20 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
+      - name: Validate E2E secrets
+        run: |
+          if [ -z \"${{ secrets.E2E_EMAIL }}\" ] || [ -z \"${{ secrets.E2E_PASSWORD }}\" ]; then
+            echo \"E2E_EMAIL or E2E_PASSWORD secret is missing\" >&2
+            exit 1
+          fi
+
       - name: Run E2E tests
         run: npm run e2e -- --project=${{ matrix.browser }}
         env:
           CI: true
           E2E_BASE_URL: http://localhost:3000
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'demo@plannetic.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'demo123' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
           E2E_WEB_SERVER: '1'
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -132,13 +168,20 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
+      - name: Validate E2E secrets
+        run: |
+          if [ -z \"${{ secrets.E2E_EMAIL }}\" ] || [ -z \"${{ secrets.E2E_PASSWORD }}\" ]; then
+            echo \"E2E_EMAIL or E2E_PASSWORD secret is missing\" >&2
+            exit 1
+          fi
+
       - name: Run E2E tests
         run: npm run e2e -- --project=${{ matrix.device }}
         env:
           CI: true
           E2E_BASE_URL: http://localhost:3000
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL || 'demo@plannetic.com' }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'demo123' }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
           E2E_WEB_SERVER: '1'
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}

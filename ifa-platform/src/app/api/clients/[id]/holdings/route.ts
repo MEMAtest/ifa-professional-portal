@@ -6,7 +6,10 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
+import { log } from '@/lib/logging/structured'
+import { parseRequestBody } from '@/app/api/utils'
 
 interface ProductHolding {
   id?: string
@@ -34,10 +37,13 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
     const clientId = context?.params?.id
@@ -48,8 +54,17 @@ export async function GET(
       )
     }
 
-    // Use service client to bypass RLS
     const supabaseService = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase: supabaseService,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     const { data, error } = await supabaseService
       .from('client_product_holdings')
       .select('*')
@@ -62,16 +77,16 @@ export async function GET(
       if (error.message?.includes('client_product_holdings')) {
         return NextResponse.json({ success: true, holdings: [] })
       }
-      console.error('Error fetching holdings:', error)
+      log.error('Error fetching holdings', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to fetch holdings' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true, holdings: data || [] })
   } catch (error) {
-    console.error('Holdings GET error:', error)
+    log.error('Holdings GET error', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -88,10 +103,13 @@ export async function POST(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
     const clientId = context?.params?.id
@@ -102,7 +120,7 @@ export async function POST(
       )
     }
 
-    const body: ProductHolding = await request.json()
+    const body: ProductHolding = await parseRequestBody(request)
 
     if (!body.service_id || !body.product_name) {
       return NextResponse.json(
@@ -111,19 +129,22 @@ export async function POST(
       )
     }
 
-    // Get firm_id from user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('firm_id')
-      .eq('id', user.id)
-      .single()
-
     const supabaseService = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase: supabaseService,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     const { data, error } = await supabaseService
       .from('client_product_holdings')
       .insert({
         client_id: clientId,
-        firm_id: profile?.firm_id || null,
+        firm_id: auth.context.firmId,
         service_id: body.service_id,
         product_name: body.product_name,
         product_provider: body.product_provider || null,
@@ -135,22 +156,22 @@ export async function POST(
         status: body.status || 'active',
         acquisition_date: body.acquisition_date || null,
         notes: body.notes || null,
-        created_by: user.id
+        created_by: auth.context.userId
       })
       .select()
       .single()
 
     if (error) {
-      console.error('Error creating holding:', error)
+      log.error('Error creating holding', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to create holding' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true, holding: data })
   } catch (error) {
-    console.error('Holdings POST error:', error)
+    log.error('Holdings POST error', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -167,13 +188,16 @@ export async function PATCH(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
-    const body = await request.json()
+    const body = await parseRequestBody(request)
     const holdingId = body.id
 
     if (!holdingId) {
@@ -184,6 +208,18 @@ export async function PATCH(
     }
 
     const supabaseService = getSupabaseServiceClient() as any
+    const clientId = context?.params?.id
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase: supabaseService,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+    }
     const { data, error } = await supabaseService
       .from('client_product_holdings')
       .update({
@@ -203,16 +239,16 @@ export async function PATCH(
       .single()
 
     if (error) {
-      console.error('Error updating holding:', error)
+      log.error('Error updating holding', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to update holding' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true, holding: data })
   } catch (error) {
-    console.error('Holdings PATCH error:', error)
+    log.error('Holdings PATCH error', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -229,10 +265,21 @@ export async function DELETE(
   context: { params: { id: string } }
 ) {
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+
+    const clientId = context?.params?.id
+    if (!clientId || clientId === 'undefined') {
+      return NextResponse.json(
+        { success: false, error: 'Client ID is required' },
+        { status: 400 }
+      )
     }
 
     const { searchParams } = new URL(request.url)
@@ -246,22 +293,31 @@ export async function DELETE(
     }
 
     const supabaseService = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase: supabaseService,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
     const { error } = await supabaseService
       .from('client_product_holdings')
       .delete()
       .eq('id', holdingId)
 
     if (error) {
-      console.error('Error deleting holding:', error)
+      log.error('Error deleting holding', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: 'Failed to delete holding' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Holdings DELETE error:', error)
+    log.error('Holdings DELETE error', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

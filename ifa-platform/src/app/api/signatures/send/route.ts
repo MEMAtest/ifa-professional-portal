@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { openSignService } from '@/services/OpenSignService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +19,17 @@ export async function POST(request: NextRequest) {
   log.info('SEND SIGNATURE: API endpoint called')
 
   try {
-    const body: SendSignatureRequest = await request.json()
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const firmId = firmResult.firmId
+
+    const body: SendSignatureRequest = await parseRequestBody(request)
     log.debug('SEND SIGNATURE: Request body', { body })
 
     const { signatureRequestId } = body
@@ -39,6 +51,7 @@ export async function POST(request: NextRequest) {
       .from('signature_requests') as any)
       .select('*')
       .eq('id', signatureRequestId)
+      .eq('firm_id', firmId)
       .single()
 
     if (signatureError || !signatureRequest) {
@@ -108,6 +121,7 @@ export async function POST(request: NextRequest) {
         }
       })
       .eq('id', signatureRequestId)
+      .eq('firm_id', firmId)
       .select()
       .single()
 
@@ -138,8 +152,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        error: 'Failed to send signature request'
       },
       { status: 500 }
     )

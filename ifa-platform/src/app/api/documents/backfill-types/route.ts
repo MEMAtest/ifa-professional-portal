@@ -2,8 +2,6 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/auth/apiAuth'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/db'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
 // Backfill documents.type/document_type using category name where missing
@@ -29,12 +27,11 @@ export async function POST(request: NextRequest) {
       if (!token || !expected || token !== expected) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
       }
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!url || !key) {
+      try {
+        supabase = getSupabaseServiceClient()
+      } catch (error) {
         return NextResponse.json({ error: 'Supabase credentials missing' }, { status: 500 })
       }
-      supabase = createServiceClient<Database>(url, key)
     }
 
     // Fetch documents missing type/document_type (null, empty string, or 'Unknown')
@@ -58,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const { data: docs, error } = await query
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to backfill document types' }, { status: 500 })
     }
 
     if (!docs || docs.length === 0) {
@@ -85,13 +82,13 @@ export async function POST(request: NextRequest) {
       .upsert(updates, { onConflict: 'id' })
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to backfill document types' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, updated: updates.length })
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Internal server error' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

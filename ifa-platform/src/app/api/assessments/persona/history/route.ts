@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       log.error('Error fetching Persona history', error)
-      return NextResponse.json({ error: 'Failed to fetch Persona history', message: error.message, success: false }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch Persona history', success: false }, { status: 500 })
     }
 
     const versions: any[] = assessments || []
@@ -116,9 +116,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     log.error('Persona history route error', error)
     return NextResponse.json(
-      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error', success: false },
+      { error: 'Internal server error', message: '', success: false },
       { status: 500 }
     )
   }
 }
-

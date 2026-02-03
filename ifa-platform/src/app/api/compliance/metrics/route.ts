@@ -5,13 +5,9 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { log } from '@/lib/logging/structured'
-
-const supabase: any = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +24,18 @@ function getLast12Months(): string[] {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const months = getLast12Months()
+    const supabase = getSupabaseServiceClient() as any
 
     // Parallel fetch all compliance data
     const [
@@ -41,19 +48,19 @@ export async function GET(request: NextRequest) {
       clientsResult
     ] = await Promise.all([
       // File Reviews
-      supabase.from('file_reviews').select('*'),
+      supabase.from('file_reviews').select('*').eq('firm_id', firmId),
       // Complaints
-      supabase.from('complaint_register').select('*'),
+      supabase.from('complaint_register').select('*').eq('firm_id', firmId),
       // Breaches
-      supabase.from('breach_register').select('*'),
+      supabase.from('breach_register').select('*').eq('firm_id', firmId),
       // Vulnerability
-      supabase.from('vulnerability_register').select('*'),
+      supabase.from('vulnerability_register').select('*').eq('firm_id', firmId),
       // AML
-      supabase.from('aml_client_status').select('*'),
+      supabase.from('aml_client_status').select('*').eq('firm_id', firmId),
       // Consumer Duty
-      supabase.from('consumer_duty_status').select('*'),
+      supabase.from('consumer_duty_status').select('*').eq('firm_id', firmId),
       // Total clients for reference
-      supabase.from('clients').select('id', { count: 'exact', head: true })
+      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('firm_id', firmId)
     ])
 
     const fileReviews: any[] = fileReviewsResult.data || []

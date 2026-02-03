@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     if (clientError) {
       logger.error('Failed to fetch clients for PROD dashboard', clientError)
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch clients', details: clientError.message },
+        { success: false, error: 'Failed to fetch clients' },
         { status: 500 }
       )
     }
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       if (servicesError) {
         logger.error('Failed to fetch client services for PROD dashboard', servicesError)
         return NextResponse.json(
-          { success: false, error: 'Failed to fetch client services', details: servicesError.message },
+          { success: false, error: 'Failed to fetch client services' },
           { status: 500 }
         )
       }

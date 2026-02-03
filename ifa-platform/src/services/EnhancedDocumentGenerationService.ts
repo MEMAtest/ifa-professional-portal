@@ -4,7 +4,7 @@
 // ================================================================
 
 import { createClient } from '@/lib/supabase/client'
-import { createClient as createSupabaseServiceClient } from '@supabase/supabase-js'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DocumentTemplateService } from './documentTemplateService'
 import type { Database } from '@/types/db' // Fixed import path
@@ -54,12 +54,7 @@ export class EnhancedDocumentGenerationService {
     try {
       // Prefer server-friendly client when not in the browser to avoid localStorage errors
       if (typeof window === 'undefined') {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-        const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        if (!url || !key) {
-          throw new Error('Supabase credentials missing')
-        }
-        this.supabase = createSupabaseServiceClient<Database>(url, key)
+        this.supabase = getSupabaseServiceClient()
       } else {
         this.supabase = createClient()
         this.initializeUser()

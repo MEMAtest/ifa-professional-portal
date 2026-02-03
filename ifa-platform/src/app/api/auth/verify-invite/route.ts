@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { hashToken } from '@/lib/security/crypto'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { log } from '@/lib/logging/structured'
 
 export async function GET(request: NextRequest) {
   // Rate limit: 5 requests per 15 minutes per IP
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     if (error || !invitation) {
       // SECURITY: Never log tokens, even partially
-      console.log('[Verify Invite] Invalid or expired invitation token')
+      log.info('[Verify Invite] Invalid or expired invitation token')
       return NextResponse.json(
         { error: 'Invalid invitation token', code: 'INVALID_TOKEN' },
         { status: 404 }
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[Verify Invite] Error:', error)
+    log.error('[Verify Invite] Error:', error)
     return NextResponse.json(
       { error: 'Internal server error', code: 'SERVER_ERROR' },
       { status: 500 }
