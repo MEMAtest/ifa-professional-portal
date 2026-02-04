@@ -1,6 +1,8 @@
 import { chromium, FullConfig } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
+import { loadEnvConfig } from '@next/env';
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Global Setup for E2E Tests
@@ -18,7 +20,9 @@ import fs from 'fs';
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting global E2E test setup...');
 
-  const { baseURL } = config.projects[0].use;
+  loadEnvConfig(process.cwd());
+
+  const baseURL = (config.projects[0].use.baseURL as string | undefined) || 'http://127.0.0.1:3000';
   const storageStatePath = path.join(__dirname, '../../.auth/user.json');
 
   // Create auth directory if it doesn't exist
@@ -31,6 +35,7 @@ async function globalSetup(config: FullConfig) {
   // This is more efficient than logging in for every test
   if (process.env.E2E_SHARED_AUTH !== '0') {
     console.log('🔐 Authenticating and saving session state...');
+    await ensureTestUser(baseURL);
     await authenticateAndSaveState(baseURL, storageStatePath);
   }
 
@@ -72,8 +77,14 @@ async function authenticateAndSaveState(baseURL: string = 'http://localhost:3000
     // Click login button
     await page.getByRole('button', { name: /sign in/i }).click();
 
-    // Wait for navigation to dashboard (indicating successful login)
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+    // Wait for navigation to a post-login page (dashboard/setup/onboarding)
+    await page.waitForURL(/\/(dashboard|setup|onboarding)/, { timeout: 30_000 });
+
+    // Prefer landing on dashboard for subsequent tests
+    if (!page.url().includes('/dashboard')) {
+      await page.goto(`${baseURL}/dashboard`);
+      await page.waitForURL(/\/dashboard/, { timeout: 30_000 }).catch(() => {});
+    }
 
     // Warm key pages to avoid first-test timeouts
     await page.goto(`${baseURL}/assessments/suitability?isProspect=true`, {
@@ -91,6 +102,169 @@ async function authenticateAndSaveState(baseURL: string = 'http://localhost:3000
   } finally {
     await browser.close();
   }
+}
+
+function isLocalBaseURL(baseURL: string): boolean {
+  try {
+    const url = new URL(baseURL);
+    return ['localhost', '127.0.0.1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureTestUser(baseURL: string): Promise<void> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    console.warn('⚠️  Skipping E2E user setup: missing Supabase service role key');
+    return;
+  }
+
+  if (!isLocalBaseURL(baseURL) && process.env.E2E_ALLOW_USER_SEED !== '1') {
+    console.warn('⚠️  Skipping E2E user setup on non-local baseURL');
+    return;
+  }
+
+  const email = process.env.E2E_EMAIL || 'demo@plannetic.com';
+  const password = process.env.E2E_PASSWORD || 'demo123';
+
+  const supabase = createClient(supabaseUrl, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const firmName = 'E2E Demo Firm';
+  const { data: firm } = await supabase
+    .from('firms')
+    .select('id')
+    .eq('name', firmName)
+    .maybeSingle();
+
+  const firmId =
+    firm?.id ||
+    (await supabase
+      .from('firms')
+      .insert({
+        name: firmName,
+        subscription_tier: 'professional',
+        settings: { test: true, purpose: 'e2e-tests' },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    ).data?.id;
+
+  if (!firmId) {
+    console.warn('⚠️  Unable to create or fetch E2E firm');
+    return;
+  }
+
+  const { data: firmSettingsRow } = await supabase
+    .from('firms')
+    .select('settings')
+    .eq('id', firmId)
+    .maybeSingle()
+
+  const currentSettings = (firmSettingsRow?.settings ?? {}) as Record<string, any>
+  const updatedSettings = {
+    ...currentSettings,
+    onboarding: {
+      ...(currentSettings.onboarding ?? {}),
+      completed: true,
+    },
+    test: true,
+    purpose: 'e2e-tests',
+  }
+
+  await supabase
+    .from('firms')
+    .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+    .eq('id', firmId)
+
+  const existingUser = await findUserByEmail(supabase, email);
+  let userId = existingUser?.id ?? null;
+
+  if (existingUser?.id) {
+    await supabase.auth.admin.updateUserById(existingUser.id, {
+      password,
+      email_confirm: true,
+      user_metadata: {
+        firm_id: firmId,
+        role: 'owner',
+      },
+    });
+    userId = existingUser.id;
+  } else {
+    const { data: created, error: createError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        firm_id: firmId,
+        role: 'owner',
+      },
+    });
+    if (createError) {
+      if (createError.message?.includes('already been registered')) {
+        const existingAfter = await findUserByEmail(supabase, email);
+        if (existingAfter?.id) {
+          await supabase.auth.admin.updateUserById(existingAfter.id, {
+            password,
+            email_confirm: true,
+            user_metadata: {
+              firm_id: firmId,
+              role: 'owner',
+            },
+          });
+          userId = existingAfter.id;
+        }
+      } else {
+        console.warn(`⚠️  Failed to create E2E user: ${createError.message}`);
+        return;
+      }
+    } else {
+      userId = created?.user?.id ?? null;
+    }
+  }
+
+  if (!userId) return;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!profile) {
+    await supabase.from('profiles').insert({
+      id: userId,
+      firm_id: firmId,
+      role: 'owner',
+      email,
+      first_name: 'E2E',
+      last_name: 'Tester',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  } else {
+    await supabase
+      .from('profiles')
+      .update({ firm_id: firmId, role: 'owner', email })
+      .eq('id', userId);
+  }
+}
+
+async function findUserByEmail(supabase: any, email: string) {
+  for (let page = 1; page <= 50; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 50 });
+    if (error) break;
+    const users = data?.users ?? [];
+    if (users.length === 0) break;
+    const match = users.find((user: any) => user.email === email);
+    if (match) return match;
+  }
+  return null;
 }
 
 /**

@@ -8,7 +8,7 @@ import { ShareAssessmentInputSchema, formatValidationErrors } from '@/lib/valida
 import { logger, getErrorMessage } from '@/lib/errors'
 import { createAuditLogger } from '@/lib/audit'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { parseRequestBody } from '@/app/api/utils'
 
@@ -38,7 +38,12 @@ export async function POST(request: NextRequest) {
     if (!authResult.success || !authResult.context) {
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { userId, firmId } = authResult.context
+    const firmResult = requireFirmId(authResult.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+    const { userId } = authResult.context
 
     // Cast to any: users/assessment_shares tables not yet in generated Supabase types
     const supabase: any = getSupabaseServiceClient()
@@ -224,6 +229,11 @@ export async function GET(request: NextRequest) {
     if (!authResult.success || !authResult.context) {
       return authResult.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const firmResult = requireFirmId(authResult.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
     const { userId } = authResult.context
 
     // Cast to any: assessment_shares table not yet in generated Supabase types
@@ -238,6 +248,7 @@ export async function GET(request: NextRequest) {
       .from('assessment_shares')
       .select('*')
       .eq('advisor_id', userId)
+      .eq('firm_id', firmId)
       .order('created_at', { ascending: false })
 
     if (clientId) {

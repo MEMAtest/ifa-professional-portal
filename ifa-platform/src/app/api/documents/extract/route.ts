@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { log } from '@/lib/logging/structured'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { extractText } from '@/lib/documents/textExtractor'
 import { analyzeDocument, readPageImages } from '@/lib/documents/aiAnalyzer'
@@ -53,6 +53,7 @@ function getEffectiveMimeType(document: Record<string, any>): string {
 
 async function processDocument(
   documentId: string,
+  firmId: string,
   supabase: ReturnType<typeof getSupabaseServiceClient>
 ): Promise<ExtractionResult> {
   // 1. Mark as processing
@@ -60,12 +61,14 @@ async function processDocument(
     .from('documents')
     .update({ status: 'processing' } as any)
     .eq('id', documentId)
+    .eq('firm_id', firmId)
 
   // 2. Fetch document record
   const { data: doc, error: docError } = await supabase
     .from('documents')
     .select('*')
     .eq('id', documentId)
+    .eq('firm_id', firmId)
     .single()
 
   if (docError || !doc) {
@@ -78,6 +81,7 @@ async function processDocument(
       .from('documents')
       .update({ status: 'failed', metadata: { ...((doc.metadata as any) || {}), extraction_error: 'No file path' } } as any)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
     return { documentId, status: 'failed', error: 'No file path' }
   }
 
@@ -90,6 +94,7 @@ async function processDocument(
       .from('documents')
       .update({ status: 'failed', metadata: { ...((doc.metadata as any) || {}), extraction_error: 'Download failed' } } as any)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
     return { documentId, status: 'failed', error: 'File download failed' }
   }
 
@@ -111,6 +116,7 @@ async function processDocument(
         metadata: { ...((doc.metadata as any) || {}), extraction_error: rawMsg },
       } as any)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
     return { documentId, status: 'failed', error: publicMsg }
   }
 
@@ -170,6 +176,7 @@ async function processDocument(
         },
       } as any)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
 
     return { documentId, status: 'analyzed' }
   } catch (aiErr) {
@@ -188,6 +195,7 @@ async function processDocument(
         },
       } as any)
       .eq('id', documentId)
+      .eq('firm_id', firmId)
 
     return { documentId, status: 'extracted', error: publicMsg }
   }
@@ -200,8 +208,13 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
     const body = await parseRequestBody(request, requestSchema)
     const documentIds: string[] = body.documentIds
@@ -215,6 +228,26 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseServiceClient()
     const results: ExtractionResult[] = []
     let partial = false
+
+    const { data: allowedDocs, error: allowedError } = await supabase
+      .from('documents')
+      .select('id')
+      .in('id', documentIds)
+      .eq('firm_id', firmId)
+
+    if (allowedError) {
+      log.error('Failed to verify document access', allowedError)
+      return NextResponse.json({ error: 'Failed to verify document access' }, { status: 500 })
+    }
+
+    const allowedIds = new Set((allowedDocs || []).map((doc: any) => doc.id))
+    const missingIds = documentIds.filter((id) => !allowedIds.has(id))
+    if (missingIds.length > 0) {
+      return NextResponse.json(
+        { error: 'One or more documents were not found' },
+        { status: 404 }
+      )
+    }
 
     // Process in batches of CONCURRENCY
     for (let i = 0; i < documentIds.length; i += CONCURRENCY) {
@@ -230,7 +263,7 @@ export async function POST(request: NextRequest) {
 
       const batch = documentIds.slice(i, i + CONCURRENCY)
       const batchResults = await Promise.allSettled(
-        batch.map((id) => processDocument(id, supabase))
+        batch.map((id) => processDocument(id, firmId, supabase))
       )
 
       for (const result of batchResults) {

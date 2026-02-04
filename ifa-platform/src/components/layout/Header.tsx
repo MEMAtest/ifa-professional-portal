@@ -328,6 +328,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
 
           <div className="relative">
             <button
+              aria-label="User menu"
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-50 transition-colors"
             >

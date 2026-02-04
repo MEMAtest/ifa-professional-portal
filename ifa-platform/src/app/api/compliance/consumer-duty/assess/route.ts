@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
         .from('consumer_duty_assessments')
         .select('version')
         .eq('client_id', clientId)
+        .eq('firm_id', firmId)
         .order('version', { ascending: false })
         .limit(1)
 
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
       .from('consumer_duty_status')
       .select('id')
       .eq('client_id', clientId)
+      .eq('firm_id', firmId)
       .maybeSingle()
 
     if (statusQueryError && statusQueryError.code !== 'PGRST116') {
@@ -159,6 +161,7 @@ export async function POST(request: NextRequest) {
         .from('consumer_duty_status')
         .update(statusRecord)
         .eq('id', existingStatus.id)
+        .eq('firm_id', firmId)
 
       if (updateError) {
         log.error('Error updating consumer_duty_status:', updateError)
@@ -184,6 +187,7 @@ export async function POST(request: NextRequest) {
       const { data: tableCheck, error: tableError } = await supabase
         .from('consumer_duty_assessments')
         .select('id')
+        .eq('firm_id', firmId)
         .limit(1)
 
       if (!tableError) {
@@ -230,6 +234,7 @@ export async function GET(request: NextRequest) {
     if (!('firmId' in firmResult)) {
       return firmResult
     }
+    const { firmId } = firmResult
 
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
@@ -257,7 +262,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Try consumer_duty_assessments first
-    let query = supabase.from('consumer_duty_assessments').select('*')
+    let query = supabase
+      .from('consumer_duty_assessments')
+      .select('*')
+      .eq('firm_id', firmId)
 
     if (assessmentId) {
       query = query.eq('id', assessmentId)
@@ -277,6 +285,7 @@ export async function GET(request: NextRequest) {
         .from('consumer_duty_status')
         .select('*')
         .eq('client_id', clientId)
+        .eq('firm_id', firmId)
         .maybeSingle()
 
       if (statusError && statusError.code !== 'PGRST116') {

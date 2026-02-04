@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requirePermission } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { log } from '@/lib/logging/structured'
 
 // Max file size: 15MB
@@ -177,6 +178,18 @@ export async function POST(request: NextRequest) {
 
     // Use service client to bypass storage/RLS restrictions
     const supabase = getSupabaseServiceClient()
+
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+    }
 
     // Generate unique file path
     const timestamp = Date.now()

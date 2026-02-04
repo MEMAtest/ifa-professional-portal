@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
@@ -35,11 +36,11 @@ interface GenerateDocumentResponse {
   error?: string
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<GenerateDocumentResponse>> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Verify authentication
     const auth = await getAuthContext(request)
-    if (!auth.success) {
+    if (!auth.success || !auth.context) {
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
@@ -57,14 +58,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateD
       )
     }
 
-    const firmId = auth.context?.firmId
-    if (!firmId) {
-      return NextResponse.json(
-        { success: false, error: 'Firm ID not configured. Please contact support.' },
-        { status: 403 }
-      )
+    const firmResult = requireFirmId(auth.context)
+    if (firmResult instanceof NextResponse) {
+      return firmResult
     }
+    const firmId = firmResult.firmId
     const userId = auth.context?.userId
+
+    if (body.clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId: body.clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+    }
 
     // Generate unique document ID
     const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`

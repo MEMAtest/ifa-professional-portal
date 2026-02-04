@@ -11,7 +11,7 @@ import { createRequestLogger } from '@/lib/logging/structured'
 import { notifyClientReassigned } from '@/lib/notifications/notificationService'
 import { rateLimit } from '@/lib/security/rateLimit'
 import type { Json } from '@/types/db'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 
 // UUID validation regex (RFC 4122 compliant)
@@ -60,25 +60,29 @@ export async function POST(request: NextRequest) {
   const logger = createRequestLogger(request)
 
   try {
-    const supabase = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
-    // Check user's role - must be supervisor or admin
+    const supabase = getSupabaseServiceClient()
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, firm_id, first_name, last_name')
-      .eq('id', user.id)
+      .eq('id', auth.context.userId)
       .single()
 
     if (!profile) {
       return NextResponse.json({ success: false, error: 'Profile not found' }, { status: 404 })
     }
 
-    if (!['admin', 'supervisor'].includes(profile.role || '')) {
+    const effectiveRole = auth.context.role || profile.role || ''
+    if (!['admin', 'supervisor'].includes(effectiveRole)) {
       return NextResponse.json(
         { success: false, error: 'Insufficient permissions. Supervisor or admin role required.' },
         { status: 403 }
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
       clientCount: clientIds.length,
       newAdvisorId,
       transferAssessments,
-      requestedBy: user.id
+      requestedBy: auth.context.userId
     })
 
     // Verify new advisor exists and is in the same firm
@@ -159,7 +163,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (newAdvisor.firm_id !== profile.firm_id) {
+    if (newAdvisor.firm_id !== firmId) {
       return NextResponse.json(
         { success: false, error: 'New advisor must be in the same firm' },
         { status: 400 }
@@ -176,14 +180,15 @@ export async function POST(request: NextRequest) {
     }
 
     const newAdvisorName = `${newAdvisor.first_name || ''} ${newAdvisor.last_name || ''}`.trim() || 'Unknown'
-    const performerName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || user.email || 'System'
+    const performerName =
+      `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || auth.context.email || 'System'
 
     // Fetch clients to reassign with their current advisor info
     const { data: clients, error: clientsError } = await supabase
       .from('clients')
       .select('id, advisor_id, personal_details, firm_id')
       .in('id', clientIds)
-      .eq('firm_id', profile.firm_id!) // Security: only reassign clients in user's firm
+      .eq('firm_id', firmId) // Security: only reassign clients in user's firm
 
     if (clientsError) {
       logger.error('Error fetching clients', clientsError)
@@ -306,7 +311,7 @@ export async function POST(request: NextRequest) {
           new_advisor_id: newAdvisorId,
           new_advisor_name: newAdvisorName,
           reason: reason || null,
-          performed_by: user.id
+          performed_by: auth.context.userId
         } as Json
       })
     }
@@ -365,7 +370,7 @@ export async function POST(request: NextRequest) {
             client.clientName,
             'removed',
             newAdvisorName,
-            profile.firm_id || undefined
+            firmId || undefined
           )
         }
 
@@ -376,7 +381,7 @@ export async function POST(request: NextRequest) {
           client.clientName,
           'assigned',
           client.previousAdvisorName,
-          profile.firm_id || undefined
+          firmId || undefined
         )
       } catch (notifyError) {
         logger.warn('Failed to send reassignment notification', {

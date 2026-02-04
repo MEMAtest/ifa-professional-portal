@@ -13,11 +13,24 @@ import { defineConfig, devices } from '@playwright/test';
  */
 
 const wantsLocalServer = process.env.E2E_WEB_SERVER === '1';
-const envBaseURL = process.env.E2E_BASE_URL || (!wantsLocalServer
-  ? (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_API_URL)
-  : undefined);
+const appUrlCandidate =
+  process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_API_URL;
+
+const isLocalUrl = (value?: string) => {
+  if (!value) return false;
+  try {
+    const hostname = new URL(value).hostname;
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+};
+
+const envBaseURL =
+  process.env.E2E_BASE_URL ||
+  (wantsLocalServer ? (isLocalUrl(appUrlCandidate) ? appUrlCandidate : undefined) : appUrlCandidate);
 const devPort = process.env.E2E_PORT || process.env.NEXT_PORT || process.env.PORT || '3000';
-const baseURL = envBaseURL || `http://127.0.0.1:${devPort}`;
+const baseURL = envBaseURL || `http://localhost:${devPort}`;
 const resolvedURL = new URL(baseURL);
 const webServerHost = resolvedURL.hostname || '127.0.0.1';
 const webServerPort =
@@ -87,6 +100,7 @@ export default defineConfig({
         actionTimeout: 20_000,
         storageState: '.auth/user.json',
       },
+      testIgnore: ['**/security/**'],
     },
     {
       name: 'qa-suitability',
@@ -96,6 +110,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         storageState: '.auth/user.json',
       },
+      testIgnore: ['**/security/**'],
     },
 
     // ============================================
@@ -108,6 +123,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 720 },
       },
+      testIgnore: ['**/security/**'],
     },
     {
       name: 'firefox',
@@ -115,6 +131,7 @@ export default defineConfig({
         ...devices['Desktop Firefox'],
         viewport: { width: 1280, height: 720 },
       },
+      testIgnore: ['**/security/**'],
     },
     {
       name: 'webkit',
@@ -122,6 +139,7 @@ export default defineConfig({
         ...devices['Desktop Safari'],
         viewport: { width: 1280, height: 720 },
       },
+      testIgnore: ['**/security/**'],
     },
 
     // Mobile browsers
@@ -130,12 +148,14 @@ export default defineConfig({
       use: {
         ...devices['Pixel 5'],
       },
+      testIgnore: ['**/security/**'],
     },
     {
       name: 'mobile-safari',
       use: {
         ...devices['iPhone 13'],
       },
+      testIgnore: ['**/security/**'],
     },
 
     // Tablet
@@ -144,6 +164,7 @@ export default defineConfig({
       use: {
         ...devices['iPad Pro'],
       },
+      testIgnore: ['**/security/**'],
     },
 
     // ============================================

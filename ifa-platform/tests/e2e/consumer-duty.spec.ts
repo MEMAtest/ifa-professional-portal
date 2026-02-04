@@ -4,23 +4,7 @@
 // ===================================================================
 
 import { test, expect, Page } from '@playwright/test';
-
-// Helper to login before tests
-async function login(page: Page) {
-  await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await page.waitForTimeout(2000);
-
-  const emailField = page.getByLabel('Email');
-  const isLoginPage = page.url().includes('/login');
-  const hasEmailField = await emailField.isVisible().catch(() => false);
-
-  if (isLoginPage && hasEmailField) {
-    await emailField.fill('demo@plannetic.com');
-    await page.getByLabel('Password').fill('demo123');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForTimeout(4000);
-  }
-}
+import { createTestHelpers } from './helpers/test-utils';
 
 async function openMobileNavIfNeeded(page: Page) {
   const menuButton = page
@@ -38,7 +22,8 @@ async function ensureConsumerDutySettings(page: Page) {
   await page.waitForTimeout(3000);
 
   if (page.url().includes('/login')) {
-    await login(page);
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
     await page.goto('/settings?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.waitForTimeout(3000);
   }
@@ -46,7 +31,8 @@ async function ensureConsumerDutySettings(page: Page) {
 
 test.describe('Consumer Duty Dashboard', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
   });
 
   test.describe('Dashboard Navigation', () => {
@@ -235,7 +221,8 @@ test.describe('Consumer Duty Dashboard', () => {
 
 test.describe('Consumer Duty Firm Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
   });
 
   test.describe('Settings Page', () => {
@@ -433,7 +420,8 @@ test.describe('Consumer Duty Firm Settings', () => {
 
 test.describe('Consumer Duty Charts', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
   });
 
   test('should display compliance status visualization', async ({ page }) => {
@@ -461,7 +449,8 @@ test.describe('Consumer Duty Charts', () => {
 
 test.describe('Consumer Duty Direct Page', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
   });
 
   test('should load standalone consumer duty page', async ({ page }) => {

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 interface Params {
   params: {
@@ -18,15 +18,17 @@ interface Params {
 
 export async function GET(request: NextRequest, { params }: Params) {
   try {
-    const supabase = getSupabaseServiceClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
+    const supabase = getSupabaseServiceClient()
 
     const { assessmentType } = params
 
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       .select('*')
       .eq('assessment_type', assessmentType)
       .eq('is_active', true)
+      .eq('firm_id', firmId)
       .order('is_default', { ascending: false })
       .order('name')
 

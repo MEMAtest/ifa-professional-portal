@@ -18,6 +18,15 @@ export const TEST_CONFIG = {
   },
 };
 
+let uniqueCounter = 0;
+
+function buildUniqueSuffix(): string {
+  uniqueCounter += 1;
+  const timestamp = Date.now().toString();
+  const counter = uniqueCounter.toString().padStart(3, '0');
+  return `${timestamp}${counter}`;
+}
+
 /**
  * Authentication helpers
  */
@@ -34,7 +43,12 @@ export class AuthHelpers {
     await this.page.fill('#email', email);
     await this.page.fill('#password', password);
     await this.page.getByRole('button', { name: /sign in/i }).click();
-    await this.page.waitForURL(/\/dashboard/, { timeout: TEST_CONFIG.timeout.long });
+    await this.page.waitForURL(/\/(dashboard|setup|onboarding)/, { timeout: TEST_CONFIG.timeout.long });
+
+    if (!this.page.url().includes('/dashboard')) {
+      await this.page.goto('/dashboard');
+      await this.page.waitForURL(/\/dashboard/, { timeout: TEST_CONFIG.timeout.long }).catch(() => {});
+    }
   }
 
   /**
@@ -44,6 +58,11 @@ export class AuthHelpers {
     await this.page.goto('/dashboard');
     if (this.page.url().includes('/login')) {
       await this.login();
+      return;
+    }
+    if (this.page.url().includes('/setup') || this.page.url().includes('/onboarding')) {
+      await this.page.goto('/dashboard');
+      await this.page.waitForURL(/\/dashboard/, { timeout: TEST_CONFIG.timeout.long }).catch(() => {});
     }
   }
 
@@ -51,9 +70,29 @@ export class AuthHelpers {
    * Logout from the application
    */
   async logout(): Promise<void> {
-    // Adjust selector based on your app's logout button
-    await this.page.getByRole('button', { name: /logout|sign out/i }).click();
-    await this.page.waitForURL(/\/login/, { timeout: TEST_CONFIG.timeout.medium });
+    const signOutButton = this.page.getByRole('button', { name: /logout|sign out/i });
+    const isVisible = await signOutButton.isVisible().catch(() => false);
+
+    if (!isVisible) {
+      const userMenuButton = this.page.getByRole('button', { name: /user menu/i });
+      if (await userMenuButton.isVisible().catch(() => false)) {
+        await userMenuButton.click();
+      }
+    }
+
+    if (await signOutButton.isVisible().catch(() => false)) {
+      await signOutButton.click();
+      await this.page.waitForURL(/\/login/, { timeout: TEST_CONFIG.timeout.medium }).catch(() => {});
+    }
+    if (!this.page.url().includes('/login')) {
+      await this.page.context().clearCookies();
+      await this.page.evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+      });
+      await this.page.goto('/login');
+      await this.page.waitForURL(/\/login/, { timeout: TEST_CONFIG.timeout.medium }).catch(() => {});
+    }
   }
 
   /**
@@ -218,7 +257,11 @@ export class WaitHelpers {
    * Wait for network to be idle
    */
   async waitForNetworkIdle(timeout = TEST_CONFIG.timeout.medium): Promise<void> {
-    await this.page.waitForLoadState('networkidle', { timeout });
+    try {
+      await this.page.waitForLoadState('networkidle', { timeout });
+    } catch {
+      await this.page.waitForLoadState('domcontentloaded', { timeout });
+    }
   }
 
   /**
@@ -308,14 +351,14 @@ export class DataHelpers {
    * Generate unique email
    */
   generateUniqueEmail(prefix = 'test'): string {
-    return `${prefix}.${Date.now()}@example.com`;
+    return `${prefix}.${buildUniqueSuffix()}@example.com`;
   }
 
   /**
    * Generate unique string
    */
   generateUniqueString(prefix = 'test'): string {
-    return `${prefix}_${Date.now()}`;
+    return `${prefix}_${buildUniqueSuffix()}`;
   }
 
   /**

@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
-
-import { cookies } from 'next/headers'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
 // ===================================================================
 // TYPES
@@ -58,21 +57,15 @@ export async function GET(request: NextRequest) {
   // Cast to any: document_audit_log schema mismatch with generated types
   const supabase: any = getSupabaseServiceClient()
   try {
-   
-    
-    // Get current user and firm context
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const firmId = user.user_metadata?.firm_id
-    if (!firmId) {
-      return NextResponse.json(
-        { success: false, error: 'Firm ID not configured. Please contact support.' },
-        { status: 403 }
-      )
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
+    const { firmId } = firmResult
 
     // Parse query parameters
     const { searchParams } = new URL(request.url)

@@ -8,6 +8,7 @@ import type { Database, DbInsert, DbRow } from '@/types/db';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
@@ -54,6 +55,29 @@ interface ComplianceCheckResult {
   recommendations: string[];
 }
 
+async function getAccessContext(request: NextRequest, clientId: string) {
+  const auth = await getAuthContext(request)
+  if (!auth.success || !auth.context) {
+    return {
+      ok: false as const,
+      response: auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
+  const supabase = getSupabaseServiceClient();
+  const access = await requireClientAccess({
+    supabase,
+    clientId,
+    ctx: auth.context,
+    select: 'id, firm_id, advisor_id'
+  })
+  if (!access.ok) {
+    return { ok: false as const, response: access.response }
+  }
+
+  return { ok: true as const, supabase, ctx: auth.context }
+}
+
 // GET: Check compliance status for a client
 export async function GET(
   request: NextRequest,
@@ -61,7 +85,11 @@ export async function GET(
 ) {
   try {
     const clientId = params.clientId;
-    const supabase = getSupabaseServiceClient();
+    const accessResult = await getAccessContext(request, clientId)
+    if (!accessResult.ok) {
+      return accessResult.response
+    }
+    const { supabase } = accessResult;
 
     // Get assessment progress - fixed typing
     const { data: progress, error } = await supabase
@@ -212,7 +240,12 @@ export async function POST(
     const clientId = params.clientId;
     const body = await parseRequestBody(request);
     const { alertId, resolution, notes } = body;
-    const supabase = getSupabaseServiceClient();
+
+    const accessResult = await getAccessContext(request, clientId)
+    if (!accessResult.ok) {
+      return accessResult.response
+    }
+    const { supabase, ctx } = accessResult;
 
     if (!alertId || !resolution) {
       return NextResponse.json(
@@ -221,16 +254,13 @@ export async function POST(
       );
     }
 
-    // Get user context for performed_by field
-    const { data: { user } } = await supabase.auth.getUser();
-
     // Log the resolution in history with proper typing
     const historyData: AssessmentHistoryInsert = {
       client_id: clientId,
       assessment_type: 'compliance',
       action: 'alert_resolved',
       performed_at: new Date().toISOString(),
-      performed_by: user?.id || null,
+      performed_by: ctx.userId || null,
       changes: {
         alertId,
         resolution,
@@ -284,7 +314,11 @@ export async function PATCH(
     const clientId = params.clientId;
     const body = await parseRequestBody(request);
     const { remindersEnabled, reviewFrequency } = body;
-    const supabase = getSupabaseServiceClient();
+    const accessResult = await getAccessContext(request, clientId)
+    if (!accessResult.ok) {
+      return accessResult.response
+    }
+    const { supabase, ctx } = accessResult;
 
     // Validate input
     if (typeof remindersEnabled !== 'boolean' || !reviewFrequency) {
@@ -294,9 +328,6 @@ export async function PATCH(
       );
     }
 
-    // Get user context
-    const { data: { user } } = await supabase.auth.getUser();
-
     // Update client settings via assessment history
     // In production, you might have a dedicated settings table
     const historyData: AssessmentHistoryInsert = {
@@ -304,7 +335,7 @@ export async function PATCH(
       assessment_type: 'compliance',
       action: 'settings_updated',
       performed_at: new Date().toISOString(),
-      performed_by: user?.id || null,
+      performed_by: ctx.userId || null,
       changes: {
         remindersEnabled,
         reviewFrequency
@@ -313,7 +344,7 @@ export async function PATCH(
         remindersEnabled,
         reviewFrequency,
         updatedAt: new Date().toISOString(),
-        updatedBy: user?.email || 'system'
+        updatedBy: ctx.email || 'system'
       }
     };
 
@@ -374,26 +405,14 @@ export async function DELETE(
 ) {
   try {
     const clientId = params.clientId;
-    const supabase = getSupabaseServiceClient();
-
-    // Check user authorization
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const accessResult = await getAccessContext(request, clientId)
+    if (!accessResult.ok) {
+      return accessResult.response
     }
+    const { supabase, ctx } = accessResult;
 
-    // Check if user has admin role (you'd implement this based on your auth system)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.role !== 'admin' && profile?.role !== 'advisor') {
+    const role = ctx.role || ''
+    if (!['admin', 'advisor', 'owner'].includes(role)) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }
@@ -406,9 +425,9 @@ export async function DELETE(
       assessment_type: 'compliance',
       action: 'alerts_cleared',
       performed_at: new Date().toISOString(),
-      performed_by: user.id,
+      performed_by: ctx.userId,
       metadata: {
-        clearedBy: user.email,
+        clearedBy: ctx.email,
         clearedAt: new Date().toISOString(),
         reason: 'Manual clear by administrator'
       }
@@ -429,7 +448,7 @@ export async function DELETE(
     return NextResponse.json({ 
       success: true,
       message: 'Compliance alerts cleared successfully',
-      clearedBy: user.email,
+      clearedBy: ctx.email,
       clearedAt: new Date().toISOString()
     });
   } catch (error) {

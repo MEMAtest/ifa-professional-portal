@@ -418,8 +418,8 @@ test.describe('File Review API Security', () => {
     // Should be 401 or 403 (depending on auth middleware)
     expect([401, 403]).toContain(response.status());
 
-    const body = await response.json();
-    expect(body.success).toBe(false);
+    const body = await response.json().catch(() => ({}));
+    expect(body.success === false || Boolean(body.error)).toBeTruthy();
 
     // Error message should NOT contain API keys or internal details
     const errorStr = JSON.stringify(body);

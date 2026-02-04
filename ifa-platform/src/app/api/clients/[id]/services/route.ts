@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 interface ClientServicesPayload {
@@ -34,12 +35,6 @@ export async function GET(
   const logger = createRequestLogger(request)
 
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
     const clientId = context?.params?.id;
     logger.debug('GET /api/clients/[id]/services - Request received', { clientId })
 
@@ -50,8 +45,22 @@ export async function GET(
       );
     }
 
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Use service client to bypass RLS (cast to any to handle missing table type)
     const supabaseService = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase: supabaseService,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
     const { data, error } = await supabaseService
       .from('client_services')
       .select('*')
@@ -93,18 +102,8 @@ export async function POST(
   context: { params: { id: string } }
 ) {
   const logger = createRequestLogger(request)
-  const isValidFirmId = (value?: string | null) => {
-    if (!value) return false
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-  }
 
   try {
-    const supabase: any = getSupabaseServiceClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-    }
-
     const clientId = context?.params?.id;
     logger.debug('POST /api/clients/[id]/services - Saving client services', { clientId })
 
@@ -113,6 +112,11 @@ export async function POST(
         { success: false, error: 'Client ID is required' },
         { status: 400 }
       );
+    }
+
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await parseRequestBody(request) as ClientServicesPayload;
@@ -127,6 +131,15 @@ export async function POST(
 
     // Use service client to bypass RLS (cast to any to handle missing table type)
     const supabaseService = getSupabaseServiceClient() as any
+    const access = await requireClientAccess({
+      supabase: supabaseService,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Check if record exists
     const { data: existing } = await supabaseService
@@ -136,9 +149,7 @@ export async function POST(
       .limit(1)
 
     const existingRecord = Array.isArray(existing) ? existing[0] : null
-    const resolvedFirmId = isValidFirmId(body.firm_id)
-      ? body.firm_id
-      : existingRecord?.firm_id ?? null
+    const resolvedFirmId = auth.context?.firmId ?? existingRecord?.firm_id ?? null
 
     const payload = {
       client_id: clientId,

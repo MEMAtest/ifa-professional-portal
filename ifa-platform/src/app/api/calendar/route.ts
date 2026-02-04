@@ -5,10 +5,11 @@ export const dynamic = 'force-dynamic'
 // FILE 1: /src/app/api/calendar/route.ts - COMPLETE FIXED VERSION
 // ============================================
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
 import { log } from '@/lib/logging/structured';
 import { parseRequestBody } from '@/app/api/utils'
+import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 
 // Review type configurations
 const REVIEW_EVENT_CONFIG = {
@@ -43,27 +44,27 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('clientId');
     const eventType = searchParams.get('eventType');
 
-    // Create Supabase client with auth from cookies
-    const cookieStore = cookies();
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            cookie: cookieStore.toString(),
-          },
-        },
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const supabase = getSupabaseServiceClient()
+    const userId = auth.context.userId
+
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
       }
-    );
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
     }
 
     // Build query
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
           personal_details
         )
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('start_date', { ascending: true });
 
     // Apply filters
@@ -181,27 +182,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create Supabase client with auth from cookies
-    const cookieStore = cookies();
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            cookie: cookieStore.toString(),
-          },
-        },
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const supabase = getSupabaseServiceClient()
+    const userId = auth.context.userId
+
+    if (clientId) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
       }
-    );
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
     }
 
     // Calculate end date based on duration
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('calendar_events')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         title,
         description: enhancedDescription,
         start_date: startDateTime.toISOString(),
@@ -266,27 +267,27 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Create Supabase client with auth from cookies
-    const cookieStore = cookies();
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            cookie: cookieStore.toString(),
-          },
-        },
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const supabase = getSupabaseServiceClient()
+    const userId = auth.context.userId
+
+    if (updates.client_id) {
+      const access = await requireClientAccess({
+        supabase,
+        clientId: updates.client_id,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
       }
-    );
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
     }
 
     // If updating dates, recalculate end date
@@ -316,7 +317,7 @@ export async function PATCH(request: NextRequest) {
       .from('calendar_events')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', user.id) // Ensure user owns the event
+      .eq('user_id', userId) // Ensure user owns the event
       .select()
       .single();
 
@@ -368,35 +369,23 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Create Supabase client with auth from cookies
-    const cookieStore = cookies();
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            cookie: cookieStore.toString(),
-          },
-        },
-      }
-    );
-    
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const supabase = getSupabaseServiceClient()
+    const userId = auth.context.userId
 
     // Delete the event
     const { error } = await supabase
       .from('calendar_events')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id); // Ensure user owns the event
+      .eq('user_id', userId); // Ensure user owns the event
 
     if (error) {
       log.error('Error deleting calendar event', error);

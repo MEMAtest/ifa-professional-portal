@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { parseRequestBody } from '@/app/api/utils'
@@ -558,7 +558,7 @@ export async function GET(request: NextRequest) {
   try {
     // Verify authentication
     const auth = await getAuthContext(request)
-    if (!auth.success) {
+    if (!auth.success || !auth.context) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -566,17 +566,11 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase: any = getSupabaseServiceClient()
-    const firmId = auth.context?.firmId
-
-    // If no firmId, return empty metrics instead of 403
-    if (!firmId) {
-      log.warn('Metrics requested without firmId', { userId: auth.context?.userId })
-      return NextResponse.json({
-        success: true,
-        metrics: getEmptyMetrics(),
-        warning: 'Firm not configured - showing empty metrics'
-      })
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
+    const { firmId } = firmResult
 
     const { searchParams } = new URL(request.url)
 
@@ -661,7 +655,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify authentication
     const auth = await getAuthContext(request)
-    if (!auth.success) {
+    if (!auth.success || !auth.context) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -669,17 +663,11 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase: any = getSupabaseServiceClient()
-    const firmId = auth.context?.firmId
-
-    // If no firmId, return empty metrics for refresh/export actions
-    if (!firmId) {
-      log.warn('Metrics POST requested without firmId', { userId: auth.context?.userId })
-      return NextResponse.json({
-        success: true,
-        metrics: getEmptyMetrics(),
-        warning: 'Firm not configured - showing empty metrics'
-      })
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
+    const { firmId } = firmResult
 
     const body = await parseRequestBody(request)
 

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 
 // ===================================================================
@@ -64,19 +64,16 @@ interface DocumentProcessingResult {
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
-    // Get current user - using your existing supabase client
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const firmId = user.user_metadata?.firm_id
-    if (!firmId) {
-      return NextResponse.json(
-        { success: false, error: 'Firm ID not configured. Please contact support.' },
-        { status: 403 }
-      )
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
+    const { firmId } = firmResult
+    const userId = auth.context.userId
 
     // Parse request body
     const body: BulkActionRequest = await parseRequestBody(request)
@@ -143,7 +140,7 @@ export async function POST(request: NextRequest) {
           total_documents: documents.length,
           status: 'processing',
           firm_id: firmId,
-          initiated_by: user.id,
+          initiated_by: userId,
           started_at: new Date().toISOString()
         })
     }
@@ -166,11 +163,11 @@ export async function POST(request: NextRequest) {
         break
         
       case 'send':
-        results = await processSendDocuments(documents, actionParams, user.id, firmId, supabase)
+        results = await processSendDocuments(documents, actionParams, userId, firmId, supabase)
         break
         
       case 'resend':
-        results = await processResendDocuments(documents, actionParams, user.id, firmId, supabase)
+        results = await processResendDocuments(documents, actionParams, userId, firmId, supabase)
         break
         
       case 'download':
@@ -506,25 +503,21 @@ async function tableExists(tableName: string, supabase: any): Promise<boolean> {
 export async function GET(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const { searchParams } = new URL(request.url)
     const jobId = searchParams.get('jobId')
 
     if (!jobId) {
       return NextResponse.json({ error: 'Job ID required' }, { status: 400 })
-    }
-
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const firmId = user.user_metadata?.firm_id
-    if (!firmId) {
-      return NextResponse.json(
-        { success: false, error: 'Firm ID not configured. Please contact support.' },
-        { status: 403 }
-      )
     }
 
     // Check if bulk operations log table exists

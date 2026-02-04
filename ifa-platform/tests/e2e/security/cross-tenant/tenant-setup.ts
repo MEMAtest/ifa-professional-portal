@@ -78,12 +78,37 @@ async function withRetry<T>(
         err?.message?.includes('rate limit') ||
         err?.message?.includes('Rate limit') ||
         err?.status === 429
-      if (!isRateLimit || attempt === maxAttempts) throw err
+      const isInvalidLogin =
+        err?.message?.includes('Invalid login credentials') ||
+        err?.message?.includes('invalid login') ||
+        err?.message?.includes('No users found')
+      if ((!isRateLimit && !isInvalidLogin) || attempt === maxAttempts) throw err
       const delay = baseDelayMs * Math.pow(2, attempt - 1)
       await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
   throw new Error('withRetry: unreachable')
+}
+
+async function deleteAuthUserByEmail(serviceClient: SupabaseClient, email: string): Promise<void> {
+  try {
+    for (let page = 1; page <= 50; page++) {
+      const { data: listData } = await serviceClient.auth.admin.listUsers({
+        page,
+        perPage: 50,
+      })
+      const users = listData?.users || []
+      if (users.length === 0) break
+      const stale = users.find((u: any) => u.email === email)
+      if (stale) {
+        await serviceClient.from('profiles').delete().eq('id', stale.id)
+        await serviceClient.auth.admin.deleteUser(stale.id)
+        break
+      }
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -98,24 +123,27 @@ interface FirmIdentity {
   lastName: string
 }
 
+const RUN_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+const buildEmail = (slug: string) => `e2e-${slug}-${RUN_ID}@test.plannetic.com`
+
 const FIRMS: Record<'A' | 'B' | 'C', FirmIdentity> = {
   A: {
     firmName: 'E2E Alpha Advisers',
-    email: 'e2e-firm-a@test.plannetic.com',
+    email: buildEmail('firm-a'),
     password: 'E2eTest!FirmA2024',
     firstName: 'Alpha',
     lastName: 'Adviser',
   },
   B: {
     firmName: 'E2E Beta Advisers',
-    email: 'e2e-firm-b@test.plannetic.com',
+    email: buildEmail('firm-b'),
     password: 'E2eTest!FirmB2024',
     firstName: 'Beta',
     lastName: 'Adviser',
   },
   C: {
     firmName: 'E2E Gamma Advisers',
-    email: 'e2e-firm-c@test.plannetic.com',
+    email: buildEmail('firm-c'),
     password: 'E2eTest!FirmC2024',
     firstName: 'Gamma',
     lastName: 'Adviser',
@@ -130,13 +158,15 @@ async function setupSingleFirm(
   serviceClient: SupabaseClient,
   identity: FirmIdentity
 ): Promise<FirmContext> {
+  await deleteAuthUserByEmail(serviceClient, identity.email)
+
   // 1. Create firm
   const { data: firm, error: firmError } = await serviceClient
     .from('firms')
     .insert({
       name: identity.firmName,
       subscription_tier: 'professional',
-      settings: { test: true, purpose: 'cross-tenant-isolation' },
+      settings: { test: true, purpose: 'cross-tenant-isolation', onboarding: { completed: true } },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as any)
@@ -167,32 +197,7 @@ async function setupSingleFirm(
     firstAttempt.error &&
     firstAttempt.error.message.includes('already been registered')
   ) {
-    // Look up stale user via their profile row (by email)
-    const { data: staleProfile } = await serviceClient
-      .from('profiles')
-      .select('id')
-      .eq('email', identity.email)
-      .maybeSingle()
-
-    if (staleProfile?.id) {
-      await serviceClient.from('profiles').delete().eq('id', staleProfile.id)
-      await serviceClient.auth.admin.deleteUser(staleProfile.id)
-    } else {
-      // Profile missing but auth user exists — paginate admin.listUsers
-      for (let page = 1; page <= 50; page++) {
-        const { data: listData } = await serviceClient.auth.admin.listUsers({
-          page,
-          perPage: 50,
-        })
-        const users = listData?.users || []
-        if (users.length === 0) break
-        const stale = users.find((u: any) => u.email === identity.email)
-        if (stale) {
-          await serviceClient.auth.admin.deleteUser(stale.id)
-          break
-        }
-      }
-    }
+    await deleteAuthUserByEmail(serviceClient, identity.email)
 
     // Retry user creation
     const retryResult = await serviceClient.auth.admin.createUser({
@@ -241,6 +246,12 @@ async function setupSingleFirm(
     throw new Error(`Failed to create profile for ${identity.email}: ${profileError.message}`)
   }
 
+  // Ensure auth user is confirmed and password is set before sign-in.
+  await serviceClient.auth.admin.updateUserById(userId, {
+    email_confirm: true,
+    password: identity.password,
+  })
+
   // 4. Seed test data
   const clientId = await createTestClient(serviceClient, firmId, userId)
   const documentId = await createTestDocument(serviceClient, firmId, clientId)
@@ -252,6 +263,7 @@ async function setupSingleFirm(
   // 5. Sign in to obtain JWT — use a SEPARATE anon client so we never
   //    pollute the service client's auth session. Retry on rate limits.
   const token = await withRetry(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 750))
     const anonClient = createAnonClient()
     const { data: signInData, error: signInError } =
       await anonClient.auth.signInWithPassword({
@@ -371,6 +383,27 @@ async function cleanupStaleTestData(serviceClient: SupabaseClient): Promise<void
 
     // Delete firms
     await serviceClient.from('firms').delete().in('id', firmIds)
+
+    // Best-effort cleanup of stale auth users with the test prefix
+    for (let page = 1; page <= 20; page++) {
+      const { data: listData } = await serviceClient.auth.admin.listUsers({
+        page,
+        perPage: 100,
+      })
+      const users = listData?.users || []
+      if (users.length === 0) break
+      const staleUsers = users.filter((u: any) =>
+        typeof u.email === 'string' && u.email.startsWith('e2e-firm-')
+      )
+      for (const user of staleUsers) {
+        try {
+          await serviceClient.from('profiles').delete().eq('id', user.id)
+          await serviceClient.auth.admin.deleteUser(user.id)
+        } catch {
+          // ignore
+        }
+      }
+    }
   } catch {
     // Best-effort; don't fail setup if stale cleanup fails
   }

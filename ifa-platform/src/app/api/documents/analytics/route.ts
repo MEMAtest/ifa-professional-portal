@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic'
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { parseRequestBody } from '@/app/api/utils'
 
 // Calculate analytics from your real database
-async function calculateRealAnalytics(supabase: any, firmId: string | null, filters?: any) {
+async function calculateRealAnalytics(supabase: any, firmId: string, filters?: any) {
   try {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -25,7 +25,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
       .from('documents')
       .select('*', { count: 'exact', head: true })
       .eq('is_archived', false)
-    if (firmId) totalDocsQuery = totalDocsQuery.eq('firm_id', firmId)
+    totalDocsQuery = totalDocsQuery.eq('firm_id', firmId)
     const { count: totalDocuments } = await totalDocsQuery
 
     // ✅ REAL: Get documents this month
@@ -34,7 +34,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
       .select('*', { count: 'exact', head: true })
       .eq('is_archived', false)
       .gte('created_at', startOfMonth.toISOString())
-    if (firmId) thisMonthQuery = thisMonthQuery.eq('firm_id', firmId)
+    thisMonthQuery = thisMonthQuery.eq('firm_id', firmId)
     const { count: documentsThisMonth } = await thisMonthQuery
 
     // ✅ REAL: Get documents last month
@@ -44,14 +44,14 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
       .eq('is_archived', false)
       .gte('created_at', startOfLastMonth.toISOString())
       .lte('created_at', endOfLastMonth.toISOString())
-    if (firmId) lastMonthQuery = lastMonthQuery.eq('firm_id', firmId)
+    lastMonthQuery = lastMonthQuery.eq('firm_id', firmId)
     const { count: documentsLastMonth } = await lastMonthQuery
 
     // ✅ REAL: Get signature requests data
     let signatureQuery = supabase
       .from('signature_requests')
       .select('status')
-    if (firmId) signatureQuery = signatureQuery.eq('firm_id', firmId)
+    signatureQuery = signatureQuery.eq('firm_id', firmId)
     const { data: signatureData } = await signatureQuery
 
     const pendingSignatures = signatureData?.filter((s: any) => s.status === 'pending').length || 0
@@ -62,7 +62,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
       .from('documents')
       .select('compliance_status')
       .eq('is_archived', false)
-    if (firmId) complianceQuery = complianceQuery.eq('firm_id', firmId)
+    complianceQuery = complianceQuery.eq('firm_id', firmId)
     const { data: complianceData } = await complianceQuery
 
   const complianceBreakdown = complianceData?.reduce((acc: any, doc: any) => {
@@ -96,7 +96,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
       .eq('is_archived', false)
       .order('updated_at', { ascending: false })
       .limit(10)
-    if (firmId) recentActivityQuery = recentActivityQuery.eq('firm_id', firmId)
+    recentActivityQuery = recentActivityQuery.eq('firm_id', firmId)
     const { data: recentActivity, error: activityError } = await recentActivityQuery
 
     if (activityError) {
@@ -145,7 +145,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
         created_at
       `)
       .eq('is_archived', false)
-    if (firmId) categoryQuery = categoryQuery.eq('firm_id', firmId)
+    categoryQuery = categoryQuery.eq('firm_id', firmId)
     const { data: categoryData } = await categoryQuery
 
     const categoryPerformance = Object.values(
@@ -174,7 +174,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
     let clientsCountQuery = supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
-    if (firmId) clientsCountQuery = clientsCountQuery.eq('firm_id', firmId)
+    clientsCountQuery = clientsCountQuery.eq('firm_id', firmId)
     const { count: totalClients } = await clientsCountQuery
 
     let topClientsQuery = supabase
@@ -188,7 +188,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
         )
       `)
       .eq('is_archived', false)
-    if (firmId) topClientsQuery = topClientsQuery.eq('firm_id', firmId)
+    topClientsQuery = topClientsQuery.eq('firm_id', firmId)
     const { data: topClientsData } = await topClientsQuery
 
     const clientCounts = (topClientsData || []).reduce((acc: any, doc: any) => {
@@ -227,7 +227,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
         .eq('is_archived', false)
         .gte('created_at', date.toISOString())
         .lt('created_at', nextDate.toISOString())
-      if (firmId) dailyDocsQuery = dailyDocsQuery.eq('firm_id', firmId)
+      dailyDocsQuery = dailyDocsQuery.eq('firm_id', firmId)
       const { count: dailyCount } = await dailyDocsQuery
 
       last7Days.push({
@@ -248,7 +248,7 @@ async function calculateRealAnalytics(supabase: any, firmId: string | null, filt
       .select('*', { count: 'exact', head: true })
       .eq('is_archived', false)
       .gte('created_at', today.toISOString())
-    if (firmId) todayQuery = todayQuery.eq('firm_id', firmId)
+    todayQuery = todayQuery.eq('firm_id', firmId)
     const { count: documentsToday } = await todayQuery
 
     // ✅ REAL: Count clients with documents (active clients)
@@ -335,7 +335,7 @@ export async function GET(request: NextRequest) {
   try {
     // Verify authentication
     const auth = await getAuthContext(request)
-    if (!auth.success) {
+    if (!auth.success || !auth.context) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -343,7 +343,11 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseServiceClient()
-    const firmId = auth.context?.firmId || null
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
     const { searchParams } = new URL(request.url)
 
@@ -360,7 +364,6 @@ export async function GET(request: NextRequest) {
     }
 
     // ✅ REAL: Calculate analytics from your actual database
-    // firmId may be null for single-tenant setups - the function handles this correctly
     const realData = await calculateRealAnalytics(supabase, firmId, finalFilters)
 
     // Analytics processing with REAL DATA ONLY - no mock data
@@ -417,7 +420,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify authentication
     const auth = await getAuthContext(request)
-    if (!auth.success) {
+    if (!auth.success || !auth.context) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -425,7 +428,11 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseServiceClient()
-    const firmId = auth.context?.firmId || null
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
     const body = await parseRequestBody(request)
 

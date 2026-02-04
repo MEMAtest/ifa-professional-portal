@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRequestLogger } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
@@ -16,7 +17,6 @@ export async function GET(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     
@@ -26,6 +26,22 @@ export async function GET(
     const assessmentType = searchParams.get('assessmentType');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = getSupabaseServiceClient();
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Build query
     let query = supabase
@@ -127,10 +143,25 @@ export async function POST(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
     const body = await parseRequestBody(request);
     const { assessmentType, assessmentId, action, changes, metadata } = body;
+
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = getSupabaseServiceClient();
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Validate required fields
     if (!assessmentType || !action) {
@@ -152,7 +183,7 @@ export async function POST(
         assessment_type: normalizedType,
         action,
         performed_at: new Date().toISOString(),
-        performed_by: null, // TODO: Get from auth context when available
+        performed_by: auth.context.userId || null,
         changes: changes || {},
         metadata: metadata || {},
         created_at: new Date().toISOString()
@@ -189,29 +220,27 @@ export async function DELETE(
   { params }: { params: { clientId: string } }
 ) {
   try {
-    const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
     const { searchParams } = new URL(request.url);
     const assessmentType = searchParams.get('assessmentType');
-
-    // Auth check - admin role required for deletion
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user role from profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const supabase = getSupabaseServiceClient();
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
-    // Only admins can delete history
-    if (profile?.role !== 'admin') {
+    const role = auth.context.role || ''
+    if (!['admin', 'owner'].includes(role)) {
       return NextResponse.json(
         { success: false, error: 'Forbidden - Admin role required' },
         { status: 403 }
@@ -246,7 +275,7 @@ export async function DELETE(
         assessment_type: assessmentType || 'all',
         action: 'history_cleared',
         performed_at: new Date().toISOString(),
-        performed_by: null, // TODO: Get from auth context
+        performed_by: auth.context.userId || null,
         metadata: { clearedBy: 'admin' },
         created_at: new Date().toISOString()
       });

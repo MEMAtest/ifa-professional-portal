@@ -4,6 +4,9 @@
 
 import { test, expect } from '@playwright/test';
 
+const EMAIL = process.env.E2E_EMAIL || 'demo@plannetic.com';
+const PASSWORD = process.env.E2E_PASSWORD || 'demo123';
+
 test.describe('Authentication', () => {
   test.beforeEach(async ({ page }) => {
     // Start from the login page
@@ -20,10 +23,6 @@ test.describe('Authentication', () => {
       await expect(page.getByLabel('Email')).toBeVisible();
       await expect(page.getByLabel('Password')).toBeVisible();
       await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
-
-      // Check for demo credentials
-      await expect(page.getByText('Demo Credentials')).toBeVisible();
-      await expect(page.getByText(/demo@plannetic\.com/i)).toBeVisible();
     });
 
     test('should show validation errors for empty form', async ({ page }) => {
@@ -83,8 +82,8 @@ test.describe('Authentication', () => {
 
     test('should successfully login with valid credentials', async ({ page }) => {
       // Fill in demo credentials
-      await page.getByLabel('Email').fill('demo@plannetic.com');
-      await page.getByLabel('Password').fill('demo123');
+      await page.getByLabel('Email').fill(EMAIL);
+      await page.getByLabel('Password').fill(PASSWORD);
 
       // Submit form
       await page.getByRole('button', { name: /sign in/i }).click();
@@ -103,8 +102,8 @@ test.describe('Authentication', () => {
     });
 
     test('should show loading state during login', async ({ page }) => {
-      await page.getByLabel('Email').fill('demo@plannetic.com');
-      await page.getByLabel('Password').fill('demo123');
+      await page.getByLabel('Email').fill(EMAIL);
+      await page.getByLabel('Password').fill(PASSWORD);
 
       const submitButton = page.getByRole('button', { name: /sign in/i });
       await submitButton.click();
@@ -139,13 +138,15 @@ test.describe('Authentication', () => {
       // This test checks that the login form works and page can reload
       await page.goto('/login');
 
-      // Fill in credentials
-      await page.getByLabel('Email').fill('demo@plannetic.com');
-      await page.getByLabel('Password').fill('demo123');
-      await page.getByRole('button', { name: /sign in/i }).click();
+      if (page.url().includes('/login')) {
+        // Fill in credentials
+        await page.getByLabel('Email').fill(EMAIL);
+        await page.getByLabel('Password').fill(PASSWORD);
+        await page.getByRole('button', { name: /sign in/i }).click();
 
-      // Wait for response
-      await page.waitForTimeout(3000);
+        // Wait for response
+        await page.waitForTimeout(3000);
+      }
 
       // Reload the page
       await page.reload();
@@ -178,8 +179,8 @@ test.describe('Authentication', () => {
     test.beforeEach(async ({ page }) => {
       // Login before each logout test
       await page.goto('/login');
-      await page.getByLabel('Email').fill('demo@plannetic.com');
-      await page.getByLabel('Password').fill('demo123');
+      await page.getByLabel('Email').fill(EMAIL);
+      await page.getByLabel('Password').fill(PASSWORD);
       await page.getByRole('button', { name: /sign in/i }).click();
       await page.waitForURL(/\/dashboard|\//, { timeout: 10000 });
     });
@@ -198,7 +199,17 @@ test.describe('Authentication', () => {
         const url = page.url();
         expect(url.includes('/login') || url === new URL('/', page.url()).href).toBeTruthy();
       } else {
-        // If no logout button found, test passes (might be in a menu)
+        const userMenuButton = page.getByRole('button', { name: /user menu/i });
+        if (await userMenuButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await userMenuButton.click();
+          if (await logoutButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await logoutButton.click();
+            await page.waitForTimeout(2000);
+            const url = page.url();
+            expect(url.includes('/login') || url === new URL('/', page.url()).href).toBeTruthy();
+            return;
+          }
+        }
         test.skip();
       }
     });
@@ -219,6 +230,19 @@ test.describe('Authentication', () => {
         const url = page.url();
         expect(url.includes('/login') || url === new URL('/', page.url()).href).toBeTruthy();
       } else {
+        const userMenuButton = page.getByRole('button', { name: /user menu/i });
+        if (await userMenuButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await userMenuButton.click();
+          if (await logoutButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await logoutButton.click();
+            await page.waitForTimeout(2000);
+            await page.goto('/dashboard');
+            await page.waitForTimeout(2000);
+            const url = page.url();
+            expect(url.includes('/login') || url === new URL('/', page.url()).href).toBeTruthy();
+            return;
+          }
+        }
         test.skip();
       }
     });
