@@ -66,16 +66,22 @@ export interface StressTestReportData {
 
 export class StressTestReportService {
   private clientService: ClientService;
-  private supabase: SupabaseClient<Database>;
+  private _supabase: SupabaseClient<Database> | null = null;
 
   constructor() {
     this.clientService = new ClientService();
-    // Use server-friendly client when running on the server to avoid localStorage issues
-    if (typeof window === 'undefined') {
-      this.supabase = getSupabaseServiceClient();
-    } else {
-      this.supabase = createClient();
+    // Lazy initialization - supabase client created on first access
+  }
+
+  private get supabase(): SupabaseClient<Database> {
+    if (!this._supabase) {
+      if (typeof window === 'undefined') {
+        this._supabase = getSupabaseServiceClient();
+      } else {
+        this._supabase = createClient();
+      }
     }
+    return this._supabase!;
   }
 
   /**

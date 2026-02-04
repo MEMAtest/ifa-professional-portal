@@ -46,25 +46,37 @@ export type {
 // ================================================================
 
 export class EnhancedDocumentGenerationService {
-  private supabase: SupabaseClient<Database> | null = null
-  private templateService: DocumentTemplateService
+  private _supabase: SupabaseClient<Database> | null = null
+  private _templateService: DocumentTemplateService | null = null
   private static instance: EnhancedDocumentGenerationService
   private currentUserId: string | null = null
 
   constructor() {
-    try {
-      // Prefer server-friendly client when not in the browser to avoid localStorage errors
-      if (typeof window === 'undefined') {
-        this.supabase = getSupabaseServiceClient()
-      } else {
-        this.supabase = createClient()
-        this.initializeUser()
+    // Lazy initialization - supabase and template service created on first access
+  }
+
+  private get supabase(): SupabaseClient<Database> | null {
+    if (!this._supabase) {
+      try {
+        if (typeof window === 'undefined') {
+          this._supabase = getSupabaseServiceClient()
+        } else {
+          this._supabase = createClient()
+          this.initializeUser()
+        }
+      } catch (error) {
+        clientLogger.error("CRITICAL: Supabase client initialization failed in EnhancedDocumentGenerationService.", error)
+        this._supabase = null
       }
-    } catch (error) {
-      clientLogger.error("CRITICAL: Supabase client initialization failed in EnhancedDocumentGenerationService.", error)
-      this.supabase = null
     }
-    this.templateService = DocumentTemplateService.getInstance()
+    return this._supabase
+  }
+
+  private get templateService(): DocumentTemplateService {
+    if (!this._templateService) {
+      this._templateService = DocumentTemplateService.getInstance()
+    }
+    return this._templateService
   }
 
   private async initializeUser(): Promise<void> {

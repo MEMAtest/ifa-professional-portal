@@ -86,24 +86,32 @@ const TEMPLATE_NAME_MAPPING: Record<string, string> = {
 // ENHANCED DOCUMENT TEMPLATE SERVICE CLASS
 // ===================================================================
 export class DocumentTemplateService {
-  private supabase: SupabaseClient<Database> | null = null
+  private _supabase: SupabaseClient<Database> | null = null
+  private _supabaseInitialized = false
   private static instance: DocumentTemplateService
   private templateCache: Map<string, DocumentTemplate> = new Map()
   private cacheExpiry: Map<string, number> = new Map()
   private readonly CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
   constructor() {
-    try {
-      // Use a server-friendly client when not in the browser to avoid localStorage errors
-      if (typeof window === 'undefined') {
-        this.supabase = getSupabaseServiceClient()
-      } else {
-        this.supabase = createClient()
+    // Lazy initialization - supabase client created on first access
+  }
+
+  private get supabase(): SupabaseClient<Database> | null {
+    if (!this._supabaseInitialized) {
+      this._supabaseInitialized = true
+      try {
+        if (typeof window === 'undefined') {
+          this._supabase = getSupabaseServiceClient()
+        } else {
+          this._supabase = createClient()
+        }
+      } catch (error) {
+        clientLogger.error("CRITICAL: Supabase client initialization failed in DocumentTemplateService. Check environment variables.", error)
+        this._supabase = null
       }
-    } catch (error) {
-      clientLogger.error("CRITICAL: Supabase client initialization failed in DocumentTemplateService. Check environment variables.", error)
-      this.supabase = null
     }
+    return this._supabase
   }
 
   public static getInstance(): DocumentTemplateService {
