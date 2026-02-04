@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import clientLogger from '@/lib/logging/clientLogger'
 // src/services/emailService.ts
 
 // Helper to get base URL for server-side fetch calls
@@ -58,7 +59,7 @@ export async function sendReportEmail(payload: EmailPayload): Promise<void> {
       throw new Error(error.message || 'Failed to send email')
     }
   } catch (error) {
-    console.error('Email send error:', error)
+    clientLogger.error('Email send error:', error)
     throw error
   }
 }

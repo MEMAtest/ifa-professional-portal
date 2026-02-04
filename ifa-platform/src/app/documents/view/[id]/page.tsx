@@ -24,6 +24,7 @@ import {
   Mail
 } from 'lucide-react'
 import { safeWriteToClipboard } from '@/lib/utils'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Type definitions
 interface DocumentData {
@@ -92,7 +93,7 @@ export default function DocumentViewerPage() {
       // Set preview URL
       setPreviewUrl(`/api/documents/preview/${documentId}`)
     } catch (err) {
-      console.error('Error fetching document:', err)
+      clientLogger.error('Error fetching document:', err)
       setError(err instanceof Error ? err.message : 'Failed to load document')
     } finally {
       setLoading(false)
@@ -114,7 +115,7 @@ export default function DocumentViewerPage() {
       // Open download URL in new window
       window.open(`/api/documents/download/${documentId}`, '_blank')
     } catch (err) {
-      console.error('Download error:', err)
+      clientLogger.error('Download error:', err)
       setError('Failed to download document')
     } finally {
       setDownloading(false)
@@ -145,7 +146,6 @@ export default function DocumentViewerPage() {
           url: shareUrl
         })
       } catch (err) {
-        console.log('Share cancelled or failed')
       }
     } else {
       // Fallback - copy to clipboard
@@ -180,7 +180,7 @@ export default function DocumentViewerPage() {
       // Show success message
       alert('Document sent successfully!')
     } catch (err) {
-      console.error('Email error:', err)
+      clientLogger.error('Email error:', err)
       setError('Failed to send email')
     } finally {
       setSending(false)

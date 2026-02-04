@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface Props {
   clientId: string
@@ -186,7 +187,7 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
         })
       }
     } catch (error) {
-      console.error('Error loading decumulation data:', error)
+      clientLogger.error('Error loading decumulation data:', error)
     } finally {
       setLoading(false)
     }
@@ -239,7 +240,7 @@ export default function DecumulationStrategy({ clientId, firmId, onSaved }: Prop
       onSaved?.()
       loadData()
     } catch (error) {
-      console.error('Error saving:', error)
+      clientLogger.error('Error saving:', error)
       toast({
         title: 'Error',
         description: 'Failed to save decumulation strategy',

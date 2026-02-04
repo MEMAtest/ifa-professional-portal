@@ -1,3 +1,4 @@
+import clientLogger from '@/lib/logging/clientLogger'
 // src/lib/pdf/ChartRenderer.ts
 // Server-side chart rendering using QuickChart.io API
 // Generates PNG data URLs for embedding in PDF reports
@@ -33,7 +34,7 @@ async function generateQuickChart(config: object): Promise<string> {
     const base64 = Buffer.from(buffer).toString('base64')
     return `data:image/png;base64,${base64}`
   } catch (error) {
-    console.error('QuickChart generation failed:', error)
+    clientLogger.error('QuickChart generation failed:', error)
     throw error
   }
 }
@@ -434,7 +435,7 @@ export async function generateAssessmentCharts(assessment: {
     await Promise.all(promises)
     return charts
   } catch (error) {
-    console.error('Error generating assessment charts:', error)
+    clientLogger.error('Error generating assessment charts:', error)
     return charts
   }
 }

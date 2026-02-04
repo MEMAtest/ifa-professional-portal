@@ -12,11 +12,10 @@ import { defineConfig, devices } from '@playwright/test';
  * - CI: Set to 'true' in CI/CD environments
  */
 
-const envBaseURL =
-  process.env.E2E_BASE_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  process.env.NEXTAUTH_URL ||
-  process.env.NEXT_PUBLIC_API_URL;
+const wantsLocalServer = process.env.E2E_WEB_SERVER === '1';
+const envBaseURL = process.env.E2E_BASE_URL || (!wantsLocalServer
+  ? (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_API_URL)
+  : undefined);
 const devPort = process.env.E2E_PORT || process.env.NEXT_PORT || process.env.PORT || '3000';
 const baseURL = envBaseURL || `http://127.0.0.1:${devPort}`;
 const resolvedURL = new URL(baseURL);
@@ -53,8 +52,8 @@ export default defineConfig({
   // Output
   outputDir: 'test-results/artifacts',
 
-  // Global setup/teardown (optional - can be added later)
-  // globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
+  // Global setup/teardown
+  globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
   // globalTeardown: require.resolve('./tests/e2e/global-teardown.ts'),
 
   // Browser defaults
@@ -80,11 +79,13 @@ export default defineConfig({
     {
       name: 'qa-brutal',
       testDir: 'e2e/qa-agent/runners',
+      timeout: 120_000,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 720 },
         // Longer timeouts for stress tests
         actionTimeout: 20_000,
+        storageState: '.auth/user.json',
       },
     },
     {
@@ -93,6 +94,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 720 },
+        storageState: '.auth/user.json',
       },
     },
 
@@ -141,6 +143,19 @@ export default defineConfig({
       name: 'tablet',
       use: {
         ...devices['iPad Pro'],
+      },
+    },
+
+    // ============================================
+    // SECURITY - CROSS-TENANT ISOLATION
+    // ============================================
+    {
+      name: 'security-isolation',
+      testDir: 'tests/e2e/security/cross-tenant',
+      testMatch: '*.spec.ts',
+      fullyParallel: false,
+      use: {
+        baseURL,
       },
     },
   ],

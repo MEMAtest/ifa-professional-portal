@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useDocuments, useDocumentCategories } from '@/lib/hooks/useDocuments'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -226,7 +227,7 @@ function UploadDialog({ isOpen, onClose, onUpload, categories, categoriesLoading
     } catch (error) {
       // Ignore abort errors
       if ((error as Error).name === 'AbortError') return
-      console.error('Error searching clients:', error)
+      clientLogger.error('Error searching clients:', error)
     } finally {
       setClientsLoading(false)
     }
@@ -329,7 +330,7 @@ function UploadDialog({ isOpen, onClose, onUpload, categories, categoriesLoading
       setNewTag('')
       onClose()
     } catch (error) {
-      console.error('Upload failed:', error)
+      clientLogger.error('Upload failed:', error)
     } finally {
       setUploading(false)
     }

@@ -2,6 +2,7 @@ import type { ConditionalFieldGroup, PulledPlatformData, SuitabilityFormData } f
 
 import type { ConditionalAction, ConditionalRule } from './rules'
 import { conditionalRules } from './rules'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export class ConditionalLogicEngine {
   private rules: ConditionalRule[]
@@ -23,7 +24,7 @@ export class ConditionalLogicEngine {
           applicableActions.push(...rule.actions)
         }
       } catch (error) {
-        console.error(`[ConditionalLogic] Error evaluating rule "${rule.id}":`, error)
+        clientLogger.error(`[ConditionalLogic] Error evaluating rule "${rule.id}":`, error)
       }
     }
 
@@ -89,7 +90,7 @@ export class ConditionalLogicEngine {
           try {
             calculated[key] = action.value(formData, pulledData)
           } catch (error) {
-            console.error(`[ConditionalLogic] Error calculating "${key}":`, error)
+            clientLogger.error(`[ConditionalLogic] Error calculating "${key}":`, error)
             calculated[key] = undefined
           }
         }

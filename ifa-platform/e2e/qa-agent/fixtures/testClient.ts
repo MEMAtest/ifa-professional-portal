@@ -33,7 +33,7 @@ export const TestClientIds = {
 // Helper to login before tests
 export async function loginAsTestUser(page: import('@playwright/test').Page): Promise<void> {
   // Navigate to login
-  await page.goto('/auth/signin')
+  await page.goto('/login')
 
   // Fill credentials
   await page.fill('input[name="email"], input[type="email"]', TestCredentials.email)

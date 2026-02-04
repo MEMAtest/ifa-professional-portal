@@ -6,6 +6,7 @@ import { normalizeIsoCountryCode } from '@/lib/isoCountries';
 
 import { clientService } from '@/services/ClientService';
 import type { Client, ClientFormData, MigrationResult, MigrationError } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface LegacyClientData {
   id: string;
@@ -82,7 +83,7 @@ export class ClientMigrationService {
       };
 
     } catch (migrationError) {
-      console.error(`Migration failed for client ${legacyData.id}:`, migrationError);
+      clientLogger.error(`Migration failed for client ${legacyData.id}:`, migrationError);
       
       return {
         clientId: legacyData.id,

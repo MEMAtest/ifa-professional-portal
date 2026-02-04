@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface OwnerOption {
   id: string
@@ -38,7 +39,7 @@ export default function OwnerPicker({ value, firmId, onChange, compact }: OwnerP
         const { data, error: queryError } = await query
         if (!isMounted) return
         if (queryError) {
-          console.error('OwnerPicker: Failed to load profiles', queryError)
+          clientLogger.error('OwnerPicker: Failed to load profiles', queryError)
           setError(true)
           return
         }
@@ -46,7 +47,7 @@ export default function OwnerPicker({ value, firmId, onChange, compact }: OwnerP
         setError(false)
       } catch (err) {
         if (isMounted) {
-          console.error('OwnerPicker: Unexpected error', err)
+          clientLogger.error('OwnerPicker: Unexpected error', err)
           setError(true)
         }
       }

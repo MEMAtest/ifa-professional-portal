@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/Label';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger';
 
 const supabase = createClient();  // ✅ ADD THIS LINE
 // ===== TYPE DEFINITIONS =====
@@ -403,7 +404,7 @@ export function ScheduleReviewModal({
       onSuccess?.();
       onClose();
     } catch (error) {
-      console.error('Error scheduling review:', error);
+      clientLogger.error('Error scheduling review:', error);
       
       toast({
         title: 'Error',

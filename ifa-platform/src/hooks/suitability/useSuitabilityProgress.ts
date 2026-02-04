@@ -5,6 +5,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { SuitabilityFormData, SuitabilitySection } from '@/types/suitability'
 import { AssessmentService } from '@/services/AssessmentService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface UseSuitabilityProgressOptions {
   clientId?: string
@@ -104,7 +105,7 @@ export const useSuitabilityProgress = ({
         }
       })
     } catch (error) {
-      console.error('Failed to track progress:', error)
+      clientLogger.error('Failed to track progress:', error)
     } finally {
       setIsTracking(false)
     }

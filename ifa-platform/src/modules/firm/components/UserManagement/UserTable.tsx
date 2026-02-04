@@ -17,6 +17,7 @@ import { EditUserSheet } from './EditUserSheet'
 import { ReassignClientsModal } from './ReassignClientsModal'
 import { useToast } from '@/hooks/use-toast'
 import type { FirmUser, UserInvitation } from '../../types/user.types'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // State for tracking user with clients that need reassignment
 interface ReassignmentState {
@@ -139,7 +140,7 @@ export function UserTable() {
 
       refetch()
     } catch (error) {
-      console.error('Deactivation error:', error)
+      clientLogger.error('Deactivation error:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to deactivate user',
@@ -171,7 +172,7 @@ export function UserTable() {
       setReassignmentState(null)
       refetch()
     } catch (error) {
-      console.error('Post-reassignment deactivation error:', error)
+      clientLogger.error('Post-reassignment deactivation error:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to deactivate user',
@@ -204,7 +205,7 @@ export function UserTable() {
       setReassignmentState(null)
       refetch()
     } catch (error) {
-      console.error('Skip reassignment error:', error)
+      clientLogger.error('Skip reassignment error:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to deactivate user',

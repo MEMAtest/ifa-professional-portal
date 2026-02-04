@@ -13,6 +13,7 @@ import {
   Filter,
   X
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import { FileReviewModal } from './FileReviewModal'
 import { renderMarkdown } from '@/lib/documents/markdownRenderer'
 import { generateFileReviewPDF, generateFileReviewDOCX } from '@/lib/documents/fileReviewExport'
@@ -111,7 +112,7 @@ export default function DocumentGenerationHub({
             }
           }
         } catch (err) {
-          console.error(`Error fetching ${type} assessment:`, err)
+          clientLogger.error(`Error fetching ${type} assessment:`, err)
         }
       }
 
@@ -146,7 +147,7 @@ export default function DocumentGenerationHub({
       setAssessments(allAssessments)
     } catch (err) {
       setError('Failed to load assessments')
-      console.error('Error loading assessments:', err)
+      clientLogger.error('Error loading assessments:', err)
     } finally {
       setLoading(false)
     }

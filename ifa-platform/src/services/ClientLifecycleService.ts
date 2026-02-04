@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/client';
 import { safeUUID } from '@/lib/utils';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export class ClientLifecycleService {
   // Remove instance property since all methods are static
@@ -23,7 +24,7 @@ export class ClientLifecycleService {
       // Log the successful initialization
       await this.logActivity(clientId, 'client_created', 'Client profile initialized with default data');
     } catch (error) {
-      console.error('Error in client lifecycle initialization:', error);
+      clientLogger.error('Error in client lifecycle initialization:', error);
       // Don't throw - allow client creation to succeed even if some tasks fail
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.logActivity(clientId, 'initialization_partial', `Some initialization tasks failed: ${errorMessage}`);
@@ -101,7 +102,7 @@ export class ClientLifecycleService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error creating default scenario:', error);
+      clientLogger.error('Error creating default scenario:', error);
       throw error;
     }
   }
@@ -143,7 +144,7 @@ export class ClientLifecycleService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error scheduling review:', error);
+      clientLogger.error('Error scheduling review:', error);
       throw error;
     }
   }
@@ -179,7 +180,7 @@ export class ClientLifecycleService {
           });
       }
     } catch (error) {
-      console.error('Error creating document workflow:', error);
+      clientLogger.error('Error creating document workflow:', error);
       // Non-critical error - don't throw
     }
   }
@@ -209,7 +210,7 @@ export class ClientLifecycleService {
         throw error;
       }
     } catch (error) {
-      console.error('Error initializing assessment tracking:', error);
+      clientLogger.error('Error initializing assessment tracking:', error);
       // Non-critical - don't throw
     }
   }
@@ -236,7 +237,7 @@ export class ClientLifecycleService {
           metadata: { details }
         });
     } catch (error) {
-      console.error('Error logging activity:', error);
+      clientLogger.error('Error logging activity:', error);
       // Logging errors are non-critical
     }
   }
@@ -265,7 +266,7 @@ export class ClientLifecycleService {
         `Status changed from ${oldStatus} to ${newStatus}`
       );
     } catch (error) {
-      console.error('Error handling status change:', error);
+      clientLogger.error('Error handling status change:', error);
     }
   }
 
@@ -273,7 +274,6 @@ export class ClientLifecycleService {
     // Generate onboarding documents
     // Send welcome communications
     // Schedule first annual review
-    console.log('Handling client activation for:', clientId);
   }
 
   private static async scheduleAnnualReview(clientId: string): Promise<void> {

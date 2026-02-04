@@ -76,7 +76,6 @@ export function useAssessmentProgress(clientId: string) {
           filter: `client_id=eq.${clientId}`,
         },
         (payload: unknown) => {
-          console.log('Assessment progress change:', payload)
           refetch()
         }
       )

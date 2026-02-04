@@ -13,12 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { clientService } from '@/services/ClientService';
 import { sampleLegacyClients } from '@/data/sampleLegacyClients'; // ✅ FIXED: Import sample data
-import type { 
-  Client, 
-  MigrationResult, 
-  ClientCommunication, 
+import clientLogger from '@/lib/logging/clientLogger';
+import type {
+  Client,
+  MigrationResult,
+  ClientCommunication,
   AuditLog,
-  LegacyClientData 
+  LegacyClientData,
 } from '@/types/client';
 
 // Page Params Interface
@@ -74,7 +75,7 @@ export default function ClientMigrationPage() {
         setCommunications(commsData);
         setAuditLog(auditData);
       } catch (err) {
-        console.error('Error loading client data:', err);
+        clientLogger.error('Error loading client data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load client data');
         toast({
           title: 'Error',
@@ -120,7 +121,7 @@ export default function ClientMigrationPage() {
       });
 
     } catch (error) {
-      console.error('Migration failed:', error);
+      clientLogger.error('Migration failed:', error);
       toast({
         title: 'Migration Failed',
         description: error instanceof Error ? error.message : 'Unknown error occurred',

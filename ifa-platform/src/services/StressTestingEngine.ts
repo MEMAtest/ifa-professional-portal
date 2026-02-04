@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 
 import type { CashFlowScenario } from '@/types/cashflow';
 import { createMonteCarloEngine, type SimulationInput } from '@/lib/monte-carlo/engine';
+import clientLogger from '@/lib/logging/clientLogger'
 import type { 
   StressScenario, 
   PersonalCrisisParameters, 
@@ -300,7 +301,6 @@ export class StressTestingEngine {
     const results: StressTestResults[] = [];
 
     for (const stressTest of testsToRun) {
-      console.log(`🧪 Running stress test: ${stressTest.name}`);
       
       try {
         // Apply stress parameters to create modified scenario
@@ -327,7 +327,7 @@ export class StressTestingEngine {
         results.push(stressResult);
 
       } catch (error) {
-        console.error(`Error running stress test ${stressTest.name}:`, error);
+        clientLogger.error(`Error running stress test ${stressTest.name}:`, error);
         // Continue with other tests even if one fails
       }
     }

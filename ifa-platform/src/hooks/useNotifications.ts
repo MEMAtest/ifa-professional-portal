@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/components/ui/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { RealtimePostgresChangesPayload } from '@supabase/realtime-js'
 import type { Notification, NotificationsResponse } from '@/types/notifications'
 import { getSupabaseAuthHeaders } from '@/lib/auth/clientAuth'
@@ -158,7 +159,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
       if (err instanceof Error && err.name === 'AbortError') {
         return
       }
-      console.error('Error fetching notifications:', err)
+      clientLogger.error('Error fetching notifications:', err)
       setError(err instanceof Error ? err.message : 'Failed to load notifications')
     } finally {
       setLoading(false)
@@ -259,7 +260,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         scheduleSync()
       }
     } catch (err) {
-      console.error('Error marking notification as read:', err)
+      clientLogger.error('Error marking notification as read:', err)
     }
   }, [scheduleSync, getAuthHeaders])
 
@@ -281,7 +282,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         scheduleSync()
       }
     } catch (err) {
-      console.error('Error marking all as read:', err)
+      clientLogger.error('Error marking all as read:', err)
     }
   }, [scheduleSync, getAuthHeaders])
 
@@ -305,7 +306,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         scheduleSync()
       }
     } catch (err) {
-      console.error('Error deleting notification:', err)
+      clientLogger.error('Error deleting notification:', err)
     }
   }, [notifications, scheduleSync, getAuthHeaders])
 

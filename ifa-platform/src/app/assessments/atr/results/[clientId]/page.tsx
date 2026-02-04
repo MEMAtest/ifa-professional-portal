@@ -28,6 +28,7 @@ import {
 
 // Import DocumentGenerationButton
 import DocumentGenerationButton from '@/components/documents/DocumentGenerationButton';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Types
 interface ATRResult {
@@ -191,7 +192,7 @@ export default function ATRResultsPage() {
         setClientData(data.client || data);
       }
     } catch (error) {
-      console.error('Error loading client data:', error);
+      clientLogger.error('Error loading client data:', error);
       // Non-critical error, don't block the page
     }
   }, [clientId]);
@@ -219,7 +220,7 @@ export default function ATRResultsPage() {
       setCurrentResult(currentData.data);
       setDisplayedResult(currentData.data);
     } catch (error) {
-      console.error('Error loading results:', error);
+      clientLogger.error('Error loading results:', error);
       setError(error instanceof Error ? error.message : 'Failed to load results');
     } finally {
       setIsLoading(false);
@@ -252,7 +253,6 @@ export default function ATRResultsPage() {
   // Handle document generation success
   const handleDocumentGenerationSuccess = (docId: string, docUrl?: string) => {
     // Could show a toast or update UI
-    console.log('Document generated successfully:', docId);
   };
 
   // Fixed: Proper risk level colors (green = low risk, red = high risk)

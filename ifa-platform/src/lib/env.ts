@@ -1,3 +1,4 @@
+import clientLogger from '@/lib/logging/clientLogger'
 // src/lib/env.ts
 const requiredEnvVars = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -23,7 +24,7 @@ export function validateEnv(): void {
   }
   
   if (missing.length > 0) {
-    console.error('Missing environment variables:', missing);
+    clientLogger.error('Missing environment variables:', missing);
     throw new EnvironmentError(missing.join(', '));
   }
 }

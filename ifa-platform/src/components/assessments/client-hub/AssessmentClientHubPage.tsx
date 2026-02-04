@@ -13,6 +13,7 @@ import {
 
 import { clientService } from '@/services/ClientService'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { Client } from '@/types/client'
 import type { AssessmentProgress, AssessmentHistory, ComplianceAlert } from '@/types/assessment'
 import { deriveSuitabilityCompletionState } from '@/lib/assessments/suitabilityStatus'
@@ -114,7 +115,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
         }
       }
     } catch (error) {
-      console.error('Error loading Suitability versions:', error)
+      clientLogger.error('Error loading Suitability versions:', error)
     }
 
     // Load ATR versions
@@ -136,7 +137,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
         }
       }
     } catch (error) {
-      console.error('Error loading ATR versions:', error)
+      clientLogger.error('Error loading ATR versions:', error)
     }
 
     // Load CFL versions
@@ -158,7 +159,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
         }
       }
     } catch (error) {
-      console.error('Error loading CFL versions:', error)
+      clientLogger.error('Error loading CFL versions:', error)
     }
 
     // Load Persona versions
@@ -180,7 +181,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
         }
       }
     } catch (error) {
-      console.error('Error loading Persona versions:', error)
+      clientLogger.error('Error loading Persona versions:', error)
     }
 
     setAssessmentVersions(versions)
@@ -271,7 +272,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
       await loadAssessmentVersions()
       checkComplianceAlerts(normalizedProgress)
     } catch (err) {
-      console.error('Error loading data:', err)
+      clientLogger.error('Error loading data:', err)
       if (mountedRef.current) {
         setError(err instanceof Error ? err.message : 'Failed to load assessment data')
       }
@@ -345,7 +346,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
       a.click()
       window.setTimeout(() => window.URL.revokeObjectURL(url), 15000)
     } catch (error) {
-      console.error('Error exporting report:', error)
+      clientLogger.error('Error exporting report:', error)
       alert('Failed to export report')
     }
   }

@@ -12,6 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, DbInsert } from '@/types/db';
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import type {
   StressTestResults,
   StressScenario,
@@ -92,7 +93,6 @@ export class StressTestReportService {
     }
   ): Promise<StressTestReportResult> {
     try {
-      console.log('📄 Generating stress test report for scenario:', scenarioId);
 
       // 1. Gather all required data
       const reportData = await this.gatherReportData(scenarioId, options);
@@ -139,7 +139,7 @@ export class StressTestReportService {
       };
       
     } catch (error) {
-      console.error('Error generating stress test report:', error);
+      clientLogger.error('Error generating stress test report:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Report generation failed'
@@ -176,7 +176,7 @@ export class StressTestReportService {
       return await this.generateStressTestReport(scenarios[0].id, options);
       
     } catch (error) {
-      console.error('Error generating compliance report:', error);
+      clientLogger.error('Error generating compliance report:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Compliance report generation failed'
@@ -635,7 +635,7 @@ export class StressTestReportService {
       .order('created_at', { ascending: false });
     
     if (error) {
-      console.error('Error fetching scenarios:', error);
+      clientLogger.error('Error fetching scenarios:', error);
       return [];
     }
     
@@ -768,13 +768,12 @@ export class StressTestReportService {
         .insert(insertData);
 
       if (error) {
-        console.error('❌ Error storing stress test results:', error);
+        clientLogger.error('❌ Error storing stress test results:', error);
         // Don't throw - report generation should succeed even if storage fails
       } else {
-        console.log('✅ Stress test results stored in database');
       }
     } catch (error) {
-      console.error('❌ Error storing stress test results:', error);
+      clientLogger.error('❌ Error storing stress test results:', error);
       // Don't throw - report generation should succeed even if storage fails
     }
   }
@@ -804,13 +803,12 @@ export class StressTestReportService {
         .insert(insertData);
 
       if (error) {
-        console.error('❌ Error storing compliance evidence:', error);
+        clientLogger.error('❌ Error storing compliance evidence:', error);
         // Don't throw - non-critical failure
       } else {
-        console.log('✅ Compliance evidence stored');
       }
     } catch (error) {
-      console.error('❌ Error storing compliance evidence:', error);
+      clientLogger.error('❌ Error storing compliance evidence:', error);
     }
   }
 

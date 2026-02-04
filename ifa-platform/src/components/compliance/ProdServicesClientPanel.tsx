@@ -12,6 +12,7 @@ import {
   DialogTitle
 } from '@/components/ui/Dialog'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import ServiceSelection from '@/components/clients/ServiceSelection'
 import {
   BarChart,
@@ -90,7 +91,7 @@ export function ProdServicesClientPanel() {
       setClients(result.clients || [])
       setServicesCatalog(result.servicesCatalog || [])
     } catch (error) {
-      console.error('Failed to fetch PROD clients', error)
+      clientLogger.error('Failed to fetch PROD clients', error)
     } finally {
       setLoading(false)
       setRefreshing(false)

@@ -5,6 +5,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { MarketAssumptions } from '@/types/cashflow';
+import clientLogger from '@/lib/logging/clientLogger';
 
 interface AlphaVantageResponse {
   'Global Quote'?: {
@@ -57,11 +58,8 @@ export class MarketDataService {
       // Try to get cached data first
       const cachedData = await this.getCachedData();
       if (cachedData && this.isCacheValid(cachedData)) {
-        console.log('Using cached market data');
         return cachedData.data;
       }
-
-      console.log('Fetching fresh market data...');
       
       // Fetch fresh data from multiple sources
       const freshData = await this.fetchFreshMarketData();
@@ -72,7 +70,7 @@ export class MarketDataService {
       return freshData;
 
     } catch (error) {
-      console.error('Error getting market assumptions:', error);
+      clientLogger.error('Error getting market assumptions:', error);
       
       // Try to return stale cached data if fresh fetch failed
       const cachedData = await this.getCachedData();
@@ -118,7 +116,7 @@ export class MarketDataService {
       };
 
     } catch (error) {
-      console.error('Error fetching fresh market data:', error);
+      clientLogger.error('Error fetching fresh market data:', error);
       throw error;
     }
   }
@@ -171,7 +169,7 @@ export class MarketDataService {
       return baseReturn + momentumAdjustment;
 
     } catch (error) {
-      console.error('Error fetching UK equity returns:', error);
+      clientLogger.error('Error fetching UK equity returns:', error);
       return 6.5; // Default historical average
     }
   }
@@ -216,7 +214,7 @@ export class MarketDataService {
       return Math.max(0, yieldValue);
 
     } catch (error) {
-      console.error('Error fetching UK bond yields:', error);
+      clientLogger.error('Error fetching UK bond yields:', error);
       return 3.5; // Default 10-year gilt yield assumption
     }
   }
@@ -236,7 +234,7 @@ export class MarketDataService {
       return boeInflationTarget;
 
     } catch (error) {
-      console.error('Error fetching inflation forecasts:', error);
+      clientLogger.error('Error fetching inflation forecasts:', error);
       return 2.5; // Default inflation assumption
     }
   }
@@ -316,12 +314,11 @@ export class MarketDataService {
    */
   static async forceRefresh(): Promise<MarketAssumptions> {
     try {
-      console.log('Force refreshing market data...');
       const freshData = await this.fetchFreshMarketData();
       await this.cacheData(freshData);
       return freshData;
     } catch (error) {
-      console.error('Error force refreshing market data:', error);
+      clientLogger.error('Error force refreshing market data:', error);
       return this.getDefaultAssumptions();
     }
   }
@@ -371,7 +368,7 @@ export class MarketDataService {
       health.lastUpdate = cachedData?.cachedAt || null;
 
     } catch (error) {
-      console.error('Error in health check:', error);
+      clientLogger.error('Error in health check:', error);
     }
 
     return health;

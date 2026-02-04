@@ -10,6 +10,7 @@ import { DocumentTemplateService } from './documentTemplateService'
 import { clientService } from './ClientService'
 import type { GeneratedDocument } from '@/types/document'
 import { OpenSignService, type SignerInfo, type SignatureRequestOptions } from './OpenSignService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // INTERFACES
@@ -56,7 +57,7 @@ export class RealClientService {
       const response: ClientListResponse = await clientService.getAllClients()
       return response.clients // Extract the clients array from the response
     } catch (error) {
-      console.error('Error fetching clients:', error)
+      clientLogger.error('Error fetching clients:', error)
       return []
     }
   }
@@ -66,7 +67,7 @@ export class RealClientService {
       const client = await clientService.getClientById(id)
       return client
     } catch (error) {
-      console.error('Error fetching client:', error)
+      clientLogger.error('Error fetching client:', error)
       return null
     }
   }
@@ -175,7 +176,7 @@ export class RealDocumentService {
         error: undefined
       }
     } catch (error) {
-      console.error('Real document generation error:', error)
+      clientLogger.error('Real document generation error:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Generation failed' 
@@ -187,8 +188,6 @@ export class RealDocumentService {
   // FIX 1: Add missing createClientWorkflow method
   // ===================================================================
   async createClientWorkflow(clientId: string, workflowType: string): Promise<any> {
-    console.log(`Creating ${workflowType} workflow for client ${clientId}`)
-    
     // For now, return a mock workflow object
     // In production, implement actual workflow creation
     const workflow = {
@@ -350,7 +349,7 @@ export class RealDocumentService {
             }
           }
         } catch (openSignError) {
-          console.error('OpenSign integration error:', openSignError)
+          clientLogger.error('OpenSign integration error:', openSignError)
           // Fall through to database-only storage
         }
       }
@@ -396,7 +395,7 @@ export class RealDocumentService {
       }
 
     } catch (error) {
-      console.error('Real document with signature error:', error)
+      clientLogger.error('Real document with signature error:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Generation failed'
@@ -426,7 +425,7 @@ export class RealDocumentService {
       console.warn('PDF buffer not available for document, using placeholder')
       return null
     } catch (error) {
-      console.error('Error getting PDF buffer:', error)
+      clientLogger.error('Error getting PDF buffer:', error)
       return null
     }
   }
@@ -493,7 +492,7 @@ export class RealDocumentService {
         }
       }
     } catch (error) {
-      console.error('Error checking signature status:', error)
+      clientLogger.error('Error checking signature status:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to check status'
@@ -527,7 +526,7 @@ export class RealDocumentService {
 
       return { data: null, error: 'OpenSign service not available' }
     } catch (error) {
-      console.error('Error downloading signed document:', error)
+      clientLogger.error('Error downloading signed document:', error)
       return { data: null, error: error instanceof Error ? error.message : 'Download failed' }
     }
   }
@@ -544,13 +543,13 @@ export class RealDocumentService {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Error fetching signature requests:', error)
+        clientLogger.error('Error fetching signature requests:', error)
         return []
       }
 
       return data || []
     } catch (error) {
-      console.error('Error fetching signature requests:', error)
+      clientLogger.error('Error fetching signature requests:', error)
       return []
     }
   }
@@ -593,7 +592,7 @@ export class RealDocumentService {
         error: 'Could not resend signature request'
       }
     } catch (error) {
-      console.error('Error resending signature request:', error)
+      clientLogger.error('Error resending signature request:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Resend failed'
@@ -667,7 +666,7 @@ export class AutoSaveService {
       try {
         await this.saveClientData(clientId, data)
       } catch (error) {
-        console.error(`Failed to auto-save client ${clientId}:`, error)
+        clientLogger.error(`Failed to auto-save client ${clientId}:`, error)
         // Re-queue failed saves
         this.queueSave(clientId, data)
       }
@@ -717,7 +716,6 @@ export class AutoSaveService {
 
     if (error) throw error
     
-    console.log(`Auto-saved data for client ${clientId}`)
   }
 
   // Force save all pending changes
@@ -779,7 +777,7 @@ export async function generateClientDocument(
       }
     }
   } catch (error) {
-    console.error('Document generation error:', error)
+    clientLogger.error('Document generation error:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Generation failed'

@@ -7,6 +7,7 @@ import { Layout } from '@/components/layout/Layout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvestmentTotal, calculatePensionTotal } from '@/lib/financials/aumCalculator'
 import {
@@ -377,7 +378,7 @@ export default function AIInsightsPage() {
 
       setLastRefreshed(new Date())
     } catch (err) {
-      console.error('Error fetching portfolio data:', err)
+      clientLogger.error('Error fetching portfolio data:', err)
       setError('Failed to load portfolio data. Please try again.')
     } finally {
       setLoading(false)
@@ -483,7 +484,7 @@ export default function AIInsightsPage() {
 
       setAiInsights(insights)
     } catch (err) {
-      console.error('Error generating AI insights:', err)
+      clientLogger.error('Error generating AI insights:', err)
       // Don't show error to user - gracefully degrade to no AI insights
     } finally {
       setAiLoading(false)
@@ -513,7 +514,7 @@ export default function AIInsightsPage() {
       const data = await response.json()
       return JSON.parse(data.content)
     } catch (err) {
-      console.error('AI call error:', err)
+      clientLogger.error('AI call error:', err)
       return null
     }
   }

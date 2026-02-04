@@ -6,6 +6,7 @@ import { renderMarkdown } from '@/lib/documents/markdownRenderer'
 import { generateFileReviewPDF, generateFileReviewDOCX } from '@/lib/documents/fileReviewExport'
 import { useCreateTask } from '@/modules/tasks/hooks/useTasks'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { SuggestedTask } from '@/lib/documents/fileReviewGenerator'
 
 interface FileReviewMetadata {
@@ -434,7 +435,7 @@ export function FileReviewModal({ clientId, clientName, isOpen, onClose, onSaved
         setState('saved')
         onSavedRef.current?.()
       } catch (err) {
-        console.error('[FileReview] Auto-save failed:', err)
+        clientLogger.error('[FileReview] Auto-save failed:', err)
       }
     })()
   }, [state])

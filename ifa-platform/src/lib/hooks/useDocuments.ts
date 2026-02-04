@@ -22,6 +22,8 @@ import type {
 } from '@/types/document';
 // ✅ FIXED: Change from import type to regular import for constructor usage
 import { DocumentError } from '@/types/document';
+import clientLogger from '@/lib/logging/clientLogger'
+import { buildDocumentSearchParams, formatDocumentCategories } from './documentHookUtils'
 
 // ===================================================================
 // ENHANCED ANALYTICS TYPES
@@ -148,31 +150,7 @@ export function useDocuments(initialParams?: DocumentListParams) {
       setLoading(true);
       setError(null);
 
-      const searchParams = new URLSearchParams();
-      
-      if (params?.page) searchParams.append('page', params.page.toString());
-      if (params?.limit) searchParams.append('limit', params.limit.toString());
-      if (params?.category_id) searchParams.append('category_id', params.category_id);
-      if (params?.client_id) searchParams.append('client_id', params.client_id);
-      if (params?.status) searchParams.append('status', params.status);
-      if (params?.compliance_status) searchParams.append('compliance_status', params.compliance_status);
-      if (params?.search) searchParams.append('search', params.search);
-      if (params?.sort_by) searchParams.append('sort_by', params.sort_by);
-      if (params?.sort_order) searchParams.append('sort_order', params.sort_order);
-
-      // Add filter parameters
-      if (filters.categories?.length) {
-        filters.categories.forEach(cat => searchParams.append('categories', cat));
-      }
-      if (filters.statuses?.length) {
-        filters.statuses.forEach(status => searchParams.append('statuses', status));
-      }
-      if (filters.compliance_statuses?.length) {
-        filters.compliance_statuses.forEach(status => searchParams.append('compliance_statuses', status));
-      }
-      if (filters.search) {
-        searchParams.append('search', filters.search);
-      }
+      const searchParams = buildDocumentSearchParams(params, filters);
 
       const supabase = createClient();
       const headers = await getSupabaseAuthHeaders(supabase);
@@ -217,20 +195,7 @@ export function useDocuments(initialParams?: DocumentListParams) {
       const result = await response.json();
       
       // Transform the response to match our interface
-      const formattedCategories = result.categories.map((cat: any) => ({
-        id: cat.id,
-        name: cat.name,
-        description: cat.description,
-        icon: cat.icon,
-        color: cat.color,
-        is_system: cat.is_system,
-        requires_signature: cat.requires_signature || false,
-        compliance_level: cat.compliance_level || 'standard',
-        created_at: cat.created_at,
-        updated_at: cat.updated_at
-      }));
-
-      setCategories(formattedCategories);
+      setCategories(formatDocumentCategories(result.categories || []));
 
     } catch (err) {
       setError(new DocumentError(
@@ -771,7 +736,7 @@ export function useDocumentAnalytics(filters?: AnalyticsFilters) {
           err
         ))
       }
-      console.error('Analytics fetch error:', err)
+      clientLogger.error('Analytics fetch error:', err)
     } finally {
       setLoading(false)
     }
@@ -912,7 +877,7 @@ export function useDocumentCategories() {
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch categories'
         setError(new DocumentError(errorMessage, 'FETCH_ERROR'))
-        console.error('Error fetching categories:', err)
+        clientLogger.error('Error fetching categories:', err)
       } finally {
         setLoading(false)
       }
@@ -1162,7 +1127,7 @@ export function useAssessmentMetrics() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch metrics'
       setError(errorMessage)
-      console.error('Assessment metrics error:', err)
+      clientLogger.error('Assessment metrics error:', err)
     } finally {
       setLoading(false)
     }
@@ -1221,7 +1186,7 @@ export function useClientStatistics() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch statistics'
       setError(errorMessage)
-      console.error('Client statistics error:', err)
+      clientLogger.error('Client statistics error:', err)
     } finally {
       setLoading(false)
     }

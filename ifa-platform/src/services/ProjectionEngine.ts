@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/client"
 // All property mismatches and type errors resolved
 // ================================================================
 
-import type { 
-  CashFlowScenario, 
-  CashFlowProjection, 
+import clientLogger from '@/lib/logging/clientLogger'
+import type {
+  CashFlowScenario,
+  CashFlowProjection,
   ProjectionSummary,
   ProjectionResult // FIX: Import the missing type
 } from '@/types/cashflow';
@@ -151,7 +152,7 @@ export class ProjectionEngine {
       };
       
     } catch (error) {
-      console.error('Error generating projections:', error);
+      clientLogger.error('Error generating projections:', error);
       throw error;
     }
   }

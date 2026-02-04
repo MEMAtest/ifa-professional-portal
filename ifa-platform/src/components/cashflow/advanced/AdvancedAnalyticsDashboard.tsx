@@ -15,6 +15,7 @@ import {
   ComplianceReport 
 } from '@/types/advanced-analytics';
 import { CashFlowScenario } from '@/types/cashflow';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Remove the import from non-existent '@/types/stress-test'
 // Define the type locally or import from the correct location
@@ -61,7 +62,7 @@ export const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProp
       setAnalyticsData(results);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      console.error('Analytics failed:', err);
+      clientLogger.error('Analytics failed:', err);
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -70,12 +71,10 @@ export const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProp
 
   const exportReport = async () => {
     // Implementation for exporting report
-    console.log('Exporting report...');
   };
 
   const exportComplianceDoc = async () => {
     // Implementation for exporting compliance doc
-    console.log('Exporting compliance doc...');
   };
 
   if (error) {

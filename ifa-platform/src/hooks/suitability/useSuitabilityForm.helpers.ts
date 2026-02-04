@@ -230,20 +230,12 @@ export interface ExtractedRiskProfile {
 // Note: using any type here for flexibility
 export const fillEmptyFieldsFromClient = (formData: SuitabilityFormData, client: any): SuitabilityFormData => {
   if (!client) {
-    console.log('[fillEmptyFieldsFromClient] No client data available')
     return formData
   }
 
   const personalDetails = client.personalDetails || client.personal_details || {}
   const contactInfo = client.contactInfo || client.contact_info || {}
   const clientRef = client.clientRef || client.client_ref
-
-  console.log('[fillEmptyFieldsFromClient] Client data:', {
-    hasPersonalDetails: !!client.personalDetails || !!client.personal_details,
-    firstName: personalDetails?.firstName || personalDetails?.first_name,
-    lastName: personalDetails?.lastName || personalDetails?.last_name,
-    clientRef
-  })
 
   const personal = { ...((formData.personal_information as any) || {}) }
   const contact = { ...((formData.contact_details as any) || {}) }
@@ -256,7 +248,6 @@ export const fillEmptyFieldsFromClient = (formData: SuitabilityFormData, client:
     const firstName = personalDetails?.firstName || personalDetails?.first_name || ''
     const lastName = personalDetails?.lastName || personalDetails?.last_name || ''
     const fullName = [title, firstName, lastName].filter(Boolean).join(' ').trim()
-    console.log('[fillEmptyFieldsFromClient] Generated fullName:', fullName)
     if (fullName) {
       personal.client_name = fullName
       changed = true
@@ -412,7 +403,6 @@ export const fillEmptyFieldsFromClient = (formData: SuitabilityFormData, client:
   result.contact_details = contact as any
   result.financial_situation = financial as any
 
-  console.log('[fillEmptyFieldsFromClient] Result personal_information:', result.personal_information)
   return result
 }
 

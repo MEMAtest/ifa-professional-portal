@@ -20,6 +20,7 @@ import {
   HelpCircle,
   Building2
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import { FirmAnalyticsService, type MarketConditions } from '@/services/FirmAnalyticsService'
 
 // Tooltip explanations for each metric
@@ -160,7 +161,7 @@ export function MarketConditionsWidget({
       onRefresh?.()
     } catch (err) {
       setError('Failed to load market data')
-      console.error('Error fetching market data:', err)
+      clientLogger.error('Error fetching market data:', err)
     } finally {
       setLoading(false)
     }

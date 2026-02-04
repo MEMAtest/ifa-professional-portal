@@ -15,10 +15,11 @@ import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { useToast } from '@/hooks/use-toast'
-import { 
-  FileText, 
-  TrendingUp, 
-  Users, 
+import clientLogger from '@/lib/logging/clientLogger'
+import {
+  FileText,
+  TrendingUp,
+  Users,
   Clock,
   CheckCircle,
   Send,
@@ -178,7 +179,7 @@ export default function DocumentVaultDashboard() {
       }
       
     } catch (err) {
-      console.error('Dashboard loading error:', err)
+      clientLogger.error('Dashboard loading error:', err)
       setError(err instanceof Error ? err.message : 'Failed to load dashboard')
       toast({
         title: 'Error',
@@ -254,7 +255,7 @@ export default function DocumentVaultDashboard() {
       await loadDashboardData()
       
     } catch (err) {
-      console.error('Bulk action error:', err)
+      clientLogger.error('Bulk action error:', err)
       toast({
         title: 'Bulk Action Failed',
         description: err instanceof Error ? err.message : 'Unknown error',

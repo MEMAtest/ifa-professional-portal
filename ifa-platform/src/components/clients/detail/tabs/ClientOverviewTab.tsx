@@ -159,7 +159,7 @@ export function ClientOverviewTab(props: { client: ExtendedClientProfile }) {
               <div className="flex flex-wrap gap-1">
                 {client.financialProfile.investmentObjectives.map((objective: string, index: number) => (
                   <Badge key={index} variant="outline" className="text-xs capitalize">
-                    {objective.replace(/_/g, ' ')}
+                    {String(objective ?? '').replace(/_/g, ' ')}
                   </Badge>
                 ))}
               </div>

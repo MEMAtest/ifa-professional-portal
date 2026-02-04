@@ -7,6 +7,7 @@
 // ================================================================
 
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Re-export the new PDFGenerator for convenience
 export { PDFGenerator, type PDFReportData } from './PDFGenerator';
@@ -103,7 +104,7 @@ export class PDFGenerationEngine {
       return Buffer.from(htmlContent, 'utf-8');
       
     } catch (error) {
-      console.error('PDF generation error:', error);
+      clientLogger.error('PDF generation error:', error);
       throw new Error('Failed to generate PDF');
     }
   }

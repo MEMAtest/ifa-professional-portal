@@ -22,6 +22,7 @@ import {
   RefreshCw,
   BarChart2
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import { aiAssistantService } from '@/services/aiAssistantService'
 
 // Updated interface to match what the service actually returns
@@ -67,7 +68,7 @@ const AIServiceMonitor: React.FC = () => {
         setMetrics(normalizedMetrics)
         setLastUpdate(new Date())
       } catch (error) {
-        console.error('Failed to fetch AI metrics:', error)
+        clientLogger.error('Failed to fetch AI metrics:', error)
       }
     }
 
@@ -85,7 +86,7 @@ const AIServiceMonitor: React.FC = () => {
       setMetrics(normalizedMetrics)
       setLastUpdate(new Date())
     } catch (error) {
-      console.error('Failed to refresh AI metrics:', error)
+      clientLogger.error('Failed to refresh AI metrics:', error)
     }
     setTimeout(() => setIsRefreshing(false), 500)
   }

@@ -8,6 +8,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DocumentTemplateService } from './documentTemplateService'
 import type { Database } from '@/types/db' // Fixed import path
+import clientLogger from '@/lib/logging/clientLogger'
 import { aggregateAssessmentData } from './document-generation/summary'
 import { getDefaultHtmlTemplate, mapAssessmentToVariables } from './document-generation/assessment-templates'
 import {
@@ -60,7 +61,7 @@ export class EnhancedDocumentGenerationService {
         this.initializeUser()
       }
     } catch (error) {
-      console.error("CRITICAL: Supabase client initialization failed in EnhancedDocumentGenerationService.", error)
+      clientLogger.error("CRITICAL: Supabase client initialization failed in EnhancedDocumentGenerationService.", error)
       this.supabase = null
     }
     this.templateService = DocumentTemplateService.getInstance()
@@ -73,7 +74,7 @@ export class EnhancedDocumentGenerationService {
       const { data: { user } } = await this.supabase.auth.getUser()
       this.currentUserId = user?.id || null
     } catch (error) {
-      console.error('Failed to get current user:', error)
+      clientLogger.error('Failed to get current user:', error)
       this.currentUserId = null
     }
   }
@@ -221,7 +222,7 @@ export class EnhancedDocumentGenerationService {
         }
       }
     } catch (error) {
-      console.error('Error generating document from assessment:', error)
+      clientLogger.error('Error generating document from assessment:', error)
       if (logId) {
         await this.updateGenerationLog(logId, null, 'failed', error)
       }
@@ -344,7 +345,7 @@ export class EnhancedDocumentGenerationService {
         }
       }
     } catch (error) {
-      console.error('Error generating combined report:', error)
+      clientLogger.error('Error generating combined report:', error)
       if (logId) {
         await this.updateGenerationLog(logId, null, 'failed', error)
       }
@@ -632,7 +633,7 @@ export class EnhancedDocumentGenerationService {
         .maybeSingle()
 
       if (error) {
-        console.error('Database insert error:', error)
+        clientLogger.error('Database insert error:', error)
         throw error
       }
       
@@ -643,14 +644,14 @@ export class EnhancedDocumentGenerationService {
         url: publicUrl
       }
     } catch (error) {
-      console.error('Error in saveDocument:', error)
+      clientLogger.error('Error in saveDocument:', error)
       throw error
     }
   }
 
   private async linkAssessmentToDocument(params: LinkAssessmentParams): Promise<void> {
     if (!this.supabase) {
-      console.error("Cannot perform action: Supabase client is not available.")
+      clientLogger.error("Cannot perform action: Supabase client is not available.")
       return
     }
 
@@ -663,26 +664,24 @@ export class EnhancedDocumentGenerationService {
       if (error) {
         // If the table doesn't exist, we'll get error code 42P01
         if (error.code === '42P01') {
-          console.log('assessment_documents table does not exist, skipping link creation')
           return
         }
         // Ignore duplicate key errors
         if (error.code === '23505') {
-          console.log('Link already exists between assessment and document')
           return
         }
         // Log other errors but don't throw
-        console.error('Error linking assessment to document:', error)
+        clientLogger.error('Error linking assessment to document:', error)
       }
     } catch (error) {
-      console.error('Error in linkAssessmentToDocument:', error)
+      clientLogger.error('Error in linkAssessmentToDocument:', error)
       // Don't throw - this is not critical for document generation
     }
   }
 
   private async logGeneration(params: Record<string, any>): Promise<string | null> {
     if (!this.supabase) {
-      console.error("Cannot perform action: Supabase client is not available.")
+      clientLogger.error("Cannot perform action: Supabase client is not available.")
       return null
     }
 
@@ -691,7 +690,7 @@ export class EnhancedDocumentGenerationService {
       if (!this.currentUserId) {
         await this.initializeUser()
       }
-      
+
       const { data, error } = await this.supabase
         .from('document_generation_logs')
         .insert({
@@ -703,13 +702,13 @@ export class EnhancedDocumentGenerationService {
         .maybeSingle()
 
       if (error) {
-        console.error('Error logging generation:', error)
+        clientLogger.error('Error logging generation:', error)
         return null
       }
 
       return data?.id || null
     } catch (error) {
-      console.error('Error in logGeneration:', error)
+      clientLogger.error('Error in logGeneration:', error)
       return null
     }
   }
@@ -722,7 +721,7 @@ export class EnhancedDocumentGenerationService {
   ): Promise<void> {
     if (!this.supabase || !logId) {
       if (!logId) {
-        console.error("Cannot update log: Missing log ID")
+        clientLogger.error("Cannot update log: Missing log ID")
       }
       return
     }
@@ -742,10 +741,10 @@ export class EnhancedDocumentGenerationService {
         .eq('id', logId)
 
       if (updateError) {
-        console.error('Error updating generation log:', updateError)
+        clientLogger.error('Error updating generation log:', updateError)
       }
     } catch (err) {
-      console.error('Error in updateGenerationLog:', err)
+      clientLogger.error('Error in updateGenerationLog:', err)
     }
   }
 
@@ -823,7 +822,6 @@ export class EnhancedDocumentGenerationService {
   }
 
   private async sendForSignature(documentId: string, clientId: string): Promise<void> {
-    console.log(`Sending document ${documentId} for signature to client ${clientId}`)
     // Add actual DocuSeal integration here when ready
   }
 

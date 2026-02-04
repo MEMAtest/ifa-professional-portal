@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Document type definitions
 export type DocumentCategory = 'assessment' | 'report' | 'agreement' | 'letter' | 'analysis';
@@ -331,7 +332,6 @@ export class DocumentGenerationRouter {
     config: DocumentTypeConfig
   ): void {
     this.DOCUMENT_CONFIGS[documentType] = config;
-    console.log(`Registered new document type: ${documentType}`);
   }
 }
 
@@ -452,7 +452,6 @@ export class UnifiedDocumentService {
       // Route the document
       const { strategy, generator, config } = await DocumentGenerationRouter.routeDocument(request);
       
-      console.log(`Generating ${request.documentType} using ${strategy} strategy`);
       
       // Generate the document
       const document = await generator.generate(request.data, request.options);
@@ -471,7 +470,7 @@ export class UnifiedDocumentService {
       return document;
       
     } catch (error) {
-      console.error('Document generation failed:', error);
+      clientLogger.error('Document generation failed:', error);
       throw error;
     }
   }

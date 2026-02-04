@@ -409,10 +409,11 @@ export function buildSuitabilityReportModel(params: {
     showPensionDetails: facts.hasPensions === true,
     showProtectionDetails: facts.hasProtection === true,
     showDbTransferQuestion:
-      facts.hasPensions === true && isConditionallyShown('existing_arrangements', 'db_transfer_considered'),
+      facts.hasPensions === true &&
+      (facts.hasDbPension === true || isConditionallyShown('existing_arrangements', 'db_transfer_considered')),
     showDbTransferDetails:
       facts.hasPensions === true &&
-      isConditionallyShown('existing_arrangements', 'db_transfer_considered') &&
+      (facts.hasDbPension === true || isConditionallyShown('existing_arrangements', 'db_transfer_considered')) &&
       facts.dbTransferConsidered === true
   }
 

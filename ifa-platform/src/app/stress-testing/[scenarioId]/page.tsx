@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Progress } from '@/components/ui/Progress';
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   ArrowLeft,
   AlertTriangle,
@@ -64,7 +65,7 @@ export default function ScenarioDetailPage({ params }: PageProps) {
           setError(data.error || 'Failed to load scenario');
         }
       } catch (err) {
-        console.error('Error fetching scenario:', err);
+        clientLogger.error('Error fetching scenario:', err);
         setError('Failed to load scenario details');
       } finally {
         setLoading(false);

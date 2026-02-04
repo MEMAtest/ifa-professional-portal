@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { investorPersonas } from '@/data/investorPersonas'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ================================================================
 // PERSONA ASSESSMENT QUESTIONS
@@ -320,7 +321,7 @@ export default function PersonaAssessmentPage() {
         })
       })
     } catch (error) {
-      console.error('Error tracking progress:', error)
+      clientLogger.error('Error tracking progress:', error)
     }
   }, [clientId])
 
@@ -466,7 +467,7 @@ export default function PersonaAssessmentPage() {
       // }, 1500)
       
     } catch (error) {
-      console.error('Error saving persona:', error)
+      clientLogger.error('Error saving persona:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to save persona assessment',

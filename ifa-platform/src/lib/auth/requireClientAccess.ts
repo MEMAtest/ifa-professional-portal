@@ -11,6 +11,13 @@ type RequireClientAccessArgs = {
 }
 
 export async function requireClientAccess({ supabase, clientId, ctx, select = '*' }: RequireClientAccessArgs) {
+  if (!ctx.firmId && !ctx.isPlatformAdmin) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: 'Firm context required' }, { status: 403 })
+    }
+  }
+
   const { data: client, error: clientError } = await supabase
     .from('clients')
     .select(select)
@@ -24,18 +31,21 @@ export async function requireClientAccess({ supabase, clientId, ctx, select = '*
     }
   }
 
-  if (ctx.role !== ROLES.ADMIN && ctx.role !== ROLES.OWNER) {
-    if (ctx.firmId && (client as any).firm_id && ctx.firmId !== (client as any).firm_id) {
+  if (!ctx.isPlatformAdmin) {
+    const clientFirmId = (client as any).firm_id
+    if (!clientFirmId || (ctx.firmId && ctx.firmId !== clientFirmId)) {
       return {
         ok: false as const,
         response: NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
 
-    if ((client as any).advisor_id && !canAccessClient(ctx, String((client as any).advisor_id))) {
-      return {
-        ok: false as const,
-        response: NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (ctx.role !== ROLES.ADMIN && ctx.role !== ROLES.OWNER) {
+      if ((client as any).advisor_id && !canAccessClient(ctx, String((client as any).advisor_id))) {
+        return {
+          ok: false as const,
+          response: NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
       }
     }
   }

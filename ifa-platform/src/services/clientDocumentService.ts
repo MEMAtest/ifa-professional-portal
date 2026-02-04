@@ -3,6 +3,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Extended types for client document management
 export interface ClientDocumentStatus {
@@ -209,7 +210,7 @@ export class ClientDocumentService {
 
       return clientStatuses.sort((a, b) => a.clientName.localeCompare(b.clientName))
     } catch (error) {
-      console.error('Error getting client document status:', error)
+      clientLogger.error('Error getting client document status:', error)
       throw error
     }
   }
@@ -261,7 +262,7 @@ export class ClientDocumentService {
 
       return requirements
     } catch (error) {
-      console.error('Error getting client document requirements:', error)
+      clientLogger.error('Error getting client document requirements:', error)
       throw error
     }
   }
@@ -294,7 +295,7 @@ export class ClientDocumentService {
         isActive: t.is_active
       })) || []
     } catch (error) {
-      console.error('Error getting document templates:', error)
+      clientLogger.error('Error getting document templates:', error)
       throw error
     }
   }
@@ -355,7 +356,7 @@ export class ClientDocumentService {
         requiresSignature: tmpl.requires_signature
       }
     } catch (error) {
-      console.error('Error generating document from template:', error)
+      clientLogger.error('Error generating document from template:', error)
       throw error
     }
   }
@@ -418,7 +419,7 @@ export class ClientDocumentService {
 
       return workflow
     } catch (error) {
-      console.error('Error getting client workflow:', error)
+      clientLogger.error('Error getting client workflow:', error)
       return null
     }
   }

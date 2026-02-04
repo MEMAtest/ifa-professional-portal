@@ -5,6 +5,7 @@ import type {
   NotificationType
 } from '@/types/notifications'
 import { NOTIFICATION_CONFIG } from '@/types/notifications'
+import clientLogger from '@/lib/logging/clientLogger'
 
 const DEDUPE_WINDOW_HOURS: Partial<Record<NotificationType, number>> = {
   // Prevent accidental double-toasts/double-click spam.
@@ -84,7 +85,7 @@ export class NotificationService {
       .single()
 
     if (error) {
-      console.error('Failed to create notification:', error)
+      clientLogger.error('Failed to create notification:', error)
       return null
     }
 
@@ -114,7 +115,7 @@ export class NotificationService {
       .select()
 
     if (error) {
-      console.error('Failed to create bulk notifications:', error)
+      clientLogger.error('Failed to create bulk notifications:', error)
       return 0
     }
 
@@ -147,6 +148,11 @@ export class NotificationService {
         .single()
       firmId = profile?.firm_id ?? undefined
     }
+    if (!firmId) {
+      const err = new Error('Firm context is required for notifications.')
+      ;(err as any).code = 'FIRM_CONTEXT_REQUIRED'
+      throw err
+    }
 
     // Query notifications by firm_id (firm-wide) OR user_id (user-specific)
     let query = supabase
@@ -154,12 +160,8 @@ export class NotificationService {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
 
-    // Use firm_id if available, otherwise fall back to user_id
-    if (firmId) {
-      query = query.or(`firm_id.eq.${firmId},user_id.eq.${userId}`)
-    } else {
-      query = query.eq('user_id', userId)
-    }
+    // Use firm_id plus user_id (user-specific + firm-wide)
+    query = query.or(`firm_id.eq.${firmId},user_id.eq.${userId}`)
 
     if (unreadOnly) {
       query = query.eq('read', false)
@@ -191,11 +193,7 @@ export class NotificationService {
       .select('*', { count: 'exact', head: true })
       .eq('read', false)
 
-    if (firmId) {
-      unreadQuery = unreadQuery.or(`firm_id.eq.${firmId},user_id.eq.${userId}`)
-    } else {
-      unreadQuery = unreadQuery.eq('user_id', userId)
-    }
+    unreadQuery = unreadQuery.or(`firm_id.eq.${firmId},user_id.eq.${userId}`)
 
     const { count: unreadCount, error: unreadError } = await unreadQuery
 
@@ -229,17 +227,18 @@ export class NotificationService {
         .single()
       resolvedFirmId = profile?.firm_id ?? undefined
     }
+    if (!resolvedFirmId) {
+      const err = new Error('Firm context is required for notifications.')
+      ;(err as any).code = 'FIRM_CONTEXT_REQUIRED'
+      throw err
+    }
 
     let query = supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('read', false)
 
-    if (resolvedFirmId) {
-      query = query.or(`firm_id.eq.${resolvedFirmId},user_id.eq.${userId}`)
-    } else {
-      query = query.eq('user_id', userId)
-    }
+    query = query.or(`firm_id.eq.${resolvedFirmId},user_id.eq.${userId}`)
 
     const { count, error } = await query
 
@@ -270,6 +269,11 @@ export class NotificationService {
         .single()
       resolvedFirmId = profile?.firm_id ?? undefined
     }
+    if (!resolvedFirmId) {
+      const err = new Error('Firm context is required for notifications.')
+      ;(err as any).code = 'FIRM_CONTEXT_REQUIRED'
+      throw err
+    }
 
     // Build query that matches user's notifications OR firm-wide notifications they can see
     let query = supabase
@@ -277,11 +281,7 @@ export class NotificationService {
       .update({ read: true, read_at: new Date().toISOString() })
       .eq('id', notificationId)
 
-    if (resolvedFirmId) {
-      query = query.or(`user_id.eq.${userId},firm_id.eq.${resolvedFirmId}`)
-    } else {
-      query = query.eq('user_id', userId)
-    }
+    query = query.or(`user_id.eq.${userId},firm_id.eq.${resolvedFirmId}`)
 
     const { error } = await query
 
@@ -312,6 +312,11 @@ export class NotificationService {
         .single()
       resolvedFirmId = profile?.firm_id ?? undefined
     }
+    if (!resolvedFirmId) {
+      const err = new Error('Firm context is required for notifications.')
+      ;(err as any).code = 'FIRM_CONTEXT_REQUIRED'
+      throw err
+    }
 
     // Build query that matches user's notifications OR firm-wide notifications
     let query = supabase
@@ -319,11 +324,7 @@ export class NotificationService {
       .update({ read: true, read_at: new Date().toISOString() })
       .eq('read', false)
 
-    if (resolvedFirmId) {
-      query = query.or(`user_id.eq.${userId},firm_id.eq.${resolvedFirmId}`)
-    } else {
-      query = query.eq('user_id', userId)
-    }
+    query = query.or(`user_id.eq.${userId},firm_id.eq.${resolvedFirmId}`)
 
     const { data, error } = await query.select()
 
@@ -596,7 +597,6 @@ export async function notifyProfileUpdated(
   clientId: string,
   clientName: string
 ): Promise<void> {
-  console.log('[Notification] Creating profile_updated notification', { userId, clientId, clientName })
   const supabase = getSupabaseServiceClient()
   let firmId = await getUserFirmId(userId)
 
@@ -609,7 +609,6 @@ export async function notifyProfileUpdated(
     firmId = clientFirm?.firm_id ?? undefined
   }
 
-  console.log('[Notification] Got firm_id:', firmId)
   const input: CreateNotificationInput = {
     user_id: userId,
     client_id: clientId,
@@ -627,7 +626,6 @@ export async function notifyProfileUpdated(
   }
 
   const result = await NotificationService.create(input)
-  console.log('[Notification] Result:', result ? 'created' : 'deduplicated or failed')
 }
 
 export async function notifyATRCompleted(

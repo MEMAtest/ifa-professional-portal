@@ -546,27 +546,22 @@ export class DocumentWorkflowEngine {
   ): Promise<void> {
     switch (action.type) {
       case 'create_document':
-        console.log('Creating document:', action.parameters)
         // Integration with document service would go here
         break
         
       case 'send_notification':
-        console.log('Sending notification:', action.parameters)
         // Integration with notification service would go here
         break
         
       case 'request_signature':
-        console.log('Requesting signature:', action.parameters)
         // Integration with DocuSeal would go here
         break
         
       case 'update_status':
-        console.log('Updating status:', action.parameters)
         // Update client or document status
         break
         
       case 'schedule_review':
-        console.log('Scheduling review:', action.parameters)
         // Schedule future review
         break
     }

@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { useRouter } from 'next/navigation'
 import FileReviewModal from './FileReviewModal'
 import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
@@ -163,7 +164,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
       const { data, error } = await query
 
       if (error) {
-        console.error('Error loading reviews:', error)
+        clientLogger.error('Error loading reviews:', error)
         // Handle case where table doesn't exist
         setReviews([])
         return
@@ -179,7 +180,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
 
       setReviews(reviewsWithRelations)
     } catch (error) {
-      console.error('Error loading reviews:', error)
+      clientLogger.error('Error loading reviews:', error)
       setReviews([])
     } finally {
       setLoading(false)
@@ -257,7 +258,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
       await loadReviews()
       onStatsChange?.()
     } catch (error) {
-      console.error('Error updating review status:', error)
+      clientLogger.error('Error updating review status:', error)
       toast({
         title: 'Error',
         description: 'Failed to update review status',
@@ -362,7 +363,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
       onStatsChange?.()
       setShowReviewModal(false)
     } catch (error) {
-      console.error('Error updating review:', error)
+      clientLogger.error('Error updating review:', error)
       toast({
         title: 'Error',
         description: 'Failed to update review',
@@ -1010,7 +1011,7 @@ function CreateReviewModal({
       })
       onCreated()
     } catch (error) {
-      console.error('Error creating review:', error)
+      clientLogger.error('Error creating review:', error)
       toast({
         title: 'Error',
         description: 'Failed to create review',

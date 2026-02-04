@@ -11,14 +11,15 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 
-import { AlertCircle, Check, ChevronDown, Copy, Database, HelpCircle, Info, Sparkles } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Copy, Database, FileText, HelpCircle, Info, Sparkles } from 'lucide-react'
 
 export const TextField = memo<FieldProps>(
-  ({ field, value, onChange, onBlur, onFocus, error, warning, isReadOnly, isRequired, aiSuggestion, pulledValue, showHelp, className }) => {
+  ({ field, value, onChange, onBlur, onFocus, error, warning, isReadOnly, isRequired, aiSuggestion, pulledValue, isFromDocuments, showHelp, className }) => {
     const [copied, setCopied] = useState(false)
     const inputType = field.type === 'email' ? 'email' : field.type === 'tel' ? 'tel' : 'text'
     const datalistId = field.type === 'text' && field.options?.length ? `suitability-datalist-${field.id}` : undefined
-    const showPulledIndicator = hasValue(pulledValue) && hasValue(value)
+    const showPulledIndicator = hasValue(pulledValue) && hasValue(value) && !isFromDocuments
+    const showDocumentsIndicator = isFromDocuments && hasValue(value)
 
     const handleCopy = useCallback(() => {
       void safeWriteToClipboard(value || '').then((ok) => {
@@ -54,6 +55,13 @@ export const TextField = memo<FieldProps>(
           </Label>
 
           <div className="flex items-center gap-2">
+            {showDocumentsIndicator && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                <FileText className="h-3 w-3" />
+                From documents
+              </span>
+            )}
+
             {showPulledIndicator && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                 <Database className="h-3 w-3" />

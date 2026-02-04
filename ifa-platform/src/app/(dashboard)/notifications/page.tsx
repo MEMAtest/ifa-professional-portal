@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { getSupabaseAuthHeaders } from '@/lib/auth/clientAuth'
+import clientLogger from '@/lib/logging/clientLogger'
 
 const PAGE_SIZE = 50
 
@@ -156,7 +157,7 @@ export default function NotificationsPage() {
       setNextBefore(firstPage.length > 0 ? firstPage[firstPage.length - 1].created_at : null)
       setHasMore(firstPage.length === PAGE_SIZE)
     } catch (e) {
-      console.error('Failed to load notifications page:', e)
+      clientLogger.error('Failed to load notifications page:', e)
       setListError(e instanceof Error ? e.message : 'Failed to load notifications')
       setItems([])
       setNextBefore(null)
@@ -180,7 +181,7 @@ export default function NotificationsPage() {
       setNextBefore(more.length > 0 ? more[more.length - 1].created_at : nextBefore)
       setHasMore(more.length === PAGE_SIZE)
     } catch (e) {
-      console.error('Failed to load more notifications:', e)
+      clientLogger.error('Failed to load more notifications:', e)
       setListError(e instanceof Error ? e.message : 'Failed to load more notifications')
     } finally {
       setLoadingMore(false)
@@ -297,7 +298,7 @@ export default function NotificationsPage() {
       await refetch()
       await loadInitial()
     } catch (e) {
-      console.error('Failed to seed notification:', e)
+      clientLogger.error('Failed to seed notification:', e)
       setListError(e instanceof Error ? e.message : 'Failed to seed notification')
     } finally {
       setSeeding(false)

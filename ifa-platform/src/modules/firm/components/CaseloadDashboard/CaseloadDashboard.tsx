@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { useFirmUsers } from '../../hooks/useFirmUsers'
 import { usePermissions } from '../../hooks/usePermissions'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface AdvisorCaseload {
   advisorId: string
@@ -183,7 +184,7 @@ export function CaseloadDashboard() {
 
       setCaseloads(caseloadData)
     } catch (err) {
-      console.error('Error fetching caseload data:', err)
+      clientLogger.error('Error fetching caseload data:', err)
       setError(err instanceof Error ? err.message : 'Failed to load caseload data')
     } finally {
       setIsLoading(false)

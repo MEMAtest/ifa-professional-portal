@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DashboardMetrics, IncompleteAssessment } from '@/components/assessments/dashboard/types';
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface UseAssessmentDashboardState {
   metrics: DashboardMetrics | null;
@@ -28,7 +29,7 @@ const fetchIncompleteAssessments = async () => {
       totalCount: typeof data.count === 'number' ? data.count : data.assessments.length
     };
   } catch (error) {
-    console.error('Error fetching incomplete assessments:', error);
+    clientLogger.error('Error fetching incomplete assessments:', error);
     return { items: [], totalCount: 0 };
   }
 };
@@ -72,7 +73,7 @@ export const useAssessmentDashboard = (): UseAssessmentDashboardState => {
       setMetrics(metricsData);
       setLastRefresh(new Date());
     } catch (err) {
-      console.error('Error fetching metrics:', err);
+      clientLogger.error('Error fetching metrics:', err);
       setError(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
     } finally {
       setIsLoading(false);

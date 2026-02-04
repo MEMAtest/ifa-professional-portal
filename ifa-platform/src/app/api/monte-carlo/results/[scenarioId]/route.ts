@@ -6,6 +6,7 @@ import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
 import { requireClientAccess } from '@/lib/auth/requireClientAccess';
+import { requireScenarioAccess } from '@/lib/monte-carlo/monteCarloAccess'
 import { parseRequestBody } from '@/app/api/utils'
 import { z } from 'zod'
 
@@ -53,39 +54,71 @@ export async function GET(
 
     const supabase = getSupabaseServiceClient();
 
-    // Try to get results by scenario_id (TEXT field)
-    const { data: results, error: resultsError } = await supabase
-      .from('monte_carlo_results')
-      .select('*')
-      .eq('scenario_id', cleanScenarioId)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const { data: scenarioRow } = await supabase
+      .from('cash_flow_scenarios')
+      .select('id')
+      .eq('id', cleanScenarioId)
+      .maybeSingle()
 
-    // If we found results by scenario_id, return them as array
-    if (!resultsError && results && results.length > 0) {
-      const clientId = results[0]?.client_id
-      if (clientId) {
-        const access = await requireClientAccess({
-          supabase,
-          clientId,
-          ctx: auth.context,
-          select: 'id, firm_id, advisor_id'
-        })
-        if (!access.ok) {
-          return access.response as NextResponse
-        }
+    if (scenarioRow?.id) {
+      const access = await requireScenarioAccess({
+        supabase,
+        scenarioId: cleanScenarioId,
+        ctx: auth.context
+      })
+      if (!access.ok) {
+        return access.response as NextResponse
       }
+
+      const { data: results, error: resultsError } = await supabase
+        .from('monte_carlo_results')
+        .select('*')
+        .eq('scenario_id', cleanScenarioId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (resultsError) {
+        log.error('Monte Carlo results fetch error', { error: resultsError.message });
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch Monte Carlo results', results: [] },
+          { status: 500 }
+        )
+      }
+
+      if (!results || results.length === 0) {
+        return NextResponse.json({
+          success: true,
+          results: [],
+          message: 'No Monte Carlo results found for this scenario',
+          scenarioId: cleanScenarioId,
+          metadata: {
+            scenarioId: cleanScenarioId,
+            fetchedAt: new Date().toISOString()
+          }
+        })
+      }
+
       return NextResponse.json({
         success: true,
-        results: results, // Return as array format
+        results: results,
         metadata: {
           scenarioId: cleanScenarioId,
           fetchedAt: new Date().toISOString()
         }
-      });
+      })
     }
 
-    // If not found by scenario_id, try client_id
+    // If not a scenario id, treat as client id
+    const clientAccess = await requireClientAccess({
+      supabase,
+      clientId: cleanScenarioId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!clientAccess.ok) {
+      return clientAccess.response as NextResponse
+    }
+
     const { data: resultsByClient, error: clientError } = await supabase
       .from('monte_carlo_results')
       .select('*')
@@ -118,20 +151,6 @@ export async function GET(
           fetchedAt: new Date().toISOString()
         }
       });
-    }
-
-    // Return found results as array
-    const clientId = resultsByClient[0]?.client_id
-    if (clientId) {
-      const access = await requireClientAccess({
-        supabase,
-        clientId,
-        ctx: auth.context,
-        select: 'id, firm_id, advisor_id'
-      })
-      if (!access.ok) {
-        return access.response as NextResponse
-      }
     }
 
     return NextResponse.json({
@@ -200,29 +219,13 @@ export async function PATCH(
 
     const supabase = getSupabaseServiceClient()
 
-    const { data: existingResult, error: existingError } = await supabase
-      .from('monte_carlo_results')
-      .select('id, client_id')
-      .eq('scenario_id', cleanScenarioId)
-      .single()
-
-    if (existingError || !existingResult) {
-      return NextResponse.json(
-        { success: false, error: 'Scenario not found' },
-        { status: 404 }
-      )
-    }
-
-    if (existingResult.client_id) {
-      const access = await requireClientAccess({
-        supabase,
-        clientId: existingResult.client_id,
-        ctx: auth.context,
-        select: 'id, firm_id, advisor_id'
-      })
-      if (!access.ok) {
-        return access.response as NextResponse
-      }
+    const scenarioAccess = await requireScenarioAccess({
+      supabase,
+      scenarioId: cleanScenarioId,
+      ctx: auth.context
+    })
+    if (!scenarioAccess.ok) {
+      return scenarioAccess.response as NextResponse
     }
 
     // Update in monte_carlo_results table
@@ -236,8 +239,8 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error) {
-      log.error('Failed to update status for scenario', { scenarioId: cleanScenarioId, error: error.message });
+    if (error || !data) {
+      log.error('Failed to update status for scenario', { scenarioId: cleanScenarioId, error: error?.message });
       return NextResponse.json(
         {
           success: false,
@@ -321,6 +324,19 @@ export async function POST(
     const body = await parseRequestBody(request, createSchema)
 
     const supabase = getSupabaseServiceClient()
+
+    const scenarioAccess = await requireScenarioAccess({
+      supabase,
+      scenarioId: cleanScenarioId,
+      ctx: auth.context
+    })
+    if (!scenarioAccess.ok) {
+      return scenarioAccess.response as NextResponse
+    }
+
+    if (scenarioAccess.scenario?.client_id && scenarioAccess.scenario.client_id !== body.client_id) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     const access = await requireClientAccess({
       supabase,
@@ -422,29 +438,13 @@ export async function DELETE(
 
     const supabase = getSupabaseServiceClient()
 
-    const { data: existingResult, error: existingError } = await supabase
-      .from('monte_carlo_results')
-      .select('id, client_id')
-      .eq('scenario_id', cleanScenarioId)
-      .single()
-
-    if (existingError || !existingResult) {
-      return NextResponse.json(
-        { success: false, error: 'Scenario not found' },
-        { status: 404 }
-      )
-    }
-
-    if (existingResult.client_id) {
-      const access = await requireClientAccess({
-        supabase,
-        clientId: existingResult.client_id,
-        ctx: auth.context,
-        select: 'id, firm_id, advisor_id'
-      })
-      if (!access.ok) {
-        return access.response as NextResponse
-      }
+    const scenarioAccess = await requireScenarioAccess({
+      supabase,
+      scenarioId: cleanScenarioId,
+      ctx: auth.context
+    })
+    if (!scenarioAccess.ok) {
+      return scenarioAccess.response as NextResponse
     }
 
     // Delete results

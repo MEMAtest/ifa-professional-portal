@@ -5,6 +5,7 @@
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import clientLogger from '@/lib/logging/clientLogger'
 import { 
   AlertTriangle, 
   RefreshCw, 
@@ -29,7 +30,7 @@ export default function AssessmentClientError({
 
   useEffect(() => {
     // Log the error to an error reporting service
-    console.error('Assessment Client Hub Error:', error)
+    clientLogger.error('Assessment Client Hub Error:', error)
   }, [error])
 
   // Determine error type and provide appropriate messaging

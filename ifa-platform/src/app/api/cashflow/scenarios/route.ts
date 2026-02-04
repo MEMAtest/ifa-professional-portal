@@ -4,6 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +13,16 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
     
@@ -21,11 +33,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     // Use correct column names: client_id (not clientId), is_active (not isActive)
     const { data, error } = await supabase
       .from('cash_flow_scenarios')
       .select('*')
       .eq('client_id', clientId)  // ✅ FIXED: was 'clientId'
+      .eq('firm_id', firmId)
       .eq('is_active', true);     // ✅ FIXED: was 'isActive'
 
     if (error) {
@@ -52,6 +75,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient()
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const body = await parseRequestBody(request);
     
     if (!body.clientId) {
@@ -60,11 +93,22 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    const access = await requireClientAccess({
+      supabase,
+      clientId: body.clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     const scenarioData = {
       client_id: body.clientId,          // ✅ FIXED: snake_case
       scenario_name: body.scenarioName || `Scenario ${Date.now()}`,
       scenario_type: body.scenarioType || 'base',
       projection_years: body.projectionYears || 30,
+      firm_id: firmId,
       is_active: true,                   // ✅ FIXED: snake_case
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()

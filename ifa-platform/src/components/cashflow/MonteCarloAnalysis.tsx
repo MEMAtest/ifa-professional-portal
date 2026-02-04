@@ -30,6 +30,7 @@ import {
   ComposedChart
 } from 'recharts';
 import type { CashFlowScenario } from '@/types/cashflow';
+import clientLogger from '@/lib/logging/clientLogger';
 
 interface MonteCarloAnalysisProps {
   scenario: CashFlowScenario;
@@ -56,11 +57,10 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
         if (!response.ok) {
           if (response.status === 404) {
             // No results yet - this is expected for new scenarios
-            console.log(`No Monte Carlo results yet for scenario ${scenario.id}`);
             return;
           }
           // Other errors are unexpected
-          console.error(`Monte Carlo results API error: ${response.status}`);
+          clientLogger.error(`Monte Carlo results API error: ${response.status}`);
           return;
         }
         
@@ -71,7 +71,7 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
       } catch (error) {
         // Only log actual errors, not expected 404s
         if (error instanceof Error && !error.message.includes('404')) {
-          console.error('Error checking for Monte Carlo results:', error);
+          clientLogger.error('Error checking for Monte Carlo results:', error);
         }
       }
     };
@@ -91,7 +91,6 @@ const MonteCarloAnalysis: React.FC<MonteCarloAnalysisProps> = ({
       if (!response.ok) {
         if (response.status === 404) {
           // No results found - this is normal for new scenarios
-          console.log(`No historical Monte Carlo results for scenario ${scenario.id}`);
           setHistoricalResults([]);
           setSimulationResults(null);
           return;

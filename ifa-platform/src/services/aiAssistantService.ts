@@ -11,6 +11,7 @@ import {
   ChartData
 } from '@/types/suitability'
 import { suitabilityAIPrompts } from '@/prompts/suitability/aiPrompts'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // =====================================================
 // CONFIGURATION
@@ -187,7 +188,7 @@ class AIAssistantService {
       return suggestion
       
     } catch (error) {
-      console.error('AI suggestion error:', error)
+      clientLogger.error('AI suggestion error:', error)
       this.metrics.errors++
       
       // Return fallback suggestion
@@ -298,7 +299,7 @@ class AIAssistantService {
         timestamp: new Date().toISOString()
       }
     } catch (error) {
-      console.error('Failed to parse AI response:', error)
+      clientLogger.error('Failed to parse AI response:', error)
       throw error
     }
   }
@@ -402,7 +403,7 @@ class AIAssistantService {
 
         return platformData
       } catch (error) {
-        console.error('Error pulling platform data:', error)
+        clientLogger.error('Error pulling platform data:', error)
         this.platformDataCache.delete(cacheKey)
         return {}
       }
@@ -423,7 +424,7 @@ class AIAssistantService {
       const json = await response.json().catch(() => null)
       return (json as any)?.client ?? json
     } catch (error) {
-      console.error('Error fetching client record:', error)
+      clientLogger.error('Error fetching client record:', error)
       return null
     }
   }
@@ -490,7 +491,7 @@ class AIAssistantService {
         cflDate: row?.assessment_date || undefined
       }
     } catch (error) {
-      console.error('Error pulling CFL data:', error)
+      clientLogger.error('Error pulling CFL data:', error)
       return {}
     }
   }
@@ -510,7 +511,7 @@ class AIAssistantService {
         atrDate: row?.assessment_date || undefined
       }
     } catch (error) {
-      console.error('Error pulling ATR data:', error)
+      clientLogger.error('Error pulling ATR data:', error)
       return {}
     }
   }
@@ -532,7 +533,7 @@ class AIAssistantService {
         status: a.status
       }))
     } catch (error) {
-      console.error('Error pulling assessment history:', error)
+      clientLogger.error('Error pulling assessment history:', error)
       return []
     }
   }

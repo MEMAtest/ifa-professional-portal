@@ -8,6 +8,7 @@ import { headers } from 'next/headers'
 import { z } from 'zod'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 
 // =====================================================
@@ -302,9 +303,14 @@ export async function POST(request: NextRequest) {
   let provider: AIProvider = 'mock'
   
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     // Get client ID from headers or session
     const headersList = headers()
-    const clientId = headersList.get('x-client-id') || 'anonymous'
+    const clientId = auth.context.userId || headersList.get('x-client-id') || 'anonymous'
     
     // Check rate limit
     if (!checkRateLimit(clientId)) {

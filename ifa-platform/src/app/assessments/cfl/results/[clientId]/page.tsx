@@ -28,6 +28,7 @@ import {
 
 // Import DocumentGenerationButton
 import DocumentGenerationButton from '@/components/documents/DocumentGenerationButton';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Types
 interface CFLResult {
@@ -226,7 +227,7 @@ export default function CFLResultsPage() {
         setClientData(data.client || data);
       }
     } catch (error) {
-      console.error('Error loading client data:', error);
+      clientLogger.error('Error loading client data:', error);
     }
   }, [clientId]);
 
@@ -250,7 +251,6 @@ export default function CFLResultsPage() {
           setStats(historyData.stats || null);
         }
       } catch (historyError) {
-        console.log('History endpoint not available');
         // Set single version if history not available
         if (currentData.data) {
           setAllVersions([currentData.data]);
@@ -260,7 +260,7 @@ export default function CFLResultsPage() {
       setCurrentResult(currentData.data);
       setDisplayedResult(currentData.data); // ADDED: Set initial displayed result
     } catch (error) {
-      console.error('Error loading results:', error);
+      clientLogger.error('Error loading results:', error);
       setError(error instanceof Error ? error.message : 'Failed to load results');
     } finally {
       setIsLoading(false);
@@ -298,7 +298,6 @@ export default function CFLResultsPage() {
 
   // Handle document generation success
   const handleDocumentGenerationSuccess = (docId: string, docUrl?: string) => {
-    console.log('Document generated successfully:', docId);
   };
 
   // Get client name and email for document generation

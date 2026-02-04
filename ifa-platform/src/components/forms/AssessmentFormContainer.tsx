@@ -15,6 +15,7 @@ import { KnowledgeStep } from './steps/KnowledgeStep'
 import { SuitabilityStep } from './steps/SuitabilityStep'
 import { ReviewStep } from './steps/ReviewStep'
 import { CheckCircle, AlertCircle, Save } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface AssessmentFormContainerProps {
   assessmentId?: string
@@ -46,7 +47,7 @@ export const AssessmentFormContainer = ({
           lastSaved: new Date().toISOString() 
         }))
       } catch (error) {
-        console.error('Auto-save failed:', error)
+        clientLogger.error('Auto-save failed:', error)
       }
     }
   }, [onSave, state.assessment, state.isDirty])
@@ -139,7 +140,7 @@ export const AssessmentFormContainer = ({
 
       await onSubmit(finalAssessment)
     } catch (error) {
-      console.error('Submission failed:', error)
+      clientLogger.error('Submission failed:', error)
     } finally {
       setState(prev => ({ ...prev, isSubmitting: false }))
     }

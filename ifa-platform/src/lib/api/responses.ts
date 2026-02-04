@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server'
 import { ErrorCode, AppError, isAppError, getErrorMessage } from '@/lib/errors'
+import clientLogger from '@/lib/logging/clientLogger'
 
 /**
  * Standard API error response format
@@ -246,7 +247,7 @@ export function withErrorHandling<T>(
   requestId?: string
 ): Promise<NextResponse<T | ApiErrorResponse>> {
   return handler().catch((error: unknown) => {
-    console.error('API Error:', error)
+    clientLogger.error('API Error:', error)
     return errorResponse(error, { requestId })
   })
 }

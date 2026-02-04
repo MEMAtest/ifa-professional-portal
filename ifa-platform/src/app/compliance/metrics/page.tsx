@@ -29,6 +29,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useRouter } from 'next/navigation'
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   PieChart,
   Pie,
@@ -289,7 +290,7 @@ export default function ComplianceMetricsPage() {
         setLastUpdated(new Date())
       }
     } catch (error) {
-      console.error('Error fetching compliance metrics:', error)
+      clientLogger.error('Error fetching compliance metrics:', error)
     } finally {
       setLoading(false)
     }

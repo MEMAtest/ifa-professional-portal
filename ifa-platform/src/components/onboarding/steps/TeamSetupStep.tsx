@@ -98,7 +98,7 @@ export default function TeamSetupStep({ onNext, onBack, onSkip }: TeamSetupStepP
 
   const roleLabels: Record<string, string> = {
     advisor: 'Advisor',
-    compliance: 'Compliance',
+    supervisor: 'Compliance',
     admin: 'Admin',
   }
 
@@ -159,7 +159,7 @@ export default function TeamSetupStep({ onNext, onBack, onSkip }: TeamSetupStepP
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="advisor">Advisor</SelectItem>
-                    <SelectItem value="compliance">Compliance</SelectItem>
+                    <SelectItem value="supervisor">Compliance</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>

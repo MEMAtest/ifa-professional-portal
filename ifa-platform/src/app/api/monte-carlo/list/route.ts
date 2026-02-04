@@ -2,9 +2,10 @@
 // ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getFirmScenarioIds } from '@/lib/monte-carlo/monteCarloAccess'
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,16 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     // ✅ TIMEOUT PROTECTION
     const timeoutId = setTimeout(() => {
       throw new Error('List scenarios timeout after 15 seconds');
@@ -36,28 +47,70 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ DATABASE OPERATION WITH ERROR HANDLING
-    const response = await db.listScenarios(page, pageSize);
-    
+    const supabase = getSupabaseServiceClient()
+    const { data: firmScenarios, error: scenarioError, count: totalCount } = await getFirmScenarioIds({
+      supabase,
+      firmId,
+      page,
+      pageSize
+    })
+
     clearTimeout(timeoutId);
-    
-    if (!response.success) {
-      log.error('Failed to list Monte Carlo scenarios', { error: response.error });
+
+    if (scenarioError) {
+      log.error('Failed to list Monte Carlo scenarios', { error: scenarioError.message });
       return NextResponse.json(
         { 
           success: false, 
-          error: response.error || 'Failed to retrieve scenarios'
+          error: 'Failed to retrieve scenarios'
         },
         { status: 500 }
       );
     }
 
-    // ✅ SAFE DATA HANDLING
-    const scenarios = response.data || [];
-    const totalCount = scenarios.length;
+    const scenarioIds = firmScenarios.map((s: any) => s.id)
+    if (scenarioIds.length === 0) {
+      return NextResponse.json(
+        {
+          success: true,
+          data: [],
+          pagination: {
+            page,
+            pageSize,
+            total: totalCount,
+            totalPages: Math.ceil(totalCount / pageSize),
+            hasNextPage: false,
+            hasPreviousPage: page > 1
+          },
+          metadata: {
+            fetchedAt: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development'
+          }
+        },
+        {
+          status: 200,
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+          }
+        }
+      )
+    }
+
+    const { data: results, error: resultsError } = await supabase
+      .from('monte_carlo_results')
+      .select('*')
+      .in('scenario_id', scenarioIds)
+      .order('created_at', { ascending: false })
+
+    if (resultsError) {
+      log.error('Failed to list Monte Carlo results', { error: resultsError.message })
+      return NextResponse.json(
+        { success: false, error: 'Failed to retrieve scenarios' },
+        { status: 500 }
+      )
+    }
+
+    const scenarios = results || [];
 
     // ✅ STANDARDIZED SUCCESS RESPONSE
     return NextResponse.json(

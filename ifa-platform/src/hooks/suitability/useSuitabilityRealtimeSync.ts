@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { isSupabaseRealtimeEnabled } from '@/lib/supabase/realtime'
 import type { RealtimeSyncEvent } from '@/types/suitability'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export function useSuitabilityRealtimeSync(params: {
   supabase: SupabaseClient | null
@@ -32,7 +33,7 @@ export function useSuitabilityRealtimeSync(params: {
           payload
         })
       } catch (error) {
-        console.error('Broadcast error:', error)
+        clientLogger.error('Broadcast error:', error)
       }
     },
     [clientId, enabled, supabase]

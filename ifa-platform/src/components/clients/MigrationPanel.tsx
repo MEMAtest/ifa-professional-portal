@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/use-toast';
+import clientLogger from '@/lib/logging/clientLogger'
 import { clientService } from '@/services/ClientService';
 import type { MigrationResult, LegacyClientData } from '@/types/client';
 
@@ -63,7 +64,7 @@ export default function MigrationPanel({ onMigrationComplete }: MigrationPanelPr
       });
 
     } catch (error) {
-      console.error('Migration failed:', error);
+      clientLogger.error('Migration failed:', error);
       
       // ✅ FIXED: Create proper MigrationResult object with all required properties
       const failedResult: MigrationResult = {

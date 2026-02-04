@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface CashflowCoverageClientIds {
   assessed: string[];
@@ -37,7 +38,7 @@ const fetchDocumentsForClients = async (
   const data: Record<string, any>[] = [];
   responses.forEach((response) => {
     if (response.error) {
-      console.error(`Error fetching ${table}:`, response.error);
+      clientLogger.error(`Error fetching ${table}:`, response.error);
       return;
     }
     if (response.data) {

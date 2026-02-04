@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -339,7 +340,7 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
 
       setReportHistory(history);
     } catch (error) {
-      console.error('Failed to load report history:', error);
+      clientLogger.error('Failed to load report history:', error);
       setReportHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -356,7 +357,7 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
   // Handle viewing/downloading a past report
   const handleViewReport = async (report: ReportHistoryItem) => {
     if (!report.storagePath) {
-      console.error('No storage path for report');
+      clientLogger.error('No storage path for report');
       return;
     }
 
@@ -372,7 +373,7 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
         window.open(data.signedUrl, '_blank');
       }
     } catch (error) {
-      console.error('Failed to get report URL:', error);
+      clientLogger.error('Failed to get report URL:', error);
     }
   };
 
@@ -459,7 +460,7 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
       }
 
     } catch (error) {
-      console.error('Report generation error:', error);
+      clientLogger.error('Report generation error:', error);
       setCurrentProgress({
         stage: 'error',
         progress: 0,

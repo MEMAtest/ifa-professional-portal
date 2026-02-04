@@ -22,6 +22,7 @@ import type {
   LatestProdDocument
 } from '@/components/settings/prod/types'
 import { prodServiceSteps } from '@/components/settings/prod/steps'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface UseProdServicesSettingsOptions {
   supabase: SupabaseClient
@@ -464,7 +465,7 @@ export const useProdServicesSettings = ({
         variant: 'default'
       })
     } catch (error) {
-      console.error('Error saving firm services:', error)
+      clientLogger.error('Error saving firm services:', error)
       const message = error instanceof Error ? error.message : 'Failed to save firm settings'
       setServicesSaveStatus({ state: 'error', message })
       toast({

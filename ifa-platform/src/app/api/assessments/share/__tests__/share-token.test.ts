@@ -63,8 +63,8 @@ describe('Assessment Share Token API', () => {
     })
 
     // Mock modules before importing the route
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: vi.fn().mockResolvedValue({
+    vi.doMock('@/lib/supabase/serviceClient', () => ({
+      getSupabaseServiceClient: vi.fn().mockReturnValue({
         from: mockFrom
       })
     }))
@@ -86,6 +86,10 @@ describe('Assessment Share Token API', () => {
       }),
       getClientIP: () => '127.0.0.1',
       getUserAgent: () => 'test-agent'
+    }))
+
+    vi.doMock('@/lib/notifications/notificationService', () => ({
+      notifyAssessmentCompleted: vi.fn().mockResolvedValue(undefined)
     }))
 
     // Import after mocking

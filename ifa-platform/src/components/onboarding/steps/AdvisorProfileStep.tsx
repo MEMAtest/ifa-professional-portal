@@ -25,12 +25,32 @@ export default function AdvisorProfileStep({ onNext, onBack }: AdvisorProfileSte
     phone: user?.phone ?? '',
     jobRole: '',
   })
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    // Clear error on change
+    if (errors[field]) {
+      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next })
+    }
+  }
+
+  const validatePhone = (phone: string): string | null => {
+    if (!phone.trim()) return null // optional field
+    const digits = phone.replace(/[\s\-().+]/g, '')
+    if (!/^\d{10,15}$/.test(digits)) {
+      return 'Enter a valid phone number (10-15 digits)'
+    }
+    return null
   }
 
   const handleSave = async () => {
+    const phoneError = validatePhone(formData.phone)
+    if (phoneError) {
+      setErrors({ phone: phoneError })
+      return
+    }
+
     setIsSaving(true)
     try {
       const result = await updateProfile({
@@ -112,7 +132,9 @@ export default function AdvisorProfileStep({ onNext, onBack }: AdvisorProfileSte
               value={formData.phone}
               onChange={(e) => handleChange('phone', e.target.value)}
               placeholder="e.g. 07700 900000"
+              className={errors.phone ? 'border-red-300' : ''}
             />
+            {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
           </div>
 
           <div>

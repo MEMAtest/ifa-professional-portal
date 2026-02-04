@@ -2,6 +2,21 @@
   "extends": "next/core-web-vitals",
   "rules": {
     "react/no-unescaped-entities": "warn",
-    "react/display-name": "warn"
-  }
+    "react/display-name": "warn",
+    "no-console": ["error", { "allow": ["warn"] }]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/services/__tests__/**",
+        "src/migration/**",
+        "tests/**",
+        "**/*.test.*",
+        "**/*.spec.*"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
 }

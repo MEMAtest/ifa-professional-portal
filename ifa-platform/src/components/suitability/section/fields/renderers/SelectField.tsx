@@ -10,13 +10,14 @@ import { Label } from '@/components/ui/Label'
 import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 
-import { AlertCircle, Database, HelpCircle } from 'lucide-react'
+import { AlertCircle, Database, FileText, HelpCircle } from 'lucide-react'
 
 export function SelectField(props: FieldProps) {
   const isCalculated = Boolean(props.field.calculate)
   const showHelp = Boolean(props.showHelp ?? props.field.helpText)
   const isRequired = Boolean(props.isRequired ?? props.field.required)
-  const showPulledIndicator = hasValue(props.pulledValue) && hasValue(props.value)
+  const showPulledIndicator = hasValue(props.pulledValue) && hasValue(props.value) && !props.isFromDocuments
+  const showDocumentsIndicator = props.isFromDocuments && hasValue(props.value)
   const allowCustom = Boolean((props.field as any).allowCustom)
   const customOptionLabel = (props.field as any).customOptionLabel || 'Add custom...'
   const valueString = typeof props.value === 'string' ? props.value : ''
@@ -66,6 +67,12 @@ export function SelectField(props: FieldProps) {
           {isRequired && <span className="text-red-500 ml-1">*</span>}
         </Label>
         <div className="flex items-center gap-2">
+          {showDocumentsIndicator && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+              <FileText className="h-3 w-3" />
+              From documents
+            </span>
+          )}
           {showPulledIndicator && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
               <Database className="h-3 w-3" />

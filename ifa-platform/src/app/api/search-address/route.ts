@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
+import { getAuthContext } from '@/lib/auth/apiAuth'
 import { rateLimit } from '@/lib/security/rateLimit'
 
 // Force this route to be dynamic
@@ -673,6 +674,11 @@ async function getStreetsForPostcode(postcode: string) {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const rateLimitResponse = await rateLimit(request, 'address')
     if (rateLimitResponse) {
       return rateLimitResponse

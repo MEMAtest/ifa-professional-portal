@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import { 
   Shield, 
   Calculator, 
@@ -37,7 +38,7 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
         .eq('is_current', true);
 
       if (atrError && atrError.code !== 'PGRST116') {
-        console.error('ATR fetch error:', atrError);
+        clientLogger.error('ATR fetch error:', atrError);
       }
       const atr = atrArray?.[0] || null;
 
@@ -49,7 +50,7 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
         .eq('is_current', true);
 
       if (cflError && cflError.code !== 'PGRST116') {
-        console.error('CFL fetch error:', cflError);
+        clientLogger.error('CFL fetch error:', cflError);
       }
       const cfl = cflArray?.[0] || null;
 
@@ -61,7 +62,7 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
         .single();
 
       if (clientError && clientError.code !== 'PGRST116') {
-        console.error('Client fetch error:', clientError);
+        clientLogger.error('Client fetch error:', clientError);
       }
       const profile = clientData?.risk_profile || null;
 
@@ -69,7 +70,7 @@ export default function RiskProfileTab({ clientId }: RiskProfileTabProps) {
       setCflAssessment(cfl);
       setRiskProfile(profile);
     } catch (error) {
-      console.error('Error loading assessments:', error);
+      clientLogger.error('Error loading assessments:', error);
     } finally {
       setLoading(false);
     }

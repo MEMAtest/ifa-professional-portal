@@ -10,13 +10,14 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 
-import { AlertCircle, Database, HelpCircle, Info, Sparkles } from 'lucide-react'
+import { AlertCircle, Database, FileText, HelpCircle, Info, Sparkles } from 'lucide-react'
 
 export const NumberField = memo<FieldProps>(
-  ({ field, value, onChange, onBlur, onFocus, error, warning, isReadOnly, isRequired, aiSuggestion, pulledValue, showHelp, className, isLoading }) => {
+  ({ field, value, onChange, onBlur, onFocus, error, warning, isReadOnly, isRequired, aiSuggestion, pulledValue, isFromDocuments, showHelp, className, isLoading }) => {
     const [localValue, setLocalValue] = useState(value?.toString() || '')
     const [isFocused, setIsFocused] = useState(false)
-    const showPulledIndicator = hasValue(pulledValue) && hasValue(value)
+    const showPulledIndicator = hasValue(pulledValue) && hasValue(value) && !isFromDocuments
+    const showDocumentsIndicator = isFromDocuments && hasValue(value)
 
     useEffect(() => {
       if (!isFocused) {
@@ -91,6 +92,13 @@ export const NumberField = memo<FieldProps>(
           </Label>
 
           <div className="flex items-center gap-2">
+            {showDocumentsIndicator && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                <FileText className="h-3 w-3" />
+                From documents
+              </span>
+            )}
+
             {showPulledIndicator && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                 <Database className="h-3 w-3" />

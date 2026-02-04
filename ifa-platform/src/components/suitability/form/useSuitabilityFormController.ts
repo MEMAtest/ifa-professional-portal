@@ -20,6 +20,7 @@ import { useSuitabilityForm } from '@/hooks/suitability/useSuitabilityForm'
 import { useSuitabilityNotifications } from '@/hooks/suitability/useSuitabilityNotifications'
 
 import type { AISuggestion, SuitabilityFormData, ValidationError } from '@/types/suitability'
+import clientLogger from '@/lib/logging/clientLogger'
 
 type FormState = {
   currentSection: string
@@ -93,6 +94,7 @@ export function useSuitabilityFormController(params: {
     resetSaveError,
     atrCflData,
     refreshATRCFL,
+    refreshClient,
     isATRComplete,
     isCFLComplete,
     isPersonaComplete,
@@ -364,7 +366,7 @@ export function useSuitabilityFormController(params: {
           type: 'success'
         })
       } catch (error) {
-        console.error('AI suggestion error:', error)
+        clientLogger.error('AI suggestion error:', error)
         showNotification({ title: 'AI Error', description: 'Failed to generate suggestions', type: 'error' })
       } finally {
         setIsLoadingAI((prev) => ({ ...prev, [sectionId]: false }))
@@ -481,7 +483,7 @@ export function useSuitabilityFormController(params: {
     } catch (error) {
       const errorMessage = getSubmissionErrorMessage(error)
       showNotification({ title: 'Submission Failed', description: errorMessage, type: 'error', duration: 10000 })
-      console.error('Detailed submission error:', { error, clientId: params.clientId, completionScore })
+      clientLogger.error('Detailed submission error:', { error, clientId: params.clientId, completionScore })
     } finally {
       setFormState((prev) => ({ ...prev, isSubmitting: false }))
     }
@@ -645,6 +647,7 @@ export function useSuitabilityFormController(params: {
     isCFLComplete,
     isPersonaComplete,
     refreshATRCFL,
+    refreshClient,
     getConditionalFields,
     handleFieldUpdate,
     handleSectionUpdate,

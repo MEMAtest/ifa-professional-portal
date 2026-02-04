@@ -20,7 +20,6 @@ import {
   PieChart,
   Activity
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 
 // Simple chart components
 const BarChart = ({ data }: { data: { label: string; value: number }[] }) => {
@@ -67,7 +66,6 @@ const PieChartSimple = ({ data }: { data: { label: string; value: number; color:
 
 export default function AnalyticsDashboard() {
   const [timeRange, setTimeRange] = useState('week')
-  const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState({
     totalDocuments: 0,
     signedDocuments: 0,
@@ -76,56 +74,78 @@ export default function AnalyticsDashboard() {
     signatureRate: 0,
     viewRate: 0
   })
-
-  const supabase = createClient()
+  const [analytics, setAnalytics] = useState<{
+    categoryPerformance: Array<{ category_name: string; document_count: number }>
+    complianceBreakdown: Record<string, number>
+    dailyTrends: Array<{ day: string; documents: number }>
+  }>({
+    categoryPerformance: [],
+    complianceBreakdown: {},
+    dailyTrends: []
+  })
 
   const loadAnalytics = useCallback(async () => {
-    setLoading(true)
-    
-    // In production, this would query real data
-    // For demo, using mock data
-    setTimeout(() => {
+    try {
+      const res = await fetch(`/api/documents/analytics?range=${timeRange}`)
+      if (!res.ok) throw new Error('Failed to load analytics')
+      const data = await res.json()
+      const totalDocuments = data.totalDocuments ?? 0
+      const completedSignatures = data.completedSignatures ?? 0
+      const pendingSignatures = data.pendingSignatures ?? 0
+      const signatureRate = totalDocuments > 0 ? Math.round((completedSignatures / totalDocuments) * 100) : 0
       setMetrics({
-        totalDocuments: timeRange === 'day' ? 12 : timeRange === 'week' ? 67 : 234,
-        signedDocuments: timeRange === 'day' ? 8 : timeRange === 'week' ? 45 : 178,
-        pendingDocuments: timeRange === 'day' ? 4 : timeRange === 'week' ? 22 : 56,
-        averageSignTime: 2.4, // hours
-        signatureRate: 76,
-        viewRate: 92
+        totalDocuments,
+        signedDocuments: completedSignatures,
+        pendingDocuments: pendingSignatures,
+        averageSignTime: data.averageProcessingTime ?? 0,
+        signatureRate,
+        viewRate: 0
       })
-      setLoading(false)
-    }, 500)
+      setAnalytics({
+        categoryPerformance: data.categoryPerformance || [],
+        complianceBreakdown: data.complianceBreakdown || {},
+        dailyTrends: data.dailyTrends || []
+      })
+    } catch (err) {
+      setMetrics({
+        totalDocuments: 0,
+        signedDocuments: 0,
+        pendingDocuments: 0,
+        averageSignTime: 0,
+        signatureRate: 0,
+        viewRate: 0
+      })
+      setAnalytics({
+        categoryPerformance: [],
+        complianceBreakdown: {},
+        dailyTrends: []
+      })
+    } finally {
+      // No-op: loading state intentionally omitted
+    }
   }, [timeRange])
 
   useEffect(() => {
     loadAnalytics()
   }, [loadAnalytics])
 
-  // Mock data for charts
-  const templateUsage = [
-    { label: 'Client Service Agreement', value: 45 },
-    { label: 'Suitability Report', value: 32 },
-    { label: 'Annual Review', value: 28 },
-    { label: 'Risk Assessment', value: 15 },
-    { label: 'Other', value: 8 }
-  ]
+  const templateUsage = analytics.categoryPerformance.map((category) => ({
+    label: category.category_name,
+    value: category.document_count
+  }))
 
   const statusBreakdown = [
-    { label: 'Signed', value: metrics.signedDocuments, color: 'bg-green-500' },
-    { label: 'Viewed', value: 15, color: 'bg-yellow-500' },
-    { label: 'Sent', value: metrics.pendingDocuments - 15, color: 'bg-blue-500' },
-    { label: 'Draft', value: 5, color: 'bg-gray-500' }
+    { label: 'Compliant', value: analytics.complianceBreakdown?.compliant || 0, color: 'bg-green-500' },
+    { label: 'Under Review', value: analytics.complianceBreakdown?.under_review || 0, color: 'bg-yellow-500' },
+    { label: 'Pending', value: analytics.complianceBreakdown?.pending || 0, color: 'bg-blue-500' },
+    { label: 'Non-compliant', value: analytics.complianceBreakdown?.non_compliant || 0, color: 'bg-red-500' }
   ]
 
-  const dailyActivity = [
-    { label: 'Mon', sent: 8, signed: 6 },
-    { label: 'Tue', sent: 12, signed: 9 },
-    { label: 'Wed', sent: 15, signed: 11 },
-    { label: 'Thu', sent: 10, signed: 8 },
-    { label: 'Fri', sent: 14, signed: 10 },
-    { label: 'Sat', sent: 5, signed: 4 },
-    { label: 'Sun', sent: 3, signed: 2 }
-  ]
+  const dailyActivity = analytics.dailyTrends.map((day) => ({
+    label: day.day,
+    sent: day.documents,
+    signed: 0
+  }))
 
   return (
     <Layout>
@@ -156,7 +176,7 @@ export default function AnalyticsDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Total Documents</p>
                   <p className="text-3xl font-bold">{metrics.totalDocuments}</p>
-                  <p className="text-xs text-green-600 mt-1">↑ 12% from last period</p>
+                  <p className="text-xs text-gray-600 mt-1">Based on selected period</p>
                 </div>
                 <FileText className="h-8 w-8 text-blue-400" />
               </div>
@@ -169,7 +189,7 @@ export default function AnalyticsDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Signature Rate</p>
                   <p className="text-3xl font-bold">{metrics.signatureRate}%</p>
-                  <p className="text-xs text-green-600 mt-1">↑ 5% from last period</p>
+                  <p className="text-xs text-gray-600 mt-1">Of documents requiring signature</p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-green-400" />
               </div>
@@ -182,7 +202,7 @@ export default function AnalyticsDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Avg. Sign Time</p>
                   <p className="text-3xl font-bold">{metrics.averageSignTime}h</p>
-                  <p className="text-xs text-green-600 mt-1">↓ 30min from last period</p>
+                  <p className="text-xs text-gray-600 mt-1">Based on signed documents</p>
                 </div>
                 <Clock className="h-8 w-8 text-yellow-400" />
               </div>

@@ -47,7 +47,6 @@ export class FallbackMonteCarloEngine {
   }
 
   async runSimulation(input: FallbackMonteCarloInput) {
-    console.log('[Fallback] Running simulation on main thread');
     
     const {
       initialWealth,

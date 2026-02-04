@@ -30,6 +30,7 @@ import { StressTestingEngine } from '@/services/StressTestingEngine';
 import { MitigationStrategiesService } from '@/services/MitigationStrategiesService';
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Core interfaces remain unchanged for backward compatibility
 export interface StressTestParams {
@@ -177,7 +178,7 @@ export function StressTestModal({ isOpen, onClose, scenario, client }: StressTes
       setResults(transformedResults);
 
     } catch (error) {
-      console.error('Error running stress test:', error);
+      clientLogger.error('Error running stress test:', error);
       // Handle error state
     } finally {
       setIsRunning(false);

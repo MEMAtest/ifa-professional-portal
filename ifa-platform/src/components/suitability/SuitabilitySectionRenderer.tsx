@@ -22,6 +22,12 @@ type ProductHolding = {
 
 type SectionStatus = 'complete' | 'partial' | 'incomplete' | 'error'
 
+export type DocumentPopulatedFields = {
+  personal_details: string[]
+  contact_info: string[]
+  financial_profile: string[]
+} | null
+
 type Props = {
   section: SectionDefinition
   formData: SuitabilityFormData
@@ -42,6 +48,8 @@ type Props = {
   combinedValidationErrors: ValidationError[]
   aiSuggestions: Record<string, AISuggestion>
   isLoadingAI: Record<string, boolean>
+
+  documentPopulatedFields?: DocumentPopulatedFields
 
   getConditionalFields?: (sectionId: string) => ConditionalFieldGroup[]
   onToggleExpanded: (sectionId: string) => void
@@ -194,6 +202,7 @@ export function SuitabilitySectionRenderer(props: Props) {
           conditionalFields={conditionalFieldGroups}
           clientId={props.clientId}
           assessmentId={props.assessmentId}
+          documentPopulatedFields={props.documentPopulatedFields}
         />
 
         {isExpanded && (
@@ -237,6 +246,7 @@ export function SuitabilitySectionRenderer(props: Props) {
         conditionalFields={conditionalFieldGroups}
         clientId={props.clientId}
         assessmentId={props.assessmentId}
+        documentPopulatedFields={props.documentPopulatedFields}
       />
     </div>
   )

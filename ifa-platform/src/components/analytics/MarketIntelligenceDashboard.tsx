@@ -23,6 +23,7 @@ import { ClientMarketViewModal } from './ClientMarketViewModal'
 import { ClientImpactHeatMap, type ClientImpact } from './ClientImpactHeatMap'
 import { ClientTableSelector } from './ClientTableSelector'
 import { FirmAnalyticsService, type FirmAnalytics, type DetailedClientImpact } from '@/services/FirmAnalyticsService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface MarketIntelligenceDashboardProps {
   initialClientId?: string
@@ -60,7 +61,7 @@ export function MarketIntelligenceDashboard({
       setClientImpacts(impacts)
     } catch (err) {
       setError('Failed to load analytics')
-      console.error('Error fetching analytics:', err)
+      clientLogger.error('Error fetching analytics:', err)
     } finally {
       setLoading(false)
     }
@@ -174,7 +175,6 @@ export function MarketIntelligenceDashboard({
               <RiskDistributionChart
                 distribution={analytics.riskDistribution}
                 onProfileClick={(profile) => {
-                  console.log('Filter by risk profile:', profile)
                 }}
               />
             )}

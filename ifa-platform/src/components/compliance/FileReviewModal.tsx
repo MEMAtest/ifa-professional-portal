@@ -24,6 +24,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { CommentThread, StatusPipeline, WORKFLOW_CONFIGS } from './workflow'
 
 interface FileReview {
@@ -160,7 +161,7 @@ export default function FileReviewModal({
       })
       onUpdate()
     } catch (error) {
-      console.error('Error saving review:', error)
+      clientLogger.error('Error saving review:', error)
       toast({
         title: 'Error',
         description: 'Failed to save review',

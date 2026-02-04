@@ -1,6 +1,7 @@
 // src/hooks/useAutoSave.ts
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import clientLogger from '@/lib/logging/clientLogger'
 import { createClient } from '@/lib/supabase/client';
 
 interface AutoSaveOptions {
@@ -87,7 +88,7 @@ export function useAutoSave<T extends Record<string, any>>(
         duration: 2000,
       });
     } catch (error) {
-      console.error('Auto-save error:', error);
+      clientLogger.error('Auto-save error:', error);
       toast({
         title: "Auto-save failed",
         description: "Your changes could not be saved. Please try again.",

@@ -40,6 +40,7 @@ import {
   type FeeSchedule
 } from '@/lib/financials/feeCalculator'
 import { InsightsPanel } from '@/components/clients/financials/InsightsPanel'
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -143,7 +144,7 @@ export default function ClientFinancialsPage() {
         const fees = calculateFirmFees(clientsForFees, feeSchedule)
         setFeeProjection(fees)
       } catch (err) {
-        console.error('Error fetching clients:', err)
+        clientLogger.error('Error fetching clients:', err)
         setError('Failed to load financial data')
       } finally {
         setLoading(false)

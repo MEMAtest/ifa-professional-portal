@@ -41,8 +41,34 @@ export default function SignatureSetupStep({ onNext, onBack, onSkip }: Signature
     }))
   }, [firm])
 
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) {
+      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next })
+    }
+  }
+
+  const validateFields = (): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    if (formData.phone.trim()) {
+      const digits = formData.phone.replace(/[\s\-().+]/g, '')
+      if (!/^\d{10,15}$/.test(digits)) {
+        newErrors.phone = 'Enter a valid phone number (10-15 digits)'
+      }
+    }
+
+    if (formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email)) {
+        newErrors.email = 'Enter a valid email address'
+      }
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
   }
 
   const escapeHtml = (text: string) =>
@@ -66,6 +92,8 @@ export default function SignatureSetupStep({ onNext, onBack, onSkip }: Signature
       })
       return
     }
+
+    if (!validateFields()) return
 
     try {
       const emailSignature = generateSignatureHtml()
@@ -155,10 +183,13 @@ export default function SignatureSetupStep({ onNext, onBack, onSkip }: Signature
             <Label htmlFor="sigPhone">Phone</Label>
             <Input
               id="sigPhone"
+              type="tel"
               value={formData.phone}
               onChange={(e) => handleChange('phone', e.target.value)}
               placeholder="e.g. 020 1234 5678"
+              className={errors.phone ? 'border-red-300' : ''}
             />
+            {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
           </div>
 
           <div>
@@ -169,7 +200,9 @@ export default function SignatureSetupStep({ onNext, onBack, onSkip }: Signature
               value={formData.email}
               onChange={(e) => handleChange('email', e.target.value)}
               placeholder="e.g. john@yourfirm.co.uk"
+              className={errors.email ? 'border-red-300' : ''}
             />
+            {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email}</p>}
           </div>
         </CardContent>
       </Card>

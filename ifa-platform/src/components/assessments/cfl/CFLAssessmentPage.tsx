@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Progress } from '@/components/ui/Progress'
 import { Alert, AlertDescription } from '@/components/ui/Alert'
 import { useToast } from '@/components/ui/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Navigation components
 import { NavigationGuard } from '@/components/ui/NavigationGuard'
@@ -428,7 +429,7 @@ export default function CFLAssessmentPage() {
         })
       })
     } catch (error) {
-      console.error('Error tracking progress:', error)
+      clientLogger.error('Error tracking progress:', error)
     }
   }, [clientId])
 
@@ -447,7 +448,7 @@ export default function CFLAssessmentPage() {
         })
       })
     } catch (error) {
-      console.error('Error logging history:', error)
+      clientLogger.error('Error logging history:', error)
     }
   }, [clientId])
 
@@ -602,7 +603,7 @@ export default function CFLAssessmentPage() {
         throw new Error('Failed to save assessment')
       }
     } catch (error: unknown) {
-      console.error('Error saving assessment:', error)
+      clientLogger.error('Error saving assessment:', error)
       setSaveError('Failed to save assessment. Please try again.')
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'

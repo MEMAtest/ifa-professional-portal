@@ -168,7 +168,7 @@ export const FeatureComparison = () => {
         {/* Bottom CTA */}
         <div className="mt-12 text-center">
           <a
-            href="/demo"
+            href="/marketing#tour"
             className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white font-semibold rounded-xl hover:bg-teal-700 transition-colors"
           >
             See it in action

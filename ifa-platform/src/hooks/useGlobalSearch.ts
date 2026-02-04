@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { SearchResponse, SearchResult } from '@/types/search'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface UseGlobalSearchOptions {
   debounceMs?: number
@@ -67,7 +68,7 @@ export function useGlobalSearch(options: UseGlobalSearchOptions = {}) {
       if (err instanceof Error && err.name === 'AbortError') {
         return // Ignore abort errors
       }
-      console.error('Search error:', err)
+      clientLogger.error('Search error:', err)
       setError('Search failed. Please try again.')
       setResults(null)
     } finally {

@@ -82,10 +82,10 @@ const HeroSection = () => {
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 mb-8">
               <a
-                href="#demo"
+                href="#tour"
                 className="w-full sm:w-auto px-8 py-4 bg-teal-600 text-white font-semibold rounded-xl hover:bg-teal-700 transition-colors"
               >
-                Try Interactive Demo
+                Explore the interactive tour
               </a>
               <Link
                 href="/login"
@@ -258,11 +258,11 @@ const InteractiveDemo = () => {
   const [activeDemo, setActiveDemo] = useState<'suitability' | 'assessment' | 'montecarlo' | 'cashflow'>('suitability')
 
   return (
-    <section id="demo" className="py-20 lg:py-28 bg-white">
+    <section id="tour" className="py-20 lg:py-28 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <div className="inline-flex items-center px-4 py-2 bg-teal-100 rounded-full mb-6">
-            <span className="text-sm font-semibold text-teal-800">Interactive Demo</span>
+            <span className="text-sm font-semibold text-teal-800">Interactive Tour</span>
           </div>
           <h2 className="text-3xl lg:text-5xl font-bold text-gray-900 mb-4">
             Experience Plannetic in Action
@@ -533,7 +533,7 @@ const SuitabilityFormDemo = () => {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Name</span>
-                  <span className="font-medium">{formData.clientName || 'Demo Client'}</span>
+                  <span className="font-medium">{formData.clientName || 'Example Client'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Age</span>
@@ -3026,10 +3026,10 @@ const CTASection = () => {
             Start Free Trial
           </Link>
           <a
-            href="#demo"
+            href="#tour"
             className="w-full sm:w-auto px-8 py-4 bg-slate-800 text-white font-semibold rounded-xl border border-slate-700 hover:bg-slate-700 transition-colors"
           >
-            Book a Demo
+            Book a walkthrough
           </a>
         </div>
 

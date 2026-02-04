@@ -10,6 +10,7 @@ import type { CashflowCoverageClientIds } from '@/services/cashflow/cashflowCove
 import { fetchCashflowCoverageData } from '@/services/cashflow/cashflowCoverageService';
 import type { Client, ClientListResponse } from '@/types/client';
 import type { CashFlowScenario } from '@/types/cashflow';
+import clientLogger from '@/lib/logging/clientLogger';
 
 type CashFlowTrackingState = {
   isTracking: boolean;
@@ -129,7 +130,7 @@ export const useCashFlowPageData = ({
           duration: 2000
         });
       } catch (trackError) {
-        console.error('Failed to track cash flow progress:', trackError);
+        clientLogger.error('Failed to track cash flow progress:', trackError);
       } finally {
         setTrackingState((prev) => ({ ...prev, isTracking: false }));
       }
@@ -159,7 +160,7 @@ export const useCashFlowPageData = ({
           variant: 'default'
         });
       } catch (createError) {
-        console.error('Error creating default scenario:', createError);
+        clientLogger.error('Error creating default scenario:', createError);
         toast({
           title: 'Error',
           description: 'Failed to create default scenario',
@@ -185,7 +186,7 @@ export const useCashFlowPageData = ({
           await createDefaultScenario(client);
         }
       } catch (loadError) {
-        console.error('Error loading client and scenarios:', loadError);
+        clientLogger.error('Error loading client and scenarios:', loadError);
         setError(loadError instanceof Error ? loadError.message : 'Failed to load client data');
       }
     },
@@ -209,7 +210,7 @@ export const useCashFlowPageData = ({
         await loadClientAndScenarios(clientId);
       }
     } catch (initialError) {
-      console.error('Error loading initial data:', initialError);
+      clientLogger.error('Error loading initial data:', initialError);
       setError(initialError instanceof Error ? initialError.message : 'Failed to load data');
     } finally {
       setIsLoading(false);

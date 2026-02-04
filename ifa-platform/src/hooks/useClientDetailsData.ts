@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger';
 
 interface Communication {
   id: string;
@@ -66,7 +67,7 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
       }));
       setCommunications(mappedData);
     } catch (err) {
-      console.error('Error fetching communications:', err);
+      clientLogger.error('Error fetching communications:', err);
       setError('Failed to load communications');
     }
   }, [client?.id]);
@@ -81,7 +82,7 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
       const { data } = await response.json();
       setReviews(data || []);
     } catch (err) {
-      console.error('Error fetching reviews:', err);
+      clientLogger.error('Error fetching reviews:', err);
       setError('Failed to load reviews');
     }
   }, [client?.id]);
@@ -96,7 +97,7 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
       const { data } = await response.json();
       setActivities(data || []);
     } catch (err) {
-      console.error('Error fetching activities:', err);
+      clientLogger.error('Error fetching activities:', err);
       setError('Failed to load activities');
     }
   }, [client?.id]);
@@ -112,7 +113,7 @@ export function useClientDetailsData(client: Client | null): ClientDetailsData {
         fetchActivities()
       ]);
     } catch (err) {
-      console.error('Error fetching client data:', err);
+      clientLogger.error('Error fetching client data:', err);
     } finally {
       setLoading(false);
     }
@@ -158,7 +159,7 @@ export async function createCommunication(data: {
     
     return await response.json();
   } catch (error) {
-    console.error('Error creating communication:', error);
+    clientLogger.error('Error creating communication:', error);
     throw error;
   }
 }
@@ -183,7 +184,7 @@ export async function scheduleReview(data: {
     
     return await response.json();
   } catch (error) {
-    console.error('Error scheduling review:', error);
+    clientLogger.error('Error scheduling review:', error);
     throw error;
   }
 }
@@ -207,7 +208,7 @@ export async function updateReviewStatus(reviewId: string, updates: {
     
     return await response.json();
   } catch (error) {
-    console.error('Error updating review:', error);
+    clientLogger.error('Error updating review:', error);
     throw error;
   }
 }

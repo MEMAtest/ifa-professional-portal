@@ -8,6 +8,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Home, Bug } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // INTERFACES
@@ -39,12 +40,10 @@ interface ErrorBoundaryState {
 function logError(error: Error, errorInfo: ErrorInfo, eventId: string) {
   // Console logging for development
   if (process.env.NODE_ENV === 'development') {
-    console.group('🚨 Error Boundary Caught an Error');
-    console.error('Error:', error);
-    console.error('Error Info:', errorInfo);
-    console.error('Component Stack:', errorInfo.componentStack);
-    console.error('Event ID:', eventId);
-    console.groupEnd();
+    clientLogger.error('Error:', error);
+    clientLogger.error('Error Info:', errorInfo);
+    clientLogger.error('Component Stack:', errorInfo.componentStack);
+    clientLogger.error('Event ID:', eventId);
   }
 
   // Here you would integrate with error reporting services like:
@@ -66,7 +65,7 @@ function logError(error: Error, errorInfo: ErrorInfo, eventId: string) {
       });
     }
   } catch (loggingError) {
-    console.error('Failed to log error to external service:', loggingError);
+    clientLogger.error('Failed to log error to external service:', loggingError);
   }
 }
 
@@ -144,7 +143,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       try {
         this.props.onError(error, errorInfo);
       } catch (callbackError) {
-        console.error('Error in onError callback:', callbackError);
+        clientLogger.error('Error in onError callback:', callbackError);
       }
     }
 
@@ -235,7 +234,7 @@ URL: ${window.location.href}
       await navigator.clipboard.writeText(errorText);
       alert('Error details copied to clipboard');
     } catch (err) {
-      console.error('Failed to copy error details:', err);
+      clientLogger.error('Failed to copy error details:', err);
       
       // Fallback: Create a text area and select the text
       const textArea = document.createElement('textarea');
@@ -508,7 +507,7 @@ function RouteErrorBoundaryComponent({ children }: { children: ReactNode }) {
       showErrorDetails={process.env.NODE_ENV === 'development'}
       onError={(error, errorInfo) => {
         // Log route-specific errors
-        console.error('Route Error:', {
+        clientLogger.error('Route Error:', {
           error,
           errorInfo,
           route: window.location.pathname

@@ -71,6 +71,10 @@ describe('Suitability Finalize API', () => {
       getCurrentAssessment: vi.fn().mockResolvedValue(null)
     }))
 
+    vi.doMock('@/lib/notifications/notificationService', () => ({
+      notifyAssessmentCompleted: vi.fn().mockResolvedValue(undefined)
+    }))
+
     // Import after mocking
     const route = await import('../route')
     POST = route.POST

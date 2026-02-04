@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/Label';
 import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger';
 
 const supabase = createClient();
 
@@ -166,7 +167,7 @@ export function EditReviewModal({
               .single();
 
             if (nextReviewError) {
-              console.error('Failed to create next review:', nextReviewError);
+              clientLogger.error('Failed to create next review:', nextReviewError);
             } else if (newReview) {
               // Create calendar event for the next review
               const nextStartDateTime = new Date(`${formData.next_review_date}T09:00:00`);
@@ -200,7 +201,7 @@ export function EditReviewModal({
                 });
 
               if (calendarError) {
-                console.error('Failed to create calendar event for next review:', calendarError);
+                clientLogger.error('Failed to create calendar event for next review:', calendarError);
               } else {
                 toast({
                   title: 'Next Review Scheduled',
@@ -211,7 +212,7 @@ export function EditReviewModal({
             }
           }
         } catch (error) {
-          console.error('Error creating next review:', error);
+          clientLogger.error('Error creating next review:', error);
         }
       }
 
@@ -224,7 +225,7 @@ export function EditReviewModal({
       onSuccess?.();
       onClose();
     } catch (error) {
-      console.error('Error updating review:', error);
+      clientLogger.error('Error updating review:', error);
       toast({
         title: 'Error',
         description: 'Failed to update review',
@@ -266,7 +267,7 @@ export function EditReviewModal({
       onSuccess?.();
       onClose();
     } catch (error) {
-      console.error('Error deleting review:', error);
+      clientLogger.error('Error deleting review:', error);
       toast({
         title: 'Error',
         description: 'Failed to delete review',

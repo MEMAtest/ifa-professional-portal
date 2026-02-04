@@ -19,10 +19,48 @@ describe('Monte Carlo Simulate API', () => {
     mockScenarioSingle = vi.fn()
     mockResultsSingle = vi.fn()
 
-    // Mock Supabase
-    vi.doMock('@supabase/supabase-js', () => ({
-      createClient: vi.fn().mockReturnValue({
+    // Mock Supabase service client
+    vi.doMock('@/lib/supabase/serviceClient', () => ({
+      getSupabaseServiceClient: vi.fn().mockReturnValue({
         from: mockFrom
+      })
+    }))
+
+    // Mock auth helpers
+    vi.doMock('@/lib/auth/apiAuth', () => ({
+      getAuthContext: vi.fn().mockResolvedValue({
+        success: true,
+        context: { userId: 'user-123', firmId: 'firm-123' }
+      }),
+      requireFirmId: vi.fn(() => ({ firmId: 'firm-123' }))
+    }))
+
+    // Mock client access
+    vi.doMock('@/lib/auth/requireClientAccess', () => ({
+      requireClientAccess: vi.fn().mockResolvedValue({ ok: true })
+    }))
+
+    // Mock notification helper
+    vi.doMock('@/lib/notifications/notificationService', () => ({
+      notifyMonteCarloCompleted: vi.fn().mockResolvedValue(undefined)
+    }))
+
+    // Mock Monte Carlo engine for deterministic results
+    vi.doMock('@/lib/monte-carlo/engine', () => ({
+      createMonteCarloEngine: () => ({
+        setSeed: vi.fn(),
+        runSimulation: vi.fn().mockResolvedValue({
+          successProbability: 75.5,
+          averageFinalWealth: 100000,
+          medianFinalWealth: 90000,
+          confidenceIntervals: { p10: 50000, p25: 70000, p50: 90000, p75: 110000, p90: 130000 },
+          shortfallRisk: 24.5,
+          averageShortfall: 12000,
+          simulations: [],
+          volatility: 0.12,
+          maxDrawdown: 0.25,
+          executionTime: 10
+        })
       })
     }))
 
@@ -68,6 +106,8 @@ describe('Monte Carlo Simulate API', () => {
     mockScenarioSingle.mockResolvedValue({
       data: {
         id: 'test-scenario',
+        client_id: 'client-123',
+        scenario_name: 'Test Scenario',
         current_savings: 50000,
         investment_value: 200000,
         pension_pot_value: 150000,

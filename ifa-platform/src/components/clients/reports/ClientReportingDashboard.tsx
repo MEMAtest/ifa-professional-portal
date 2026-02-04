@@ -30,6 +30,7 @@ import {
   YAxis,
   CartesianGrid
 } from 'recharts';
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   Users,
   UserCheck,
@@ -478,7 +479,7 @@ export default function ClientReportingDashboard() {
       try {
         setSavedReports(JSON.parse(stored));
       } catch (e) {
-        console.error('Failed to load saved reports:', e);
+        clientLogger.error('Failed to load saved reports:', e);
       }
     }
   }, []);

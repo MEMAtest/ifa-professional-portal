@@ -4,7 +4,6 @@
 // ================================================================
 
 'use client';
-console.log("SensitivityAnalysis loaded - UPDATED VERSION");
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Slider } from '@/components/ui/Slider';

@@ -6,6 +6,7 @@
 import PptxGenJS from 'pptxgenjs';
 import type { CashFlowScenario, ProjectionResult, CashFlowProjection } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface PowerPointReportData {
   client: Client;
@@ -247,7 +248,7 @@ export class PowerPointGenerator {
         filename,
       };
     } catch (error) {
-      console.error('PowerPoint generation error:', error);
+      clientLogger.error('PowerPoint generation error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'PowerPoint generation failed',

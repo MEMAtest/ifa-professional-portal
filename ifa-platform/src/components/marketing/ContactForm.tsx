@@ -74,7 +74,7 @@ export const ContactForm = () => {
           required
         >
           <option value="" disabled>Select a topic</option>
-          <option value="demo">Book a demo</option>
+          <option value="walkthrough">Book a walkthrough</option>
           <option value="pricing">Pricing and packages</option>
           <option value="security">Security and compliance</option>
           <option value="migration">Data migration</option>

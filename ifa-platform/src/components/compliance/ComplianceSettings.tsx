@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ComplianceRule {
   id: string
@@ -60,7 +61,7 @@ export default function ComplianceSettings() {
         .order('rule_type')
 
       if (error) {
-        console.error('Error loading rules:', error)
+        clientLogger.error('Error loading rules:', error)
         setRules([])
         return
       }
@@ -92,7 +93,7 @@ export default function ComplianceSettings() {
         }))
       }
     } catch (error) {
-      console.error('Error loading rules:', error)
+      clientLogger.error('Error loading rules:', error)
       setRules([])
     } finally {
       setLoading(false)
@@ -166,7 +167,7 @@ export default function ComplianceSettings() {
       })
       loadRules()
     } catch (error) {
-      console.error('Error saving settings:', error)
+      clientLogger.error('Error saving settings:', error)
       toast({
         title: 'Error',
         description: 'Failed to save settings',
@@ -192,7 +193,7 @@ export default function ComplianceSettings() {
       })
       loadRules()
     } catch (error) {
-      console.error('Error toggling rule:', error)
+      clientLogger.error('Error toggling rule:', error)
       toast({
         title: 'Error',
         description: 'Failed to update rule',

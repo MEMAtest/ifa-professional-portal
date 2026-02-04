@@ -12,7 +12,10 @@ export const CoverPage: React.FC<{ data: SuitabilityReportData; styles: any; bra
   <Page size="A4" style={[styles.page, styles.coverPage]}>
     {/* Firm Logo - render if provided */}
     {brand.logoUrl ? (
-      <Image src={brand.logoUrl} style={styles.firmLogo} />
+      <>
+        {/* eslint-disable-next-line jsx-a11y/alt-text */}
+        <Image src={brand.logoUrl} style={styles.firmLogo} />
+      </>
     ) : (
       <View style={styles.firmLogoPlaceholder} />
     )}

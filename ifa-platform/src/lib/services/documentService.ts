@@ -5,6 +5,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { safeUUID } from '@/lib/utils'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ====================================
 // 2. DocumentService.ts - UUID Fix
@@ -192,7 +193,7 @@ export class DocumentService {
 
       return this.mapDatabaseDocument(document)
     } catch (error) {
-      console.error('Document upload error:', error)
+      clientLogger.error('Document upload error:', error)
       throw error
     }
   }
@@ -265,7 +266,7 @@ export class DocumentService {
 
       return documents?.map(this.mapDatabaseDocument) || []
     } catch (error) {
-      console.error('Get documents error:', error)
+      clientLogger.error('Get documents error:', error)
       throw error
     }
   }
@@ -299,7 +300,7 @@ export class DocumentService {
 
       return this.mapDatabaseDocument(document)
     } catch (error) {
-      console.error('Get document by ID error:', error)
+      clientLogger.error('Get document by ID error:', error)
       throw error
     }
   }
@@ -334,7 +335,7 @@ export class DocumentService {
 
       return this.mapDatabaseDocument(document)
     } catch (error) {
-      console.error('Update document error:', error)
+      clientLogger.error('Update document error:', error)
       throw error
     }
   }
@@ -371,7 +372,7 @@ export class DocumentService {
       // Log access
       await this.logDocumentAccess(supabase, id, 'delete')
     } catch (error) {
-      console.error('Delete document error:', error)
+      clientLogger.error('Delete document error:', error)
       throw error
     }
   }
@@ -401,7 +402,7 @@ export class DocumentService {
         fileName: document.fileName
       }
     } catch (error) {
-      console.error('Download document error:', error)
+      clientLogger.error('Download document error:', error)
       throw error
     }
   }
@@ -425,7 +426,7 @@ export class DocumentService {
 
       return categories?.map(this.mapDatabaseCategory) || []
     } catch (error) {
-      console.error('Get categories error:', error)
+      clientLogger.error('Get categories error:', error)
       throw error
     }
   }
@@ -452,7 +453,7 @@ export class DocumentService {
 
       return this.mapDatabaseCategory(newCategory)
     } catch (error) {
-      console.error('Create category error:', error)
+      clientLogger.error('Create category error:', error)
       throw error
     }
   }
@@ -489,7 +490,7 @@ export class DocumentService {
 
       return this.mapDatabaseSignatureRequest(signatureRequest)
     } catch (error) {
-      console.error('Create signature request error:', error)
+      clientLogger.error('Create signature request error:', error)
       throw error
     }
   }
@@ -514,7 +515,7 @@ export class DocumentService {
 
       return requests?.map(this.mapDatabaseSignatureRequest) || []
     } catch (error) {
-      console.error('Get signature requests error:', error)
+      clientLogger.error('Get signature requests error:', error)
       throw error
     }
   }
@@ -556,7 +557,7 @@ export class DocumentService {
 
       return this.mapDatabaseSignatureRequest(request)
     } catch (error) {
-      console.error('Update signature status error:', error)
+      clientLogger.error('Update signature status error:', error)
       throw error
     }
   }
@@ -586,7 +587,7 @@ export class DocumentService {
 
       return templates?.map(this.mapDatabaseTemplate) || []
     } catch (error) {
-      console.error('Get templates error:', error)
+      clientLogger.error('Get templates error:', error)
       throw error
     }
   }
@@ -660,7 +661,7 @@ export class DocumentService {
 
       return document.id
     } catch (error) {
-      console.error('Generate document from template error:', error)
+      clientLogger.error('Generate document from template error:', error)
       throw error
     }
   }
@@ -688,7 +689,7 @@ export class DocumentService {
         pending_signatures: 0
       }
     } catch (error) {
-      console.error('Get document statistics error:', error)
+      clientLogger.error('Get document statistics error:', error)
       // Return default stats if function doesn't exist
       return {
         total_documents: 0,
@@ -716,7 +717,7 @@ export class DocumentService {
 
       return trail || []
     } catch (error) {
-      console.error('Get audit trail error:', error)
+      clientLogger.error('Get audit trail error:', error)
       throw error
     }
   }

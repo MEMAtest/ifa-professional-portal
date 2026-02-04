@@ -6,6 +6,7 @@
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import sanitizeHtmlLib from 'sanitize-html'
 import type { Database } from '@/types/db'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface EmailBranding {
   firmName: string
@@ -198,7 +199,7 @@ export async function getFirmBranding(firmId: string): Promise<EmailBranding | n
       address,
     }
   } catch (err) {
-    console.error('[emailBranding] Error fetching firm branding:', err)
+    clientLogger.error('[emailBranding] Error fetching firm branding:', err)
     return null
   }
 }

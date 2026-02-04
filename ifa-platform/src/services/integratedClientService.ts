@@ -7,6 +7,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { normalizeIsoCountryCode } from '@/lib/isoCountries'
 import type { Client, ClientFormData } from '@/types/client'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // COMPLETE TYPE DEFINITIONS
@@ -186,7 +187,7 @@ export class IntegratedClientService {
       if (error) throw error
       return this.transformToClientProfile(data)
     } catch (error) {
-      console.error('Error creating client:', error)
+      clientLogger.error('Error creating client:', error)
       throw new Error(error instanceof Error ? error.message : 'Failed to create client')
     }
   }
@@ -202,7 +203,7 @@ export class IntegratedClientService {
       if (error) throw error
       return (data || []).map(this.transformToClientProfile)
     } catch (error) {
-      console.error('Error fetching clients:', error)
+      clientLogger.error('Error fetching clients:', error)
       return []
     }
   }
@@ -219,7 +220,7 @@ export class IntegratedClientService {
       if (error) throw error
       return this.transformToClientProfile(data)
     } catch (error) {
-      console.error('Error fetching client:', error)
+      clientLogger.error('Error fetching client:', error)
       return null
     }
   }
@@ -261,7 +262,7 @@ export class IntegratedClientService {
         nextReviewDate: this.calculateNextReviewDate(client)
       }
     } catch (error) {
-      console.error('Error fetching client dashboard data:', error)
+      clientLogger.error('Error fetching client dashboard data:', error)
       return null
     }
   }
@@ -294,7 +295,7 @@ export class IntegratedClientService {
       // RETURN THE CLIENT OBJECT DIRECTLY
       return this.transformToClientProfile(data)
     } catch (error) {
-      console.error('Error updating client:', error)
+      clientLogger.error('Error updating client:', error)
       throw new Error(error instanceof Error ? error.message : 'Failed to update client')
     }
   }
@@ -336,7 +337,7 @@ export class IntegratedClientService {
 
       return { success: true, message: 'Assessment completed successfully' }
     } catch (error) {
-      console.error('Error completing assessment:', error)
+      clientLogger.error('Error completing assessment:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to complete assessment' 
@@ -372,7 +373,7 @@ export class IntegratedClientService {
 
       return { success: true, message: 'Scenario linked successfully' }
     } catch (error) {
-      console.error('Error linking scenario:', error)
+      clientLogger.error('Error linking scenario:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to link scenario' 
@@ -403,7 +404,6 @@ export class IntegratedClientService {
         })
 
       if (error && error.code === '42P01') {
-        console.log('Pending actions table not yet created')
         return { success: true, message: 'Pending action queued (table pending)' }
       }
 
@@ -411,7 +411,7 @@ export class IntegratedClientService {
 
       return { success: true, message: 'Pending action created' }
     } catch (error) {
-      console.error('Error creating pending action:', error)
+      clientLogger.error('Error creating pending action:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to create action' 
@@ -521,7 +521,6 @@ export class IntegratedClientService {
         .order('priority', { ascending: false })
 
       if (error?.code === '42P01') {
-        console.debug('Pending actions table does not exist yet')
         return []
       }
 
@@ -584,7 +583,7 @@ export class IntegratedClientService {
         status: doc.status || 'completed'
       }))
     } catch (error) {
-      console.error('Error fetching recent documents:', error)
+      clientLogger.error('Error fetching recent documents:', error)
       return []
     }
   }
@@ -601,9 +600,8 @@ export class IntegratedClientService {
 
       if (error) {
         if (error.code === '42501') {
-          console.error('Permission denied for assessments. Check RLS policies.')
+          clientLogger.error('Permission denied for assessments. Check RLS policies.')
         } else if (error.code === 'PGRST116' || error.code === '42P01') {
-          console.debug('No assessment found or table does not exist')
         } else {
           console.warn('Error fetching assessment:', error)
         }
@@ -649,7 +647,6 @@ export class IntegratedClientService {
         // REMOVED .single() - it causes 400 errors when no data exists
 
       if (error?.code === '42P01') {
-        console.log('Scenarios table does not exist yet')
         return null
       }
 
@@ -675,7 +672,7 @@ export class IntegratedClientService {
         retirement_age: scenario.retirement_age || 65
       }
     } catch (error) {
-      console.error('Error fetching active scenario:', error)
+      clientLogger.error('Error fetching active scenario:', error)
       return null
     }
   }

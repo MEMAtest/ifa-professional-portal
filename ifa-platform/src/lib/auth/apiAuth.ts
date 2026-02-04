@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { User } from '@supabase/supabase-js'
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ================================================================
 // TYPES
@@ -275,12 +276,6 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
     }
 
     if (authError || !user) {
-      console.debug('[Auth] Authentication failed', {
-        hasCookieHeader: !!request.headers.get('cookie'),
-        hasAuthHeader: !!authHeader,
-        authErrorMessage: authError?.message || null,
-        tokenCandidatesCount: tokenCandidates.length,
-      })
       return {
         success: false,
         error: 'Unauthorized - Please log in',
@@ -301,12 +296,6 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
       .single()
 
     if (profileError) {
-      console.debug('[Auth] Profile lookup failed', {
-        userId: user.id,
-        email: user.email,
-        errorCode: profileError.code,
-        errorMessage: profileError.message,
-      })
     }
 
     const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
@@ -372,7 +361,7 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
       context
     }
   } catch (error) {
-    console.error('[Auth] Error getting auth context:', error)
+    clientLogger.error('[Auth] Error getting auth context:', error)
     return {
       success: false,
       error: 'Authentication failed',
@@ -488,13 +477,13 @@ export async function getAdvisorProfile(userId: string) {
       .single()
 
     if (error) {
-      console.error('[Auth] Error fetching advisor profile:', error)
+      clientLogger.error('[Auth] Error fetching advisor profile:', error)
       return null
     }
 
     return profile
   } catch (error) {
-    console.error('[Auth] Error in getAdvisorProfile:', error)
+    clientLogger.error('[Auth] Error in getAdvisorProfile:', error)
     return null
   }
 }
@@ -513,13 +502,13 @@ export async function getFirmDetails(firmId: string) {
       .single()
 
     if (error) {
-      console.error('[Auth] Error fetching firm details:', error)
+      clientLogger.error('[Auth] Error fetching firm details:', error)
       return null
     }
 
     return firm
   } catch (error) {
-    console.error('[Auth] Error in getFirmDetails:', error)
+    clientLogger.error('[Auth] Error in getFirmDetails:', error)
     return null
   }
 }

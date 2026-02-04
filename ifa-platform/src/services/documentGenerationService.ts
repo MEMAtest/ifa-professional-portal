@@ -4,6 +4,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { DocumentTemplateService } from './documentTemplateService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // TYPE DEFINITIONS
@@ -108,7 +109,7 @@ export class DocumentGenerationService {
         createdAt: data.created_at || new Date().toISOString()
       } as GeneratedDocument;
     } catch (error) {
-      console.error('Error in generateDocument:', error);
+      clientLogger.error('Error in generateDocument:', error);
       throw error;
     }
   }

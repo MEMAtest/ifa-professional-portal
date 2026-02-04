@@ -36,7 +36,8 @@ import { ClientCommunicationsTab } from '@/components/clients/detail/tabs/Client
 import { ClientReviewsTab } from '@/components/clients/detail/tabs/ClientReviewsTab'
 import { ClientAssessmentsTab } from '@/components/clients/detail/tabs/ClientAssessmentsTab'
 
-import { AlertCircle, Download, FileText, TrendingUp } from 'lucide-react'
+import { AlertCircle, Download, FileText, Sparkles, TrendingUp } from 'lucide-react'
+import { DocumentIntelligenceModal } from '@/components/documents/DocumentIntelligenceModal'
 
 export function ClientDetailPage(props: { clientId: string }) {
   const { clientId } = props
@@ -59,6 +60,7 @@ export function ClientDetailPage(props: { clientId: string }) {
   const [showEditReviewModal, setShowEditReviewModal] = useState(false)
   const [selectedReview, setSelectedReview] = useState<any>(null)
   const [showShareAssessmentModal, setShowShareAssessmentModal] = useState(false)
+  const [showDocIntelModal, setShowDocIntelModal] = useState(false)
   const [completedAssessments, setCompletedAssessments] = useState<{
     atr?: boolean
     cfl?: boolean
@@ -159,6 +161,11 @@ export function ClientDetailPage(props: { clientId: string }) {
     router.push(`/monte-carlo?clientId=${client.id}`)
   }
 
+  const handleEnrichFromDocuments = () => {
+    if (!clientId) return
+    setShowDocIntelModal(true)
+  }
+
   const quickActions: ClientQuickAction[] = [
     {
       icon: FileText,
@@ -183,6 +190,14 @@ export function ClientDetailPage(props: { clientId: string }) {
       action: handleRunMonteCarlo,
       variant: 'outline',
       disabled: !dashboardData?.activeScenario
+    },
+    {
+      icon: Sparkles,
+      label: 'Enrich from Documents',
+      description: 'Auto-populate profile from analysed documents',
+      action: handleEnrichFromDocuments,
+      variant: 'outline',
+      disabled: showDocIntelModal
     }
   ]
 
@@ -396,6 +411,19 @@ export function ClientDetailPage(props: { clientId: string }) {
             refreshData?.()
             setShowEditReviewModal(false)
             setSelectedReview(null)
+          }}
+        />
+      )}
+
+      {clientId && (
+        <DocumentIntelligenceModal
+          clientId={clientId}
+          isOpen={showDocIntelModal}
+          onClose={() => setShowDocIntelModal(false)}
+          onApplied={(result) => {
+            if (result.totalUpdated > 0) {
+              void refresh()
+            }
           }}
         />
       )}

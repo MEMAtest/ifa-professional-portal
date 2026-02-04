@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Search, X } from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface SearchBarProps {
   value: string;
@@ -43,7 +44,7 @@ export default function SearchBar({
       try {
         await onSearch(value.trim());
       } catch (error) {
-        console.error('Search failed:', error);
+        clientLogger.error('Search failed:', error);
       } finally {
         setIsSearching(false);
       }

@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   BarChart,
   Bar,
@@ -124,7 +125,7 @@ export default function ReviewsDashboard() {
       .order('due_date', { ascending: true })
 
     if (error) {
-      console.error('Error loading reviews:', error)
+      clientLogger.error('Error loading reviews:', error)
       return
     }
 
@@ -214,7 +215,7 @@ export default function ReviewsDashboard() {
       .order('personal_details->firstName')
 
     if (error) {
-      console.error('Error loading clients:', error)
+      clientLogger.error('Error loading clients:', error)
       return
     }
 
@@ -227,7 +228,7 @@ export default function ReviewsDashboard() {
       await loadClients()
       await loadReviews()
     } catch (error) {
-      console.error('Error loading data:', error)
+      clientLogger.error('Error loading data:', error)
     } finally {
       setLoading(false)
     }
@@ -287,7 +288,7 @@ export default function ReviewsDashboard() {
       loadReviews()
 
     } catch (error) {
-      console.error('Error scheduling review:', error)
+      clientLogger.error('Error scheduling review:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to schedule review',

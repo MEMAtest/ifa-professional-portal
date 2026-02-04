@@ -3,6 +3,7 @@ import { requestAssessmentReport, type SuitabilityReportVariant, type RequestRes
 import { createReportWindow, openPdfFromBase64, openReportUrl } from '@/lib/documents/openPdf'
 import { buildSuitabilityDraftHtml } from '@/lib/suitability/draftHtmlReport'
 import type { SuitabilityFormData } from '@/types/suitability'
+import clientLogger from '@/lib/logging/clientLogger'
 
 type ShowNotification = (options: NotificationOptions) => void
 
@@ -49,7 +50,7 @@ export async function generateSuitabilityDraftHtmlReport(args: {
       type: 'success'
     })
   } catch (error) {
-    console.error('Draft report error:', error)
+    clientLogger.error('Draft report error:', error)
     args.showNotification({
       title: 'Generation Failed',
       description: error instanceof Error ? error.message : 'Could not generate draft report',
@@ -171,7 +172,7 @@ export async function generateSuitabilityPdfReport(args: {
     })
     return result
   } catch (error) {
-    console.error('PDF report generation error:', error)
+    clientLogger.error('PDF report generation error:', error)
     if (reportWindow) {
       reportWindow.close()
     }

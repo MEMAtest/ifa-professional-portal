@@ -32,6 +32,7 @@ import {
   TrendingDownIcon,
   ClipboardCheckIcon
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   PieChart,
   Pie,
@@ -357,10 +358,9 @@ export default function EnhancedReportsPage() {
       window.URL.revokeObjectURL(url)
       
       // Show success message
-      console.log(`Report exported successfully as ${exportFormat.toUpperCase()}`)
       
     } catch (error) {
-      console.error('Export failed:', error)
+      clientLogger.error('Export failed:', error)
       alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsExporting(false)

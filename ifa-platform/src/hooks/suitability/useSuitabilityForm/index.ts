@@ -40,6 +40,7 @@ import {
   seedEmptySections
 } from '@/hooks/suitability/useSuitabilityForm.helpers'
 import { removeLocalDraft } from '@/hooks/suitability/useSuitabilityForm.io'
+import clientLogger from '@/lib/logging/clientLogger'
 
 const VALID_SECTION_IDS = new Set(suitabilitySections.map((s) => s.id))
 
@@ -63,7 +64,7 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
     onValidationChange
   } = options
   
-  const { client } = useClientContext()
+  const { client, refresh: refreshClient } = useClientContext()
   const hasLoadedDraftRef = useRef(false)
   const hasInitializedUiRef = useRef(false)
   const autoFillKeyRef = useRef<string | null>(null)
@@ -85,13 +86,11 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
   } = useSaveMutex({
     savedDisplayDuration: 3000,
     onSaveStart: () => {
-      console.log('Save operation started (mutex acquired)')
     },
     onSaveSuccess: () => {
-      console.log('Save operation completed successfully')
     },
     onSaveError: (error) => {
-      console.error('Save operation failed:', error)
+      clientLogger.error('Save operation failed:', error)
     }
   })
   
@@ -343,7 +342,7 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       setConditionalActions(actions)
       return updatedData
     } catch (error) {
-      console.error('Conditional logic processing error:', error)
+      clientLogger.error('Conditional logic processing error:', error)
       return newFormData
     }
   }, [enableConditionalLogic, pulledData])
@@ -384,7 +383,7 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       
       return result
     } catch (error) {
-      console.error('Validation error:', error)
+      clientLogger.error('Validation error:', error)
       return { errors: [], warnings: [] }
     }
   }, [enableValidation, pulledData, onValidationChange])
@@ -659,18 +658,14 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
     () => debounce(async () => {
       // Skip if no changes or already saving
       if (!formDataRef.current._metadata.isDirty) {
-        console.log('No changes to save')
         return
       }
 
       // Skip if mutex is locked (another save in progress)
       if (isSaveLockedRef.current) {
-        console.log('Save in progress, deferring auto-save')
         markPendingChangesRef.current()
         return
       }
-
-      console.log('Auto-saving changes (mutex protected)...')
 
       // Execute save through mutex for race condition protection
       const result = await executeSaveRef.current(async () => {
@@ -682,10 +677,8 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
       })
 
       if (result) {
-        console.log('Auto-save successful')
         clearPendingChangesRef.current()
       } else {
-        console.log('Auto-save failed or was queued')
       }
     }, 3000), // 3 second debounce for stability
     [] // Empty deps - function is stable, uses refs for current values
@@ -709,7 +702,6 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
         skipConditionalLogic: false,
         broadcast: false
       })
-      console.log(`Field updated by ${event.userId}`)
     },
     [updateField]
   )
@@ -1043,7 +1035,8 @@ export const useSuitabilityForm = (options: UseSuitabilityFormOptions) => {
     isCFLComplete,
     isPersonaComplete,
     personaAssessment,
-    assessmentsNeedUpdate
+    assessmentsNeedUpdate,
+    refreshClient
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { User, SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 
@@ -27,7 +28,7 @@ export default function AuthTest() {
         if (error) throw error
         setUser(user)
       } catch (error) {
-        console.error('Error fetching user:', error)
+        clientLogger.error('Error fetching user:', error)
         setError(error instanceof Error ? error.message : 'Failed to fetch user')
       } finally {
         setLoading(false)
@@ -63,7 +64,7 @@ export default function AuthTest() {
       
       if (error) throw error
     } catch (error) {
-      console.error('Error signing in:', error)
+      clientLogger.error('Error signing in:', error)
       setError(error instanceof Error ? error.message : 'Failed to sign in')
     }
   }
@@ -80,7 +81,7 @@ export default function AuthTest() {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
     } catch (error) {
-      console.error('Error signing out:', error)
+      clientLogger.error('Error signing out:', error)
       setError(error instanceof Error ? error.message : 'Failed to sign out')
     }
   }

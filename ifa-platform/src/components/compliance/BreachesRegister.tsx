@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { WorkflowBoard, StatusPipeline, CommentThread, OwnerPicker, WORKFLOW_CONFIGS } from './workflow'
 import type { WorkflowItem } from './workflow'
 import { CreateTaskModal } from '@/modules/tasks/components/CreateTaskModal'
@@ -146,14 +147,14 @@ export default function BreachesRegister({ onStatsChange }: Props) {
           setBreaches(basicData || [])
           return
         }
-        console.error('Error loading breaches:', error)
+        clientLogger.error('Error loading breaches:', error)
         setBreaches([])
         return
       }
 
       setBreaches(data || [])
     } catch (error) {
-      console.error('Error loading breaches:', error)
+      clientLogger.error('Error loading breaches:', error)
       setBreaches([])
     } finally {
       setLoading(false)
@@ -208,7 +209,7 @@ export default function BreachesRegister({ onStatsChange }: Props) {
       await loadBreaches()
       onStatsChange?.()
     } catch (error) {
-      console.error('Error updating breach status:', error)
+      clientLogger.error('Error updating breach status:', error)
       toast({
         title: 'Error',
         description: 'Failed to update breach status',
@@ -669,7 +670,7 @@ function BreachFormModal({
       })
       onSaved()
     } catch (error) {
-      console.error('Error creating breach:', error)
+      clientLogger.error('Error creating breach:', error)
       toast({
         title: 'Error',
         description: 'Failed to log breach',
@@ -945,7 +946,7 @@ function BreachDetailModal({
       })
       onSaved()
     } catch (error) {
-      console.error('Error updating breach:', error)
+      clientLogger.error('Error updating breach:', error)
       toast({
         title: 'Error',
         description: 'Failed to update breach',

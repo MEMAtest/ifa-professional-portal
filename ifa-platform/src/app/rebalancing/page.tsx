@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Types for portfolio rebalancing
 interface PortfolioRebalance {
@@ -96,7 +97,7 @@ export default function RebalancingPage() {
       .order('personal_details->firstName')
 
     if (error) {
-      console.error('Error loading clients:', error)
+      clientLogger.error('Error loading clients:', error)
       return []
     }
 
@@ -259,7 +260,7 @@ export default function RebalancingPage() {
       const loadedClients = await loadClients()
       createMockPortfolioData(loadedClients)
     } catch (error) {
-      console.error('Error loading data:', error)
+      clientLogger.error('Error loading data:', error)
       toast({
         title: 'Error',
         description: 'Failed to load portfolio data',

@@ -2,9 +2,10 @@
 // ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireScenarioAccess } from '@/lib/monte-carlo/monteCarloAccess'
 
 // ✅ FORCE DYNAMIC RENDERING
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,15 @@ export async function GET(
   { params }: AssumptionRouteParams
 ): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+
     // ✅ TIMEOUT PROTECTION
     const timeoutId = setTimeout(() => {
       throw new Error('Get assumptions timeout after 10 seconds');
@@ -45,37 +55,36 @@ export async function GET(
 
     const cleanScenarioId = scenarioId.trim();
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ DATABASE OPERATION WITH ERROR HANDLING
-    const response = await db.getAssumptions(cleanScenarioId);
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.success) {
-      const isNotFound = response.error?.includes('No assumptions found') || 
-                        response.error?.includes('not found');
-      
-      const statusCode = isNotFound ? 404 : 500;
-      
-      log.error(`Failed to get assumptions for scenario ${cleanScenarioId}`, { error: response.error });
+    const supabase: any = getSupabaseServiceClient()
+    const access = await requireScenarioAccess({ supabase, scenarioId: cleanScenarioId, ctx: auth.context })
+    if (!access.ok) {
+      clearTimeout(timeoutId)
+      return access.response
+    }
 
+    const { data, error } = await supabase
+      .from('monte_carlo_assumptions')
+      .select('*')
+      .eq('scenario_id', cleanScenarioId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    clearTimeout(timeoutId)
+
+    if (error) {
+      log.error(`Failed to get assumptions for scenario ${cleanScenarioId}`, { error: error.message });
       return NextResponse.json(
-        { 
-          success: false, 
-          error: isNotFound ? 'Scenario not found' : 'Failed to retrieve assumptions',
-          scenarioId: cleanScenarioId
-        },
-        { status: statusCode }
-      );
+        { success: false, error: 'Failed to retrieve assumptions', scenarioId: cleanScenarioId },
+        { status: 500 }
+      )
     }
 
     // ✅ STANDARDIZED SUCCESS RESPONSE
     return NextResponse.json(
       { 
         success: true, 
-        data: response.data,
+        data: data || null,
         metadata: {
           scenarioId: cleanScenarioId,
           fetchedAt: new Date().toISOString(),

@@ -29,6 +29,7 @@ import { createClient } from '@/lib/supabase/client' // FIXED IMPORT
 import { useToast } from '@/hooks/use-toast'
 import { TASK_TYPE_LABELS, TASK_PRIORITY_LABELS, TASK_PRIORITY_COLORS } from '@/modules/tasks'
 import type { TaskWithDetails } from '@/modules/tasks'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Meeting types with hex colors
 const meetingTypes = [
@@ -235,7 +236,7 @@ export default function CalendarPage() {
 	            relatedEntityId: event.related_entity_id || undefined
 	          }
         } catch (err) {
-          console.error('Error formatting event:', err, event)
+          clientLogger.error('Error formatting event:', err, event)
           // Return a basic version if formatting fails
 	          return {
 	            id: event.id,
@@ -261,7 +262,7 @@ export default function CalendarPage() {
       
       setEvents(formattedEvents)
     } else if (error) {
-      console.error('Error loading events:', error)
+      clientLogger.error('Error loading events:', error)
     }
   }, [currentDate, supabase])
 
@@ -308,7 +309,7 @@ export default function CalendarPage() {
       )
 
       if (!response.ok) {
-        console.error('Failed to fetch tasks')
+        clientLogger.error('Failed to fetch tasks')
         return
       }
 
@@ -347,7 +348,7 @@ export default function CalendarPage() {
 
       setTasks(taskEvents)
     } catch (error) {
-      console.error('Error loading tasks:', error)
+      clientLogger.error('Error loading tasks:', error)
     }
   }, [currentDate])
 
@@ -360,7 +361,7 @@ export default function CalendarPage() {
         loadTasks()
       ])
     } catch (error) {
-      console.error('Error loading data:', error)
+      clientLogger.error('Error loading data:', error)
       toast({
         title: 'Error',
         description: 'Failed to load calendar data',

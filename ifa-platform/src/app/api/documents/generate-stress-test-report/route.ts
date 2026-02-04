@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jsPDF } from 'jspdf';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 // ================================================================
@@ -501,6 +503,16 @@ function generateStressTestPdf(
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const body = await parseRequestBody(request);
     const { results, clientProfile, selectedScenarios, options } = body;
 
@@ -518,6 +530,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const supabase: any = getSupabaseServiceClient();
+    const access = await requireClientAccess({
+      supabase,
+      clientId: clientProfile.clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
+
     // Generate PDF
     const pdfBase64 = generateStressTestPdf(results, clientProfile, options);
 
@@ -525,8 +548,6 @@ export async function POST(request: NextRequest) {
     const avgResilience = results.reduce((sum: number, r: StressTestResult) => sum + r.resilienceScore, 0) / results.length;
 
     // Try to save to Supabase
-    // Cast to any: documents insert schema mismatch with generated types
-    const supabase: any = getSupabaseServiceClient();
     const fileName = `stress-test-${clientProfile.clientRef}-${Date.now()}.pdf`;
 
     try {
@@ -534,7 +555,7 @@ export async function POST(request: NextRequest) {
       const pdfBuffer = Buffer.from(pdfBase64, 'base64');
 
       // Upload to storage
-      const storagePath = `stress-tests/${clientProfile.clientId}/${fileName}`;
+      const storagePath = `firms/${firmId}/stress-tests/${clientProfile.clientId}/${fileName}`;
       const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(storagePath, pdfBuffer, {
@@ -553,12 +574,16 @@ export async function POST(request: NextRequest) {
           .from('documents')
           .insert({
             client_id: clientProfile.clientId,
+            firm_id: firmId,
+            created_by: auth.context.userId,
             name: `Stress Test Report - ${new Date().toLocaleDateString('en-GB')}`,
             file_name: fileName,
             document_type: 'stress_test',
             storage_path: storagePath,
+            file_path: storagePath,
             file_size: pdfBuffer.length,
             mime_type: 'application/pdf',
+            status: 'completed',
             metadata: {
               avgResilience,
               scenarioCount: results.length,

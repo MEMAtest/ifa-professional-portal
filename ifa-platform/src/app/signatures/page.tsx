@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   PenToolIcon,
   ClockIcon,
@@ -77,7 +78,7 @@ export default function SignaturesPage() {
           setTemplates(templatesData.templates)
         }
       } catch (err) {
-        console.error('Failed to fetch data:', err)
+        clientLogger.error('Failed to fetch data:', err)
       }
     }
     fetchData()

@@ -1,5 +1,6 @@
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getStripePriceConfig } from '@/lib/billing/stripeConfig'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export type PlatformBillingConfig = {
   id: string
@@ -32,7 +33,7 @@ export async function getPlatformBillingConfig(): Promise<PlatformBillingConfig 
       if (isTableMissing(error)) {
         return null
       }
-      console.error('[Platform Billing] Failed to fetch config:', error)
+      clientLogger.error('[Platform Billing] Failed to fetch config:', error)
       return null
     }
 
@@ -41,7 +42,7 @@ export async function getPlatformBillingConfig(): Promise<PlatformBillingConfig 
     if (isTableMissing(error)) {
       return null
     }
-    console.error('[Platform Billing] Unexpected error:', error)
+    clientLogger.error('[Platform Billing] Unexpected error:', error)
     return null
   }
 }

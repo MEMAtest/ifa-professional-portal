@@ -29,6 +29,7 @@ import { StressTestingEngine } from '@/services/StressTestingEngine';
 import { MitigationStrategiesService } from '@/services/MitigationStrategiesService';
 import type { CashFlowScenario } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Core interfaces
 export interface StressTestParams {
@@ -148,7 +149,7 @@ export function StressTestAnalysis({ scenario, client }: StressTestAnalysisProps
       setResults(transformedResults);
 
     } catch (error) {
-      console.error('Error running stress test:', error);
+      clientLogger.error('Error running stress test:', error);
     } finally {
       setIsRunning(false);
     }

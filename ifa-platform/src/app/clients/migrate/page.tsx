@@ -6,7 +6,6 @@ import type { MigrationResult } from '@/types/client';
 
 export default function MigratePage() {
   const handleMigrationComplete = (result: MigrationResult) => {
-    console.log('Migration completed:', result);
     // Handle successful migration
     if (result.success) {
       // Redirect to clients list or show success message

@@ -13,12 +13,23 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 async function main() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const dbPassword = process.env.SUPABASE_DB_PASSWORD
 
-  if (!serviceRoleKey) {
-    console.error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !dbPassword) {
+    console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_DB_PASSWORD')
     process.exit(1)
   }
+
+  const projectRef =
+    process.env.SUPABASE_PROJECT_REF ||
+    new URL(supabaseUrl).hostname.split('.')[0]
+
+  const dbUser = process.env.SUPABASE_DB_USER || `postgres.${projectRef}`
+  const poolerHost = process.env.SUPABASE_DB_POOLER_HOST || 'aws-0-eu-west-2.pooler.supabase.com'
+  const poolerPort = process.env.SUPABASE_DB_POOLER_PORT || '6543'
+  const directHost = process.env.SUPABASE_DB_HOST || `db.${projectRef}.supabase.co`
+  const directPort = process.env.SUPABASE_DB_PORT || '5432'
 
   console.log('\n🔧 Applying RLS Critical Fixes Migration\n')
 
@@ -28,7 +39,7 @@ async function main() {
 
   // Connection string for Supabase pooler with service role
   // Format: postgresql://postgres.[project-ref]:[password]@[host]:6543/postgres
-  const connectionString = `postgresql://postgres.maandodhonjolrmcxivo:${serviceRoleKey}@aws-0-eu-west-2.pooler.supabase.com:6543/postgres`
+  const connectionString = `postgresql://${dbUser}:${dbPassword}@${poolerHost}:${poolerPort}/postgres`
 
   const client = new pg.Client({
     connectionString,
@@ -52,7 +63,7 @@ async function main() {
       console.log('\nTrying alternative connection...')
 
       // Try with direct connection (port 5432)
-      const directString = `postgresql://postgres.maandodhonjolrmcxivo:${serviceRoleKey}@db.maandodhonjolrmcxivo.supabase.co:5432/postgres`
+      const directString = `postgresql://${dbUser}:${dbPassword}@${directHost}:${directPort}/postgres`
 
       const client2 = new pg.Client({
         connectionString: directString,

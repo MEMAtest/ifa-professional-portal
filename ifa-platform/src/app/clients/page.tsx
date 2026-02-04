@@ -20,11 +20,8 @@ import { ReassignClientModal } from '@/components/clients/ReassignClientModal';
 import { UserCheck, CheckSquare, Square, X } from 'lucide-react';
 import { clientService } from '@/services/ClientService';
 import { getVulnerabilityStatus, isValidClientStatus } from '@/types/client'; // ✅ Import validation functions
-import type {
-  Client,
-  ClientFilters,
-  ClientStatistics,
-} from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger';
+import type { Client, ClientFilters, ClientStatistics } from '@/types/client';
 
 export default function ClientsPage() {
   const router = useRouter();
@@ -97,7 +94,7 @@ export default function ClientsPage() {
       setSelectedClient(client);
       setView('details');
     } catch (error) {
-      console.error('Error loading updated client:', error);
+      clientLogger.error('Error loading updated client:', error);
       // If we can't load the specific client, just show the list
       loadClients();
     }
@@ -138,7 +135,7 @@ export default function ClientsPage() {
         setAdvisors(data.data || []);
       }
     } catch (error) {
-      console.error('Error loading advisors:', error);
+      clientLogger.error('Error loading advisors:', error);
     }
   }, []);
 
@@ -159,7 +156,7 @@ export default function ClientsPage() {
         setClients(searchResult.clients);
       }
     } catch (err) {
-      console.error('Search error:', err);
+      clientLogger.error('Search error:', err);
     }
   };
 
@@ -192,19 +189,6 @@ export default function ClientsPage() {
         break;
       case 'vulnerable':
         newFilters = { vulnerabilityStatus: 'vulnerable' };
-        console.log('🔍 DEBUG: Filtering for vulnerable clients...');
-        console.log('🔍 DEBUG: Current clients with vulnerability data:', 
-          clients.map(c => {
-            const isVulnerable = getVulnerabilityStatus(c.vulnerabilityAssessment);
-            return {
-              id: c.id,
-              name: `${c.personalDetails?.firstName} ${c.personalDetails?.lastName}`,
-              isVulnerable: isVulnerable,
-              type: typeof isVulnerable,
-              fullAssessment: c.vulnerabilityAssessment
-            };
-          })
-        );
         break;
     }
     

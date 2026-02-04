@@ -14,12 +14,8 @@ import { integratedClientService } from '@/services/integratedClientService';
 import { realDocumentService } from '@/services/realIntegratedServices';
 import type { ClientFormData } from '@/types/client';
 import { Card, CardContent } from '@/components/ui/Card';
-import { 
-  CheckCircle, 
-  Clock, 
-  AlertCircle,
-  Loader2
-} from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger';
+import { CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
 
 // ===================================================================
 // INTERFACES
@@ -109,7 +105,7 @@ export default function NewClientPage() {
         
         updateWorkflowStep('init-workflow', 'completed');
       } catch (error) {
-        console.error('Workflow initialization failed:', error);
+        clientLogger.error('Workflow initialization failed:', error);
         // Non-critical error - don't fail the entire process
         updateWorkflowStep('init-workflow', 'error');
       }
@@ -136,7 +132,7 @@ export default function NewClientPage() {
       router.replace(`/clients/${newClient.id}?welcome=true`);
       
     } catch (error) {
-      console.error('Error creating client:', error);
+      clientLogger.error('Error creating client:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create client';
       
       // Update workflow to show error

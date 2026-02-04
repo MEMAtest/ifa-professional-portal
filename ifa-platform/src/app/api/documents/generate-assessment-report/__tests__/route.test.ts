@@ -61,8 +61,8 @@ describe('POST /api/documents/generate-assessment-report', () => {
 
     mockFrom.mockImplementation((table: string) => createBuilder(table))
 
-    vi.doMock('@supabase/supabase-js', () => ({
-      createClient: vi.fn(() => mockSupabase)
+    vi.doMock('@/lib/supabase/serviceClient', () => ({
+      getSupabaseServiceClient: vi.fn(() => mockSupabase)
     }))
 
     vi.doMock('@/lib/auth/apiAuth', () => ({
@@ -75,7 +75,12 @@ describe('POST /api/documents/generate-assessment-report', () => {
           firmId: 'firm-1'
         }
       })),
+      requireFirmId: vi.fn(() => ({ firmId: 'firm-1' })),
       canAccessClient: vi.fn(() => true)
+    }))
+
+    vi.doMock('@/lib/auth/requireClientAccess', () => ({
+      requireClientAccess: vi.fn().mockResolvedValue({ ok: true })
     }))
 
     vi.doMock('@/services/AdvisorContextService', () => ({
@@ -110,6 +115,24 @@ describe('POST /api/documents/generate-assessment-report', () => {
       generateSuitabilityReportPDF: vi.fn(async () => new ArrayBuffer(8))
     }))
 
+    vi.doMock('../jspdf', () => ({
+      generateCharts: vi.fn(async () => ({})),
+      generatePdfWithJsPDF: vi.fn(async () => new ArrayBuffer(8))
+    }))
+
+    vi.doMock('../platformData', () => ({
+      fetchATRCFLAtOrBefore: vi.fn(async () => ({ atr: null, cfl: null })),
+      fetchPersonaAtOrBefore: vi.fn(async () => null)
+    }))
+
+    vi.doMock('@/services/reportAIService', () => ({
+      generateSuitabilityReportAIContent: vi.fn(async () => ({}))
+    }))
+
+    vi.doMock('@/lib/notifications/notificationService', () => ({
+      notifyDocumentGenerated: vi.fn(async () => undefined)
+    }))
+
     const route = await import('../route')
     POST = route.POST
   })
@@ -137,4 +160,3 @@ describe('POST /api/documents/generate-assessment-report', () => {
     expect(typeof json.inlinePdf).toBe('string')
   })
 })
-

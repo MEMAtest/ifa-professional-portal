@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clientService } from '@/services/ClientService';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import type { StressTestClientMetrics } from '@/components/stress-testing/StressTestDrillDownModal';
 import type {
   StressCoverageClientIds,
@@ -96,7 +97,7 @@ export const useStressTestingDashboardData = (
 
       await refreshDashboard(clientsResponse.clients);
     } catch (err) {
-      console.error('Error loading initial data:', err);
+      clientLogger.error('Error loading initial data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setIsLoading(false);

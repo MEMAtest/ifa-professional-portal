@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { clientService } from '@/services/ClientService';
 import ClientForm from '@/components/clients/ClientForm';
 import type { Client, ClientFormData } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export default function EditClientPage() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function EditClientPage() {
         const clientData = await clientService.getClientById(clientId);
         setClient(clientData);
       } catch (err) {
-        console.error('Error loading client:', err);
+        clientLogger.error('Error loading client:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load client';
         setError(errorMessage);
         toast({
@@ -87,7 +88,7 @@ export default function EditClientPage() {
       }, 1000);
       
     } catch (err) {
-      console.error('Error updating client:', err);
+      clientLogger.error('Error updating client:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to update client';
       
       setError(errorMessage);
@@ -123,7 +124,7 @@ export default function EditClientPage() {
       }, 1000);
       
     } catch (err) {
-      console.error('Error updating client:', err);
+      clientLogger.error('Error updating client:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to update client';
       
       toast({
@@ -146,7 +147,7 @@ export default function EditClientPage() {
         router.push('/clients');
       }
     } catch (err) {
-      console.error('Navigation error:', err);
+      clientLogger.error('Navigation error:', err);
       // Ultimate fallback - use window.location
       window.location.href = clientId ? `/clients/${clientId}` : '/clients';
     }

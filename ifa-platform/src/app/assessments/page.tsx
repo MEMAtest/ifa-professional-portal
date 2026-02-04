@@ -24,6 +24,7 @@ import { clientService } from '@/services/ClientService';
 import { createClient } from '@/lib/supabase/client';
 import { normalizeAssessmentType } from '@/lib/assessments/routing';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Types
 type AssessmentTypeKey = 'atr' | 'cfl' | 'persona' | 'suitability' | 'monte_carlo' | 'cashflow';
@@ -278,7 +279,7 @@ export default function AssessmentsPage() {
       });
 
     } catch (err) {
-      console.error('Error loading clients:', err);
+      clientLogger.error('Error loading clients:', err);
       setError(err instanceof Error ? err.message : 'Failed to load clients');
     } finally {
       setIsLoading(false);

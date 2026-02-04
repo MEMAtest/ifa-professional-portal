@@ -6,6 +6,7 @@
 import * as XLSX from 'xlsx';
 import type { CashFlowScenario, ProjectionResult, CashFlowProjection } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface ExcelReportData {
   client: Client;
@@ -130,7 +131,7 @@ export class ExcelGenerator {
         filename,
       };
     } catch (error) {
-      console.error('Excel generation error:', error);
+      clientLogger.error('Excel generation error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Excel generation failed',

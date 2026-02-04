@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Search, MapPin } from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface Address {
   line1: string;
@@ -88,7 +89,7 @@ const AddressSearchField: React.FC<AddressSearchFieldProps> = ({
         }
       }
     } catch (error) {
-      console.error('Address search error:', error);
+      clientLogger.error('Address search error:', error);
       setError('Failed to search addresses. Please try again.');
       setSuggestions([]);
       setShowSuggestions(false);

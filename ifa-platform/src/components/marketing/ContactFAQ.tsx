@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 const faqs = [
   {
     question: 'How much does Plannetic cost?',
-    answer: 'Pricing is tailored based on your firm size and requirements. We offer flexible plans for solo advisers, small teams, and larger firms. Book a demo to discuss your specific needs and receive a personalised quote.'
+    answer: 'Pricing is tailored based on your firm size and requirements. We offer flexible plans for solo advisers, small teams, and larger firms. Schedule a walkthrough to discuss your specific needs and receive a personalised quote.'
   },
   {
     question: 'How long does onboarding take?',
@@ -14,7 +14,7 @@ const faqs = [
   },
   {
     question: 'Is there a free trial?',
-    answer: 'Yes! We offer a 14-day free trial with full platform access. No credit card required. You\'ll be able to explore all features and even run test assessments with sample data.'
+    answer: 'Yes! We offer a 14-day free trial with full platform access. No credit card required. You\'ll be able to explore all features and run assessments in a trial workspace.'
   },
   {
     question: 'What integrations do you support?',

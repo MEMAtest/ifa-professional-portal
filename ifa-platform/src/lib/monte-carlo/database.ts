@@ -3,6 +3,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { MonteCarloResults, SimulationInput } from './engine';
+import clientLogger from '@/lib/logging/clientLogger';
 
 /**
  * Database interfaces
@@ -10,6 +11,7 @@ import { MonteCarloResults, SimulationInput } from './engine';
 interface MonteCarloResultRecord {
   id?: string;
   scenario_id: string;
+  client_id?: string | null;
   simulation_count: number;
   success_probability: number;
   average_final_wealth: number;
@@ -72,9 +74,13 @@ export class MonteCarloDatabase {
     input: SimulationInput
   ): Promise<DatabaseResult<MonteCarloResultRecord>> {
     try {
+      const inputAny = input as any
+      const clientId = inputAny.client_id || inputAny.clientId || null
+
       // Prepare results record
       const resultRecord: MonteCarloResultRecord = {
         scenario_id: scenarioId,
+        client_id: clientId,
         simulation_count: results.simulations.length,
         success_probability: results.successProbability,
         average_final_wealth: results.averageFinalWealth,
@@ -108,7 +114,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error saving Monte Carlo results:', error);
+      clientLogger.error('Error saving Monte Carlo results:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -164,7 +170,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error saving Monte Carlo assumptions:', error);
+      clientLogger.error('Error saving Monte Carlo assumptions:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -201,7 +207,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error retrieving Monte Carlo results:', error);
+      clientLogger.error('Error retrieving Monte Carlo results:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -238,7 +244,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error retrieving Monte Carlo assumptions:', error);
+      clientLogger.error('Error retrieving Monte Carlo assumptions:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -273,7 +279,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error listing Monte Carlo scenarios:', error);
+      clientLogger.error('Error listing Monte Carlo scenarios:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -312,7 +318,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error deleting Monte Carlo scenario:', error);
+      clientLogger.error('Error deleting Monte Carlo scenario:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -346,7 +352,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error updating Monte Carlo status:', error);
+      clientLogger.error('Error updating Monte Carlo status:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -408,7 +414,7 @@ export class MonteCarloDatabase {
       };
 
     } catch (error) {
-      console.error('Error cleaning up old Monte Carlo results:', error);
+      clientLogger.error('Error cleaning up old Monte Carlo results:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown database error'
@@ -439,7 +445,7 @@ async getHealthStatus(): Promise<DatabaseResult<{ status: string; count: number 
     };
 
   } catch (error) {
-    console.error('Database health check failed:', error);
+    clientLogger.error('Database health check failed:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Database unhealthy'

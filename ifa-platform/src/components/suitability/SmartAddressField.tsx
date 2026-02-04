@@ -8,6 +8,7 @@ import { Loader2, MapPin, Search } from 'lucide-react'
 import { SmartAddressLookupResult } from '@/types/suitability'
 import { debounce } from 'lodash'
 import { cn } from '@/lib/utils'
+import clientLogger from '@/lib/logging/clientLogger'
 
 const UK_POSTCODE_PATTERN = /([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}|GIR\s?0AA)/i
 
@@ -82,7 +83,7 @@ export const SmartAddressField: React.FC<SmartAddressFieldProps> = ({
       setSuggestions(data.results || [])
       setShowSuggestions(true)
     } catch (error) {
-      console.error('Address search error:', error)
+      clientLogger.error('Address search error:', error)
       setSuggestions([])
     } finally {
       setIsSearching(false)

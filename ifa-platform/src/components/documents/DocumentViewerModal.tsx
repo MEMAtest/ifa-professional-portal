@@ -16,6 +16,7 @@ import {
   Calendar,
   CheckCircle
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import { safeWriteToClipboard } from '@/lib/utils'
 
 interface DocumentViewerModalProps {
@@ -74,7 +75,7 @@ export default function DocumentViewerModal({
         setPreviewUrl(`/api/documents/preview/${documentId}`)
       }
     } catch (error) {
-      console.error('Error fetching document:', error)
+      clientLogger.error('Error fetching document:', error)
     } finally {
       setLoading(false)
     }
@@ -102,7 +103,7 @@ export default function DocumentViewerModal({
     try {
       window.open(`/api/documents/download/${documentId}`, '_blank')
     } catch (err) {
-      console.error('Download error:', err)
+      clientLogger.error('Download error:', err)
     } finally {
       setDownloading(false)
     }
@@ -130,7 +131,6 @@ export default function DocumentViewerModal({
           url: shareUrl
         })
       } catch (err) {
-        console.log('Share cancelled or failed')
       }
     } else {
       const ok = await safeWriteToClipboard(shareUrl)
@@ -162,7 +162,7 @@ export default function DocumentViewerModal({
         alert('Document sent successfully!')
       }
     } catch (err) {
-      console.error('Email error:', err)
+      clientLogger.error('Email error:', err)
       alert('Failed to send email')
     } finally {
       setSending(false)

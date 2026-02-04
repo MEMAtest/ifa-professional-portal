@@ -715,7 +715,6 @@ const ClientDashboard: React.FC = () => {
 
   const handleClientEdit = (clientId: string) => {
     // In real implementation, this would navigate to edit page
-    console.log('Edit client:', clientId);
   };
 
   const handleClientDelete = (clientId: string) => {
@@ -727,7 +726,6 @@ const ClientDashboard: React.FC = () => {
 
   const handleAddClient = () => {
     // In real implementation, this would navigate to add client page
-    console.log('Add new client');
   };
 
   const clearFilters = () => {

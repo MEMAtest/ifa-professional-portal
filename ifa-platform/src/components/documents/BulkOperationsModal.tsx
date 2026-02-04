@@ -15,6 +15,7 @@ import { Progress } from '@/components/ui/Progress'
 import { Badge } from '@/components/ui/Badge'
 import { Alert, AlertDescription } from '@/components/ui/Alert'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import {
   Select,
@@ -317,7 +318,7 @@ export default function BulkOperationsModal({
       })
 
     } catch (err) {
-      console.error('Bulk operation error:', err)
+      clientLogger.error('Bulk operation error:', err)
       setError(err instanceof Error ? err.message : 'Operation failed')
       toast({
         title: 'Operation Failed',

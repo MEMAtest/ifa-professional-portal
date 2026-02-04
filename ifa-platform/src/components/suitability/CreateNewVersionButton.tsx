@@ -23,6 +23,7 @@ import { Alert, AlertDescription } from '@/components/ui/Alert'
 import { Textarea } from '@/components/ui/Textarea'
 import { Label } from '@/components/ui/Label'
 import { useToast } from '@/components/ui/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { SuitabilityDataService } from '@/services/suitability/SuitabilityDataService'
@@ -251,7 +252,7 @@ export const CreateNewVersionButton: React.FC<CreateNewVersionButtonProps> = ({
         setVersionHistory(data as AssessmentVersionInfo[])
       }
     } catch (err) {
-      console.error('Failed to load version history:', err)
+      clientLogger.error('Failed to load version history:', err)
       toast({
         title: 'Error',
         description: 'Failed to load version history',

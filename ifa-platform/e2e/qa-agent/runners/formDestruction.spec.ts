@@ -293,8 +293,8 @@ test.describe('Form Destruction Tests', () => {
   test.describe('Fuzzy Input Tests', () => {
     const fuzzyTests = generateFuzzyTests(['first_name', 'monthly_income'], 3)
 
-    for (const fuzzyTest of fuzzyTests.slice(0, 5)) {
-      test(`should handle ${fuzzyTest.category} on ${fuzzyTest.fieldId}`, async ({ page }) => {
+    fuzzyTests.slice(0, 5).forEach((fuzzyTest, index) => {
+      test(`should handle ${fuzzyTest.category} on ${fuzzyTest.fieldId} (${index + 1})`, async ({ page }) => {
         await suitabilityPage.fillField(fuzzyTest.fieldId, fuzzyTest.value).catch(() => {
           // Some inputs may be rejected by browser, that's OK
         })
@@ -305,7 +305,7 @@ test.describe('Form Destruction Tests', () => {
         // Try to save
         await suitabilityPage.saveDraft().catch(() => {})
       })
-    }
+    })
   })
 
   // ============================================

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ServicesProdSettings {
   prodPolicy?: string
@@ -156,7 +157,7 @@ export default function ProdServicesDashboard() {
         `prod-services-policy-${reportContext.firmName.replace(/\s+/g, '-').toLowerCase()}.pdf`
       )
     } catch (error) {
-      console.error('Failed to generate PROD PDF', error)
+      clientLogger.error('Failed to generate PROD PDF', error)
       toast({
         title: 'PDF Error',
         description: 'Unable to generate PROD policy PDF.',
@@ -178,7 +179,7 @@ export default function ProdServicesDashboard() {
       }
       window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
     } catch (error) {
-      console.error('Failed to open stored PROD PDF', error)
+      clientLogger.error('Failed to open stored PROD PDF', error)
       toast({
         title: 'Unable to open PDF',
         description: 'The stored PROD PDF could not be opened.',

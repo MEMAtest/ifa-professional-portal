@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/Badge';
 import { clientService } from '@/services/ClientService';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import clientLogger from '@/lib/logging/clientLogger';
 import NuclearMonteCarlo from '@/components/monte-carlo/NuclearMonteCarlo';
 // FIX: Use existing AssessmentService
 import { AssessmentService } from '@/services/AssessmentService';
@@ -118,7 +119,7 @@ export default function MonteCarloPage() {
       const dashboardStats = await fetchMonteCarloStats(supabase);
       setStats(dashboardStats);
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      clientLogger.error('Error fetching stats:', error);
     }
   }, [supabase]);
 
@@ -127,7 +128,7 @@ export default function MonteCarloPage() {
       const scenariosWithResults = await fetchMonteCarloScenarios(supabase, clientIdToLoad);
       setScenarios(scenariosWithResults);
     } catch (err) {
-      console.error('Error loading scenarios:', err);
+      clientLogger.error('Error loading scenarios:', err);
       setError('Failed to load scenarios');
     }
   }, [supabase]);
@@ -144,7 +145,7 @@ export default function MonteCarloPage() {
       await loadScenarios(clientIdToLoad);
 
     } catch (err) {
-      console.error('Error loading client and scenarios:', err);
+      clientLogger.error('Error loading client and scenarios:', err);
       setError(err instanceof Error ? err.message : 'Failed to load client data');
     } finally {
       setIsLoadingScenarios(false);
@@ -168,7 +169,7 @@ export default function MonteCarloPage() {
       await loadStats();
 
     } catch (err) {
-      console.error('Error loading initial data:', err);
+      clientLogger.error('Error loading initial data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setIsLoading(false);
@@ -226,8 +227,6 @@ export default function MonteCarloPage() {
 
   // ENHANCED: With assessment tracking using existing service
   const handleScenarioComplete = useCallback(async (results: any) => {
-    console.log('Scenario completed with results:', results);
-
     // Store results but DON'T change viewMode - let NuclearMonteCarlo show its detailed results
     setLatestResults(results);
     setShowResults(true);
@@ -282,7 +281,7 @@ export default function MonteCarloPage() {
         });
         
       } catch (error) {
-        console.error('Failed to track Monte Carlo progress:', error);
+        clientLogger.error('Failed to track Monte Carlo progress:', error);
         // Don't show error toast - this is non-blocking
       } finally {
         setIsTrackingProgress(false);

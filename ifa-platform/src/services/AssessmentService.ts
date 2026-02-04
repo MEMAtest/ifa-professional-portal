@@ -4,6 +4,7 @@
 // ================================================================
 
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import type { 
   AssessmentProgress, 
   AssessmentHistory, 
@@ -88,7 +89,7 @@ export class AssessmentService {
       if (!response.ok) throw new Error('Failed to fetch compliance status');
       return await response.json();
     } catch (error) {
-      console.error('Error fetching compliance status:', error);
+      clientLogger.error('Error fetching compliance status:', error);
       throw error;
     }
   }
@@ -112,7 +113,7 @@ export class AssessmentService {
       if (error && error.code !== 'PGRST116') throw error;
       return data;
     } catch (error) {
-      console.error('Error fetching client assessment:', error);
+      clientLogger.error('Error fetching client assessment:', error);
       return null;
     }
   }
@@ -181,7 +182,6 @@ export class AssessmentService {
         }
 
         const data = await response.json();
-        console.log(`✅ Assessment progress updated: ${update.assessmentType}`, data);
         
         return { success: true };
       } catch (error) {
@@ -225,7 +225,6 @@ export class AssessmentService {
         }
 
         const data = await response.json();
-        console.log(`✅ Assessment history logged: ${entry.assessmentType}`, data);
         
         return { success: true };
       } catch (error) {
@@ -266,7 +265,7 @@ export class AssessmentService {
       if (error) throw error;
       return count || 0;
     } catch (error) {
-      console.error(`Failed to get scenario count from ${tableName}:`, error);
+      clientLogger.error(`Failed to get scenario count from ${tableName}:`, error);
       return 0;
     }
   }

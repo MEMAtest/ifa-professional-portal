@@ -9,6 +9,7 @@ import { CashFlowReportService, type CashFlowReportOptions, type CashFlowReportR
 import { EnhancedCashFlowReportService, type EnhancedReportOptions, type EnhancedReportResult } from './EnhancedCashFlowReportService';
 import { StressTestReportService } from './StressTestReportService';
 import { ATRReportService } from './ATRReportService';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ================================================================
 // IMPORT INTERFACES (Use from types file to avoid duplication)
@@ -38,7 +39,6 @@ export class ReportAdapter {
    */
   async generateReport(request: UnifiedReportRequest): Promise<UnifiedReportResult> {
     try {
-      console.log(`[ReportAdapter] Routing ${request.type} report for ${request.dataId}`);
 
       switch (request.type) {
         case 'cashflow':
@@ -79,7 +79,7 @@ export class ReportAdapter {
       }
 
     } catch (error) {
-      console.error('[ReportAdapter] Error:', error);
+      clientLogger.error('[ReportAdapter] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Report generation failed',
@@ -268,7 +268,7 @@ export class ReportAdapter {
       .limit(limit);
 
     if (error) {
-      console.error('[ReportAdapter] Error fetching client reports:', error);
+      clientLogger.error('[ReportAdapter] Error fetching client reports:', error);
       return [];
     }
 

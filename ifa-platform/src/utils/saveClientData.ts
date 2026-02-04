@@ -2,6 +2,7 @@
 // Utility to save client data to your Supabase database with JSONB structure
 
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 
 const supabase = createClient()
 
@@ -104,7 +105,7 @@ export async function saveClientData({ clientId, formData, advisorId, firmId }: 
       return { data, error: null }
     }
   } catch (error) {
-    console.error('Error saving client data:', error)
+    clientLogger.error('Error saving client data:', error)
     return { data: null, error }
   }
 }

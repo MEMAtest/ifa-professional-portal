@@ -25,6 +25,7 @@ import { formatCurrency } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { FirmAnalyticsService, type ImpactDetails, type MarketConditions } from '@/services/FirmAnalyticsService'
 import type { Client } from '@/types/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { ClientAUM } from '@/lib/financials/aumCalculator'
 
 interface ClientMarketViewProps {
@@ -90,7 +91,7 @@ export function ClientMarketView({ clientId, onClose }: ClientMarketViewProps) {
         setAnalytics(data)
       } catch (err) {
         setError('Failed to load client analytics')
-        console.error('Error fetching client analytics:', err)
+        clientLogger.error('Error fetching client analytics:', err)
       } finally {
         setLoading(false)
       }

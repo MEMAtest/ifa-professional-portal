@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { useClientIntegration } from '@/lib/hooks/useClientIntegration';
 import { AlertCircle, CheckCircle, Save, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger';
 import { ClientFormStepContent } from '@/components/clients/form/ClientFormStepContent';
 import { useClientFormState } from '@/components/clients/form/hooks/useClientFormState';
 import {
@@ -93,8 +94,6 @@ export default function ClientForm({
   // ===================================================================
   
   const handleManualSave = useCallback(async () => {
-    console.log('🚀 Manual save initiated on step', currentStep);
-    
     // Must be on step 5
     if (currentStep !== 5) {
       toast({
@@ -127,8 +126,6 @@ export default function ClientForm({
     setIsSaving(true);
 
     try {
-      console.log('💾 Saving client data...');
-      
       if (onSave) {
         await onSave(formData);
       } else if (onSubmit) {
@@ -157,7 +154,7 @@ export default function ClientForm({
       }, 1500);
       
     } catch (error) {
-      console.error('❌ Save error:', error);
+      clientLogger.error('❌ Save error:', error);
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to save client',
@@ -199,7 +196,7 @@ export default function ClientForm({
             });
           }
         } catch (error) {
-          console.error('Error loading draft:', error);
+          clientLogger.error('Error loading draft:', error);
         }
       }
     };

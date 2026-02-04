@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { DEFAULT_PROD_SERVICES, ProdServiceDefinition } from '@/lib/prod/serviceCatalog'
 
 interface Props {
@@ -148,7 +149,7 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
         setLastSavedAt(null)
       }
     } catch (error) {
-      console.error('Error loading services:', error)
+      clientLogger.error('Error loading services:', error)
     } finally {
       setLoading(false)
     }
@@ -298,7 +299,7 @@ export default function ServiceSelection({ clientId, firmId, onSaved }: Props) {
       onSaved?.()
       loadData()
     } catch (error) {
-      console.error('Error saving:', error)
+      clientLogger.error('Error saving:', error)
       toast({
         title: 'Error',
         description: 'Failed to save service selection',

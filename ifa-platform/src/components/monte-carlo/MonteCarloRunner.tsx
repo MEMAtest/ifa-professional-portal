@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface MonteCarloRunnerProps {
   scenarioId: string;  // Required - must be a valid scenario ID from the database
@@ -20,7 +21,7 @@ export function MonteCarloRunner({
 
   // Validate scenarioId is provided (after hooks)
   if (!scenarioId) {
-    console.error('MonteCarloRunner: scenarioId is required');
+    clientLogger.error('MonteCarloRunner: scenarioId is required');
     return null;
   }
 

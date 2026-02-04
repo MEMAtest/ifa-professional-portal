@@ -40,6 +40,7 @@ export async function GET(
     const assessmentId = searchParams.get('assessmentId')
     const assessmentType = searchParams.get('assessmentType')
     const assessmentVersion = searchParams.get('version')
+    const summaryOnly = searchParams.get('summary') === '1' || searchParams.get('summary') === 'true'
 
     log.debug('Document fetch params', {
       clientId,
@@ -58,6 +59,32 @@ export async function GET(
     })
     if (!access.ok) {
       return access.response
+    }
+
+    if (summaryOnly) {
+      const { data: statusRows, error: statusError } = await supabase
+        .from('documents')
+        .select('status')
+        .eq('client_id', clientId)
+        .eq('firm_id', firmId)
+
+      if (statusError) {
+        log.error('Database error fetching document summary', statusError)
+        return NextResponse.json({ error: 'Failed to fetch document summary' }, { status: 500 })
+      }
+
+      const statuses = statusRows || []
+      const analyzedCount = statuses.filter((row: any) => row.status === 'analyzed').length
+      const pendingCount = statuses.filter((row: any) => row.status === 'pending' || row.status === 'active' || !row.status).length
+      const failedCount = statuses.filter((row: any) => row.status === 'failed' || row.status === 'extracted').length
+
+      return NextResponse.json({
+        success: true,
+        count: statuses.length,
+        analyzedCount,
+        pendingCount,
+        failedCount
+      })
     }
 
     // ---------------------------------------------------------------

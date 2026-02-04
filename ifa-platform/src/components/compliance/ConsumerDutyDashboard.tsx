@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
 import type { WorkflowItem } from './workflow'
 import {
@@ -224,7 +225,6 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
         if (signal?.aborted || !isMountedRef.current) return
 
         if (cdError) {
-          console.log('Consumer Duty table not available:', cdError.message)
           setTableExists(false)
         } else {
           setTableExists(true)
@@ -243,7 +243,6 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
         }
       } catch (e) {
         if ((e as Error).name === 'AbortError') return
-        console.log('Consumer Duty query failed:', e)
         setTableExists(false)
       }
 
@@ -258,7 +257,7 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
       if ((error as Error).name === 'AbortError') return
       if (!isMountedRef.current) return
 
-      console.error('Error loading Consumer Duty data:', error)
+      clientLogger.error('Error loading Consumer Duty data:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to load Consumer Duty data',
@@ -326,7 +325,7 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
 
       return newRecord
     } catch (error) {
-      console.error('Error creating Consumer Duty record:', error)
+      clientLogger.error('Error creating Consumer Duty record:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to create record. Has the table been set up?',
@@ -478,7 +477,7 @@ export default function ConsumerDutyDashboard({ onStatsChange }: Props) {
 
       onStatsChange?.()
     } catch (error) {
-      console.error('Error updating field:', error)
+      clientLogger.error('Error updating field:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to update field',

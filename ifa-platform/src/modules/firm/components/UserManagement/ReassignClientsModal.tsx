@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { useFirmUsers } from '../../hooks/useFirmUsers'
 import { useToast } from '@/hooks/use-toast'
 import type { FirmUser } from '../../types/user.types'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ReassignClientsModalProps {
   open: boolean
@@ -174,7 +175,7 @@ export function ReassignClientsModal({
       onReassignComplete()
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('Reassignment error:', error)
+        clientLogger.error('Reassignment error:', error)
       }
       toast({
         title: 'Reassignment failed',

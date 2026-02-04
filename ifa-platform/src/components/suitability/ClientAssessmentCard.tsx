@@ -13,6 +13,7 @@ import {
   ArrowDownRight
 } from 'lucide-react'
 import type { SuitabilityClient } from '@/services/SuitabilityAssessmentService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ClientAssessmentCardProps {
   client: SuitabilityClient
@@ -99,10 +100,9 @@ export default function ClientAssessmentCard({ client, onClick }: ClientAssessme
     e.stopPropagation()
     
     try {
-      console.log('Card clicked for client:', client.name)
       onClick(client)
     } catch (error) {
-      console.error('Error in card click handler:', error)
+      clientLogger.error('Error in card click handler:', error)
     }
   }
 

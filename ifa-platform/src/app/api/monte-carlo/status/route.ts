@@ -1,35 +1,34 @@
 // src/app/api/monte-carlo/status/route.ts
-// ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
+// Authenticated Monte Carlo system status (firm-scoped)
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
-import { log } from '@/lib/logging/structured';
+import { NextRequest, NextResponse } from 'next/server'
+import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
-// ✅ FORCE DYNAMIC RENDERING
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
-/**
- * GET /api/monte-carlo/status
- * Returns the health status of the Monte Carlo simulation system
- */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // ✅ TIMEOUT PROTECTION
-    const timeoutId = setTimeout(() => {
-      throw new Error('Health check timeout after 10 seconds');
-    }, 10000);
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ GET HEALTH STATUS WITH ERROR HANDLING
-    const healthResponse = await db.getHealthStatus();
-    
-    clearTimeout(timeoutId);
-    
-    if (healthResponse?.success !== true) {
-      log.error('Monte Carlo database health check failed', { error: healthResponse?.error });
+    const supabase = getSupabaseServiceClient()
+
+    const { error: pingError } = await supabase
+      .from('monte_carlo_results')
+      .select('id')
+      .limit(1)
+
+    if (pingError) {
+      log.error('Monte Carlo database health check failed', { error: pingError.message })
       return NextResponse.json(
         {
           success: false,
@@ -38,46 +37,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           timestamp: new Date().toISOString()
         },
         { status: 503 }
-      );
+      )
     }
 
-    // ✅ SAFE SCENARIO CHECKING WITH FALLBACKS
-    let hasData: boolean = false;
-    let scenarioCount: number = 0;
-    let recordCount: number = 0;
-    
-    try {
-      const scenariosResponse = await db.listScenarios(1, 5);
-      hasData = Boolean(
-        scenariosResponse?.success === true && 
-        scenariosResponse?.data && 
-        Array.isArray(scenariosResponse.data) &&
-        scenariosResponse.data.length > 0
-      );
-      scenarioCount = scenariosResponse?.data?.length || 0;
-      
-      // ✅ HANDLE BOTH OLD AND NEW DATABASE INTERFACES
-      const healthData = healthResponse.data || {};
-      recordCount = ('count' in healthData && typeof healthData.count === 'number') 
-        ? healthData.count 
-        : 0;
-        
-    } catch (scenarioError) {
-      log.warn('Could not fetch scenario data for status check', { error: scenarioError instanceof Error ? scenarioError.message : 'Unknown' });
-      hasData = false;
-      scenarioCount = 0;
-      recordCount = 0;
+    const { count: scenarioCount, error: scenarioError } = await supabase
+      .from('cash_flow_scenarios')
+      .select('id', { count: 'exact', head: true })
+      .eq('firm_id', firmId)
+
+    if (scenarioError) {
+      log.warn('Failed to fetch scenario count for status', { error: scenarioError.message })
     }
 
-    // ✅ STANDARDIZED SUCCESS RESPONSE
     return NextResponse.json(
       {
         success: true,
         status: 'healthy',
         database: {
           connection: 'ok',
-          health: healthResponse.data?.status || 'unknown',
-          totalRecords: recordCount
+          health: 'ok',
+          totalRecords: scenarioCount || 0
         },
         features: {
           simulation: true,
@@ -86,13 +65,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           healthCheck: true
         },
         data: {
-          hasScenarios: hasData,
-          recentScenarioCount: scenarioCount
+          hasScenarios: Boolean(scenarioCount && scenarioCount > 0),
+          recentScenarioCount: scenarioCount || 0
         },
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development'
       },
-      { 
+      {
         status: 200,
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -100,11 +79,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           'Expires': '0'
         }
       }
-    );
-
-  } catch (error: unknown) {
-    log.error('Monte Carlo status API error', error);
-
+    )
+  } catch (error) {
+    log.error('Monte Carlo status API error', error)
     return NextResponse.json(
       {
         success: false,
@@ -113,32 +90,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         timestamp: new Date().toISOString()
       },
       { status: 500 }
-    );
+    )
   }
-}
-
-/**
- * OPTIONS /api/monte-carlo/status
- * Handle CORS preflight requests
- */
-export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
-  const origin = request.headers.get('origin')
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-
-  const headers: Record<string, string> = {
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400'
-  }
-
-  // Only allow origins from our app or localhost in development
-  if (origin) {
-    if (appUrl && origin === appUrl) {
-      headers['Access-Control-Allow-Origin'] = origin
-    } else if (process.env.NODE_ENV === 'development') {
-      headers['Access-Control-Allow-Origin'] = origin
-    }
-  }
-
-  return new NextResponse(null, { status: 204, headers });
 }

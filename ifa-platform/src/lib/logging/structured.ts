@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server'
 import { getErrorDetails } from '@/lib/errors'
+import clientLogger from '@/lib/logging/clientLogger'
 
 /**
  * Log levels for structured logging
@@ -71,16 +72,15 @@ function outputLog(entry: LogEntry): void {
 
   switch (entry.level) {
     case 'debug':
-      console.debug(logString)
       break
     case 'info':
-      console.info(logString)
+      clientLogger.info(logString)
       break
     case 'warn':
-      console.warn(logString)
+      clientLogger.warn(logString)
       break
     case 'error':
-      console.error(logString)
+      clientLogger.error(logString)
       break
   }
 }

@@ -1,9 +1,11 @@
 // src/app/api/cashflow/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
-import { checkAuthentication, handleError, validateRequiredFields, createSuccessResponse } from '../utils';
+import { handleError, validateRequiredFields, createSuccessResponse } from '../utils';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering
@@ -16,32 +18,66 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    const { user, error: authError } = await checkAuthentication(request);
-    if (authError) {
-      log.warn('Cashflow authentication warning', { error: authError });
-      // Continue anyway for now - make this stricter if needed
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+    const supabase = getSupabaseServiceClient()
 
     const searchParams = request.nextUrl.searchParams;
     const clientId = searchParams.get('clientId');
 
     if (clientId) {
-      const scenarios = await CashFlowDataService.getClientScenarios(clientId);
-      return createSuccessResponse({
-        scenarios,
-        count: scenarios.length
-      });
-    } else if (user) {
-      const scenarios = await CashFlowDataService.getUserScenarios(user.id);
+      const access = await requireClientAccess({
+        supabase,
+        clientId,
+        ctx: auth.context,
+        select: 'id, firm_id, advisor_id'
+      })
+      if (!access.ok) {
+        return access.response
+      }
+
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('firm_id', firmId)
+        .eq('is_active', true)
+
+      if (error) {
+        return handleError(error, 'Failed to fetch cash flow scenarios')
+      }
+
+      const scenarios = (data || []).sort((a: any, b: any) =>
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
       return createSuccessResponse({
         scenarios,
         count: scenarios.length
       });
     } else {
-      // Return empty array if no user and no clientId
+      const { data, error } = await supabase
+        .from('cash_flow_scenarios')
+        .select('*')
+        .eq('firm_id', firmId)
+        .eq('is_active', true)
+
+      if (error) {
+        return handleError(error, 'Failed to fetch cash flow scenarios')
+      }
+
+      const scenarios = (data || []).sort((a: any, b: any) =>
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      )
       return createSuccessResponse({
-        scenarios: [],
-        count: 0
+        scenarios,
+        count: scenarios.length
       });
     }
 
@@ -56,9 +92,13 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { user, error: authError } = await checkAuthentication(request);
-    if (authError) {
-      return handleError(authError, 'Authentication required');
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
     const body = await parseRequestBody(request);
@@ -72,6 +112,17 @@ export async function POST(request: NextRequest) {
 
     if (validationError) {
       return NextResponse.json({ success: false, error: validationError }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServiceClient()
+    const access = await requireClientAccess({
+      supabase,
+      clientId: body.clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
     }
 
     const scenario = await CashFlowDataService.createScenarioFromClient(

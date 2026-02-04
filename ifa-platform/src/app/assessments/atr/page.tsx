@@ -39,6 +39,7 @@ import {
   Loader2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ================================================================
 // TYPE DEFINITIONS
@@ -362,7 +363,7 @@ export default function ATRAssessmentPage() {
         })
       })
     } catch (error) {
-      console.error('Error tracking progress:', error)
+      clientLogger.error('Error tracking progress:', error)
     }
   }, [clientId])
 
@@ -381,7 +382,7 @@ export default function ATRAssessmentPage() {
         })
       })
     } catch (error) {
-      console.error('Error logging history:', error)
+      clientLogger.error('Error logging history:', error)
     }
   }, [clientId])
 
@@ -522,7 +523,7 @@ export default function ATRAssessmentPage() {
         throw new Error('Failed to save assessment')
       }
     } catch (error: unknown) {
-      console.error('Error saving assessment:', error)
+      clientLogger.error('Error saving assessment:', error)
       setSaveError('Failed to save assessment. Please try again.')
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'

@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { useRouter } from 'next/navigation'
 import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
 import type { WorkflowItem } from './workflow'
@@ -272,7 +273,6 @@ export default function AMLDashboard({ onStatsChange }: Props) {
 
         if (amlError) {
           // Table doesn't exist or other error - will use empty array
-          console.log('AML table not available:', amlError.message)
           setTableExists(false)
         } else {
           setTableExists(true)
@@ -291,7 +291,6 @@ export default function AMLDashboard({ onStatsChange }: Props) {
         }
       } catch (e) {
         if ((e as Error).name === 'AbortError') return
-        console.log('AML query failed:', e)
         setTableExists(false)
       }
 
@@ -307,7 +306,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
       if ((error as Error).name === 'AbortError') return
       if (!isMountedRef.current) return
 
-      console.error('Error loading AML data:', error)
+      clientLogger.error('Error loading AML data:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to load AML data',
@@ -375,7 +374,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
 
       return newRecord
     } catch (error) {
-      console.error('Error creating AML record:', error)
+      clientLogger.error('Error creating AML record:', error)
       return null
     }
   }
@@ -443,7 +442,6 @@ export default function AMLDashboard({ onStatsChange }: Props) {
           new_value: value
         })
         .then(() => {})
-        .catch((e: any) => console.log('History log failed:', e))
 
       // Update local state immediately - no full reload needed
       setAmlRecords(prev => {
@@ -469,7 +467,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
 
       onStatsChange?.()
     } catch (error) {
-      console.error('Error updating field:', error)
+      clientLogger.error('Error updating field:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to update field',
@@ -592,7 +590,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
 
       onStatsChange?.()
     } catch (error) {
-      console.error('Error saving assessment:', error)
+      clientLogger.error('Error saving assessment:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to save assessment',
@@ -870,7 +868,7 @@ export default function AMLDashboard({ onStatsChange }: Props) {
       await loadData()
       onStatsChange?.()
     } catch (error) {
-      console.error('Error updating AML status:', error)
+      clientLogger.error('Error updating AML status:', error)
       toast({
         title: 'Error',
         description: 'Failed to update AML status',

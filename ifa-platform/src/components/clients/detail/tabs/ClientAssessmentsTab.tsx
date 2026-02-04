@@ -14,6 +14,7 @@ import {
   ExternalLink,
   ClipboardList
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
@@ -98,7 +99,7 @@ export function ClientAssessmentsTab({
       const result = await response.json()
       setData(result)
     } catch (error) {
-      console.error('Error fetching assessments:', error)
+      clientLogger.error('Error fetching assessments:', error)
       toast.error('Failed to load assessments')
     } finally {
       setLoading(false)

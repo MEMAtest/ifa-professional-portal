@@ -7,6 +7,7 @@ import {
   CashFlowScenario as AdvancedCashFlowScenario 
 } from '@/types/advanced-analytics';
 import { CashFlowScenario } from '@/types/cashflow';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export class AdvancedAnalyticsService {
   /**
@@ -37,7 +38,6 @@ export class AdvancedAnalyticsService {
     compliance_report: ComplianceReport;
     executive_summary: string;
   }> {
-    console.log('🚀 Running complete advanced analytics suite...');
     
     try {
       // Convert scenario to advanced analytics format
@@ -56,7 +56,6 @@ export class AdvancedAnalyticsService {
         complianceReport
       });
       
-      console.log('✅ Advanced analytics completed successfully');
       
       return {
         stress_tests: stressTests,
@@ -65,7 +64,7 @@ export class AdvancedAnalyticsService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.error('❌ Advanced analytics failed:', error);
+      clientLogger.error('❌ Advanced analytics failed:', error);
       throw new Error(`Advanced analytics failed: ${errorMessage}`);
     }
   }

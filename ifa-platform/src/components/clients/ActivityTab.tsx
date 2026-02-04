@@ -42,6 +42,7 @@ import {
   Legend
 } from 'recharts'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -89,7 +90,7 @@ export default function ActivityTab({ clientId, clientName }: Props) {
               console.warn(`Table ${tableName} not available:`, error.message)
               return []
             }
-            console.error(`Error querying ${tableName}:`, error)
+            clientLogger.error(`Error querying ${tableName}:`, error)
             return []
           }
           return data || []
@@ -309,7 +310,7 @@ export default function ActivityTab({ clientId, clientName }: Props) {
 
       setActivities(allActivities)
     } catch (error) {
-      console.error('Error loading activities:', error)
+      clientLogger.error('Error loading activities:', error)
       setActivities([])
     } finally {
       setLoading(false)

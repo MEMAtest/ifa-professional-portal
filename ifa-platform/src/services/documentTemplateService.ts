@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { Database, DbInsert, DbRow, DbUpdate } from '@/types/db'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Type aliases for database tables
 type DocumentTemplateRow = DbRow<'document_templates'>;
@@ -100,7 +101,7 @@ export class DocumentTemplateService {
         this.supabase = createClient()
       }
     } catch (error) {
-      console.error("CRITICAL: Supabase client initialization failed in DocumentTemplateService. Check environment variables.", error)
+      clientLogger.error("CRITICAL: Supabase client initialization failed in DocumentTemplateService. Check environment variables.", error)
       this.supabase = null
     }
   }
@@ -149,7 +150,7 @@ export class DocumentTemplateService {
   // =====================================================
   async getTemplateById(templateId: string): Promise<DocumentTemplate | null> {
     if (!this.supabase) {
-      console.error("Action failed: Supabase client is not available in getTemplateById.")
+      clientLogger.error("Action failed: Supabase client is not available in getTemplateById.")
       return this.getDefaultTemplateById(templateId)
     }
 
@@ -160,7 +161,6 @@ export class DocumentTemplateService {
       // Check cache first
       const cached = this.getCachedTemplate(mappedId)
       if (cached) {
-        console.log(`✅ Template ${mappedId} loaded from cache`)
         return cached
       }
 
@@ -185,7 +185,7 @@ export class DocumentTemplateService {
       const { data, error } = await query.single()
 
       if (error) {
-        console.error('Error fetching template by ID/name:', error)
+        clientLogger.error('Error fetching template by ID/name:', error)
         // If not found in DB, try by name
         const templateByName = await this.getTemplateByName(templateId)
         if (templateByName) {
@@ -202,7 +202,7 @@ export class DocumentTemplateService {
 
       return template
     } catch (error) {
-      console.error('Error in getTemplateById:', error)
+      clientLogger.error('Error in getTemplateById:', error)
       return this.getDefaultTemplateById(templateId)
     }
   }
@@ -212,7 +212,7 @@ export class DocumentTemplateService {
   // =====================================================
   async getTemplateByName(templateName: string): Promise<DocumentTemplate | null> {
     if (!this.supabase) {
-      console.error("Action failed: Supabase client is not available in getTemplateByName.")
+      clientLogger.error("Action failed: Supabase client is not available in getTemplateByName.")
       return this.getDefaultTemplateByName(templateName)
     }
 
@@ -223,7 +223,6 @@ export class DocumentTemplateService {
       // Check cache
       const cached = this.getCachedTemplate(mappedName)
       if (cached) {
-        console.log(`✅ Template ${mappedName} loaded from cache`)
         return cached
       }
 
@@ -236,7 +235,7 @@ export class DocumentTemplateService {
         .single()
 
       if (error) {
-        console.error('Error fetching template by name:', error)
+        clientLogger.error('Error fetching template by name:', error)
         // Try default templates
         return this.getDefaultTemplateByName(templateName)
       }
@@ -248,7 +247,7 @@ export class DocumentTemplateService {
 
       return template
     } catch (error) {
-      console.error('Error in getTemplateByName:', error)
+      clientLogger.error('Error in getTemplateByName:', error)
       return this.getDefaultTemplateByName(templateName)
     }
   }
@@ -258,7 +257,7 @@ export class DocumentTemplateService {
   // =====================================================
   async getTemplates(): Promise<DocumentTemplate[]> {
     if (!this.supabase) {
-      console.error("Action failed: Supabase client is not available in getTemplates.")
+      clientLogger.error("Action failed: Supabase client is not available in getTemplates.")
       return this.getDefaultTemplatesAsList()
     }
 
@@ -270,7 +269,7 @@ export class DocumentTemplateService {
         .order('name')
 
       if (error) {
-        console.error('Error fetching templates:', error)
+        clientLogger.error('Error fetching templates:', error)
         return this.getDefaultTemplatesAsList()
       }
 
@@ -283,7 +282,7 @@ export class DocumentTemplateService {
 
       return templates
     } catch (error) {
-      console.error('Error in getTemplates:', error)
+      clientLogger.error('Error in getTemplates:', error)
       return this.getDefaultTemplatesAsList()
     }
   }
@@ -384,7 +383,7 @@ export class DocumentTemplateService {
   // Get templates by category
   async getTemplatesByCategory(categoryId: string): Promise<DocumentTemplate[]> {
     if (!this.supabase) {
-      console.error("Action failed: Supabase client is not available in getTemplatesByCategory.")
+      clientLogger.error("Action failed: Supabase client is not available in getTemplatesByCategory.")
       return []
     }
 
@@ -399,7 +398,7 @@ export class DocumentTemplateService {
       if (error) throw error
       return this.mapTemplatesFromDatabase(data || [])
     } catch (error) {
-      console.error('Error fetching templates by category:', error)
+      clientLogger.error('Error fetching templates by category:', error)
       return []
     }
   }
@@ -407,7 +406,7 @@ export class DocumentTemplateService {
   // Get templates by type
   async getTemplatesByType(documentType: DocumentType): Promise<DocumentTemplate[]> {
     if (!this.supabase) {
-      console.error("Action failed: Supabase client is not available in getTemplatesByType.")
+      clientLogger.error("Action failed: Supabase client is not available in getTemplatesByType.")
       return []
     }
 
@@ -422,7 +421,7 @@ export class DocumentTemplateService {
       if (error) throw error
       return this.mapTemplatesFromDatabase(data || [])
     } catch (error) {
-      console.error('Error fetching templates by type:', error)
+      clientLogger.error('Error fetching templates by type:', error)
       return []
     }
   }
@@ -464,7 +463,7 @@ export class DocumentTemplateService {
       this.cacheTemplate(template.id, template)
       return template
     } catch (error) {
-      console.error('Error creating template:', error)
+      clientLogger.error('Error creating template:', error)
       throw new Error('Failed to create template: ' + (error as Error).message)
     }
   }
@@ -509,7 +508,7 @@ export class DocumentTemplateService {
       this.cacheTemplate(template.id, template)
       return template
     } catch (error) {
-      console.error('Error updating template:', error)
+      clientLogger.error('Error updating template:', error)
       throw new Error('Failed to update template: ' + (error as Error).message)
     }
   }
@@ -537,7 +536,7 @@ export class DocumentTemplateService {
       this.templateCache.delete(templateId)
       this.cacheExpiry.delete(templateId)
     } catch (error) {
-      console.error('Error deleting template:', error)
+      clientLogger.error('Error deleting template:', error)
       throw new Error('Failed to delete template: ' + (error as Error).message)
     }
   }
@@ -592,7 +591,7 @@ export class DocumentTemplateService {
         content: processedContent
       }
     } catch (error) {
-      console.error('Error generating document:', error)
+      clientLogger.error('Error generating document:', error)
       throw new Error('Failed to generate document from template: ' + (error as Error).message)
     }
   }

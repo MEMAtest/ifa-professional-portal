@@ -24,7 +24,7 @@ export default function ContactPage() {
 
               <div className="space-y-4">
                 <div className="bg-white rounded-xl border border-gray-200 p-4">
-                  <p className="text-sm font-semibold text-gray-900">Sales and demos</p>
+                  <p className="text-sm font-semibold text-gray-900">Sales and walkthroughs</p>
                   <p className="text-sm text-gray-600">Book a walkthrough with our advisory specialists.</p>
                 </div>
                 <div className="bg-white rounded-xl border border-gray-200 p-4">

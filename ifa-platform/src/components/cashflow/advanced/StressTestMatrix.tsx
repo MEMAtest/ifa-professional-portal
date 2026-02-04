@@ -422,8 +422,6 @@ export const StressTestMatrixDemo: React.FC = () => {
         results={sampleResults}
         sortable={true}
         showExportButton={true}
-        onRowClick={(result) => console.log('Clicked:', result.scenarioName)}
-        onExport={() => console.log('Export clicked')}
       />
     </div>
   );

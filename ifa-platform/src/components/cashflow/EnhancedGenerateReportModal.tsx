@@ -37,6 +37,7 @@ import {
   History,
   BookOpen
 } from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger'
 import { ReportPreview } from '@/components/reports/ReportPreview';
 import { 
   // useReportGeneration, 
@@ -269,7 +270,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
       const history = await service.getReportHistory(scenario.clientId);
       setReportHistory(history);
     } catch (error) {
-      console.error('Failed to load report history:', error);
+      clientLogger.error('Failed to load report history:', error);
       setReportHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -337,7 +338,7 @@ const EnhancedGenerateReportModal: React.FC<EnhancedGenerateReportModalProps> = 
       }
 
     } catch (error) {
-      console.error('Report generation error:', error);
+      clientLogger.error('Report generation error:', error);
       setCurrentProgress({
         stage: 'error',
         progress: 0,

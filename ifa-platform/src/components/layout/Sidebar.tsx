@@ -13,6 +13,7 @@ import { useClientContext } from '@/hooks/useClientContext';
 import { useAuth } from '@/hooks/useAuth';
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   BarChart3,
   Bell,
@@ -364,7 +365,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
 
         setOverdueTaskCount(overdueCount || 0);
       } catch (error) {
-        console.error('Error fetching sidebar stats:', error);
+        clientLogger.error('Error fetching sidebar stats:', error);
       }
     };
 

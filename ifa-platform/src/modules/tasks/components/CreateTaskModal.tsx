@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import {
@@ -50,7 +50,7 @@ export function CreateTaskModal({
   const [clientId, setClientId] = useState(defaultClientId || '')
   const [requiresSignOff, setRequiresSignOff] = useState(false)
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setTitle('')
     setDescription('')
     setType('general')
@@ -61,12 +61,12 @@ export function CreateTaskModal({
     setRequiresSignOff(false)
     setSelectedTemplate(null)
     setErrors({})
-  }
+  }, [defaultAssigneeId, defaultClientId])
 
   useEffect(() => {
     if (!open) return
     resetForm()
-  }, [open, defaultAssigneeId, defaultClientId])
+  }, [open, resetForm])
 
   const handleTemplateSelect = (templateId: string) => {
     const template = TASK_TEMPLATES.find((t) => t.id === templateId)

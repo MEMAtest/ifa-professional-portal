@@ -31,6 +31,7 @@ import { FirmSettingsPanel } from '@/modules/firm/components/FirmSettingsPanel'
 import { UserTable } from '@/modules/firm/components/UserManagement/UserTable'
 import { CaseloadDashboard } from '@/modules/firm/components/CaseloadDashboard/CaseloadDashboard'
 import { usePermissions } from '@/modules/firm/hooks/usePermissions'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Types based on actual database schema
 interface UserProfile {
@@ -203,20 +204,6 @@ export default function SettingsPage() {
     }))
   }, [user])
 
-  const createMockData = useCallback(() => {
-    // Fallback mock data
-    setUserProfile(prev => ({
-      ...prev,
-      id: user?.id || '',
-      full_name: 'John Smith',
-      phone: '+44 7700 900123',
-      job_title: 'Senior Financial Advisor',
-      bio: 'Experienced financial advisor specializing in retirement planning and investment management.',
-      created_at: '2024-01-15T00:00:00Z',
-      updated_at: new Date().toISOString()
-    }))
-  }, [user])
-
   const loadUserProfile = useCallback(async (): Promise<string | null> => {
     if (!user?.id) return null
 
@@ -228,7 +215,7 @@ export default function SettingsPage() {
       .maybeSingle()
 
     if (error) {
-      console.error('Error loading user profile:', error)
+      clientLogger.error('Error loading user profile:', error)
       // Create default profile if none exists
       createDefaultProfile()
       return firmContext.resolveFirmId(user?.firmId || null)
@@ -259,12 +246,12 @@ export default function SettingsPage() {
       await loadFirmSettings(resolvedFirmId)
       await loadConsumerDutySettings(resolvedFirmId)
     } catch (error) {
-      console.error('Error loading settings:', error)
-      createMockData()
+      clientLogger.error('Error loading settings:', error)
+      createDefaultProfile()
     } finally {
       setLoading(false)
     }
-  }, [createMockData, loadFirmSettings, loadConsumerDutySettings, loadUserProfile])
+  }, [createDefaultProfile, loadFirmSettings, loadConsumerDutySettings, loadUserProfile])
 
   const hasLoadedRef = useRef<string | null>(null)
 
@@ -309,7 +296,7 @@ export default function SettingsPage() {
       })
 
     } catch (error) {
-      console.error('Error saving profile:', error)
+      clientLogger.error('Error saving profile:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to save profile',
@@ -364,7 +351,7 @@ export default function SettingsPage() {
       })
 
     } catch (error) {
-      console.error('Error changing password:', error)
+      clientLogger.error('Error changing password:', error)
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to change password',

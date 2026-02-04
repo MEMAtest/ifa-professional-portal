@@ -3,6 +3,7 @@
 // Integrates Monte Carlo simulations with cash flow projections
 // ================================================================
 import type { CashFlowScenario, ProjectionResult } from '@/types/cashflow';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface MonteCarloResultEnhanced {
   successProbability: number;
@@ -59,7 +60,7 @@ export class MonteCarloIntegrationService {
         recommendations: this.generateRecommendations(result, scenario)
       };
     } catch (error) {
-      console.error('Monte Carlo simulation error:', error);
+      clientLogger.error('Monte Carlo simulation error:', error);
       // Return default values for demo
       return this.getDefaultSimulationResults();
     }

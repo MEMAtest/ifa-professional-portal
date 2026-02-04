@@ -13,6 +13,7 @@ import type { CashFlowScenario, ProjectionResult } from '@/types/cashflow';
 import { createClient } from '@/lib/supabase/client';
 import type { Client } from '@/types/client';
 import { advisorContextService, type ReportContext } from './AdvisorContextService';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface CashFlowReportOptions {
   includeCharts: boolean;
@@ -78,8 +79,6 @@ export class CashFlowReportService {
       );
 
       // 4. Use your existing DocumentGenerationService
-      console.log('📄 Generating document with templateId:', templateId);
-      console.log('📊 Variables keys:', Object.keys(variables));
 
       const document = await this.documentService.generateDocument({
         templateId,
@@ -89,7 +88,6 @@ export class CashFlowReportService {
         title: `Cash Flow Analysis - ${scenario.scenarioName || 'Report'}` // Added required title field
       });
 
-      console.log('✅ Document generated:', { id: document.id, filePath: document.filePath });
 
       // 5. Generate download URL
       const downloadUrl = await this.getDocumentDownloadUrl(document.filePath);
@@ -101,7 +99,7 @@ export class CashFlowReportService {
       };
 
     } catch (error) {
-      console.error('Error generating cash flow report:', error);
+      clientLogger.error('Error generating cash flow report:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Report generation failed'
@@ -406,7 +404,7 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
 
   // Add validation for filePath
   if (!filePath) {
-    console.error('Invalid filePath provided to getDocumentDownloadUrl:', filePath);
+    clientLogger.error('Invalid filePath provided to getDocumentDownloadUrl:', filePath);
     return '';
   }
 
@@ -437,7 +435,6 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
     }
   ): Promise<CashFlowReportResult> {
     try {
-      console.log('📄 Starting REAL PDF generation for scenario:', scenarioId);
 
       // 1. Gather all required data
       const scenario = await CashFlowDataService.getScenario(scenarioId);
@@ -456,7 +453,6 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
       const pdfData = await this.buildPDFReportData(client, scenario, projectionResult, options);
 
       // 3. Generate actual PDF
-      console.log('🔧 Generating PDF with @react-pdf/renderer...');
       const pdfBlob = await PDFGenerator.generateCashFlowReport(pdfData, {
         includeAssumptions: options.includeAssumptions,
         includeRiskAnalysis: options.includeRiskAnalysis,
@@ -481,7 +477,7 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
         });
 
       if (uploadError) {
-        console.error('Upload error:', uploadError);
+        clientLogger.error('Upload error:', uploadError);
         throw new Error(`Failed to upload PDF: ${uploadError.message}`);
       }
 
@@ -511,7 +507,7 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
         .single();
 
       if (dbError) {
-        console.error('Database error:', dbError);
+        clientLogger.error('Database error:', dbError);
         // Clean up uploaded file
         await supabase.storage.from('documents').remove([filePath]);
         throw new Error(`Failed to save document record: ${dbError.message}`);
@@ -520,7 +516,6 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
       // 6. Generate download URL
       const downloadUrl = await this.getDocumentDownloadUrl(filePath);
 
-      console.log('✅ PDF generated and uploaded successfully:', fileName);
 
       return {
         success: true,
@@ -530,7 +525,7 @@ private async getDocumentDownloadUrl(filePath: string): Promise<string> {
       };
 
     } catch (error) {
-      console.error('❌ PDF generation error:', error);
+      clientLogger.error('❌ PDF generation error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'PDF generation failed'

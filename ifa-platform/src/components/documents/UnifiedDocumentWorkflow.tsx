@@ -31,115 +31,24 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useRef } from 'react'
-import sanitizeHtml from 'sanitize-html'
-
-const sanitizeDocumentHtml = (html: string) =>
-  sanitizeHtml(html, {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'style']),
-    allowedAttributes: {
-      ...sanitizeHtml.defaults.allowedAttributes,
-      img: ['src', 'alt', 'width', 'height', 'style'],
-      '*': ['style', 'class', 'id']
-    }
-  })
+import clientLogger from '@/lib/logging/clientLogger'
+import { DEFAULT_TEMPLATE_CONTENT } from './unifiedDocumentWorkflowConstants'
+import {
+  formatCurrency,
+  getClientDisplayName,
+  getFallbackTemplates,
+  sanitizeDocumentHtml
+} from './unifiedDocumentWorkflowUtils'
+import type {
+  DocumentTemplate,
+  GeneratedDocument,
+  RealClient,
+  WorkflowStep
+} from './unifiedDocumentWorkflowTypes'
 
 // ===================================================================
 // TYPES & INTERFACES (FIXED)
 // ===================================================================
-
-interface PersonalDetails {
-  title?: string
-  firstName?: string
-  lastName?: string
-  dateOfBirth?: string
-  occupation?: string
-}
-
-interface ContactInfo {
-  email?: string
-  phone?: string
-  address?: {
-    line1?: string
-    city?: string
-    postcode?: string
-  }
-}
-
-interface FinancialProfile {
-  netWorth?: number
-  annualIncome?: number
-  investmentAmount?: number
-}
-
-interface RiskProfile {
-  riskTolerance?: string
-  attitudeToRisk?: number
-}
-
-interface RealClient {
-  id: string
-  client_ref: string
-  personal_details: PersonalDetails
-  contact_info: ContactInfo
-  financial_profile: FinancialProfile
-  risk_profile: RiskProfile
-  status: string
-  created_at: string
-}
-
-interface DocumentTemplate {
-  id: string
-  name: string
-  description?: string | null
-  template_content?: string | null
-  requires_signature?: boolean
-  template_variables?: Record<string, string> | null
-  is_active?: boolean
-}
-
-interface GeneratedDocument {
-  id: string
-  name: string
-  file_path: string
-  url: string
-  content: string
-}
-
-// ===================================================================
-// DEFAULT TEMPLATE CONTENT
-// ===================================================================
-
-const DEFAULT_TEMPLATE_CONTENT = `
-<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-  <h1 style="color: #2c3e50;">{{DOCUMENT_TITLE}}</h1>
-  
-  <p><strong>Date:</strong> {{REPORT_DATE}}</p>
-  <p><strong>Client Reference:</strong> {{CLIENT_REF}}</p>
-  
-  <h2>Client Information</h2>
-  <p><strong>Name:</strong> {{CLIENT_NAME}}</p>
-  <p><strong>Email:</strong> {{CLIENT_EMAIL}}</p>
-  
-  <h2>Financial Summary</h2>
-  <p><strong>Annual Income:</strong> £{{ANNUAL_INCOME}}</p>
-  <p><strong>Net Worth:</strong> £{{NET_WORTH}}</p>
-  <p><strong>Investment Amount:</strong> £{{INVESTMENT_AMOUNT}}</p>
-  
-  <h2>Risk Assessment</h2>
-  <p><strong>Risk Profile:</strong> {{RISK_PROFILE}}</p>
-  
-  <h2>Recommendation</h2>
-  <p>{{RECOMMENDATION}}</p>
-  
-  <p style="margin-top: 40px;">Prepared by: {{ADVISOR_NAME}}</p>
-</div>
-`
-
-// ===================================================================
-// WORKFLOW STEPS
-// ===================================================================
-
-type WorkflowStep = 'select-client' | 'select-template' | 'preview-document' | 'confirm-send'
 
 // ===================================================================
 // MAIN COMPONENT
@@ -163,7 +72,7 @@ export default function UnifiedDocumentWorkflow() {
     try {
       return createClient()
     } catch (error) {
-      console.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
+      clientLogger.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
       return null
     }
   }, [])
@@ -174,7 +83,7 @@ export default function UnifiedDocumentWorkflow() {
 
   const loadRealClients = useCallback(async () => {
     if (!supabase) {
-      console.error("Action failed: Supabase client is not available in loadRealClients.")
+      clientLogger.error("Action failed: Supabase client is not available in loadRealClients.")
       return
     }
 
@@ -207,37 +116,31 @@ export default function UnifiedDocumentWorkflow() {
 
       setClients(typedClients)
     } catch (err) {
-      console.error('Error loading clients:', err)
+      clientLogger.error('Error loading clients:', err)
       throw err
     }
   }, [supabase])
 
   const loadTemplates = useCallback(async () => {
     if (!supabase) {
-      console.error("Action failed: Supabase client is not available in loadTemplates.")
+      clientLogger.error("Action failed: Supabase client is not available in loadTemplates.")
       // Set fallback templates even when client is not available
       setTemplates(getFallbackTemplates())
       return
     }
 
-    console.log('Starting template load...');
-    
     // Always start with fallback templates
     const fallbackTemplates = getFallbackTemplates()
     
     // Set fallback templates immediately so UI has something
     setTemplates(fallbackTemplates)
-    console.log('Fallback templates set:', fallbackTemplates)
-    
     try {
       const { data, error } = await supabase
         .from('document_templates')
         .select('*')
 
-      console.log('Supabase query result:', { data, error })
-
       if (error) {
-        console.error('Supabase error:', error)
+        clientLogger.error('Supabase error:', error)
         // Keep using fallback templates
         return
       }
@@ -255,12 +158,10 @@ export default function UnifiedDocumentWorkflow() {
         }))
 
         setTemplates(processedTemplates)
-        console.log('Database templates loaded:', processedTemplates)
       } else {
-        console.log('No templates in database, using fallbacks')
       }
     } catch (err) {
-      console.error('Template loading error:', err)
+      clientLogger.error('Template loading error:', err)
       // Fallback templates already set
     }
   }, [supabase])
@@ -279,7 +180,7 @@ export default function UnifiedDocumentWorkflow() {
       ])
     } catch (err) {
       setError('Failed to load data. Please refresh the page.')
-      console.error('Data loading error:', err)
+      clientLogger.error('Data loading error:', err)
     } finally {
       setLoading(false)
     }
@@ -288,34 +189,6 @@ export default function UnifiedDocumentWorkflow() {
   useEffect(() => {
     loadInitialData()
   }, [loadInitialData])
-
-  // Helper to get fallback templates
-  const getFallbackTemplates = (): DocumentTemplate[] => [
-    {
-      id: '485f9812-6dab-4b72-9462-ef65573f6225',
-      name: 'Client Service Agreement',
-      description: 'Standard client service agreement template',
-      template_content: DEFAULT_TEMPLATE_CONTENT,
-      requires_signature: true,
-      template_variables: {}
-    },
-    {
-      id: '1f9ab2d6-0eb9-48c7-a82c-07bd63d0dfce',
-      name: 'Suitability Report',
-      description: 'Investment suitability assessment report',
-      template_content: DEFAULT_TEMPLATE_CONTENT,
-      requires_signature: true,
-      template_variables: {}
-    },
-    {
-      id: 'd796a0ac-8266-41f0-b626-b46f9c73aa9c',
-      name: 'Annual Review Report',
-      description: 'Annual portfolio review report',
-      template_content: DEFAULT_TEMPLATE_CONTENT,
-      requires_signature: false,
-      template_variables: {}
-    }
-  ]
 
   // ===================================================================
   // DOCUMENT GENERATION (FIXED)
@@ -391,7 +264,6 @@ export default function UnifiedDocumentWorkflow() {
         }
       } catch (apiError) {
         // Fallback for missing API
-        console.log('Document API not available, using fallback')
         setGeneratedDocument({
           id: `doc-${Date.now()}`,
           name: `${selectedTemplate.name} - ${variables.CLIENT_NAME}`,
@@ -416,13 +288,12 @@ export default function UnifiedDocumentWorkflow() {
           })
         })
       } catch (emailError) {
-        console.log('Email notification not sent')
       }
 
       setCurrentStep('preview-document')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Document generation failed')
-      console.error('Document generation error:', err)
+      clientLogger.error('Document generation error:', err)
     } finally {
       setLoading(false)
     }
@@ -461,7 +332,7 @@ export default function UnifiedDocumentWorkflow() {
         printWindow.document.close()
       }
     } catch (err) {
-      console.error('PDF generation error:', err)
+      clientLogger.error('PDF generation error:', err)
       setError('Failed to generate PDF')
     } finally {
       setLoading(false)
@@ -491,7 +362,6 @@ export default function UnifiedDocumentWorkflow() {
           throw new Error('Failed to send for signature')
         }
       } catch (apiError) {
-        console.log('Signature API not available, simulating success')
       }
 
       setCurrentStep('confirm-send')
@@ -505,23 +375,6 @@ export default function UnifiedDocumentWorkflow() {
   // ===================================================================
   // HELPER FUNCTIONS (FIXED)
   // ===================================================================
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-GB', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount)
-  }
-
-  const getClientDisplayName = (client: RealClient): string => {
-    if (!client.personal_details) return 'Unknown Client'
-    
-    const title = client.personal_details.title ? `${client.personal_details.title} ` : ''
-    const firstName = client.personal_details.firstName || ''
-    const lastName = client.personal_details.lastName || ''
-    
-    return `${title}${firstName} ${lastName}`.trim() || 'Unknown Client'
-  }
 
   const filteredClients = clients.filter(client => {
     const searchLower = searchQuery.toLowerCase()
@@ -745,7 +598,6 @@ export default function UnifiedDocumentWorkflow() {
                   key={template.id}
                   onClick={() => {
                     setSelectedTemplate(template)
-                    console.log('Selected template:', template)
                   }}
                   className={`p-4 rounded-lg border cursor-pointer transition-colors hover:border-blue-300 hover:bg-blue-50 ${
                     selectedTemplate?.id === template.id ? 'border-blue-500 bg-blue-50' : 

@@ -43,6 +43,7 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Chart colors
 const RISK_COLORS = {
@@ -225,7 +226,7 @@ export default function RiskCenterPage() {
       calculateStatistics(enrichedClients);
 
     } catch (error) {
-      console.error('Error loading risk data:', error);
+      clientLogger.error('Error loading risk data:', error);
     } finally {
       setIsLoading(false);
     }

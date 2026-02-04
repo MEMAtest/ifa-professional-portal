@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface DocumentStatus {
   id: string
@@ -53,15 +54,15 @@ export default function DocumentStatusPage() {
     try {
       return createClient()
     } catch (error) {
-      console.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
+      clientLogger.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
       return null
     }
   }, [])
 
   const loadDocumentStatuses = useCallback(async () => {
     if (!supabase) {
-      console.error("Action failed: Supabase client is not available in loadDocumentStatuses.")
-      setDocuments(getMockDocuments())
+      clientLogger.error("Action failed: Supabase client is not available in loadDocumentStatuses.")
+      setDocuments([])
       setLoading(false)
       return
     }
@@ -98,62 +99,15 @@ export default function DocumentStatusPage() {
         
         setDocuments(formattedDocs)
       } else {
-        // Use mock data for demo
-        setDocuments(getMockDocuments())
+        setDocuments([])
       }
     } catch (err) {
-      console.error('Error loading documents:', err)
-      setDocuments(getMockDocuments())
+      clientLogger.error('Error loading documents:', err)
+      setDocuments([])
     } finally {
       setLoading(false)
     }
   }, [supabase])
-
-  const getMockDocuments = (): DocumentStatus[] => [
-    {
-      id: '1',
-      document_name: 'Client Service Agreement - Sam Sung',
-      client_name: 'Mr Sam Sung',
-      client_email: 'sam.sung@demo.com',
-      template_name: 'Client Service Agreement',
-      status: 'signed',
-      sent_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-      viewed_at: new Date(Date.now() - 86400000).toISOString(),
-      signed_at: new Date().toISOString(),
-      created_at: new Date(Date.now() - 86400000 * 3).toISOString()
-    },
-    {
-      id: '2',
-      document_name: 'Suitability Report - Lora Piana',
-      client_name: 'Mrs Lora Piana',
-      client_email: 'lora.piana@demo.com',
-      template_name: 'Suitability Report',
-      status: 'viewed',
-      sent_at: new Date(Date.now() - 86400000).toISOString(),
-      viewed_at: new Date(Date.now() - 3600000).toISOString(),
-      created_at: new Date(Date.now() - 86400000 * 2).toISOString()
-    },
-    {
-      id: '3',
-      document_name: 'Annual Review - Brother Printer',
-      client_name: 'Mr Brother Printer',
-      client_email: 'brother.printer@demo.com',
-      template_name: 'Annual Review Report',
-      status: 'sent',
-      sent_at: new Date().toISOString(),
-      created_at: new Date().toISOString()
-    },
-    {
-      id: '4',
-      document_name: 'Risk Assessment - John Doe',
-      client_name: 'Mr John Doe',
-      client_email: 'john.doe@demo.com',
-      template_name: 'Risk Assessment Form',
-      status: 'expired',
-      sent_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-      created_at: new Date(Date.now() - 86400000 * 31).toISOString()
-    }
-  ]
 
   const filterDocuments = useCallback(() => {
     let filtered = [...documents]
@@ -241,13 +195,11 @@ export default function DocumentStatusPage() {
 
   const resendDocument = async (doc: DocumentStatus) => {
     // Implement resend logic
-    console.log('Resending document:', doc)
     alert(`Resending ${doc.document_name} to ${doc.client_email}`)
   }
 
   const downloadDocument = async (doc: DocumentStatus) => {
     // Implement download logic
-    console.log('Downloading document:', doc)
     alert(`Downloading ${doc.document_name}`)
   }
 

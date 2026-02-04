@@ -6,6 +6,7 @@ import { Search, Users, FileText, ClipboardCheck, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchResultItem } from '@/components/search/SearchResultItem'
 import type { SearchResponse, SearchResult, SearchEntityType } from '@/types/search'
+import clientLogger from '@/lib/logging/clientLogger'
 
 type FilterType = 'all' | SearchEntityType
 
@@ -45,7 +46,7 @@ function SearchPageContent() {
       const data: SearchResponse = await response.json()
       setResults(data)
     } catch (err) {
-      console.error('Search error:', err)
+      clientLogger.error('Search error:', err)
       setError('Failed to load search results. Please try again.')
     } finally {
       setLoading(false)

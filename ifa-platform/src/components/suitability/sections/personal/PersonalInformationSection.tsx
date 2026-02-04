@@ -30,6 +30,7 @@ import {
   AlertTriangle,
   CheckCircle2
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 import { cn } from '@/lib/utils'
 import { OCCUPATION_SUGGESTIONS } from '@/lib/constants/occupations'
 import { EMPLOYMENT_STATUS_OPTIONS, FIELD_ICONS, MARITAL_STATUS_OPTIONS, REQUIRED_FIELDS } from './constants'
@@ -174,7 +175,7 @@ export const PersonalInformationSection: React.FC<PersonalInformationSectionProp
       setTimeout(() => setShowSuccessMessage(false), 3000)
     },
     onError: (error) => {
-      console.error('AI suggestion error:', error)
+      clientLogger.error('AI suggestion error:', error)
     }
   })
 

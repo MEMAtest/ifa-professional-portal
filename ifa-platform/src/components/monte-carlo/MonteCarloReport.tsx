@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { FileText } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Type definitions with strict typing
 interface MonteCarloScenario {
@@ -67,7 +68,7 @@ export const MonteCarloReportButton: React.FC<MonteCarloReportButtonProps> = ({
       setIsGenerating(true);
       // Null safety checks
       if (!scenario || !client) {
-        console.error('Missing required data for report generation');
+        clientLogger.error('Missing required data for report generation');
         toast({ title: 'Error', description: 'Missing scenario or client data', variant: 'destructive' });
         setIsGenerating(false);
         return;
@@ -143,7 +144,6 @@ export const MonteCarloReportButton: React.FC<MonteCarloReportButtonProps> = ({
       }
 
       const payload = await response.json();
-      console.log('Generated report with data:', reportData);
 
       if (payload.signedUrl) {
         window.open(payload.signedUrl, '_blank');
@@ -157,7 +157,7 @@ export const MonteCarloReportButton: React.FC<MonteCarloReportButtonProps> = ({
         toast({ title: 'Report saved', description: 'Report stored; download from Documents.' });
       }
     } catch (error) {
-      console.error('Error generating report:', error);
+      clientLogger.error('Error generating report:', error);
       toast({
         title: 'Report failed',
         description: error instanceof Error ? error.message : 'Could not generate Monte Carlo report.',

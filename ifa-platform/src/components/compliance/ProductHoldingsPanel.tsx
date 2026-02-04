@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ProductHolding {
   id: string
@@ -90,7 +91,7 @@ export default function ProductHoldingsPanel({ clientId, services = DEFAULT_SERV
         setHoldings(data.holdings || [])
       }
     } catch (error) {
-      console.error('Error loading holdings:', error)
+      clientLogger.error('Error loading holdings:', error)
     } finally {
       setLoading(false)
     }

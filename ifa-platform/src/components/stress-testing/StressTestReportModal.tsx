@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -278,7 +279,7 @@ export const StressTestReportModal: React.FC<StressTestReportModalProps> = ({
 
       setReportHistory(history);
     } catch (error) {
-      console.error('Failed to load report history:', error);
+      clientLogger.error('Failed to load report history:', error);
       setReportHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -307,7 +308,7 @@ export const StressTestReportModal: React.FC<StressTestReportModalProps> = ({
         window.open(data.signedUrl, '_blank');
       }
     } catch (error) {
-      console.error('Failed to get report URL:', error);
+      clientLogger.error('Failed to get report URL:', error);
     }
   };
 
@@ -392,7 +393,7 @@ export const StressTestReportModal: React.FC<StressTestReportModalProps> = ({
       }
 
     } catch (error) {
-      console.error('Report generation error:', error);
+      clientLogger.error('Report generation error:', error);
       setCurrentProgress({
         stage: 'error',
         progress: 0,

@@ -20,6 +20,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { createClient } from '@/lib/supabase/client'
 import { safeUUID } from '@/lib/utils'
 import type { AssessmentVersionInfo } from '@/types/suitability-version'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export default function SuitabilityAssessmentPage() {
   const router = useRouter()
@@ -117,7 +118,7 @@ export default function SuitabilityAssessmentPage() {
       setSavedAssessmentId(selectedVersion?.id ?? null)
       setCanEdit(!(selectedVersion?.is_final ?? false))
     } catch (error) {
-      console.error('Error loading suitability versions:', error)
+      clientLogger.error('Error loading suitability versions:', error)
       toast({
         title: 'Error',
         description: 'Failed to load suitability assessment versions',

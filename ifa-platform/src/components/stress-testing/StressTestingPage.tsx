@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import clientLogger from '@/lib/logging/clientLogger'
 import { StressTestReportService } from '@/services/StressTestReportService';
 import {
   ArrowLeft,
@@ -212,7 +213,7 @@ export default function StressTestingPage() {
         throw new Error(result.error || 'Failed to generate report');
       }
     } catch (error) {
-      console.error('Report generation error:', error);
+      clientLogger.error('Report generation error:', error);
       toast({
         title: 'Report Generation Failed',
         description: error instanceof Error ? error.message : 'An error occurred while generating the report.',
@@ -236,7 +237,7 @@ export default function StressTestingPage() {
         setSelectedScenarios(selectedScenarios);
       }
     } catch (err) {
-      console.error('Error loading client data:', err);
+      clientLogger.error('Error loading client data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load client data');
     }
   }, [setError, supabase]);
@@ -308,7 +309,7 @@ export default function StressTestingPage() {
       });
 
     } catch (err) {
-      console.error('Error running stress tests:', err);
+      clientLogger.error('Error running stress tests:', err);
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to run stress tests. Please try again.',

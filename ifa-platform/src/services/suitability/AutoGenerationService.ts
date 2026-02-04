@@ -12,7 +12,6 @@ import type {
 
 const DEBUG_AUTOGEN = process.env.NEXT_PUBLIC_DEBUG_SUITABILITY === 'true'
 const debugLog = (...args: any[]) => {
-  if (DEBUG_AUTOGEN) console.log(...args)
 }
 const debugWarn = (...args: any[]) => {
   if (DEBUG_AUTOGEN) console.warn(...args)
@@ -61,6 +60,29 @@ const getNestedValue = (obj: any, path: string): any => {
   } catch {
     return undefined
   }
+}
+
+const toNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^0-9.-]/g, '')
+    if (!normalized) return null
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+const sumNumeric = (values: unknown[]): number | undefined => {
+  let total = 0
+  let hasValue = false
+  for (const value of values) {
+    const num = toNumber(value)
+    if (num === null) continue
+    total += num
+    hasValue = true
+  }
+  return hasValue ? total : undefined
 }
 
 // =====================================================
@@ -288,8 +310,23 @@ export class AutoGenerationService {
       'financialProfile.mortgageBalance': (c) => (c.financialProfile || c.financial_profile)?.mortgageBalance,
       'financialProfile.otherDebts': (c) => (c.financialProfile || c.financial_profile)?.otherDebts,
       'financialProfile.emergencyFund': (c) => (c.financialProfile || c.financial_profile)?.emergencyFund,
-      'financialProfile.pensionValue': (c) => (c.financialProfile || c.financial_profile)?.pensionValue,
-      'financialProfile.existingInvestments': (c) => (c.financialProfile || c.financial_profile)?.existingInvestments,
+      'financialProfile.pensionValue': (c) => {
+        const profile = c.financialProfile || c.financial_profile
+        if (profile?.pensionValue !== undefined && profile?.pensionValue !== null && profile?.pensionValue !== '') {
+          return profile.pensionValue
+        }
+        const arrangements = Array.isArray(profile?.pensionArrangements) ? profile.pensionArrangements : []
+        const sum = sumNumeric(arrangements.map((item: any) => item?.currentValue ?? item?.value ?? item?.amount))
+        return sum
+      },
+      'financialProfile.existingInvestments': (c) => {
+        const profile = c.financialProfile || c.financial_profile
+        const existing = profile?.existingInvestments
+        if (Array.isArray(existing)) {
+          return sumNumeric(existing.map((item: any) => item?.currentValue ?? item?.value ?? item?.amount))
+        }
+        return existing
+      },
       
       // Risk Profile Mappings
       'riskProfile.attitudeToRisk': (c) => {

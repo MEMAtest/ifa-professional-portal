@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 
 // ✅ FIXED: Removed Supabase dependency and created standalone implementation
@@ -128,6 +129,11 @@ const AVAILABLE_TEMPLATES = {
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action')
     
@@ -179,6 +185,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body: PDFGenerationRequest = await parseRequestBody(request)
     
     // Validate request body

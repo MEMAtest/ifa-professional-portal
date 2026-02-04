@@ -66,10 +66,10 @@ export default function AboutPage() {
               Get in touch
             </a>
             <a
-              href="/demo"
+              href="/marketing#tour"
               className="inline-flex items-center justify-center px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold hover:border-gray-400 transition-colors"
             >
-              Book a demo
+              Book a walkthrough
             </a>
           </div>
         </div>

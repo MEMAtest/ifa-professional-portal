@@ -11,276 +11,32 @@ import {
   Eye,
   Download,
   Filter,
-  Loader2,
   FileType,
   ChevronDown,
   ChevronRight,
-  Sparkles,
   RefreshCw,
-  Tag,
-  Calendar,
-  DollarSign,
-  User,
-  Building,
-  Hash,
-  MapPin,
   Search,
   XCircle,
+  Loader2,
+  Sparkles,
+  Tag,
+  User,
+  Upload,
 } from 'lucide-react'
 import { DocumentPreviewModal } from '@/components/documents/DocumentPreviewModal'
 import { TagEditor } from '@/components/documents/TagEditor'
 import { FileReviewModal } from './FileReviewModal'
+import { DocumentIntelligenceModal } from '@/components/documents/DocumentIntelligenceModal'
 import { renderMarkdown } from '@/lib/documents/markdownRenderer'
 import { generateFileReviewPDF, generateFileReviewDOCX } from '@/lib/documents/fileReviewExport'
 import { useToast } from '@/hooks/use-toast'
+import { getAutoTags } from '@/components/setup/bulkSetupUtils'
+import { CLASSIFICATION_LABELS, TYPE_CONFIG } from './clientDocumentsConstants'
+import { ExpandedAnalysis, StatusBadge } from './clientDocumentsComponents'
+import { formatCurrency, formatDate, formatFileSize, getDocType } from './clientDocumentsUtils'
+import type { DocTypeFilter, FileReviewDocument, UploadedDocument } from './clientDocumentsTypes'
 
-interface DocumentMetadata {
-  type?: string
-  extracted_text?: string
-  extracted_text_length?: number
-  extraction_method?: string
-  extracted_at?: string
-  ai_analysis?: {
-    summary: string
-    classification: string
-    confidence: number
-    entities: {
-      clientNames?: string[]
-      dates?: string[]
-      providerNames?: string[]
-      policyNumbers?: string[]
-      financialAmounts?: { amount: number; currency: string; context: string }[]
-      addresses?: string[]
-      referenceNumbers?: string[]
-    }
-  }
-  ai_analyzed_at?: string
-  ai_provider?: string
-  ai_error?: string
-  extraction_error?: string
-}
 
-interface UploadedDocument {
-  id: string
-  name: string
-  file_name: string
-  file_type: string
-  file_size: number
-  type: string
-  document_type: string
-  tags: string[]
-  created_at: string
-  status: string
-  metadata?: DocumentMetadata
-}
-
-interface FileReviewDocument extends UploadedDocument {
-  metadata?: DocumentMetadata & {
-    type?: string
-    reviewMarkdown?: string
-    generatedAt?: string
-    documentsAnalyzed?: number
-    totalDocuments?: number
-    aiProvider?: string
-    workflow?: {
-      steps?: Array<{
-        id: string
-        label: string
-        done: boolean
-        completedAt?: string | null
-      }>
-    }
-  }
-}
-
-type DocTypeFilter = 'all' | 'pdf' | 'word' | 'email' | 'spreadsheet' | 'image' | 'text'
-
-const TYPE_CONFIG: Record<string, { icon: typeof FileText; label: string; color: string }> = {
-  pdf: { icon: FileText, label: 'PDF', color: 'text-red-600 bg-red-50' },
-  word: { icon: FileType, label: 'Word', color: 'text-blue-600 bg-blue-50' },
-  email: { icon: Mail, label: 'Email', color: 'text-purple-600 bg-purple-50' },
-  spreadsheet: { icon: FileSpreadsheet, label: 'Spreadsheet', color: 'text-green-600 bg-green-50' },
-  image: { icon: Image, label: 'Image', color: 'text-amber-600 bg-amber-50' },
-  text: { icon: FileText, label: 'Text', color: 'text-gray-600 bg-gray-50' },
-  upload: { icon: File, label: 'File', color: 'text-gray-600 bg-gray-50' },
-}
-
-const CLASSIFICATION_LABELS: Record<string, string> = {
-  pension_statement: 'Pension Statement',
-  bank_statement: 'Bank Statement',
-  investment_report: 'Investment Report',
-  insurance_policy: 'Insurance Policy',
-  tax_document: 'Tax Document',
-  identity_document: 'Identity Document',
-  correspondence: 'Correspondence',
-  transfer_form: 'Transfer Form',
-  valuation_report: 'Valuation Report',
-  fund_factsheet: 'Fund Factsheet',
-  application_form: 'Application Form',
-  meeting_notes: 'Meeting Notes',
-  compliance_document: 'Compliance Document',
-  other: 'Other',
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
-function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: currency || 'GBP',
-  }).format(amount)
-}
-
-function getDocType(doc: UploadedDocument): string {
-  return doc.document_type || doc.type || 'upload'
-}
-
-function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'processing':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Analysing...
-        </span>
-      )
-    case 'analyzed':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-          <Sparkles className="h-3 w-3" />
-          Analysed
-        </span>
-      )
-    case 'extracted':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
-          <FileText className="h-3 w-3" />
-          Text Only
-        </span>
-      )
-    case 'failed':
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-          Failed
-        </span>
-      )
-    default:
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-          Pending
-        </span>
-      )
-  }
-}
-
-function EntityChip({ icon: Icon, label, value }: { icon: typeof User; label: string; value: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-xs text-gray-700" title={label}>
-      <Icon className="h-3 w-3 text-gray-500 flex-shrink-0" />
-      <span className="truncate max-w-[200px]">{value}</span>
-    </span>
-  )
-}
-
-function ExpandedAnalysis({ doc }: { doc: UploadedDocument }) {
-  const analysis = doc.metadata?.ai_analysis
-  if (!analysis) {
-    if (doc.metadata?.ai_error) {
-      return (
-        <div className="px-6 py-3 bg-red-50 text-sm text-red-600">
-          Analysis failed: {doc.metadata.ai_error}
-        </div>
-      )
-    }
-    if (doc.metadata?.extraction_error) {
-      return (
-        <div className="px-6 py-3 bg-red-50 text-sm text-red-600">
-          Extraction failed: {doc.metadata.extraction_error}
-        </div>
-      )
-    }
-    return (
-      <div className="px-6 py-3 bg-gray-50 text-sm text-gray-500">
-        No analysis available yet.
-      </div>
-    )
-  }
-
-  const { entities } = analysis
-  const hasEntities =
-    (entities.clientNames?.length ?? 0) > 0 ||
-    (entities.dates?.length ?? 0) > 0 ||
-    (entities.providerNames?.length ?? 0) > 0 ||
-    (entities.policyNumbers?.length ?? 0) > 0 ||
-    (entities.financialAmounts?.length ?? 0) > 0 ||
-    (entities.addresses?.length ?? 0) > 0 ||
-    (entities.referenceNumbers?.length ?? 0) > 0
-
-  return (
-    <div className="px-6 py-4 bg-gray-50 space-y-3">
-      {/* Summary */}
-      <div>
-        <p className="text-sm text-gray-700">{analysis.summary}</p>
-      </div>
-
-      {/* Classification + Confidence */}
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-          <Tag className="h-3 w-3" />
-          {CLASSIFICATION_LABELS[analysis.classification] || analysis.classification}
-        </span>
-        <span className="text-xs text-gray-400">
-          {Math.round(analysis.confidence * 100)}% confidence
-        </span>
-      </div>
-
-      {/* Entities */}
-      {hasEntities && (
-        <div className="flex flex-wrap gap-1.5">
-          {entities.clientNames?.map((name, i) => (
-            <EntityChip key={`name-${i}`} icon={User} label="Client Name" value={name} />
-          ))}
-          {entities.providerNames?.map((name, i) => (
-            <EntityChip key={`provider-${i}`} icon={Building} label="Provider" value={name} />
-          ))}
-          {entities.policyNumbers?.map((num, i) => (
-            <EntityChip key={`policy-${i}`} icon={Hash} label="Policy Number" value={num} />
-          ))}
-          {entities.financialAmounts?.map((fa, i) => (
-            <EntityChip
-              key={`amount-${i}`}
-              icon={DollarSign}
-              label={fa.context}
-              value={`${formatCurrency(fa.amount, fa.currency)} — ${fa.context}`}
-            />
-          ))}
-          {entities.dates?.map((d, i) => (
-            <EntityChip key={`date-${i}`} icon={Calendar} label="Date" value={d} />
-          ))}
-          {entities.addresses?.map((addr, i) => (
-            <EntityChip key={`addr-${i}`} icon={MapPin} label="Address" value={addr} />
-          ))}
-          {entities.referenceNumbers?.map((ref, i) => (
-            <EntityChip key={`ref-${i}`} icon={Hash} label="Reference" value={ref} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function ClientUploadedDocuments({ clientId, clientName }: { clientId: string; clientName?: string }) {
   const router = useRouter()
@@ -314,7 +70,6 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
   const [workflowUpdatingId, setWorkflowUpdatingId] = useState<string | null>(null)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [profileSyncing, setProfileSyncing] = useState(false)
   const [profileSyncMessage, setProfileSyncMessage] = useState<string | null>(null)
   const [profileSyncDetails, setProfileSyncDetails] = useState<{
     personal_details?: string[]
@@ -322,6 +77,9 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
     financial_profile?: string[]
     totalUpdated?: number
   } | null>(null)
+  const [showDocIntelModal, setShowDocIntelModal] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const actionErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { toast } = useToast()
@@ -332,46 +90,20 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
     actionErrorTimer.current = setTimeout(() => setActionError(null), 4000)
   }, [])
 
-  const handlePopulateProfile = useCallback(async () => {
-    setProfileSyncing(true)
-    setProfileSyncMessage('Analysing documents and updating missing profile fields...')
-    setProfileSyncDetails(null)
-    try {
-      const res = await fetch(`/api/clients/${clientId}/populate-profile`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.success) {
-        throw new Error(data?.error || 'Failed to update client profile')
-      }
-      const totalUpdated = typeof data?.totalUpdated === 'number' ? data.totalUpdated : null
-      setProfileSyncDetails(
-        data?.updatedFields
-          ? { ...data.updatedFields, totalUpdated: totalUpdated ?? undefined }
-          : null
-      )
-      if (totalUpdated && totalUpdated > 0) {
-        setProfileSyncMessage(`Updated ${totalUpdated} profile fields from analysed documents.`)
-        toast({
-          title: 'Profile updated',
-          description: `Updated ${totalUpdated} field${totalUpdated === 1 ? '' : 's'} from analysed documents.`,
-        })
+  const handleDocIntelApplied = useCallback(
+    (result: { totalUpdated: number; updatedFields?: { personal_details: string[]; contact_info: string[]; financial_profile: string[] } }) => {
+      const updatedFields = result.updatedFields || { personal_details: [], contact_info: [], financial_profile: [] }
+      setProfileSyncDetails({ ...updatedFields, totalUpdated: result.totalUpdated })
+      if (result.totalUpdated > 0) {
+        setProfileSyncMessage(
+          `Updated ${result.totalUpdated} profile field${result.totalUpdated === 1 ? '' : 's'} from analysed documents.`
+        )
       } else {
         setProfileSyncMessage('No new profile fields were found in the analysed documents.')
-        toast({
-          title: 'No changes detected',
-          description: 'The analysed documents did not contain new profile fields to update.',
-        })
       }
-    } catch (err) {
-      setProfileSyncMessage(null)
-      showActionError(err instanceof Error ? err.message : 'Failed to update client profile')
-    } finally {
-      setProfileSyncing(false)
-    }
-  }, [clientId, showActionError, toast])
+    },
+    []
+  )
 
   const fetchDocuments = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -411,6 +143,76 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
       if (!silent) setLoading(false)
     }
   }, [clientId])
+
+  const handleFileUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    let successCount = 0
+    let failCount = 0
+    const uploadedDocIds: string[] = []
+
+    for (const file of Array.from(files)) {
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('name', file.name)
+        formData.append('client_id', clientId)
+
+        // Auto-tag based on filename (same logic as bulk upload)
+        const tags = getAutoTags(file.name)
+        if (tags.length > 0) {
+          formData.append('tags', JSON.stringify(tags))
+        }
+
+        const res = await fetch('/api/documents/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await res.json()
+        if (res.ok && data.success) {
+          successCount++
+          if (data.document?.id) uploadedDocIds.push(data.document.id)
+        } else {
+          failCount++
+          toast({
+            title: `Upload failed: ${file.name}`,
+            description: data.error || 'Unknown error',
+            variant: 'destructive',
+          })
+        }
+      } catch (err) {
+        failCount++
+        toast({
+          title: `Upload failed: ${file.name}`,
+          description: err instanceof Error ? err.message : 'Network error',
+          variant: 'destructive',
+        })
+      }
+    }
+
+    if (successCount > 0) {
+      toast({
+        title: `${successCount} document${successCount !== 1 ? 's' : ''} uploaded`,
+        description: 'Starting analysis...',
+      })
+      await fetchDocuments()
+
+      // Auto-trigger analysis for newly uploaded documents
+      if (uploadedDocIds.length > 0) {
+        try {
+          await fetch('/api/documents/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ documentIds: uploadedDocIds }),
+          })
+        } catch {
+          // Analysis can still be triggered manually via "Analyse All"
+        }
+      }
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [clientId, toast, fetchDocuments])
 
   useEffect(() => {
     fetchDocuments()
@@ -492,26 +294,33 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
   }, [])
 
   const handleAnalyseAll = useCallback(async () => {
-    const pendingDocs = documents.filter(
-      (d) => d.status === 'pending' || d.status === 'active' || !d.status
+    const unanalysedDocs = documents.filter(
+      (d) => d.status !== 'analyzed'
     )
-    if (pendingDocs.length === 0) return
+    if (unanalysedDocs.length === 0) return
 
     setAnalysing(true)
     try {
       const res = await fetch('/api/documents/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentIds: pendingDocs.map((d) => d.id) }),
+        body: JSON.stringify({ documentIds: unanalysedDocs.map((d) => d.id) }),
       })
       if (!res.ok) throw new Error('Analysis request failed')
+      const results = await res.json().catch(() => ({}))
       await fetchDocuments(true)
+      if (results.summary?.analyzed > 0) {
+        toast({
+          title: 'Analysis complete',
+          description: 'Review document suggestions to update the client profile.',
+        })
+      }
     } catch {
       showActionError('Failed to start document analysis. Please try again.')
     } finally {
       setAnalysing(false)
     }
-  }, [documents, fetchDocuments, showActionError])
+  }, [documents, fetchDocuments, showActionError, toast])
 
   const handleRetry = useCallback(async (docId: string) => {
     setRetryingIds((prev) => new Set(prev).add(docId))
@@ -582,6 +391,9 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
     (d) => d.status === 'pending' || d.status === 'active' || !d.status
   ).length
   const analysedCount = documents.filter((d) => d.status === 'analyzed').length
+  const unanalysedCount = documents.filter(
+    (d) => d.status !== 'analyzed'
+  ).length
   const failedCount = documents.filter(
     (d) => d.status === 'failed' || d.status === 'extracted'
   ).length
@@ -616,6 +428,26 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.xlsx,.msg,.eml,.txt,.png,.jpg,.jpeg,.gif"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
+            {uploading ? 'Uploading...' : 'Upload'}
+          </button>
           {analysedCount > 0 && (
             <button
               onClick={() => setShowFileReview(true)}
@@ -652,7 +484,7 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
               Retry Failed ({failedCount})
             </button>
           )}
-          {pendingCount > 0 && (
+          {unanalysedCount > 0 && (
             <button
               onClick={handleAnalyseAll}
               disabled={analysing}
@@ -663,7 +495,7 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
               ) : (
                 <Sparkles className="h-3.5 w-3.5" />
               )}
-              Analyse All ({pendingCount})
+              {analysing ? 'Analysing...' : `Analyse All (${unanalysedCount})`}
             </button>
           )}
         </div>
@@ -687,90 +519,36 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
       )}
 
       {analysedCount > 0 && (
-        <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 flex items-center justify-between gap-3">
+        <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-blue-900">Update client profile from documents</p>
-            <p className="text-xs text-blue-800">
-              This fills missing fields in the Client Details sections using analysed document evidence.
-            </p>
-            <div className="mt-2 space-y-1 text-[11px] text-blue-900">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 border border-emerald-200">
-                  Personal details
-                </span>
-                <span className="text-blue-800">
-                  Name, date of birth, gender, nationality, marital status, dependants, employment status, occupation, retirement age.
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 border border-sky-200">
-                  Contact information
-                </span>
-                <span className="text-blue-800">
-                  Email, phone, mobile, preferred contact method.
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 border border-amber-200">
-                  Address
-                </span>
-                <span className="text-blue-800">
-                  Address lines, city, county, postcode, country.
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 border border-violet-200">
-                  Financial profile
-                </span>
-                <span className="text-blue-800">
-                  Annual income, monthly expenses, net worth, liquid assets, investment timeframe.
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 border border-rose-200">
-                  Pensions & investments
-                </span>
-                <span className="text-blue-800">
-                  Investment objectives, existing investments, pension arrangements, insurance policies.
-                </span>
-              </div>
-            </div>
-            <p className="mt-1 text-[11px] text-blue-800">
-              Only empty fields are filled. Existing data is never overwritten.
+            <p className="text-xs text-blue-700">
+              Fill missing profile fields using data extracted from {analysedCount} analysed document{analysedCount !== 1 ? 's' : ''}. Existing data is never overwritten.
             </p>
             {profileSyncMessage && (
               <p className="mt-1 text-xs text-blue-900">{profileSyncMessage}</p>
             )}
             {profileSyncDetails && (profileSyncDetails.totalUpdated || 0) > 0 && (
-              <div className="mt-2 text-[11px] text-blue-900">
-                <p className="font-medium">Updated fields this run:</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {(profileSyncDetails.personal_details || []).map((field) => (
-                    <span key={`pd-${field}`} className="rounded-full bg-white/70 px-2 py-0.5 border border-blue-200">
-                      {field}
-                    </span>
-                  ))}
-                  {(profileSyncDetails.contact_info || []).map((field) => (
-                    <span key={`ci-${field}`} className="rounded-full bg-white/70 px-2 py-0.5 border border-blue-200">
-                      {field}
-                    </span>
-                  ))}
-                  {(profileSyncDetails.financial_profile || []).map((field) => (
-                    <span key={`fp-${field}`} className="rounded-full bg-white/70 px-2 py-0.5 border border-blue-200">
-                      {field}
-                    </span>
-                  ))}
-                </div>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {[
+                  ...(profileSyncDetails.personal_details || []),
+                  ...(profileSyncDetails.contact_info || []),
+                  ...(profileSyncDetails.financial_profile || []),
+                ].map((field) => (
+                  <span key={field} className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] border border-blue-200 text-blue-900">
+                    {field}
+                  </span>
+                ))}
               </div>
             )}
           </div>
           <button
-            onClick={handlePopulateProfile}
-            disabled={profileSyncing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60"
+            onClick={() => setShowDocIntelModal(true)}
+            disabled={analysedCount === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60 flex-shrink-0"
           >
-            {profileSyncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <User className="h-3.5 w-3.5" />}
-            {profileSyncing ? 'Updating...' : 'Update Profile'}
+            <User className="h-3.5 w-3.5" />
+            Review Suggestions
           </button>
         </div>
       )}
@@ -989,6 +767,12 @@ export function ClientUploadedDocuments({ clientId, clientName }: { clientId: st
         </div>
       )}
 
+      <DocumentIntelligenceModal
+        clientId={clientId}
+        isOpen={showDocIntelModal}
+        onClose={() => setShowDocIntelModal(false)}
+        onApplied={handleDocIntelApplied}
+      />
       <DocumentPreviewModal
         documentId={previewDocId}
         onClose={() => setPreviewDocId(null)}

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 
 // ✅ FORCE DYNAMIC RENDERING
@@ -16,6 +17,16 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     // ✅ EXTENDED TIMEOUT FOR SIMULATION (5 minutes)
     const timeoutId = setTimeout(() => {
       throw new Error('Bulk simulation timeout after 5 minutes');
@@ -63,6 +74,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const validSimulationCount = Math.min(10000, Math.max(100, parseInt(simulationCount, 10) || 1000));
 
+    const scenarioIds = scenarios.map((scenario: any) => scenario?.scenario_id).filter(Boolean)
+    const supabase = getSupabaseServiceClient()
+    const { data: scenarioRows, error: scenarioError } = await supabase
+      .from('cash_flow_scenarios')
+      .select('id, client_id, firm_id, scenario_name')
+      .in('id', scenarioIds)
+      .eq('firm_id', firmId)
+
+    if (scenarioError) {
+      clearTimeout(timeoutId)
+      log.error('Failed to verify scenarios', { error: scenarioError.message })
+      return NextResponse.json({ success: false, error: 'Failed to verify scenarios' }, { status: 500 })
+    }
+
+    const scenarioMap = new Map((scenarioRows || []).map((row: any) => [row.id, row]))
+    if (scenarioIds.length !== scenarioMap.size) {
+      clearTimeout(timeoutId)
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     // ✅ PROPER DATABASE INITIALIZATION
     const db = getMonteCarloDatabase();
     
@@ -89,17 +120,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           continue;
         }
 
+        const scenarioRecord = scenarioMap.get(scenario.scenario_id)
+        if (!scenarioRecord) {
+          results.push({
+            scenario_id: scenario.scenario_id,
+            success: false,
+            error: 'Scenario not found'
+          })
+          failureCount++
+          continue
+        }
+
+        const scenarioInput = {
+          ...scenario,
+          client_id: scenarioRecord.client_id,
+          scenario_name: scenarioRecord.scenario_name
+        }
+
         // ✅ UPDATE STATUS TO RUNNING
         await db.updateStatus(scenario.scenario_id, 'running');
 
         // ✅ MOCK SIMULATION RESULTS (replace with actual simulation logic)
-        const simulationResults = await runMockSimulation(scenario, validSimulationCount);
+        const simulationResults = await runMockSimulation(scenarioInput, validSimulationCount);
 
         // ✅ SAVE RESULTS
         const saveResponse = await db.saveResults(
           scenario.scenario_id,
           simulationResults,
-          scenario
+          scenarioInput
         );
 
         if (saveResponse.success) {

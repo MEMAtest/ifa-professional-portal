@@ -19,6 +19,7 @@ import {
   seedEmptySections
 } from '@/hooks/suitability/useSuitabilityForm.helpers'
 import type { FormMetrics, SaveState } from './types'
+import clientLogger from '@/lib/logging/clientLogger'
 
 type SaveDraftArgs = {
   data: SuitabilityFormData
@@ -43,7 +44,7 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
   const effectiveClientId = args.clientId || args.client?.id || generateClientReference()
 
   if (!effectiveClientId) {
-    console.error('Cannot save: No client identifier available')
+    clientLogger.error('Cannot save: No client identifier available')
     args.setMetrics((prev) => ({
       ...prev,
       lastError: 'No client identifier',
@@ -55,13 +56,11 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
   if (args.lastSaveAttemptRef.current) {
     const timeSinceLastSave = Date.now() - args.lastSaveAttemptRef.current.getTime()
     if (timeSinceLastSave < 1000) {
-      console.log('Save throttled - too soon after last attempt')
       return false
     }
   }
 
   if (args.saveState.isSaving) {
-    console.log('Save already in progress, queueing...')
     return false
   }
 
@@ -106,8 +105,6 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
       completionPercentage: args.calculateCompletion(args.data)
     }
 
-    console.log('Saving draft with client ID:', effectiveClientId)
-
     const { response, text: errorText, json } = await postDraftToApi({
       clientId: apiPayload.clientId,
       assessmentId: apiPayload.assessmentId,
@@ -128,10 +125,10 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
         if (errorText) {
           const errorJson = JSON.parse(errorText)
           errorMessage = errorJson.error || errorJson.message || errorMessage
-          console.error('API error details:', errorJson)
+          clientLogger.error('API error details:', errorJson)
         }
       } catch {
-        console.error('API error text:', errorText)
+        clientLogger.error('API error text:', errorText)
       }
 
       throw new Error(errorMessage)
@@ -181,11 +178,10 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
       successfulSaves: prev.successfulSaves + 1
     }))
 
-    console.log('Draft saved successfully:', result.metadata)
     return true
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Save draft error:', errorMessage)
+    clientLogger.error('Save draft error:', errorMessage)
 
     args.setMetrics((prev) => ({
       ...prev,
@@ -206,10 +202,6 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
         nextRetryAt
       }))
 
-      console.log(
-        `Will retry save in ${retryDelay}ms (attempt ${args.saveState.retryCount + 1}/${args.saveState.maxRetries})`
-      )
-
       if (args.retryTimeoutRef.current) {
         clearTimeout(args.retryTimeoutRef.current)
       }
@@ -226,7 +218,7 @@ export async function saveSuitabilityDraft(args: SaveDraftArgs): Promise<boolean
       }))
 
       if (args.metrics.consecutiveErrors >= 3 && typeof window !== 'undefined') {
-        console.error('Critical: Multiple save failures detected')
+        clientLogger.error('Critical: Multiple save failures detected')
       }
     }
 
@@ -274,9 +266,9 @@ export async function hydrateSuitabilityDraftFromApi(args: LoadDraftFromApiArgs)
             lastError: message,
             consecutiveErrors: prev.consecutiveErrors + 1
           }))
-          console.error(message)
+          clientLogger.error(message)
         } else {
-          console.error('Failed to load draft from API:', response.status)
+          clientLogger.error('Failed to load draft from API:', response.status)
         }
       }
       return
@@ -299,26 +291,22 @@ export async function hydrateSuitabilityDraftFromApi(args: LoadDraftFromApiArgs)
             const localUpdatedAt = localParsed.savedAt ? new Date(localParsed.savedAt).getTime() : 0
 
             if (serverUpdatedAt > localUpdatedAt) {
-              console.log('Server data is newer - using server version')
               removeLocalDraft(args.effectiveClientId)
             } else if (localUpdatedAt > serverUpdatedAt) {
-              console.log('Local data is newer - syncing to server')
               args
                 .saveToDraft(localParsed.data)
                 .catch((err) => console.warn('Failed to sync local data to server:', err))
               return
             } else {
-              console.log('Data in sync - using server version')
               removeLocalDraft(args.effectiveClientId)
             }
           } catch (e) {
-            console.error('Failed to parse local data for reconciliation:', e)
+            clientLogger.error('Failed to parse local data for reconciliation:', e)
             removeLocalDraft(args.effectiveClientId)
           }
         }
       }
 
-      console.log('Loaded draft from server')
       const seededDraft = seedEmptySections(serverData)
 
       let nextData = fillEmptyFieldsFromClient(seededDraft, args.client)
@@ -352,7 +340,7 @@ export async function hydrateSuitabilityDraftFromApi(args: LoadDraftFromApiArgs)
       }
     }
   } catch (error) {
-    console.error('API load error:', error)
+    clientLogger.error('API load error:', error)
     args.hasLoadedDraftRef.current = true
   }
 }
@@ -377,7 +365,6 @@ export async function loadSuitabilityDraft(args: LoadDraftArgs) {
   const effectiveClientId = args.clientId || args.client?.id || args.client?.clientRef
 
   if (!effectiveClientId) {
-    console.log('No client identifier available for loading draft')
     args.hasLoadedDraftRef.current = true
     args.hasInitializedUiRef.current = true
     args.setIsLoading(false)
@@ -406,7 +393,6 @@ export async function loadSuitabilityDraft(args: LoadDraftArgs) {
     if (localDraft) {
       const hoursSinceSave = localDraft.savedAt ? hoursSince(localDraft.savedAt) : null
       if (hoursSinceSave !== null && hoursSinceSave < 2) {
-        console.log('Using recent local draft')
         const seededLocal = seedEmptySections(localDraft.data)
 
         let nextData = fillEmptyFieldsFromClient(seededLocal, args.client)
@@ -434,7 +420,7 @@ export async function loadSuitabilityDraft(args: LoadDraftArgs) {
       await args.loadFromApi(effectiveClientId)
     }
   } catch (error) {
-    console.error('Failed to load draft:', error)
+    clientLogger.error('Failed to load draft:', error)
   } finally {
     if (shouldBlockUi) {
       args.hasInitializedUiRef.current = true

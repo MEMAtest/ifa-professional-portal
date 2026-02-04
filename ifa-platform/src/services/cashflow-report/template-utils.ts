@@ -1,13 +1,9 @@
 import type { ReportTemplateType } from './types';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export const populateTemplate = (content: string, variables: Record<string, any>): string => {
-  console.log('🔍 populateTemplate called:', {
-    contentLength: content?.length,
-    variableKeys: Object.keys(variables || {}),
-    contentType: typeof content
-  });
   if (!content || typeof content !== 'string') {
-    console.error('❌ populateTemplate: Invalid content:', { content, type: typeof content });
+    clientLogger.error('❌ populateTemplate: Invalid content:', { content, type: typeof content });
     return content || '';
   }
 
@@ -40,9 +36,7 @@ export const populateTemplate = (content: string, variables: Record<string, any>
 };
 
 export const generateChartPlaceholders = (chartTypes: string[]): string[] => {
-  console.log('🔍 generateChartPlaceholders called:', { chartTypes, length: chartTypes?.length });
   return chartTypes.map((type, index) => {
-    console.log('🔍 Processing chart type:', { index, type, typeOf: typeof type });
     return `data:image/svg+xml;base64,${btoa(`
         <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
           <rect width="100%" height="100%" fill="#f8f9fa" stroke="#dee2e6"/>

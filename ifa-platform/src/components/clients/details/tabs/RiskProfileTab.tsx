@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { AlertCircle, Calculator, CheckCircle, Shield } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import { formatDate, getRiskLevelColor, getRiskLevelName } from '@/lib/utils';
 import type { Client } from '@/types/client';
 
@@ -62,7 +63,7 @@ export function RiskProfileTab({ clientId, client }: RiskProfileTabProps) {
       const atr = atrArray?.[0] || null;
 
       if (atrError && atrError.code !== 'PGRST116') {
-        console.error('ATR fetch error:', atrError);
+        clientLogger.error('ATR fetch error:', atrError);
       }
 
       const { data: cflArray, error: cflError } = await supabase
@@ -76,7 +77,7 @@ export function RiskProfileTab({ clientId, client }: RiskProfileTabProps) {
       const cfl = cflArray?.[0] || null;
 
       if (cflError && cflError.code !== 'PGRST116') {
-        console.error('CFL fetch error:', cflError);
+        clientLogger.error('CFL fetch error:', cflError);
       }
 
       const { data: clientData } = await supabase
@@ -91,7 +92,7 @@ export function RiskProfileTab({ clientId, client }: RiskProfileTabProps) {
       setCflAssessment(cfl as CflAssessment | null);
       setRiskProfile(profile as RiskProfileData | null);
     } catch (error) {
-      console.error('Error loading assessments:', error);
+      clientLogger.error('Error loading assessments:', error);
     } finally {
       setLoading(false);
     }

@@ -20,6 +20,7 @@ export interface FieldProps {
   warning?: string
   aiSuggestion?: any
   pulledValue?: any
+  isFromDocuments?: boolean
   isReadOnly?: boolean
   isRequired?: boolean
   isLoading?: boolean

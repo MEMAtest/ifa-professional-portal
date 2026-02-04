@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useParams } from 'next/navigation';
 import type { Client } from '@/types/client';
 import { clientService } from '@/services/ClientService';
+import clientLogger from '@/lib/logging/clientLogger';
 
 interface UseClientContextReturn {
   client: Client | null;
@@ -60,22 +61,22 @@ export function useClientContext(): UseClientContextReturn {
       } 
       // Check for network errors
       else if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('NetworkError')) {
-        console.error('Network error while fetching client:', errorMessage);
+        clientLogger.error('Network error while fetching client:', errorMessage);
         setError('Network error: Unable to connect to the server. Please check your connection.');
       }
       // Check for database/Supabase errors
       else if (errorMessage.includes('database') || errorMessage.includes('supabase') || errorMessage.includes('PGRST')) {
-        console.error('Database error while fetching client:', errorMessage);
+        clientLogger.error('Database error while fetching client:', errorMessage);
         setError(`Database error: ${errorMessage}`);
       }
       // Check for authentication errors
       else if (errorMessage.includes('auth') || errorMessage.includes('unauthorized') || errorMessage.includes('401')) {
-        console.error('Authentication error while fetching client:', errorMessage);
+        clientLogger.error('Authentication error while fetching client:', errorMessage);
         setError('Authentication error: Please log in again.');
       }
       // Generic error handling
       else {
-        console.error('Unexpected error while fetching client:', err);
+        clientLogger.error('Unexpected error while fetching client:', err);
         setError(`Error loading client: ${errorMessage}`);
       }
       
@@ -169,7 +170,7 @@ export function useClientContext(): UseClientContextReturn {
         setError(`Prospect with ID ${prospectId} not found in local storage`);
       }
     } catch (err) {
-      console.error('Error loading prospect from localStorage:', err);
+      clientLogger.error('Error loading prospect from localStorage:', err);
       setError('Failed to load prospect data from local storage');
     }
   }, [prospectId, isProspect]);

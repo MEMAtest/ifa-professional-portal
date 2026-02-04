@@ -20,6 +20,7 @@ import { formatCurrency, formatDate, formatPercentage, formatSignedPercentage, g
 import { generateDynamicTemplate } from './cashflow-report/templates';
 import { generateChartPlaceholders, inferTemplateType, populateTemplate } from './cashflow-report/template-utils';
 import type { EnhancedReportOptions, EnhancedReportResult, ReportGenerationError, ReportMetadata, ReportProgress, ReportTemplateType } from './cashflow-report/types';
+import clientLogger from '@/lib/logging/clientLogger'
 export type { EnhancedReportOptions, EnhancedReportResult, ReportGenerationError, ReportMetadata, ReportProgress, ReportTemplateType } from './cashflow-report/types';
 export { useReportGeneration, useReportHistory, useReportPreview } from './cashflow-report/hooks';
 
@@ -79,11 +80,6 @@ export class EnhancedCashFlowReportService {
     },
     onProgress?: (progress: ReportProgress) => void
   ): Promise<EnhancedReportResult> {
-    console.log('🔍 EnhancedCashFlowReportService.generateCompleteReport called with:', {
-      scenarioId,
-      templateType,
-      outputFormat: options.outputFormat
-    });
 
     const reportId = `${scenarioId}-${templateType}-${Date.now()}`;
     let currentRetry = 0;
@@ -173,7 +169,7 @@ export class EnhancedCashFlowReportService {
         };
 
       } catch (error) {
-        console.error('❌ EnhancedCashFlowReportService error details:', {
+        clientLogger.error('❌ EnhancedCashFlowReportService error details:', {
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : 'No stack trace',
           templateType,
@@ -332,7 +328,7 @@ export class EnhancedCashFlowReportService {
         })
       );
     } catch (error) {
-      console.error('Error fetching report history:', error);
+      clientLogger.error('Error fetching report history:', error);
       return [];
     }
   }
@@ -940,7 +936,7 @@ export class EnhancedCashFlowReportService {
 
   private async getDocumentDownloadUrl(filePath: string): Promise<string> {
     if (!filePath || typeof filePath !== 'string') {
-      console.error('❌ getDocumentDownloadUrl: Invalid filePath:', filePath);
+      clientLogger.error('❌ getDocumentDownloadUrl: Invalid filePath:', filePath);
       return '';
     }
 

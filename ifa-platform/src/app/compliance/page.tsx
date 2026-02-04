@@ -53,6 +53,7 @@ import ConsumerDutyDashboard from '@/components/compliance/ConsumerDutyDashboard
 import ProdServicesDashboard from '@/components/compliance/ProdServicesDashboard'
 import { ProdServicesClientPanel } from '@/components/compliance/ProdServicesClientPanel'
 import ComplianceWorkflowHub from '@/components/compliance/ComplianceWorkflowHub'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Error Boundary Component to catch and handle errors gracefully
 interface ErrorBoundaryProps {
@@ -77,7 +78,7 @@ class TabErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Tab Error:', error, errorInfo)
+    clientLogger.error('Tab Error:', error, errorInfo)
   }
 
   render() {
@@ -273,7 +274,7 @@ export default function ComplianceHubPage() {
         complianceScore
       })
     } catch (error) {
-      console.error('Error loading compliance stats:', error)
+      clientLogger.error('Error loading compliance stats:', error)
       // Set default stats if tables don't exist yet
       setStats({
         pendingReviews: 0,

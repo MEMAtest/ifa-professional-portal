@@ -3,13 +3,14 @@
 // FIXED: Corrected assessment ID access from autoSaveAssessment result
 // =====================================================
 
-import React from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MotionConfig } from 'framer-motion'
 
 // Component imports
 import { NavigationControls } from '../NavigationControls'
 import { Modal, NotificationDisplay } from '../SuitabilityFormModals'
+import { DocumentIntelligenceModal } from '@/components/documents/DocumentIntelligenceModal'
 import { SuitabilityFinancialDashboardToggleCard } from '../SuitabilityFinancialDashboardToggleCard'
 import { SuitabilityHeaderBar } from '../SuitabilityHeaderBar'
 import { SuitabilityFormDialogs } from '../SuitabilityFormDialogs'
@@ -206,6 +207,7 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     isCFLComplete,
     isPersonaComplete,
     refreshATRCFL,
+    refreshClient,
     getConditionalFields,
     handleFieldUpdate,
     handleSectionUpdate,
@@ -232,6 +234,67 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
     onSaved,
     onCancel
   })
+
+  // =====================================================
+  // DOCUMENT INTELLIGENCE
+  // =====================================================
+
+  const [docSummary, setDocSummary] = useState<{ total: number; analyzed: number } | null>(null)
+  const [docIntelSummary, setDocIntelSummary] = useState<{
+    updatedFields: { personal_details: string[]; contact_info: string[]; financial_profile: string[] }
+    totalUpdated: number
+  } | null>(null)
+  const [showDocIntelModal, setShowDocIntelModal] = useState(false)
+  const hasFetchedDocSummaryRef = useRef(false)
+
+  useEffect(() => {
+    if (!clientId || hasFetchedDocSummaryRef.current) return
+    hasFetchedDocSummaryRef.current = true
+    let active = true
+
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/documents/client/${clientId}?summary=1`)
+        if (!res.ok) return
+        const data = await res.json().catch(() => ({}))
+        if (!active) return
+        const total = typeof data?.count === 'number' ? data.count : 0
+        const analyzed = typeof data?.analyzedCount === 'number' ? data.analyzedCount : 0
+        setDocSummary({ total, analyzed })
+      } catch {
+        // Non-blocking
+      }
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [clientId])
+
+  const totalDocs = docSummary?.total ?? 0
+  const analyzedDocs = docSummary?.analyzed ?? 0
+
+  const handleDocIntelApplied = React.useCallback(
+    (result: { totalUpdated: number; updatedFields?: { personal_details: string[]; contact_info: string[]; financial_profile: string[] } }) => {
+      setDocIntelSummary({
+        totalUpdated: result.totalUpdated,
+        updatedFields: result.updatedFields || { personal_details: [], contact_info: [], financial_profile: [] }
+      })
+      if (result.totalUpdated > 0) {
+        refreshATRCFL()
+        refreshClient()
+      }
+    },
+    [refreshATRCFL, refreshClient]
+  )
+
+  const lastUpdatedFields = docIntelSummary
+    ? [
+        ...docIntelSummary.updatedFields.personal_details,
+        ...docIntelSummary.updatedFields.contact_info,
+        ...docIntelSummary.updatedFields.financial_profile
+      ].filter(Boolean)
+    : []
 
   const reportLink = React.useMemo(() => {
     if (!reportReady) return null
@@ -403,8 +466,51 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
 	            onSelectSection={navigateToSection}
 	          />
 	        }
-	        main={
-	          <>
+        main={
+          <>
+            {clientId && (
+              <DocumentIntelligenceModal
+                clientId={clientId}
+                isOpen={showDocIntelModal}
+                onClose={() => setShowDocIntelModal(false)}
+                onApplied={handleDocIntelApplied}
+              />
+            )}
+              {totalDocs > 0 && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-start gap-3">
+                      <Sparkles className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold text-amber-900">Document Intelligence</h4>
+                        <p className="text-sm text-amber-800 mt-1">
+                          {analyzedDocs} analysed of {totalDocs} document{totalDocs !== 1 ? 's' : ''}.{' '}
+                          {analyzedDocs > 0
+                            ? 'Review suggestions before applying them to this suitability.'
+                            : 'Analyse documents to unlock suggestions.'}
+                        </p>
+                        {docIntelSummary && docIntelSummary.totalUpdated > 0 && (
+                          <p className="mt-1 text-xs text-amber-700">
+                            Last applied: {docIntelSummary.totalUpdated} field{docIntelSummary.totalUpdated === 1 ? '' : 's'} updated
+                            {lastUpdatedFields.length > 0 && ` (${lastUpdatedFields.slice(0, 5).join(', ')}${lastUpdatedFields.length > 5 ? '…' : ''})`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowDocIntelModal(true)}
+                        disabled={analyzedDocs === 0}
+                      >
+                        Review suggestions
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <AssessmentStatusCard
                 assessmentsNeedUpdate={assessmentsNeedUpdate}
                 isLoading={isLoading}
@@ -467,6 +573,7 @@ export const SuitabilityForm: React.FC<SuitabilityFormProps> = ({
 	                onFieldUpdate={handleFieldUpdate}
 	                onSectionUpdate={handleSectionUpdate}
 	                onGetAISuggestion={(sectionId) => handleGetAISuggestion(sectionId)}
+	                documentPopulatedFields={docIntelSummary?.updatedFields ?? null}
 	              />
 	            ))}
 

@@ -17,6 +17,7 @@ import { fcaComplianceRules } from './rules/compliance'
 import { crossSectionValidations } from './rules/crossSection'
 import { fieldValidationRules } from './rules/fields'
 import type { ComplianceRule, ValidationRule } from './types'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export class SmartValidationEngine {
   private fieldRules: ValidationRule[]
@@ -60,7 +61,7 @@ export class SmartValidationEngine {
         suggestions
       }
     } catch (error) {
-      console.error('Validation error for field', sectionId, fieldId, error)
+      clientLogger.error('Validation error for field', sectionId, fieldId, error)
       return {
         isValid: true,
         errors: [],
@@ -106,7 +107,7 @@ export class SmartValidationEngine {
         suggestions
       }
     } catch (error) {
-      console.error('Section validation error', sectionId, error)
+      clientLogger.error('Section validation error', sectionId, error)
       return {
         isValid: true,
         errors: [],
@@ -132,7 +133,7 @@ export class SmartValidationEngine {
             suggestions.push(...result.suggestions)
           }
         } catch (error) {
-          console.error('Cross validation error', validation.rule, error)
+          clientLogger.error('Cross validation error', validation.rule, error)
         }
       }
 
@@ -143,7 +144,7 @@ export class SmartValidationEngine {
         suggestions
       }
     } catch (error) {
-      console.error('Cross validations error', error)
+      clientLogger.error('Cross validations error', error)
       return {
         isValid: true,
         errors: [],
@@ -173,7 +174,7 @@ export class SmartValidationEngine {
             remediations.push(`${rule.fcaCode}: ${rule.remediation}`)
           }
         } catch (error) {
-          console.error('Compliance rule error', rule.id, error)
+          clientLogger.error('Compliance rule error', rule.id, error)
         }
       }
 
@@ -183,7 +184,7 @@ export class SmartValidationEngine {
         remediations
       }
     } catch (error) {
-      console.error('Compliance check error', error)
+      clientLogger.error('Compliance check error', error)
       return {
         compliant: true,
         violations: [],
@@ -243,7 +244,7 @@ export class SmartValidationEngine {
         compliance
       }
     } catch (error) {
-      console.error('Complete validation error', error)
+      clientLogger.error('Complete validation error', error)
       return {
         isValid: true,
         errors: [],
@@ -300,7 +301,7 @@ export class SmartValidationEngine {
         complianceStatus
       }
     } catch (error) {
-      console.error('Validation summary error', error)
+      clientLogger.error('Validation summary error', error)
       return {
         totalErrors: 0,
         totalWarnings: 0,

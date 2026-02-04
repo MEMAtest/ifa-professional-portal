@@ -60,10 +60,15 @@ export default function FirmDetailsStep({ onNext, onBack }: FirmDetailsStepProps
         city: firm.address?.city ?? '',
       })
     }
-  }, [firm?.id, firm?.name, firm?.updatedAt])
+  }, [firm])
+
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) {
+      setErrors((prev) => { const next = { ...prev }; delete next[field]; return next })
+    }
     // Reset FCA lookup when FRN changes
     if (field === 'fcaNumber') {
       setFcaLookup({ status: 'idle' })
@@ -154,6 +159,25 @@ export default function FirmDetailsStep({ onNext, onBack }: FirmDetailsStepProps
   }
 
   const handleSave = async () => {
+    const newErrors: Record<string, string> = {}
+
+    if (formData.fcaNumber.trim() && !/^\d{6,7}$/.test(formData.fcaNumber.trim())) {
+      newErrors.fcaNumber = 'FCA number must be 6 or 7 digits'
+    }
+
+    if (formData.postcode.trim()) {
+      const pc = formData.postcode.trim().toUpperCase()
+      // UK postcode pattern: A9 9AA, A99 9AA, A9A 9AA, AA9 9AA, AA99 9AA, AA9A 9AA
+      if (!/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/.test(pc)) {
+        newErrors.postcode = 'Enter a valid UK postcode (e.g. SW1A 1AA)'
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
     try {
       const input: FirmUpdateInput = {
         name: formData.name,
@@ -317,7 +341,10 @@ export default function FirmDetailsStep({ onNext, onBack }: FirmDetailsStepProps
                 value={formData.fcaNumber}
                 onChange={(e) => handleChange('fcaNumber', e.target.value)}
                 placeholder="e.g. 123456"
+                inputMode="numeric"
+                className={errors.fcaNumber ? 'border-red-300' : ''}
               />
+              {errors.fcaNumber && <p className="text-xs text-red-600 mt-1">{errors.fcaNumber}</p>}
             </div>
             <div>
               <Label htmlFor="postcode">Postcode</Label>
@@ -326,7 +353,9 @@ export default function FirmDetailsStep({ onNext, onBack }: FirmDetailsStepProps
                 value={formData.postcode}
                 onChange={(e) => handleChange('postcode', e.target.value)}
                 placeholder="e.g. SW1A 1AA"
+                className={errors.postcode ? 'border-red-300' : ''}
               />
+              {errors.postcode && <p className="text-xs text-red-600 mt-1">{errors.postcode}</p>}
             </div>
           </div>
         </CardContent>

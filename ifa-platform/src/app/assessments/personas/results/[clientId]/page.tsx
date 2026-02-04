@@ -27,6 +27,7 @@ import { investorPersonas } from '@/data/investorPersonas';
 
 // Import DocumentGenerationButton
 import DocumentGenerationButton from '@/components/documents/DocumentGenerationButton';
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Types
 interface PersonaResult {
@@ -195,7 +196,7 @@ export default function PersonaResultsPage() {
         setClientData(data.client || data);
       }
     } catch (error) {
-      console.error('Error loading client data:', error);
+      clientLogger.error('Error loading client data:', error);
     }
   }, [clientId]);
 
@@ -220,7 +221,6 @@ export default function PersonaResultsPage() {
           setPersonaChanges(historyData.personaChanges || []);
         }
       } catch (historyError) {
-        console.log('History endpoint not available');
         if (currentData.data) {
           setAllVersions([currentData.data]);
         }
@@ -229,7 +229,7 @@ export default function PersonaResultsPage() {
       setCurrentResult(currentData.data);
       setDisplayedResult(currentData.data);
     } catch (error) {
-      console.error('Error loading results:', error);
+      clientLogger.error('Error loading results:', error);
       setError(error instanceof Error ? error.message : 'Failed to load results');
     } finally {
       setIsLoading(false);
@@ -267,7 +267,6 @@ export default function PersonaResultsPage() {
 
   // Handle document generation success
   const handleDocumentGenerationSuccess = (docId: string, docUrl?: string) => {
-    console.log('Document generated successfully:', docId);
   };
 
   // Get client name and email for document generation

@@ -441,7 +441,10 @@ export const AssessmentLetter: React.FC<AssessmentLetterProps> = ({
         {/* Letterhead */}
         <View style={styles.letterhead}>
           {effectiveBranding.logoUrl && (
-            <Image src={effectiveBranding.logoUrl} style={styles.companyLogo} />
+            <>
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
+              <Image src={effectiveBranding.logoUrl} style={styles.companyLogo} />
+            </>
           )}
           <Text style={styles.companyName}>{effectiveBranding.firmName}</Text>
           {effectiveBranding.firmAddress && (

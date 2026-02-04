@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import clientLogger from '@/lib/logging/clientLogger'
 // /src/services/ClientAnalyticsService.ts
 // Core analytics service that connects market data to individual client stories
 
@@ -92,7 +93,7 @@ class ClientAnalyticsService {
         timestamp: new Date().toISOString()
       };
     } catch (error) {
-      console.error('Client analytics generation error:', error);
+      clientLogger.error('Client analytics generation error:', error);
       // Return fallback analytics with mock data
       return this.getFallbackAnalytics(riskMetrics, clientPersona);
     }
@@ -449,7 +450,7 @@ class ClientAnalyticsService {
         timestamp: new Date().toISOString()
       };
     } catch (error) {
-      console.error('Market data fetch error:', error);
+      clientLogger.error('Market data fetch error:', error);
       // Return realistic mock data for development
       return this.getMockMarketData();
     }
@@ -465,7 +466,7 @@ class ClientAnalyticsService {
       // For now, return current known rate
       return 5.25;
     } catch (error) {
-      console.error('Bank rate fetch error:', error);
+      clientLogger.error('Bank rate fetch error:', error);
       return 5.25; // Fallback to current rate
     }
   }
@@ -491,7 +492,7 @@ class ClientAnalyticsService {
       
       throw new Error('No inflation data available');
     } catch (error) {
-      console.error('Inflation data fetch error:', error);
+      clientLogger.error('Inflation data fetch error:', error);
       return 2.1; // Fallback to approximate current rate
     }
   }

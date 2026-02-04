@@ -1,218 +1,219 @@
 // src/app/api/monte-carlo/cleanup/route.ts
-// ✅ COMPLETE BULLETPROOF VERSION - COPY-PASTE REPLACEMENT
+// Firm-scoped cleanup for Monte Carlo results
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getMonteCarloDatabase } from '@/lib/monte-carlo/database';
-import { log } from '@/lib/logging/structured';
+import { NextRequest, NextResponse } from 'next/server'
+import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 
-// ✅ FORCE DYNAMIC RENDERING
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
-/**
- * DELETE /api/monte-carlo/cleanup
- * Clean up old Monte Carlo results
- */
+function parseOlderThanDays(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const olderThanDaysParam = searchParams.get('olderThanDays')
+  let olderThanDays = 90
+  if (olderThanDaysParam !== null) {
+    const parsed = parseInt(olderThanDaysParam, 10)
+    if (Number.isNaN(parsed) || parsed < 1 || parsed > 365) {
+      return { error: 'olderThanDays must be a number between 1 and 365' }
+    }
+    olderThanDays = parsed
+  }
+  return { olderThanDays }
+}
+
+async function getFirmScenarioIds(supabase: ReturnType<typeof getSupabaseServiceClient>, firmId: string) {
+  const { data, error } = await supabase
+    .from('cash_flow_scenarios')
+    .select('id')
+    .eq('firm_id', firmId)
+
+  if (error) {
+    return { error }
+  }
+
+  return { ids: (data || []).map((row: any) => row.id) }
+}
+
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
   try {
-    // ✅ TIMEOUT PROTECTION (generous for cleanup operations)
-    const timeoutId = setTimeout(() => {
-      throw new Error('Cleanup timeout after 30 seconds');
-    }, 30000);
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
-    // ✅ SAFE PARAMETER EXTRACTION
-    const searchParams = request.nextUrl.searchParams;
-    const olderThanDaysParam = searchParams.get('olderThanDays');
-    
-    // ✅ PARAMETER VALIDATION AND DEFAULTS
-    let olderThanDays = 90; // Default to 90 days
-    
-    if (olderThanDaysParam !== null) {
-      const parsed = parseInt(olderThanDaysParam, 10);
-      if (isNaN(parsed) || parsed < 1 || parsed > 365) {
-        clearTimeout(timeoutId);
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: 'olderThanDays must be a number between 1 and 365' 
-          },
-          { status: 400 }
-        );
-      }
-      olderThanDays = parsed;
+    const parsed = parseOlderThanDays(request)
+    if (parsed.error) {
+      return NextResponse.json({ success: false, error: parsed.error }, { status: 400 })
+    }
+    const olderThanDays = parsed.olderThanDays ?? 90
+
+    const cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString()
+    const supabase: any = getSupabaseServiceClient()
+
+    const scenarioResult = await getFirmScenarioIds(supabase, firmId)
+    if (scenarioResult.error) {
+      log.error('Failed to fetch firm scenarios for cleanup', { error: scenarioResult.error.message })
+      return NextResponse.json({ success: false, error: 'Failed to fetch scenarios' }, { status: 500 })
     }
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ CLEANUP OPERATION WITH ERROR HANDLING
-    const cleanupResponse = await db.cleanupOldResults(olderThanDays);
-    
-    clearTimeout(timeoutId);
-    
-    if (!cleanupResponse.success) {
-      log.error('Failed to cleanup old Monte Carlo results', { error: cleanupResponse.error });
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to cleanup old results'
-        },
-        { status: 500 }
-      );
-    }
-
-    const deletedCount = cleanupResponse.data || 0;
-
-    // ✅ STANDARDIZED SUCCESS RESPONSE
-    return NextResponse.json(
-      {
+    const scenarioIds = scenarioResult.ids || []
+    if (scenarioIds.length === 0) {
+      return NextResponse.json({
         success: true,
-        message: `Cleanup completed successfully`,
+        message: 'No scenarios to clean up',
         data: {
-          deletedCount,
+          deletedCount: 0,
           olderThanDays,
           cleanupDate: new Date().toISOString(),
-          cutoffDate: new Date(Date.now() - (olderThanDays * 24 * 60 * 60 * 1000)).toISOString()
-        },
-        metadata: {
-          operation: 'cleanup',
-          completedAt: new Date().toISOString(),
-          environment: process.env.NODE_ENV || 'development'
+          cutoffDate
         }
+      })
+    }
+
+    const { data: deletedResults, error: deleteError } = await supabase
+      .from('monte_carlo_results')
+      .delete()
+      .in('scenario_id', scenarioIds)
+      .lt('created_at', cutoffDate)
+      .select('id')
+
+    if (deleteError) {
+      log.error('Failed to delete Monte Carlo results', { error: deleteError.message })
+      return NextResponse.json({ success: false, error: 'Failed to cleanup old results' }, { status: 500 })
+    }
+
+    const deletedCount = deletedResults?.length || 0
+
+    // Best-effort cleanup assumptions if table exists
+    try {
+      await supabase
+        .from('monte_carlo_assumptions')
+        .delete()
+        .in('scenario_id', scenarioIds)
+        .lt('created_at', cutoffDate)
+    } catch (assumptionError) {
+      log.warn('Failed to cleanup Monte Carlo assumptions', {
+        error: assumptionError instanceof Error ? assumptionError.message : String(assumptionError)
+      })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Cleanup completed successfully',
+      data: {
+        deletedCount,
+        olderThanDays,
+        cleanupDate: new Date().toISOString(),
+        cutoffDate
       },
-      { 
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
-        }
+      metadata: {
+        operation: 'cleanup',
+        completedAt: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
       }
-    );
-
-  } catch (error: unknown) {
-    log.error('Monte Carlo cleanup API error', error);
-
+    })
+  } catch (error) {
+    log.error('Monte Carlo cleanup API error', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to cleanup old results',
-        timestamp: new Date().toISOString()
-      },
+      { success: false, error: 'Failed to cleanup old results', timestamp: new Date().toISOString() },
       { status: 500 }
-    );
+    )
   }
 }
 
-/**
- * GET /api/monte-carlo/cleanup
- * Get cleanup status and statistics
- */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // ✅ TIMEOUT PROTECTION
-    const timeoutId = setTimeout(() => {
-      throw new Error('Cleanup status timeout after 10 seconds');
-    }, 10000);
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
 
-    // ✅ SAFE PARAMETER EXTRACTION
-    const searchParams = request.nextUrl.searchParams;
-    const olderThanDaysParam = searchParams.get('olderThanDays');
-    
-    let olderThanDays = 90;
-    if (olderThanDaysParam !== null) {
-      const parsed = parseInt(olderThanDaysParam, 10);
-      if (!isNaN(parsed) && parsed >= 1 && parsed <= 365) {
-        olderThanDays = parsed;
-      }
+    const parsed = parseOlderThanDays(request)
+    if (parsed.error) {
+      return NextResponse.json({ success: false, error: parsed.error }, { status: 400 })
+    }
+    const olderThanDays = parsed.olderThanDays ?? 90
+
+    const cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString()
+    const supabase: any = getSupabaseServiceClient()
+
+    const scenarioResult = await getFirmScenarioIds(supabase, firmId)
+    if (scenarioResult.error) {
+      log.error('Failed to fetch firm scenarios for cleanup status', { error: scenarioResult.error.message })
+      return NextResponse.json({ success: false, error: 'Failed to fetch scenarios' }, { status: 500 })
     }
 
-    // ✅ PROPER DATABASE INITIALIZATION
-    const db = getMonteCarloDatabase();
-    
-    // ✅ GET STATISTICS WITHOUT ACTUAL CLEANUP
-    const scenarios = await db.listScenarios(1, 1000); // Get a large sample
-    
-    clearTimeout(timeoutId);
-    
-    if (!scenarios.success) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Failed to get cleanup statistics'
-        },
-        { status: 500 }
-      );
-    }
-
-    // ✅ CALCULATE CLEANUP STATISTICS
-    const cutoffDate = new Date(Date.now() - (olderThanDays * 24 * 60 * 60 * 1000));
-    const allScenarios = scenarios.data || [];
-    
-    const oldScenarios = allScenarios.filter(scenario => {
-      if (!scenario.created_at) return false;
-      return new Date(scenario.created_at) < cutoffDate;
-    });
-
-    // ✅ STANDARDIZED RESPONSE
-    return NextResponse.json(
-      {
+    const scenarioIds = scenarioResult.ids || []
+    if (scenarioIds.length === 0) {
+      return NextResponse.json({
         success: true,
         data: {
-          totalScenarios: allScenarios.length,
-          oldScenarios: oldScenarios.length,
-          recentScenarios: allScenarios.length - oldScenarios.length,
+          totalScenarios: 0,
+          oldScenarios: 0,
+          recentScenarios: 0,
           olderThanDays,
-          cutoffDate: cutoffDate.toISOString(),
-          wouldDelete: oldScenarios.length
-        },
-        metadata: {
-          operation: 'cleanup-preview',
-          checkedAt: new Date().toISOString(),
-          environment: process.env.NODE_ENV || 'development'
+          cutoffDate,
+          wouldDelete: 0
         }
-      },
-      { 
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
-        }
-      }
-    );
-
-  } catch (error: unknown) {
-    log.error('Monte Carlo cleanup status API error', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch cleanup status',
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * OPTIONS /api/monte-carlo/cleanup
- * Handle CORS preflight requests
- */
-export async function OPTIONS(request: NextRequest): Promise<NextResponse> {
-  const origin = request.headers.get('origin')
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-
-  const headers: Record<string, string> = {
-    'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Max-Age': '86400'
-  }
-
-  if (origin) {
-    if (appUrl && origin === appUrl) {
-      headers['Access-Control-Allow-Origin'] = origin
-    } else if (process.env.NODE_ENV === 'development') {
-      headers['Access-Control-Allow-Origin'] = origin
+      })
     }
-  }
 
-  return new NextResponse(null, { status: 204, headers });
+    const { count: totalCount, error: totalError } = await supabase
+      .from('monte_carlo_results')
+      .select('id', { count: 'exact', head: true })
+      .in('scenario_id', scenarioIds)
+
+    if (totalError) {
+      log.error('Failed to count Monte Carlo results', { error: totalError.message })
+      return NextResponse.json({ success: false, error: 'Failed to fetch cleanup status' }, { status: 500 })
+    }
+
+    const { count: oldCount, error: oldError } = await supabase
+      .from('monte_carlo_results')
+      .select('id', { count: 'exact', head: true })
+      .in('scenario_id', scenarioIds)
+      .lt('created_at', cutoffDate)
+
+    if (oldError) {
+      log.error('Failed to count old Monte Carlo results', { error: oldError.message })
+      return NextResponse.json({ success: false, error: 'Failed to fetch cleanup status' }, { status: 500 })
+    }
+
+    const totalScenarios = totalCount || 0
+    const oldScenarios = oldCount || 0
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        totalScenarios,
+        oldScenarios,
+        recentScenarios: Math.max(0, totalScenarios - oldScenarios),
+        olderThanDays,
+        cutoffDate,
+        wouldDelete: oldScenarios
+      },
+      metadata: {
+        operation: 'cleanup-preview',
+        checkedAt: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+      }
+    })
+  } catch (error) {
+    log.error('Monte Carlo cleanup status API error', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch cleanup status', timestamp: new Date().toISOString() },
+      { status: 500 }
+    )
+  }
 }

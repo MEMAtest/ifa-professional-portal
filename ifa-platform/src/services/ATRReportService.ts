@@ -8,10 +8,11 @@ import { createClient } from '@/lib/supabase/client';
 import { ReportUtils } from './utils/ReportUtils';
 import { PDFGenerator, type PDFReportData } from '@/lib/pdf/PDFGenerator';
 import { advisorContextService } from '@/services/AdvisorContextService';
+import clientLogger from '@/lib/logging/clientLogger';
 import type {
   UnifiedReportRequest,
   UnifiedReportResult,
-  ReportOptions
+  ReportOptions,
 } from '@/types/reporting.types';
 
 // ATR-specific types based on existing schema
@@ -61,12 +62,6 @@ export class ATRReportService {
 
   async generateReport(request: UnifiedReportRequest): Promise<UnifiedReportResult> {
     try {
-      console.log('🎯 ATRReportService: Starting ATR report generation');
-      console.log('Request:', {
-        type: request.type,
-        dataId: request.dataId,
-        options: request.options
-      });
 
       // Validate request
       if (request.type !== 'atr') {
@@ -107,7 +102,7 @@ export class ATRReportService {
       };
 
     } catch (error) {
-      console.error('❌ ATRReportService error:', error);
+      clientLogger.error('❌ ATRReportService error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error generating ATR report',
@@ -121,7 +116,6 @@ export class ATRReportService {
   }
 
   private async fetchATRData(clientId: string): Promise<ATRReportData> {
-    console.log('📊 Fetching ATR data for client:', clientId);
 
     // Fetch client basic info from JSON columns
     const { data: clientRaw, error: clientError } = await this.supabase
@@ -177,7 +171,6 @@ export class ATRReportService {
       throw new Error(`No current ATR assessment found for client: ${clientId}`);
     }
 
-    console.log('✅ ATR data fetched successfully');
 
     // Build risk profile summary
     const riskProfileSummary = this.buildRiskProfileSummary(assessment);
@@ -218,7 +211,6 @@ export class ATRReportService {
   }
 
   private async buildATRReport(data: ATRReportData, options: ReportOptions): Promise<string> {
-    console.log('📝 Building ATR report content');
 
     const { client, assessment, riskProfileSummary } = data;
 
@@ -448,7 +440,6 @@ export class ATRReportService {
 </html>
 `;
 
-    console.log('✅ ATR report content built successfully');
     return reportContent;
   }
 
@@ -493,7 +484,6 @@ export class ATRReportService {
    */
   async generatePDFReport(clientId: string): Promise<UnifiedReportResult> {
     try {
-      console.log('📄 Starting REAL ATR PDF generation for client:', clientId);
 
       // Fetch ATR data
       const reportData = await this.fetchATRData(clientId);
@@ -524,7 +514,6 @@ export class ATRReportService {
       };
 
       // Generate actual PDF
-      console.log('🔧 Generating ATR PDF with @react-pdf/renderer...');
       const pdfBlob = await PDFGenerator.generateATRReport(pdfData);
 
       // Upload PDF to Supabase Storage
@@ -566,7 +555,6 @@ export class ATRReportService {
         .from('documents')
         .createSignedUrl(filePath, 3600);
 
-      console.log('✅ ATR PDF generated and uploaded successfully:', fileName);
 
       return {
         success: true,
@@ -585,7 +573,7 @@ export class ATRReportService {
       };
 
     } catch (error) {
-      console.error('❌ ATR PDF generation error:', error);
+      clientLogger.error('❌ ATR PDF generation error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'ATR PDF generation failed',

@@ -29,6 +29,7 @@ import {
   FileTextIcon,
   ArrowRightIcon
 } from 'lucide-react'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Import your existing types - ensure these match your actual type definitions
 import type { ClientProfile } from '@/types'
@@ -298,7 +299,6 @@ const mockWorkflowEngine = {
 // Mock document service
 const mockDocumentService = {
   async generateDocument(params: { templateId: string; clientId: string }, client: ExtendedClientProfile) {
-    console.log('Generating document:', params, client)
     // This would be replaced with your real document generation
     return {
       success: true,
@@ -346,7 +346,7 @@ export default function ClientDocumentSystem() {
         setSelectedClient(clientData[0])
       }
     } catch (error) {
-      console.error('Error loading clients:', error)
+      clientLogger.error('Error loading clients:', error)
     } finally {
       setLoading(false)
     }
@@ -357,7 +357,7 @@ export default function ClientDocumentSystem() {
       const workflow = await mockWorkflowEngine.getClientWorkflow(clientId)
       setClientWorkflow(workflow)
     } catch (error) {
-      console.error('Error loading client workflow:', error)
+      clientLogger.error('Error loading client workflow:', error)
     }
   }
 
@@ -386,7 +386,7 @@ export default function ClientDocumentSystem() {
         throw new Error('Generation failed')
       }
     } catch (error) {
-      console.error('Error generating document:', error)
+      clientLogger.error('Error generating document:', error)
       alert('Failed to generate document: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setIsGenerating(false)

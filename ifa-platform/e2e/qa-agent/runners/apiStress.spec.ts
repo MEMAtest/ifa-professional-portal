@@ -8,6 +8,7 @@ import { StressTestScenarios, ValidClients, flattenClientData } from '../generat
  */
 
 test.describe('API Stress Tests', () => {
+  test.describe.configure({ mode: 'serial', timeout: 180_000 })
   let suitabilityPage: SuitabilityPage
 
   test.beforeEach(async ({ page }) => {
@@ -42,12 +43,11 @@ test.describe('API Stress Tests', () => {
       })
 
       // Fill some data first
-      await suitabilityPage.fillField('first_name', 'Stress')
-      await suitabilityPage.fillField('last_name', 'Test')
+      await suitabilityPage.fillField('client_name', 'Stress Test')
 
       // Rapid fire saves
       for (let i = 0; i < 10; i++) {
-        await suitabilityPage.fillField('first_name', `Stress${i}`)
+        await suitabilityPage.fillField('client_name', `Stress Test ${i}`)
         await suitabilityPage.saveDraft()
         // Minimal delay to trigger race condition
         await page.waitForTimeout(50)
@@ -79,12 +79,13 @@ test.describe('API Stress Tests', () => {
       const page2 = await context.newPage()
       const suitabilityPage2 = new SuitabilityPage(page2)
 
-      await suitabilityPage.goto()
       await suitabilityPage2.goto()
+      await suitabilityPage.goToSection('Personal Information').catch(() => {})
+      await suitabilityPage2.goToSection('Personal Information').catch(() => {})
 
       // Fill different data in each tab
-      await suitabilityPage.fillField('first_name', 'Tab1User')
-      await suitabilityPage2.fillField('first_name', 'Tab2User')
+      await suitabilityPage.fillField('client_name', 'Tab1User')
+      await suitabilityPage2.fillField('client_name', 'Tab2User')
 
       // Save from both tabs simultaneously
       const [result1, result2] = await Promise.allSettled([
@@ -113,7 +114,7 @@ test.describe('API Stress Tests', () => {
 
       // Send many requests in quick succession
       for (let i = 0; i < requestCount; i++) {
-        await suitabilityPage.fillField('first_name', `Burst${i}`)
+        await suitabilityPage.fillField('client_name', `Burst User ${i}`)
 
         try {
           await suitabilityPage.saveDraft()
@@ -155,6 +156,7 @@ test.describe('API Stress Tests', () => {
     test('should handle large text fields', async ({ page }) => {
       const largeText = 'A'.repeat(10000)
 
+      await suitabilityPage.goToSection('Recommendation').catch(() => {})
       await suitabilityPage.fillField('recommendation_rationale', largeText)
       await suitabilityPage.saveDraft()
 
@@ -198,6 +200,7 @@ test.describe('API Stress Tests', () => {
         }
       })
 
+      await suitabilityPage.goToSection('Recommendation').catch(() => {})
       await suitabilityPage.fillField('recommendation_rationale', oversizedText)
 
       try {
@@ -220,8 +223,7 @@ test.describe('API Stress Tests', () => {
   test.describe('Network Failure Tests', () => {
     test('should handle network timeout gracefully', async ({ page }) => {
       // Fill some data
-      await suitabilityPage.fillField('first_name', 'Network')
-      await suitabilityPage.fillField('last_name', 'Test')
+      await suitabilityPage.fillField('client_name', 'Network Test')
 
       // Slow down network
       await page.route('**/api/**', async (route) => {

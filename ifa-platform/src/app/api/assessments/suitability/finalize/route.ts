@@ -67,11 +67,24 @@ export async function POST(req: NextRequest) {
   logger.info('Suitability finalize started', metadata)
 
   try {
-    const body: FinalizePayload = await parseRequestBody(req, requestSchema)
+    let body: FinalizePayload
+    try {
+      body = await parseRequestBody(req, undefined, { allowEmpty: true })
+    } catch (error) {
+      logger.warn('Invalid JSON in finalize request', { error: error instanceof Error ? error.message : String(error) })
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
+
     const { assessmentId, clientId, formData, completionPercentage } = body
     if (!clientId) {
       logger.warn('Missing clientId in request', { assessmentId })
       return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
+    }
+
+    const parsed = requestSchema.safeParse(body)
+    if (!parsed.success) {
+      logger.warn('Invalid finalize request body', { issues: parsed.error.issues })
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
     logger.debug('Finalize payload received', { clientId, assessmentId, hasFormData: !!formData })

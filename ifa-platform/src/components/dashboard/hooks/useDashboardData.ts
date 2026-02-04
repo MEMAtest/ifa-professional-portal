@@ -6,6 +6,7 @@ import {
   calculateClientStatistics,
   calculatePerformanceData
 } from '@/lib/dashboard/data'
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   fetchAssessmentStats,
   fetchClients,
@@ -91,7 +92,7 @@ export const useDashboardData = ({
         recentActivity: recentActivities.slice(0, 10)
       })
     } catch (error) {
-      console.error('Error fetching dashboard data:', error)
+      clientLogger.error('Error fetching dashboard data:', error)
     } finally {
       setLoading(false)
     }

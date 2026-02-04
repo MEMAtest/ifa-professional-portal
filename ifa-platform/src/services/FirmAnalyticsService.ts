@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { calculateFirmAUM, calculateClientAUM, type FirmAUM, type ClientAUM } from '@/lib/financials/aumCalculator'
 import { normalizeFinancialProfile, createVulnerabilityAssessment, isValidClientStatus } from '@/types/client'
 import type { Client } from '@/types/client'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface RiskDistribution {
   profile1: number  // Cautious
@@ -112,7 +113,7 @@ export class FirmAnalyticsService {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching clients:', error)
+      clientLogger.error('Error fetching clients:', error)
       return []
     }
 
@@ -343,7 +344,7 @@ export class FirmAnalyticsService {
         fetchedAt: data.fetchedAt || new Date().toISOString()
       }
     } catch (error) {
-      console.error('Error fetching market conditions:', error)
+      clientLogger.error('Error fetching market conditions:', error)
       // Return error state - no hardcoded fallbacks
       const errorState = {
         value: 0,

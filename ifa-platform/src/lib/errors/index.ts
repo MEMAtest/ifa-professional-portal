@@ -1,3 +1,4 @@
+import clientLogger from '@/lib/logging/clientLogger'
 // =====================================================
 // FILE: src/lib/errors/index.ts
 // PURPOSE: Centralized error types for consistent error handling
@@ -344,21 +345,21 @@ export interface LogEntry {
 export const logger = {
   debug(message: string, context?: Record<string, unknown>) {
     if (process.env.NODE_ENV === 'development') {
-      console.debug(JSON.stringify({ level: 'debug', message, context, timestamp: new Date().toISOString() }))
+      clientLogger.debug(JSON.stringify({ level: 'debug', message, context, timestamp: new Date().toISOString() }))
     }
   },
 
   info(message: string, context?: Record<string, unknown>) {
-    console.info(JSON.stringify({ level: 'info', message, context, timestamp: new Date().toISOString() }))
+    clientLogger.info(JSON.stringify({ level: 'info', message, context, timestamp: new Date().toISOString() }))
   },
 
   warn(message: string, context?: Record<string, unknown>) {
-    console.warn(JSON.stringify({ level: 'warn', message, context, timestamp: new Date().toISOString() }))
+    clientLogger.warn(JSON.stringify({ level: 'warn', message, context, timestamp: new Date().toISOString() }))
   },
 
   error(message: string, error?: unknown, context?: Record<string, unknown>) {
     const errorDetails = error ? getErrorDetails(error) : undefined
-    console.error(JSON.stringify({
+    clientLogger.error(JSON.stringify({
       level: 'error',
       message,
       error: errorDetails,

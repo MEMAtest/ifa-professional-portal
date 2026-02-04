@@ -19,6 +19,7 @@ import {
   Loader,
   Info
 } from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger'
 // FIX: Import the Enhanced service that has generateReportPreview method
 import { EnhancedCashFlowReportService, type EnhancedReportOptions } from '@/services/EnhancedCashFlowReportService';
 import type { CashFlowScenario } from '@/types/cashflow';
@@ -70,7 +71,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
       }
 
     } catch (err) {
-      console.error('Error generating preview:', err);
+      clientLogger.error('Error generating preview:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate preview');
     } finally {
       setIsLoading(false);

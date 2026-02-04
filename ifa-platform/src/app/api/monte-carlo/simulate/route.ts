@@ -28,7 +28,18 @@ export async function POST(request: NextRequest) {
       return firmResult;
     }
 
-    const { scenario_id, simulation_count = 5000, seed } = await parseRequestBody(request, requestSchema);
+    let parsedBody: z.infer<typeof requestSchema>
+    try {
+      parsedBody = await parseRequestBody(request, requestSchema);
+    } catch (error) {
+      log.warn('Invalid Monte Carlo request body', { error: error instanceof Error ? error.message : String(error) })
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
+    const { scenario_id, simulation_count = 5000, seed } = parsedBody;
     const userId = auth.context.userId;
     const supabase = getSupabaseServiceClient();
 

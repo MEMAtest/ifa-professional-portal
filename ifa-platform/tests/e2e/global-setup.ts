@@ -29,7 +29,7 @@ async function globalSetup(config: FullConfig) {
 
   // Option 1: Authenticate once and save state
   // This is more efficient than logging in for every test
-  if (process.env.E2E_SHARED_AUTH === '1') {
+  if (process.env.E2E_SHARED_AUTH !== '0') {
     console.log('🔐 Authenticating and saving session state...');
     await authenticateAndSaveState(baseURL, storageStatePath);
   }
@@ -74,6 +74,12 @@ async function authenticateAndSaveState(baseURL: string = 'http://localhost:3000
 
     // Wait for navigation to dashboard (indicating successful login)
     await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+
+    // Warm key pages to avoid first-test timeouts
+    await page.goto(`${baseURL}/assessments/suitability?isProspect=true`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 120_000
+    }).catch(() => {});
 
     // Save authenticated state
     await page.context().storageState({ path: storageStatePath });

@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Send } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import type { WorkflowSourceType } from './types'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ComplianceComment {
   id: string
@@ -30,7 +31,7 @@ export default function CommentThread({ sourceType, sourceId }: CommentThreadPro
   const [content, setContent] = useState('')
   const endRef = useRef<HTMLDivElement | null>(null)
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     setLoading(true)
     try {
       const response = await fetch(`/api/compliance/comments?sourceType=${sourceType}&sourceId=${sourceId}`)
@@ -38,17 +39,17 @@ export default function CommentThread({ sourceType, sourceId }: CommentThreadPro
       const data = await response.json()
       setComments(data.comments || [])
     } catch (error) {
-      console.error('Failed to load comments:', error)
+      clientLogger.error('Failed to load comments:', error)
       setComments([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [sourceId, sourceType])
 
   useEffect(() => {
     if (!sourceType || !sourceId) return
     loadComments()
-  }, [sourceType, sourceId])
+  }, [sourceType, sourceId, loadComments])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -74,7 +75,7 @@ export default function CommentThread({ sourceType, sourceId }: CommentThreadPro
       setComments((prev) => [...prev, data.comment])
       setContent('')
     } catch (error) {
-      console.error('Failed to add comment:', error)
+      clientLogger.error('Failed to add comment:', error)
     } finally {
       setPosting(false)
     }

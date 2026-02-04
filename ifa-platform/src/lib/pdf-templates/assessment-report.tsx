@@ -247,30 +247,35 @@ export const AssessmentReport: React.FC<AssessmentReportProps> = ({
         {charts?.riskChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Risk Distribution</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={charts.riskChart} style={{ width: '100%', height: 160 }} />
           </View>
         )}
         {charts?.capacityChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Capacity for Loss</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={charts.capacityChart} style={{ width: '100%', height: 160 }} />
           </View>
         )}
         {charts?.progressChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Assessment Progress</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={charts.progressChart} style={{ width: '100%', height: 160 }} />
           </View>
         )}
         {charts?.categoryChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Category Scores</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={charts.categoryChart} style={{ width: '100%', height: 180 }} />
           </View>
         )}
         {charts?.alignmentChart && (
           <View style={styles.chartWrapper}>
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 6 }}>Risk Profile Alignment</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={charts.alignmentChart} style={{ width: '100%', height: 160 }} />
           </View>
         )}

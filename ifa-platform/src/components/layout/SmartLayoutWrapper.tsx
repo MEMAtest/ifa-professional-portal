@@ -49,15 +49,17 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
                        pathname === '/onboarding'
 
   // Fetch firm data to check onboarding status
-  const { firm } = useFirm()
+  const { firm, isLoading: firmLoading } = useFirm()
   const isOnboardingRoute = pathname === '/onboarding'
 
   // Check if admin user needs onboarding redirect
+  // IMPORTANT: Don't redirect while firm data is still loading — firm will be null
+  // and onboardingCompleted would wrongly evaluate to false, causing a redirect loop.
   const firmSettings = firm?.settings as any
   const onboardingCompleted = firmSettings?.onboarding?.completed === true
   const isAdminUser = user?.role === 'admin'
   const shouldRedirectToOnboarding = Boolean(
-    user && isAdminUser && !isPlatformAdmin && !onboardingCompleted && !isOnboardingRoute && !isPublicPage
+    user && isAdminUser && !isPlatformAdmin && !firmLoading && !onboardingCompleted && !isOnboardingRoute && !isPublicPage
   )
 
   useEffect(() => {

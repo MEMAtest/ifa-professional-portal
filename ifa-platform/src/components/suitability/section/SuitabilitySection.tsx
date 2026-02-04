@@ -22,6 +22,7 @@ import type {
   AISuggestion,
   ConditionalFieldGroup
 } from '@/types/suitability'
+import type { DocumentPopulatedFields } from '../SuitabilitySectionRenderer'
 
 // =====================================================
 // EXTENDED FIELD TYPE DEFINITIONS
@@ -63,6 +64,7 @@ interface SuitabilitySectionProps {
   showSmartComponents?: boolean
   className?: string
   conditionalFields?: ConditionalFieldGroup[] // ✅ NEW: Accept conditional fields
+  documentPopulatedFields?: DocumentPopulatedFields
 }
 
 // =====================================================
@@ -90,7 +92,8 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
   onApplyAISuggestion,
   showSmartComponents = true,
   className,
-  conditionalFields = [] // ✅ NEW: Accept conditional fields
+  conditionalFields = [], // ✅ NEW: Accept conditional fields
+  documentPopulatedFields
 }) => {
   const [localExpanded, setLocalExpanded] = useState(isExpanded)
   // Some sections contain grouped/optional inputs where hiding fields creates confusion
@@ -229,6 +232,7 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
                 hiddenFieldsCount={hiddenFieldsCount}
                 onToggleShowAllFields={() => setShowAllFields(!showAllFields)}
                 onFieldUpdate={handleFieldUpdate}
+                documentPopulatedFields={documentPopulatedFields}
               />
             </motion.div>
           )}
@@ -311,6 +315,7 @@ export const SuitabilitySection = memo<SuitabilitySectionProps>(({
               helpUrl={section.helpUrl}
               clientId={clientId}
               assessmentId={assessmentId}
+              documentPopulatedFields={documentPopulatedFields}
             />
           </motion.div>
         )}

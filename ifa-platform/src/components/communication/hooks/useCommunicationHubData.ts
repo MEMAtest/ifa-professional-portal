@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type {
   CalendarEvent,
@@ -76,7 +77,7 @@ export const useCommunicationHubData = ({ supabase, userId }: UseCommunicationHu
     } catch (error) {
       // Don't process aborted requests
       if ((error as Error).name === 'AbortError' || signal?.aborted) return
-      console.error('Error loading data:', error)
+      clientLogger.error('Error loading data:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to load communication data',
@@ -105,7 +106,7 @@ export const useCommunicationHubData = ({ supabase, userId }: UseCommunicationHu
       }))
     } catch (error) {
       if (!isMountedRef.current) return
-      console.error('Error loading calendar events:', error)
+      clientLogger.error('Error loading calendar events:', error)
     }
   }, [])
 
@@ -138,7 +139,7 @@ export const useCommunicationHubData = ({ supabase, userId }: UseCommunicationHu
       } catch (error) {
         // Ignore abort errors
         if ((error as Error).name !== 'AbortError') {
-          console.error('Error in init:', error)
+          clientLogger.error('Error in init:', error)
         }
       }
     }

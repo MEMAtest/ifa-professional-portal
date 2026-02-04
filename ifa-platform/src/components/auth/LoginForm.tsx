@@ -169,20 +169,6 @@ export const LoginForm: React.FC = () => {
                 )}
               </button>
             </form>
-            
-            {/* Demo Credentials */}
-            <div className="mt-6 pt-6 border-t border-white/20">
-              <p className="text-teal-300 text-sm font-medium mb-2">Demo Credentials</p>
-              <div className="bg-black/20 backdrop-blur rounded-lg p-3">
-                <p className="text-gray-300 text-xs">
-                  <span className="text-gray-400">Email:</span> demo@plannetic.com
-                </p>
-                <p className="text-gray-300 text-xs mt-1">
-                  <span className="text-gray-400">Password:</span> demo123
-                </p>
-              </div>
-            </div>
-
             {/* Marketing Page Link */}
             <div className="mt-4">
               <Link

@@ -134,21 +134,18 @@ export const useClientFormState = (client?: Client): ClientFormState => {
 
   const handleNextStep = useCallback(() => {
     if (currentStep < TOTAL_STEPS) {
-      console.log(`➡️ Moving from step ${currentStep} to step ${currentStep + 1}`);
       setCurrentStep(currentStep + 1);
     }
   }, [currentStep]);
 
   const handlePrevStep = useCallback(() => {
     if (currentStep > 1) {
-      console.log(`⬅️ Moving from step ${currentStep} to step ${currentStep - 1}`);
       setCurrentStep(currentStep - 1);
     }
   }, [currentStep]);
 
   const handleStepClick = useCallback((stepId: number) => {
     if (stepId <= currentStep || stepId === currentStep + 1) {
-      console.log(`🔢 Direct navigation to step ${stepId}`);
       setCurrentStep(stepId);
     }
   }, [currentStep]);

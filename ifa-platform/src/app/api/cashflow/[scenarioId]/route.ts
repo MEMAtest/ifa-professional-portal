@@ -7,13 +7,36 @@ export const dynamic = 'force-dynamic'
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { CashFlowDataService } from '@/services/CashFlowDataService';
-import { handleError, checkAuthentication } from '../../utils';
+import { handleError } from '../../utils';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireScenarioAccess } from '@/lib/monte-carlo/monteCarloAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 interface RouteParams {
   params: { scenarioId: string };
+}
+
+function transformToCamelCase(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(transformToCamelCase)
+  const result: any = {}
+  for (const key in obj) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+    result[camelKey] = transformToCamelCase(obj[key])
+  }
+  return result
+}
+
+function transformToSnakeCase(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(transformToSnakeCase)
+  const result: any = {}
+  for (const key in obj) {
+    const snakeKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+    result[snakeKey] = transformToSnakeCase(obj[key])
+  }
+  return result
 }
 
 // =====================================================
@@ -26,24 +49,33 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { user, error: authError } = await checkAuthentication(request);
-    if (authError || !user) {
-        return handleError(authError || new Error('Authentication failed'), 'Authentication failed');
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
     const { scenarioId } = params;
-    const scenario = await CashFlowDataService.getScenario(scenarioId);
-
-    if (!scenario) {
-      return NextResponse.json({ success: false, error: 'Scenario not found' }, { status: 404 });
+    const supabase = getSupabaseServiceClient()
+    const access = await requireScenarioAccess({ supabase, scenarioId, ctx: auth.context })
+    if (!access.ok) {
+      return access.response
     }
 
-    // CRITICAL SECURITY FIX (IDOR): Ensures the user can only access their own scenarios.
-    if (scenario.createdBy !== user.id) {
-        return handleError({ message: 'unauthorized' }, 'Unauthorized access to scenario');
+    const { data, error } = await supabase
+      .from('cash_flow_scenarios')
+      .select('*')
+      .eq('id', scenarioId)
+      .single()
+
+    if (error || !data) {
+      return NextResponse.json({ success: false, error: 'Scenario not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, data: scenario });
+    return NextResponse.json({ success: true, data: transformToCamelCase(data) });
 
   } catch (error) {
     return handleError(error, 'Failed to fetch scenario');
@@ -56,9 +88,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { user, error: authError } = await checkAuthentication(request);
-    if (authError || !user) {
-        return handleError(authError || new Error('Authentication failed'), 'Authentication failed');
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
     const { scenarioId } = params;
@@ -68,19 +104,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ success: false, error: 'Request body cannot be empty.' }, { status: 400 });
     }
 
-    const scenario = await CashFlowDataService.getScenario(scenarioId);
-
-    if (!scenario) {
-      return NextResponse.json({ success: false, error: 'Scenario not found' }, { status: 404 });
+    const supabase = getSupabaseServiceClient()
+    const access = await requireScenarioAccess({ supabase, scenarioId, ctx: auth.context })
+    if (!access.ok) {
+      return access.response
     }
 
-    // CRITICAL SECURITY FIX (IDOR): Prevents users from updating scenarios they don't own.
-    if (scenario.createdBy !== user.id) {
-        return handleError({ message: 'unauthorized' }, 'Unauthorized to update scenario');
+    const updateData = {
+      ...transformToSnakeCase(updates),
+      updated_at: new Date().toISOString()
     }
 
-    const updatedScenario = await CashFlowDataService.updateScenario(scenarioId, updates);
-    return NextResponse.json({ success: true, data: updatedScenario });
+    const { data, error } = await supabase
+      .from('cash_flow_scenarios')
+      .update(updateData)
+      .eq('id', scenarioId)
+      .select()
+      .single()
+
+    if (error || !data) {
+      return NextResponse.json({ success: false, error: 'Failed to update scenario' }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true, data: transformToCamelCase(data) });
 
   } catch (error) {
     return handleError(error, 'Failed to update scenario');
@@ -93,25 +139,26 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { user, error: authError } = await checkAuthentication(request);
-    if (authError || !user) {
-        return handleError(authError || new Error('Authentication failed'), 'Authentication failed');
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
     }
 
     const { scenarioId } = params;
-    const scenario = await CashFlowDataService.getScenario(scenarioId);
-
-    if (!scenario) {
-      // The resource is already gone, so the request can be considered successful.
-      return new NextResponse(null, { status: 204 });
+    const supabase = getSupabaseServiceClient()
+    const access = await requireScenarioAccess({ supabase, scenarioId, ctx: auth.context })
+    if (!access.ok) {
+      return access.response
     }
 
-    // CRITICAL SECURITY FIX (IDOR): Prevents users from deleting scenarios they don't own.
-    if (scenario.createdBy !== user.id) {
-        return handleError({ message: 'unauthorized' }, 'Unauthorized to delete scenario');
-    }
-
-    await CashFlowDataService.deleteScenario(scenarioId);
+    await supabase
+      .from('cash_flow_scenarios')
+      .delete()
+      .eq('id', scenarioId)
 
     // Return a 204 No Content response, the standard for successful deletions.
     return new NextResponse(null, { status: 204 });

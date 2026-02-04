@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import clientLogger from '@/lib/logging/clientLogger'
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -261,7 +262,7 @@ export default function NuclearMonteCarlo({
             description: "Simulation results saved to client profile",
           });
         } catch (error) {
-          console.error('Error saving results:', error);
+          clientLogger.error('Error saving results:', error);
           toast({
             title: "Save Failed",
             description: "Results displayed but could not be saved",
@@ -294,7 +295,7 @@ export default function NuclearMonteCarlo({
       }
 
     } catch (error) {
-      console.error('Simulation error:', error);
+      clientLogger.error('Simulation error:', error);
       toast({
         title: "Simulation Failed",
         description: "An error occurred during simulation",
@@ -395,7 +396,7 @@ export default function NuclearMonteCarlo({
         throw new Error(result.error || 'Report generation failed');
       }
     } catch (error) {
-      console.error('Report generation error:', error);
+      clientLogger.error('Report generation error:', error);
       toast({
         title: "Report Failed",
         description: error instanceof Error ? error.message : "Failed to generate report",

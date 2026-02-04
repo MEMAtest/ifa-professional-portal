@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { PulledPlatformData } from '@/types/suitability'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ATRAssessment {
   id: string
@@ -69,7 +70,7 @@ async function fetchApiJson<T>(url: string): Promise<ApiResponse<T> | null> {
     const json = (await res.json().catch(() => null)) as ApiResponse<T> | null
     return json
   } catch (error) {
-    console.error('API fetch error:', error)
+    clientLogger.error('API fetch error:', error)
     return null
   }
 }
@@ -117,7 +118,7 @@ export const useATRCFLIntegration = ({
       if (!json || !json.success) return null
       return json.data || null
     } catch (error) {
-      console.error('ATR fetch error:', error)
+      clientLogger.error('ATR fetch error:', error)
       return null
     }
   }, [clientId])
@@ -129,7 +130,7 @@ export const useATRCFLIntegration = ({
       if (!json || !json.success) return null
       return json.data || null
     } catch (error) {
-      console.error('CFL fetch error:', error)
+      clientLogger.error('CFL fetch error:', error)
       return null
     }
   }, [clientId])
@@ -140,7 +141,7 @@ export const useATRCFLIntegration = ({
       if (!json || !json.success) return null
       return json.data || null
     } catch (error) {
-      console.error('Persona fetch error:', error)
+      clientLogger.error('Persona fetch error:', error)
       return null
     }
   }, [clientId])

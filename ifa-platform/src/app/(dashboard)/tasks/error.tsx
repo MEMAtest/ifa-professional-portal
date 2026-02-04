@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ErrorProps {
   error: Error & { digest?: string }
@@ -11,7 +12,7 @@ interface ErrorProps {
 
 export default function TasksError({ error, reset }: ErrorProps) {
   useEffect(() => {
-    console.error('[Task Hub] Rendering error:', error)
+    clientLogger.error('[Task Hub] Rendering error:', error)
   }, [error])
 
   return (

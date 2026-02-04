@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { integratedClientService } from '@/services/integratedClientService'
 import { realDocumentService, autoSaveService } from '@/services/realIntegratedServices'
 import type { ClientDashboardData, ExtendedClientProfile, IntegrationResult } from '@/services/integratedClientService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // HOOK INTERFACE
@@ -87,7 +88,7 @@ export function useClientIntegration(
         setError('Client not found')
       }
     } catch (err) {
-      console.error('Error fetching client data:', err)
+      clientLogger.error('Error fetching client data:', err)
       setError(err instanceof Error ? err.message : 'Failed to load client data')
     } finally {
       setIsLoading(false)
@@ -287,7 +288,7 @@ export function useClientIntegration(
 
       return null
     } catch (err) {
-      console.error('Document generation error:', err)
+      clientLogger.error('Document generation error:', err)
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to generate document',
@@ -327,7 +328,7 @@ export function useClientIntegration(
 
       return workflow
     } catch (err) {
-      console.error('Workflow creation error:', err)
+      clientLogger.error('Workflow creation error:', err)
       toast({
         title: 'Error',
         description: 'Failed to create workflow',

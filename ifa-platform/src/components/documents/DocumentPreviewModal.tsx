@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
+import Image from 'next/image'
 import {
   X,
   Loader2,
@@ -265,11 +266,15 @@ export function DocumentPreviewModal({ documentId, onClose, onReuploaded }: Docu
                 {isPreviewable ? (
                   doc?.mime_type?.startsWith('image/') || doc?.file_type === 'image' ? (
                     <div className="flex items-center justify-center h-full p-4">
-                      <img
-                        src={`/api/documents/preview/${doc!.id}`}
-                        alt={doc!.file_name || doc!.name}
-                        className="max-w-full max-h-full object-contain"
-                      />
+                      <div className="relative h-full w-full">
+                        <Image
+                          src={`/api/documents/preview/${doc!.id}`}
+                          alt={doc!.file_name || doc!.name || 'Document preview'}
+                          fill
+                          sizes="(max-width: 1024px) 100vw, 50vw"
+                          className="object-contain"
+                        />
+                      </div>
                     </div>
                   ) : (
                     <iframe

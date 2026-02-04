@@ -4,6 +4,7 @@ import {
   OTHER_OPTION,
   createDefaultConsumerDutyFramework
 } from '@/components/settings/consumerDuty/constants'
+import clientLogger from '@/lib/logging/clientLogger'
 import type {
   ConsumerDutyFramework,
   ConsumerDutySaveStatus,
@@ -204,7 +205,7 @@ export const useConsumerDutySettings = ({
       setTimeout(() => setSaveStatus({ state: 'idle' }), 3000)
 
     } catch (error) {
-      console.error('Error saving Consumer Duty settings:', error)
+      clientLogger.error('Error saving Consumer Duty settings:', error)
       setSaveStatus({ state: 'error', message: 'Failed to save' })
       toast({
         title: 'Error',

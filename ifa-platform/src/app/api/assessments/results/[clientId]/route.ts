@@ -4,6 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 
 export const dynamic = 'force-dynamic';
 
@@ -12,8 +14,26 @@ export async function GET(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+
     const supabase = getSupabaseServiceClient();
     const clientId = params.clientId;
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Fetch latest results for each assessment type
     const [atrResult, cflResult, personaResult] = await Promise.all([

@@ -4,9 +4,10 @@ export const dynamic = 'force-dynamic'
 // Server-side API route for fetching market data with full transparency
 // All data from live APIs - no hardcoded values
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { getAuthContext } from '@/lib/auth/apiAuth'
 const CACHE_KEY = 'market_data_cache_v2'
 
 interface DataPoint<T> {
@@ -531,7 +532,12 @@ async function setCachedData(marketData: MarketData): Promise<void> {
 // ============================================
 // MAIN API HANDLER
 // ============================================
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await getAuthContext(request)
+  if (!auth.success || !auth.context) {
+    return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   log.info('\n=== MARKET DATA FETCH STARTED ===')
 
   // Get cached data to use as fallback

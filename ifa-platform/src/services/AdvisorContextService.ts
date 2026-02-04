@@ -8,6 +8,7 @@ import { createClient as createBrowserClient } from '@/lib/supabase/client'
 import { type SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import type { Database } from '@/types/db'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ================================================================
 // TYPES
@@ -167,7 +168,7 @@ export class AdvisorContextService {
       return context
 
     } catch (error) {
-      console.error('[AdvisorContextService] Error getting context:', error)
+      clientLogger.error('[AdvisorContextService] Error getting context:', error)
       return { advisor: DEFAULT_ADVISOR, firm: DEFAULT_FIRM }
     }
   }
@@ -212,7 +213,7 @@ export class AdvisorContextService {
       }
 
     } catch (error) {
-      console.error('[AdvisorContextService] Error fetching advisor profile:', error)
+      clientLogger.error('[AdvisorContextService] Error fetching advisor profile:', error)
       return { ...DEFAULT_ADVISOR, id: userId }
     }
   }
@@ -244,7 +245,7 @@ export class AdvisorContextService {
       return this.mapFirmData(firm)
 
     } catch (error) {
-      console.error('[AdvisorContextService] Error fetching firm profile:', error)
+      clientLogger.error('[AdvisorContextService] Error fetching firm profile:', error)
       return DEFAULT_FIRM
     }
   }

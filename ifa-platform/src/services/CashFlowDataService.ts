@@ -8,6 +8,7 @@ import { clientService } from '@/services/ClientService';
 import { AssessmentService } from '@/services/AssessmentService';
 import type { Client, FinancialProfile } from '@/types/client';
 import type { AssessmentResult } from '@/types/assessment';
+import clientLogger from '@/lib/logging/clientLogger'
 import type { 
   CashFlowScenario, 
   CashFlowProjection, 
@@ -155,7 +156,7 @@ export class CashFlowDataService {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (error) {
-      console.error('Error fetching client scenarios:', error);
+      clientLogger.error('Error fetching client scenarios:', error);
       return [];
     }
   }
@@ -199,7 +200,7 @@ export class CashFlowDataService {
 
       return transformToCamelCase(data) as CashFlowScenario;
     } catch (error) {
-      console.error('Error updating scenario assumptions:', error);
+      clientLogger.error('Error updating scenario assumptions:', error);
       throw error;
     }
   }
@@ -225,7 +226,7 @@ export class CashFlowDataService {
 
       return data ? transformToCamelCase(data) as CashFlowScenario : null;
     } catch (error) {
-      console.error('Error fetching scenario:', error);
+      clientLogger.error('Error fetching scenario:', error);
       return null;
     }
   }
@@ -253,7 +254,7 @@ export class CashFlowDataService {
 
       return transformToCamelCase(data) as CashFlowScenario;
     } catch (error) {
-      console.error('Error updating scenario:', error);
+      clientLogger.error('Error updating scenario:', error);
       throw error;
     }
   }
@@ -273,7 +274,7 @@ export class CashFlowDataService {
         
       if (error) throw error;
     } catch (error) {
-      console.error('Error deleting scenario:', error);
+      clientLogger.error('Error deleting scenario:', error);
       throw error;
     }
   }
@@ -299,7 +300,7 @@ export class CashFlowDataService {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (error) {
-      console.error('Error fetching user scenarios:', error);
+      clientLogger.error('Error fetching user scenarios:', error);
       return [];
     }
   }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EnhancedCashFlowReportService } from '@/services/EnhancedCashFlowReportService'
 import type { EnhancedReportOptions, ReportProgress } from '@/services/cashflow-report/types'
+import clientLogger from '@/lib/logging/clientLogger'
 
 export const useReportGeneration = () => {
   const queryClient = useQueryClient()
@@ -25,7 +26,7 @@ export const useReportGeneration = () => {
       queryClient.invalidateQueries({ queryKey: ['report-history'] })
     },
     onError: (error) => {
-      console.error('Report generation failed:', error)
+      clientLogger.error('Report generation failed:', error)
     }
   })
 }

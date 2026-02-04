@@ -10,6 +10,7 @@ import {
   AISuggestion 
 } from '@/types/suitability'
 import { aiAssistantService } from '@/services/aiAssistantService'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface UseSuitabilityAIOptions {
   clientId?: string
@@ -37,7 +38,7 @@ export const useSuitabilityAI = ({
       }
       return data
     } catch (error) {
-      console.error('Error pulling platform data:', error)
+      clientLogger.error('Error pulling platform data:', error)
       throw error
     } finally {
       setIsPullingData(false)
@@ -74,7 +75,7 @@ export const useSuitabilityAI = ({
       setAiSuggestions(prev => ({ ...prev, [sectionId]: aiSuggestion }))
       return aiSuggestion
     } catch (error) {
-      console.error('AI suggestion error:', error)
+      clientLogger.error('AI suggestion error:', error)
       throw error
     } finally {
       setIsLoadingAI(prev => ({ ...prev, [sectionId]: false }))

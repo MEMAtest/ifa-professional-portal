@@ -22,19 +22,11 @@ import {
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { useToast } from '@/components/ui/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { generatePDF } from '@/lib/pdf/generatePDF'
 import { sendReportEmail } from '@/services/emailService'
-import sanitizeHtml from 'sanitize-html'
-
-const sanitizeReportHtml = (html: string) =>
-  sanitizeHtml(html, {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'style']),
-    allowedAttributes: {
-      ...sanitizeHtml.defaults.allowedAttributes,
-      img: ['src', 'alt', 'width', 'height', 'style'],
-      '*': ['style', 'class', 'id']
-    }
-  })
+import { sanitizeReportHtml } from './reportGenerationUtils'
+import { ReportModalShell } from './ReportModalShell'
 
 // Import types from your existing assessment types
 import type { 
@@ -101,51 +93,6 @@ interface FirmSettings {
 type WizardStep = 'edit' | 'preview' | 'send' | 'complete'
 
 // ================================================================
-// CUSTOM MODAL COMPONENT
-// ================================================================
-
-interface ModalProps {
-  isOpen: boolean
-  onClose: () => void
-  children: React.ReactNode
-}
-
-function Modal({ isOpen, onClose, children }: ModalProps) {
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
-
-    return () => {
-      document.body.style.overflow = 'unset'
-    }
-  }, [isOpen])
-
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-50">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/50"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            onClose()
-          }
-        }}
-      />
-      
-      {/* Modal Content */}
-      <div className="absolute inset-0 bg-white">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// ================================================================
 // MAIN COMPONENT
 // ================================================================
 
@@ -204,7 +151,7 @@ export default function ReportGenerationModal({
       try {
         setFirmSettings(JSON.parse(savedSettings))
       } catch (e) {
-        console.error('Failed to load firm settings')
+        clientLogger.error('Failed to load firm settings')
       }
     }
   }, [])
@@ -307,7 +254,7 @@ export default function ReportGenerationModal({
         description: 'Your report has been generated successfully'
       })
     } catch (error) {
-      console.error('PDF generation error:', error)
+      clientLogger.error('PDF generation error:', error)
       toast({
         title: 'Generation failed',
         description: 'Failed to generate PDF report',
@@ -353,7 +300,7 @@ export default function ReportGenerationModal({
         description: 'Report has been sent successfully'
       })
     } catch (error) {
-      console.error('Email error:', error)
+      clientLogger.error('Email error:', error)
       toast({
         title: 'Send failed',
         description: error instanceof Error ? error.message : 'Failed to send email',
@@ -403,7 +350,7 @@ export default function ReportGenerationModal({
       const { documentId } = await response.json()
       return documentId
     } catch (error) {
-      console.error('Failed to save document:', error)
+      clientLogger.error('Failed to save document:', error)
       throw error
     }
   }
@@ -858,7 +805,7 @@ export default function ReportGenerationModal({
   // ================================================================
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <ReportModalShell isOpen={isOpen} onClose={onClose}>
       <div className="h-full flex flex-col">
         {/* Close button */}
         <button
@@ -910,7 +857,7 @@ export default function ReportGenerationModal({
           {currentStep === 'complete' && renderCompleteStep()}
         </div>
       </div>
-    </Modal>
+    </ReportModalShell>
   )
 }
 

@@ -16,6 +16,7 @@ import {
   STRESS_SCENARIOS
 } from '@/components/stress-testing/constants'
 import { mapStoredStressResults } from '@/lib/stress-testing/mappers'
+import clientLogger from '@/lib/logging/clientLogger'
 
 const emptyDashboardStats: StressTestingDashboardStats = {
   totalClients: 0,
@@ -97,19 +98,19 @@ export const loadStressTestingDashboardData = async (
 
   let latestResults = latestResultsResponse.data || []
   if (latestResultsResponse.error) {
-    console.error('Error loading latest stress test results:', latestResultsResponse.error)
+    clientLogger.error('Error loading latest stress test results:', latestResultsResponse.error)
     latestResults = []
   }
 
   let stressRuns = stressRunsResponse.data || []
   if (stressRunsResponse.error) {
-    console.error('Error loading stress test runs:', stressRunsResponse.error)
+    clientLogger.error('Error loading stress test runs:', stressRunsResponse.error)
     stressRuns = []
   }
 
   let scenarios = scenariosResponse.data || []
   if (scenariosResponse.error) {
-    console.error('Error loading cash flow scenarios:', scenariosResponse.error)
+    clientLogger.error('Error loading cash flow scenarios:', scenariosResponse.error)
     scenarios = []
   }
 
@@ -146,7 +147,7 @@ export const loadStressTestingDashboardData = async (
       .in('client_id', clientIds)
 
     if (fallbackError) {
-      console.error('Error loading fallback stress test results:', fallbackError)
+      clientLogger.error('Error loading fallback stress test results:', fallbackError)
     } else if (fallbackResults && fallbackResults.length > 0) {
       const latestByClient: Record<string, any> = {}
       fallbackResults.forEach((row: any) => {
@@ -362,7 +363,7 @@ export const loadStressTestingClientData = async (
     .maybeSingle()
 
   if (stressError) {
-    console.error('Error loading stress test results:', stressError)
+    clientLogger.error('Error loading stress test results:', stressError)
   }
 
   const storedResults = Array.isArray(latestStressResult?.results_json)
@@ -405,7 +406,7 @@ const fetchDocumentsForClients = async (
   const data: Record<string, any>[] = []
   responses.forEach((response) => {
     if (response.error) {
-      console.error(`Error fetching ${table}:`, response.error)
+      clientLogger.error(`Error fetching ${table}:`, response.error)
       return
     }
     if (response.data) {

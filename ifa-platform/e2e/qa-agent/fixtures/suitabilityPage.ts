@@ -46,19 +46,67 @@ export class SuitabilityPage {
     const url = clientId
       ? `/assessments/suitability?clientId=${clientId}`
       : this.baseUrl  // Uses isProspect=true
-    await this.page.goto(url, { timeout: 60000 })
+    await this.gotoWithRetry(url)
+    await this.ensureAuthenticated(url)
     await this.waitForFormLoad()
   }
 
   async gotoWithNewClient() {
     // Use prospect mode for testing without a real client
-    await this.page.goto('/assessments/suitability?isProspect=true')
+    const url = '/assessments/suitability?isProspect=true'
+    await this.gotoWithRetry(url)
+    await this.ensureAuthenticated(url)
     await this.waitForFormLoad()
   }
 
   async gotoWithClientId(clientId: string) {
-    await this.page.goto(`/assessments/suitability?clientId=${clientId}`)
+    const url = `/assessments/suitability?clientId=${clientId}`
+    await this.gotoWithRetry(url)
+    await this.ensureAuthenticated(url)
     await this.waitForFormLoad()
+  }
+
+  private async ensureAuthenticated(targetUrl: string) {
+    const currentUrl = this.page.url()
+    const isLoginPage = currentUrl.includes('/login') || currentUrl.includes('/auth/signin')
+
+    if (!isLoginPage) {
+      return
+    }
+
+    const email = process.env.E2E_EMAIL || 'demo@plannetic.com'
+    const password = process.env.E2E_PASSWORD || 'demo123'
+
+    await this.page.fill('#email, input[name="email"], input[type="email"]', email)
+    await this.page.fill('#password, input[name="password"], input[type="password"]', password)
+
+    const submit = this.page.locator(
+      'button:has-text("Sign in"), button:has-text("Sign In"), button:has-text("Login"), button[type="submit"]'
+    ).first()
+    await submit.click()
+
+    await this.page.waitForURL((url) => {
+      return !url.pathname.includes('/login') && !url.pathname.includes('/auth/signin')
+    }, { timeout: 30000 }).catch(() => {})
+
+    if (!this.page.url().includes('/assessments/suitability')) {
+      await this.gotoWithRetry(targetUrl)
+    }
+  }
+
+  private async gotoWithRetry(url: string) {
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await this.page.goto(url, { timeout: 120000, waitUntil: 'domcontentloaded' })
+        return
+      } catch (error) {
+        if (attempt === maxAttempts) {
+          throw error
+        }
+        await this.page.waitForTimeout(2000)
+      }
+    }
   }
 
   async waitForFormLoad() {
@@ -154,15 +202,55 @@ export class SuitabilityPage {
   }
 
   private getFieldLocator(fieldId: string): Locator {
-    // Try multiple selectors
-    return this.page.locator([
-      `#${fieldId}`,
-      `[name="${fieldId}"]`,
-      `[data-testid="${fieldId}"]`,
-      `input[id*="${fieldId}"]`,
-      `select[id*="${fieldId}"]`,
-      `textarea[id*="${fieldId}"]`
-    ].join(', ')).first()
+    const candidates = this.getFieldCandidates(fieldId)
+    const selectors = candidates.flatMap((candidate) => ([
+      `#${candidate}`,
+      `[name="${candidate}"]`,
+      `[data-testid="${candidate}"]`,
+      `input[id*="${candidate}"]`,
+      `select[id*="${candidate}"]`,
+      `textarea[id*="${candidate}"]`
+    ]))
+
+    return this.page.locator(selectors.join(', ')).first()
+  }
+
+  private getFieldCandidates(fieldId: string): string[] {
+    const candidates = new Set<string>()
+    const aliases: Record<string, string[]> = {
+      first_name: ['client_name'],
+      last_name: ['client_name'],
+      business_name: ['employer_name', 'occupation'],
+      monthly_income: ['annual_income'],
+      outstanding_mortgage: ['mortgage_outstanding'],
+      mortgage_payment: ['mortgage_outstanding'],
+      pension_income: ['income_defined_benefit', 'income_state_pension'],
+      salary_income: ['income_employment', 'annual_income'],
+      rental_income: ['income_rental'],
+      rental_property_value: ['property_value'],
+      dividend_income: ['income_dividends'],
+      pension_provider: ['pension_type'],
+      spouse_name: ['notes'],
+      spouse_income: ['income_other'],
+    }
+
+    const addCandidate = (value: string) => {
+      if (value && typeof value === 'string') candidates.add(value)
+    }
+
+    addCandidate(fieldId)
+    const aliasList = aliases[fieldId]
+    if (aliasList) {
+      aliasList.forEach(addCandidate)
+    }
+
+    if (fieldId.includes('_')) {
+      const camel = fieldId.replace(/_([a-z])/g, (_, ch) => ch.toUpperCase())
+      addCandidate(camel)
+      addCandidate(fieldId.replace(/_/g, ''))
+    }
+
+    return Array.from(candidates)
   }
 
   // ============================================

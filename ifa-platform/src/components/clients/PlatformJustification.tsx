@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface Props {
   clientId: string
@@ -113,7 +114,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
         })
       }
     } catch (error) {
-      console.error('Error loading platform data:', error)
+      clientLogger.error('Error loading platform data:', error)
     } finally {
       setLoading(false)
     }
@@ -193,7 +194,7 @@ export default function PlatformJustification({ clientId, firmId, onSaved }: Pro
       onSaved?.()
       loadData()
     } catch (error) {
-      console.error('Error saving:', error)
+      clientLogger.error('Error saving:', error)
       toast({
         title: 'Error',
         description: 'Failed to save platform selection',

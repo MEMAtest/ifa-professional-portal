@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Users, Plus, TrendingUp } from 'lucide-react';
+import clientLogger from '@/lib/logging/clientLogger'
 import { CashFlowScenarioService } from '@/services/CashFlowScenarioService';
 import type { ClientOption, CashFlowScenario } from '@/types/cash-flow-scenario';
 
@@ -32,7 +33,7 @@ export function ClientScenarioSelector({
       const clientsData = await CashFlowScenarioService.getClientsWithScenarios();
       setClients(clientsData);
     } catch (error) {
-      console.error('Error loading clients:', error);
+      clientLogger.error('Error loading clients:', error);
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,7 @@ export function ClientScenarioSelector({
         }
       }
     } catch (error) {
-      console.error('Error loading scenarios:', error);
+      clientLogger.error('Error loading scenarios:', error);
     } finally {
       setScenariosLoading(false);
     }
@@ -84,7 +85,7 @@ export function ClientScenarioSelector({
       setScenarios(prev => [newScenario, ...prev]);
       onScenarioSelect(newScenario);
     } catch (error) {
-      console.error('Error creating scenario:', error);
+      clientLogger.error('Error creating scenario:', error);
     }
   };
 

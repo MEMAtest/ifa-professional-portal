@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/Alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { createClient } from '@/lib/supabase/client'
+import clientLogger from '@/lib/logging/clientLogger'
 import type { AssessmentVersionInfo } from '@/types/suitability-version'
 
 import { ComparisonSummaryTab } from './version-comparison/components/ComparisonSummaryTab'
@@ -106,7 +107,7 @@ export const VersionComparison: React.FC<VersionComparisonProps> = ({
       
       setVersionData(prev => ({ ...prev, [versionId]: formData }))
     } catch (err) {
-      console.error(`Failed to load version ${versionId}:`, err)
+      clientLogger.error(`Failed to load version ${versionId}:`, err)
       setError(err instanceof Error ? err.message : 'Failed to load version data')
     }
   }, [versionData, supabase])

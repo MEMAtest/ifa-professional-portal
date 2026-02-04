@@ -11,7 +11,7 @@ interface MarketingShellProps {
 
 const navLinks = [
   { label: 'Features', href: '/marketing#features', match: (pathname: string) => pathname.startsWith('/marketing') },
-  { label: 'Demo', href: '/marketing#demo', match: (pathname: string) => pathname.startsWith('/marketing') },
+  { label: 'Tour', href: '/marketing#tour', match: (pathname: string) => pathname.startsWith('/marketing') },
   { label: 'Security', href: '/marketing#security', match: (pathname: string) => pathname.startsWith('/marketing') },
   { label: 'Blog', href: '/blog', match: (pathname: string) => pathname.startsWith('/blog') },
   { label: 'Contact', href: '/contact', match: (pathname: string) => pathname === '/contact' }
@@ -152,7 +152,7 @@ const Footer = () => {
             <h4 className="text-white font-semibold mb-4">Product</h4>
             <ul className="space-y-2 text-sm">
               <li><Link href="/marketing#features" className="hover:text-white transition-colors">Features</Link></li>
-              <li><Link href="/marketing#demo" className="hover:text-white transition-colors">Demo</Link></li>
+              <li><Link href="/marketing#tour" className="hover:text-white transition-colors">Tour</Link></li>
               <li><Link href="/marketing#security" className="hover:text-white transition-colors">Security</Link></li>
             </ul>
           </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export const useClientCashFlowStatus = (supabase: SupabaseClient, clientId: string) => {
   const [hasCashFlowAnalysis, setHasCashFlowAnalysis] = useState(false);
@@ -24,7 +25,7 @@ export const useClientCashFlowStatus = (supabase: SupabaseClient, clientId: stri
         setCashFlowCount(count);
       }
     } catch (refreshError) {
-      console.error('Error checking cash flow data:', refreshError);
+      clientLogger.error('Error checking cash flow data:', refreshError);
       setHasCashFlowAnalysis(false);
       setCashFlowCount(0);
     }

@@ -4,6 +4,7 @@
 
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // CORE UTILITY FUNCTIONS
@@ -818,7 +819,6 @@ export function isErrorOfType(error: unknown, type: string): boolean {
  */
 export function devLog(...args: any[]): void {
   if (process.env.NODE_ENV === 'development') {
-    console.log(...args);
   }
 }
 
@@ -827,6 +827,6 @@ export function devLog(...args: any[]): void {
  */
 export function devAssert(condition: boolean, message: string): void {
   if (process.env.NODE_ENV === 'development' && !condition) {
-    console.error('Assertion failed:', message);
+    clientLogger.error('Assertion failed:', message);
   }
 }

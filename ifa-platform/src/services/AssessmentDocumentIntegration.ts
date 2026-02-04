@@ -5,6 +5,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // ===================================================================
 // TYPES AND INTERFACES
@@ -46,8 +47,6 @@ export class AssessmentDocumentIntegration {
    */
   async onAssessmentCompleted(assessment: AssessmentData): Promise<void> {
     try {
-      console.log(`Processing completed ${assessment.assessmentType} assessment for client ${assessment.clientId}`);
-
       // Get client data
       const { data: client, error: clientError } = await this.supabase
         .from('clients')
@@ -80,10 +79,8 @@ export class AssessmentDocumentIntegration {
       // Schedule follow-up tasks
       await this.scheduleFollowUpTasks(client, assessment);
 
-      console.log(`Assessment processing completed for client ${assessment.clientId}`);
-
     } catch (error) {
-      console.error('Error in assessment document integration:', error);
+      clientLogger.error('Error in assessment document integration:', error);
       throw error;
     }
   }
@@ -93,8 +90,6 @@ export class AssessmentDocumentIntegration {
    */
   private async generateSuitabilityDocuments(client: any, assessment: AssessmentData): Promise<void> {
     try {
-      console.log('Generating suitability documents...');
-
       // Find suitability report template
       const { data: template, error: templateError } = await this.supabase
         .from('document_templates')
@@ -138,11 +133,10 @@ export class AssessmentDocumentIntegration {
           }
         });
 
-        console.log(`Suitability report generated: ${documentResult.document.id}`);
       }
 
     } catch (error) {
-      console.error('Error generating suitability documents:', error);
+      clientLogger.error('Error generating suitability documents:', error);
       // Create a fallback document record
       await this.createGenericDocument(client, assessment, 'suitability_report');
     }
@@ -153,8 +147,6 @@ export class AssessmentDocumentIntegration {
    */
   private async updateRiskProfileDocuments(client: any, assessment: AssessmentData): Promise<void> {
     try {
-      console.log('Updating risk profile documents...');
-
       // Update client's risk profile in database
       const riskData = this.extractRiskData(assessment.data);
       
@@ -168,16 +160,14 @@ export class AssessmentDocumentIntegration {
         .eq('id', client.id);
 
       if (error) {
-        console.error('Failed to update client risk profile:', error);
+        clientLogger.error('Failed to update client risk profile:', error);
       }
 
       // Generate risk profile summary document
       await this.createGenericDocument(client, assessment, 'risk_profile_update');
 
-      console.log('Risk profile documents updated');
-
     } catch (error) {
-      console.error('Error updating risk profile documents:', error);
+      clientLogger.error('Error updating risk profile documents:', error);
     }
   }
 
@@ -186,8 +176,6 @@ export class AssessmentDocumentIntegration {
    */
   private async generateCapacityForLossReport(client: any, assessment: AssessmentData): Promise<void> {
     try {
-      console.log('Generating capacity for loss report...');
-
       // Extract key CFL metrics
       const cflMetrics = this.extractCFLMetrics(assessment.data);
 
@@ -210,10 +198,8 @@ export class AssessmentDocumentIntegration {
         await this.createGenericDocument(client, assessment, 'cfl_report');
       }
 
-      console.log('CFL report generated');
-
     } catch (error) {
-      console.error('Error generating CFL report:', error);
+      clientLogger.error('Error generating CFL report:', error);
     }
   }
 
@@ -245,11 +231,10 @@ export class AssessmentDocumentIntegration {
           } as any)
           .eq('id', client.id);
 
-        console.log('Client status updated to active/compliant');
       }
 
     } catch (error) {
-      console.error('Error updating client status:', error);
+      clientLogger.error('Error updating client status:', error);
     }
   }
 
@@ -298,10 +283,8 @@ export class AssessmentDocumentIntegration {
           } as any);
       }
 
-      console.log('Follow-up tasks scheduled');
-
     } catch (error) {
-      console.error('Error scheduling follow-up tasks:', error);
+      clientLogger.error('Error scheduling follow-up tasks:', error);
     }
   }
 
@@ -337,7 +320,7 @@ export class AssessmentDocumentIntegration {
       }
 
     } catch (error) {
-      console.error('Error creating generic document:', error);
+      clientLogger.error('Error creating generic document:', error);
     }
   }
 
@@ -388,7 +371,7 @@ export class AssessmentDocumentIntegration {
       };
 
     } catch (error) {
-      console.error('Error generating document from template:', error);
+      clientLogger.error('Error generating document from template:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Document generation failed'
@@ -483,7 +466,7 @@ export class AssessmentDocumentIntegration {
           created_at: new Date().toISOString()
         } as any);
     } catch (error) {
-      console.error('Error creating pending action:', error);
+      clientLogger.error('Error creating pending action:', error);
     }
   }
 

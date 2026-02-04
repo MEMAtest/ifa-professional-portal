@@ -20,7 +20,7 @@ import { parseRequestBody } from '@/app/api/utils'
 
 const inviteSchema = z.object({
   email: z.string().min(1),
-  role: z.enum(['advisor', 'compliance', 'admin'])
+  role: z.enum(['advisor', 'supervisor', 'admin'])
 })
 
 export async function GET(request: NextRequest) {
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
     }
 
-    if (!body.role || !['advisor', 'compliance', 'admin'].includes(body.role)) {
+    if (!body.role || !['advisor', 'supervisor', 'admin'].includes(body.role)) {
       return NextResponse.json({ error: 'Valid role is required' }, { status: 400 })
     }
 

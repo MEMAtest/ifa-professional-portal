@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -191,7 +192,7 @@ export default function ComplianceWorkflowHub() {
       const data = await response.json()
       setItems(data.items || [])
     } catch (error) {
-      console.error('Workflow hub load error:', error)
+      clientLogger.error('Workflow hub load error:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to load workflow hub data',
@@ -293,7 +294,7 @@ export default function ComplianceWorkflowHub() {
         )
       )
     } catch (error) {
-      console.error('Workflow hub status update error:', error)
+      clientLogger.error('Workflow hub status update error:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to update item status',
@@ -351,7 +352,7 @@ export default function ComplianceWorkflowHub() {
       setSelectedItem((prev) => (prev ? { ...prev, ...updates } : prev))
       await loadItems()
     } catch (error) {
-      console.error('Workflow hub update error:', error)
+      clientLogger.error('Workflow hub update error:', error)
       toastRef.current({
         title: 'Error',
         description: 'Failed to update workflow item',

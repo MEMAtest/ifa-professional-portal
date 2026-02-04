@@ -31,7 +31,6 @@ export class MonteCarloWorkerManager {
    * Initialize workers
    */
   async initialize(): Promise<void> {
-    console.log(`🔧 Initializing ${this.maxWorkers} Monte Carlo workers`);
     
     const workerPromises: Promise<Worker>[] = [];
     
@@ -41,7 +40,6 @@ export class MonteCarloWorkerManager {
     }
     
     this.workers = await Promise.all(workerPromises);
-    console.log(`✅ ${this.workers.length} workers initialized`);
   }
   
   /**
@@ -148,7 +146,6 @@ export class MonteCarloWorkerManager {
     
     this.progressCallback = onProgress;
     
-    console.log(`🎲 Running ${totalSimulations} simulations across ${this.workers.length} workers`);
     
     // Create batches
     const batches: { start: number; size: number }[] = [];
@@ -182,7 +179,6 @@ export class MonteCarloWorkerManager {
       allResults.push(...batchResult.results);
     }
     
-    console.log(`✅ Completed ${allResults.length} simulations`);
     return allResults;
   }
   
@@ -219,7 +215,6 @@ export class MonteCarloWorkerManager {
    * Clean up workers
    */
   destroy(): void {
-    console.log('🧹 Cleaning up Monte Carlo workers');
     
     for (const worker of this.workers) {
       worker.terminate();

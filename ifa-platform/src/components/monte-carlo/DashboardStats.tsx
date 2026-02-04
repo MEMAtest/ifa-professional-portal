@@ -10,6 +10,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { createClient } from '@/lib/supabase/client';
+import clientLogger from '@/lib/logging/clientLogger'
 import {
   Activity,
   Users,
@@ -137,7 +138,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
       const { data: scenarios, count: scenarioCount, error: scenariosError } = await scenariosQuery;
 
       if (scenariosError) {
-        console.error('Error loading scenarios:', scenariosError);
+        clientLogger.error('Error loading scenarios:', scenariosError);
       }
 
       // Get scenario IDs to filter results
@@ -152,7 +153,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
       const { data: results, error: resultsError } = await resultsQuery;
 
       if (resultsError) {
-        console.error('Error loading results:', resultsError);
+        clientLogger.error('Error loading results:', resultsError);
       }
 
       // Get unique clients with simulations
@@ -223,7 +224,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
         totalScenariosCreated: scenarioCount || 0
       });
     } catch (error) {
-      console.error('Error loading dashboard stats:', error);
+      clientLogger.error('Error loading dashboard stats:', error);
     } finally {
       setLoading(false);
     }

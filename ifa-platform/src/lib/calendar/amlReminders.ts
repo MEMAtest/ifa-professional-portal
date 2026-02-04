@@ -5,6 +5,7 @@
 // ================================================================
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface AMLReminderParams {
   clientId: string
@@ -82,7 +83,7 @@ export async function createAMLReviewReminder(
         .eq('id', existingReminders.data[0].id)
 
       if (updateError) {
-        console.error('Error updating AML reminder:', updateError)
+        clientLogger.error('Error updating AML reminder:', updateError)
         return { success: false, error: 'Failed to update reminder' }
       }
 
@@ -109,13 +110,13 @@ export async function createAMLReviewReminder(
       .single()
 
     if (error) {
-      console.error('Error creating AML reminder:', error)
+      clientLogger.error('Error creating AML reminder:', error)
       return { success: false, error: 'Failed to create reminder' }
     }
 
     return { success: true, eventId: event?.id }
   } catch (error) {
-    console.error('Error in createAMLReviewReminder:', error)
+    clientLogger.error('Error in createAMLReviewReminder:', error)
     return { success: false, error: 'Unexpected error creating reminder' }
   }
 }
@@ -141,13 +142,13 @@ export async function removeAMLReviewReminders(
       .eq('event_type', 'aml_review_reminder')
 
     if (error) {
-      console.error('Error removing AML reminders:', error)
+      clientLogger.error('Error removing AML reminders:', error)
       return { success: false, error: 'Failed to remove reminders' }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('Error in removeAMLReviewReminders:', error)
+    clientLogger.error('Error in removeAMLReviewReminders:', error)
     return { success: false, error: 'Unexpected error removing reminders' }
   }
 }
@@ -185,7 +186,6 @@ export async function getAMLSettings(
     if (error) {
       // 406 typically means table doesn't exist - this is expected in some setups
       if (error.code === '42P01' || error.message?.includes('406')) {
-        console.log('AML settings: Using defaults (compliance_rules table not found)')
       }
       return DEFAULT_AML_SETTINGS
     }

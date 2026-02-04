@@ -121,11 +121,11 @@ export default function ClientCard({ client, onView, onEdit, onDelete }: ClientC
         </div>
         
         {/* Investment objectives with robust parsing */}
-        {(client.financialProfile?.investmentObjectives?.length || 0) > 0 && (
+        {Array.isArray(client.financialProfile?.investmentObjectives) && client.financialProfile.investmentObjectives.length > 0 && (
           <div className="border-t border-gray-100 pt-3">
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Objectives</p>
             <div className="flex flex-wrap gap-1">
-              {client.financialProfile!.investmentObjectives!.slice(0, 2).map((objective, index) => {
+              {client.financialProfile.investmentObjectives.slice(0, 2).map((objective, index) => {
                 let displayText = '';
                 if (typeof objective === 'string') {
                   displayText = objective;
@@ -135,16 +135,16 @@ export default function ClientCard({ client, onView, onEdit, onDelete }: ClientC
                 } else {
                   displayText = 'Investment Goal';
                 }
-                
+
                 return (
                   <Badge key={index} variant="outline" className="text-xs">
                     {displayText}
                   </Badge>
                 );
               })}
-              {(client.financialProfile!.investmentObjectives!.length || 0) > 2 && (
+              {client.financialProfile.investmentObjectives.length > 2 && (
                 <Badge variant="outline" className="text-xs">
-                  +{(client.financialProfile!.investmentObjectives!.length || 0) - 2} more
+                  +{client.financialProfile.investmentObjectives.length - 2} more
                 </Badge>
               )}
             </div>

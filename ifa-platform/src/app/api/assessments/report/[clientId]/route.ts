@@ -7,9 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { clientService } from '@/services/ClientService';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
 // Force dynamic rendering to prevent build-time errors
@@ -52,16 +53,35 @@ export async function POST(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const auth = await getAuthContext(request)
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const { firmId } = firmResult
+
     const clientId = params.clientId;
     const body = await parseRequestBody(request);
     const { format = 'pdf', includeHistory = true, assessmentTypes = [] } = body;
     
     // Create Supabase client
     const supabase = getSupabaseServiceClient();
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Fetch all required data
     const [clientData, progressData, historyData] = await Promise.all([
-      fetchClientData(clientId),
+      fetchClientData(supabase, clientId, firmId),
       fetchProgressData(supabase, clientId, assessmentTypes),
       includeHistory ? fetchHistoryData(supabase, clientId) : Promise.resolve([])
     ]);
@@ -131,9 +151,27 @@ export async function POST(
 }
 
 // Fetch client data
-async function fetchClientData(clientId: string) {
+async function fetchClientData(supabase: any, clientId: string, firmId: string) {
   try {
-    return await clientService.getClientById(clientId);
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id, client_ref, personal_details, contact_info, financial_profile, risk_profile')
+      .eq('id', clientId)
+      .eq('firm_id', firmId)
+      .single()
+
+    if (error || !data) {
+      return null
+    }
+
+    return {
+      id: data.id,
+      clientRef: data.client_ref,
+      personalDetails: data.personal_details || {},
+      contactInfo: data.contact_info || {},
+      financialProfile: data.financial_profile || {},
+      riskProfile: data.risk_profile || {}
+    }
   } catch (error) {
     log.error('Error fetching client:', error);
     return null;

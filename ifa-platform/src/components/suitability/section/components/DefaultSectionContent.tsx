@@ -11,9 +11,70 @@ import { AlertCircle, Check, ChevronDown, ChevronUp, Copy, HelpCircle, Info, Spa
 
 import type { AISuggestion, PulledPlatformData, SuitabilityFormData, ValidationError } from '@/types/suitability'
 import type { ExtendedSuitabilityField } from '../types'
+import type { DocumentPopulatedFields } from '../../SuitabilitySectionRenderer'
 
 import { FieldRenderer } from '../fields/FieldRenderer'
 import { isAIGeneratableField } from '@/lib/suitability/ai/fieldRegistry'
+
+// Reverse map from populate-profile labels to client profile field keys
+const LABEL_TO_KEY: Record<string, string> = {
+  'Title': 'title', 'First name': 'firstName', 'Last name': 'lastName',
+  'Date of birth': 'dateOfBirth', 'Gender': 'gender', 'Nationality': 'nationality',
+  'Marital status': 'maritalStatus', 'Dependants': 'dependents',
+  'Employment status': 'employmentStatus', 'Occupation': 'occupation',
+  'Retirement age': 'retirementAge',
+  'Email': 'email', 'Phone': 'phone', 'Mobile': 'mobile',
+  'Preferred contact': 'preferredContact',
+  'Address line 1': 'line1', 'Address line 2': 'line2', 'City': 'city',
+  'County': 'county', 'Postcode': 'postcode', 'Country': 'country',
+  'Annual income': 'annualIncome', 'Monthly expenses': 'monthlyExpenses',
+  'Net worth': 'netWorth', 'Liquid assets': 'liquidAssets',
+  'Investment timeframe': 'investmentTimeframe', 'Investment objectives': 'investmentObjectives',
+  'Existing investments': 'existingInvestments', 'Pension arrangements': 'pensionArrangements',
+  'Insurance policies': 'insurancePolicies',
+}
+
+function buildDocumentPopulatedKeys(fields: DocumentPopulatedFields): Set<string> {
+  if (!fields) return new Set()
+  const keys = new Set<string>()
+  const allLabels = [
+    ...fields.personal_details,
+    ...fields.contact_info,
+    ...fields.financial_profile,
+  ]
+  for (const label of allLabels) {
+    const key = LABEL_TO_KEY[label]
+    if (key) keys.add(key)
+  }
+  return keys
+}
+
+function checkFieldFromDocuments(pullFrom: string | undefined, populatedKeys: Set<string>): boolean {
+  if (!pullFrom || populatedKeys.size === 0) return false
+  if (pullFrom === 'client.personalDetails') {
+    return (
+      populatedKeys.has('title') ||
+      populatedKeys.has('firstName') ||
+      populatedKeys.has('lastName') ||
+      populatedKeys.has('dateOfBirth') ||
+      populatedKeys.has('gender') ||
+      populatedKeys.has('maritalStatus') ||
+      populatedKeys.has('nationality')
+    )
+  }
+  if (pullFrom === 'client.contactInfo.address') {
+    return (
+      populatedKeys.has('line1') ||
+      populatedKeys.has('line2') ||
+      populatedKeys.has('city') ||
+      populatedKeys.has('county') ||
+      populatedKeys.has('postcode') ||
+      populatedKeys.has('country')
+    )
+  }
+  const lastSegment = pullFrom.split('.').pop()
+  return lastSegment ? populatedKeys.has(lastSegment) : false
+}
 
 interface DefaultSectionContentProps {
   baseFields: ExtendedSuitabilityField[]
@@ -41,11 +102,16 @@ interface DefaultSectionContentProps {
   helpUrl?: string
   clientId?: string
   assessmentId?: string
+  documentPopulatedFields?: DocumentPopulatedFields
 }
 
 export function DefaultSectionContent(props: DefaultSectionContentProps) {
   const baseFieldIds = useMemo(() => new Set(props.baseFields.map((f) => f.id)), [props.baseFields])
   const conditionalFieldsCount = Math.max(0, props.allFields.length - props.baseFields.length)
+  const documentPopulatedKeys = useMemo(
+    () => buildDocumentPopulatedKeys(props.documentPopulatedFields ?? null),
+    [props.documentPopulatedFields]
+  )
 
   return (
     <>
@@ -137,6 +203,7 @@ export function DefaultSectionContent(props: DefaultSectionContentProps) {
                   pulledValue={
                     props.pulledData && field.pullFrom ? (props.pulledData as Record<string, unknown>)[field.pullFrom] : undefined
                   }
+                  isFromDocuments={checkFieldFromDocuments(field.pullFrom, documentPopulatedKeys)}
                   isLoading={props.isLoadingAI}
                   aiContext={
                     isAIGeneratableField(field.id) && field.type === 'textarea'

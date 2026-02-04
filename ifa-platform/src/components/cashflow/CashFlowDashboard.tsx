@@ -41,6 +41,7 @@ import type {
   ScenarioType 
 } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface CashFlowDashboardProps {
   clientId: string;
@@ -77,7 +78,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
       setScenarios(clientScenarios);
 
     } catch (err) {
-      console.error('Error loading dashboard data:', err);
+      clientLogger.error('Error loading dashboard data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
@@ -94,7 +95,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
       const result = await ProjectionEngine.generateProjections(scenario);
       setProjectionResult(result);
     } catch (err) {
-      console.error('Error loading projections:', err);
+      clientLogger.error('Error loading projections:', err);
       setError('Failed to generate projections');
     }
   }, []);
@@ -246,7 +247,6 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
           await (CashFlowDataService as any).createGoalsFromClient(clientId, newScenario.id);
         }
       } catch (error) {
-        console.log('createGoalsFromClient not implemented yet');
       }
 
       const updatedScenarios = await CashFlowDataService.getClientScenarios(clientId);
@@ -254,7 +254,7 @@ export default function CashFlowDashboard({ clientId }: CashFlowDashboardProps) 
       setSelectedScenarioId(newScenario.id);
 
     } catch (err) {
-      console.error('Error creating scenario:', err);
+      clientLogger.error('Error creating scenario:', err);
       setError(err instanceof Error ? err.message : 'Failed to create scenario');
     } finally {
       setIsCreatingScenario(false);

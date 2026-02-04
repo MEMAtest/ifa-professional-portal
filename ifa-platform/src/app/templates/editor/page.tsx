@@ -31,6 +31,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/Alert'
+import clientLogger from '@/lib/logging/clientLogger'
 
 // Template variables with icons and descriptions
 const TEMPLATE_VARIABLES = [
@@ -210,7 +211,7 @@ export default function TemplateEditorPage() {
     try {
       return createClient()
     } catch (error) {
-      console.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
+      clientLogger.error("CRITICAL: Supabase client initialization failed. Check environment variables.", error)
       return null
     }
   }, [])
@@ -257,7 +258,7 @@ export default function TemplateEditorPage() {
   // Save template
   const saveTemplate = async () => {
     if (!supabase) {
-      console.error("Action failed: Supabase client is not available in saveTemplate.")
+      clientLogger.error("Action failed: Supabase client is not available in saveTemplate.")
       alert("Cannot save template: Supabase client is not available")
       return
     }
@@ -281,11 +282,11 @@ export default function TemplateEditorPage() {
         setShowSuccess(true)
         setTimeout(() => setShowSuccess(false), 3000)
       } else {
-        console.error('Save error:', error)
+        clientLogger.error('Save error:', error)
         alert('Failed to save template')
       }
     } catch (err) {
-      console.error('Save error:', err)
+      clientLogger.error('Save error:', err)
       alert('Failed to save template')
     } finally {
       setSaving(false)

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client"
 // src/services/PollingService.ts
 import { CashFlowScenarioService } from './CashFlowScenarioService';
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface PollingConfig {
   interval: number;
@@ -31,7 +32,7 @@ export class PollingService {
         callback(data);
         this.retryCount.set(pollId, 0); // Reset retry count on success
       } catch (error) {
-        console.error('Polling error:', error);
+        clientLogger.error('Polling error:', error);
         
         const currentRetries = this.retryCount.get(pollId) || 0;
         if (currentRetries < pollConfig.maxRetries) {
@@ -48,7 +49,7 @@ export class PollingService {
           
           return; // Skip the normal interval
         } else {
-          console.error('Max retries reached for polling:', pollId);
+          clientLogger.error('Max retries reached for polling:', pollId);
           this.stopPolling(pollId);
           return;
         }

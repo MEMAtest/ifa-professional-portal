@@ -34,55 +34,11 @@ interface Assessment {
   createdAt: string;
 }
 
-// Mock data for demonstration
-const MOCK_ASSESSMENTS: Assessment[] = [
-  {
-    id: 'assessment_001',
-    clientProfile: {
-      firstName: 'Geoffrey',
-      lastName: 'Clarkson',
-      clientRef: 'C250626917'
-    },
-    riskProfile: {
-      finalRiskProfile: 3
-    },
-    vulnerabilityAssessment: {
-      is_vulnerable: false
-    },
-    suitabilityAssessment: {
-      suitabilityScore: 85
-    },
-    status: 'completed',
-    adviceType: 'review',
-    createdAt: '2024-06-26T09:15:00Z'
-  },
-  {
-    id: 'assessment_002',
-    clientProfile: {
-      firstName: 'Eddie',
-      lastName: 'Sauna',
-      clientRef: 'C250625166'
-    },
-    riskProfile: {
-      finalRiskProfile: 5
-    },
-    vulnerabilityAssessment: {
-      is_vulnerable: true
-    },
-    suitabilityAssessment: {
-      suitabilityScore: 78
-    },
-    status: 'completed',
-    adviceType: 'initial',
-    createdAt: '2024-06-25T11:20:00Z'
-  }
-]
-
 interface DashboardProps {
   assessments?: Assessment[]
 }
 
-export const AssessmentDashboard = ({ assessments = MOCK_ASSESSMENTS }: DashboardProps) => {
+export const AssessmentDashboard = ({ assessments = [] }: DashboardProps) => {
   const [filteredAssessments, setFilteredAssessments] = useState<Assessment[]>(assessments)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')

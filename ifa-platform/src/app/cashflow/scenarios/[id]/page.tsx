@@ -46,6 +46,7 @@ import type {
   CashFlowProjection 
 } from '@/types/cashflow';
 import type { Client } from '@/types/client';
+import clientLogger from '@/lib/logging/clientLogger'
 
 interface ScenarioDetailPageProps {
   params: {
@@ -78,7 +79,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
       const result = await ProjectionEngine.generateProjections(scenarioData);
       setProjectionResult(result);
     } catch (err) {
-      console.error('Error generating projections:', err);
+      clientLogger.error('Error generating projections:', err);
       setError('Failed to generate projections');
     } finally {
       setIsCalculating(false);
@@ -105,7 +106,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
       await generateProjections(scenarioData);
 
     } catch (err) {
-      console.error('Error loading scenario:', err);
+      clientLogger.error('Error loading scenario:', err);
       setError(err instanceof Error ? err.message : 'Failed to load scenario');
     } finally {
       setIsLoading(false);
@@ -136,7 +137,7 @@ export default function ScenarioDetailPage({ params }: ScenarioDetailPageProps) 
       setIsEditing(false);
 
     } catch (err) {
-      console.error('Error saving scenario:', err);
+      clientLogger.error('Error saving scenario:', err);
       setError('Failed to save changes');
     } finally {
       setIsSaving(false);

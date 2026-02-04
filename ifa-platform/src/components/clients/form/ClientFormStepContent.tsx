@@ -6,6 +6,7 @@ import { FinancialProfileStep } from '@/components/clients/form/steps/FinancialP
 import { PersonalDetailsStep } from '@/components/clients/form/steps/PersonalDetailsStep';
 import { RiskProfileStep } from '@/components/clients/form/steps/RiskProfileStep';
 import { VulnerabilityAssessmentStep } from '@/components/clients/form/steps/VulnerabilityAssessmentStep';
+import clientLogger from '@/lib/logging/clientLogger'
 import type {
   ClientFormData,
   PersonalDetails,
@@ -84,7 +85,7 @@ export const ClientFormStepContent = ({
         />
       );
     default:
-      console.error(`Invalid step: ${currentStep}`);
+      clientLogger.error(`Invalid step: ${currentStep}`);
       return (
         <PersonalDetailsStep
           formData={formData}

@@ -5,7 +5,8 @@ import { z } from 'zod'
 import type { DbInsert } from '@/types/db'
 import type { ScenarioType } from '@/types/cashflow'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { clientService } from '@/services/ClientService'
 import { AssessmentService } from '@/services/AssessmentService'
 import { CashFlowDataService } from '@/services/CashFlowDataService'
@@ -36,7 +37,24 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
     const auth = await getAuthContext(req)
-    const currentUserId = auth.context?.userId || null
+    if (!auth.success || !auth.context) {
+      return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const firmResult = requireFirmId(auth.context)
+    if (!('firmId' in firmResult)) {
+      return firmResult
+    }
+    const currentUserId = auth.context.userId || null
+
+    const access = await requireClientAccess({
+      supabase,
+      clientId,
+      ctx: auth.context,
+      select: 'id, firm_id, advisor_id'
+    })
+    if (!access.ok) {
+      return access.response
+    }
 
     // Load client + assessment via existing services (they use anon client; safe for reads)
     const client = await clientService.getClientById(clientId)
@@ -55,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('cash_flow_scenarios')
-      .insert(scenario)
+      .insert({ ...scenario, firm_id: firmResult.firmId })
       .select()
       .single()
 

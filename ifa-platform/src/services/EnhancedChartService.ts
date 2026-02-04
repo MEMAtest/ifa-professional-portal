@@ -5,6 +5,7 @@ import type { CashFlowProjection, CashFlowScenario } from '@/types/cashflow';
 import { createClient } from '@/lib/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/db';
+import clientLogger from '@/lib/logging/clientLogger'
 
 export interface ChartConfig {
   type: 'line' | 'bar' | 'doughnut' | 'area' | 'radar';
@@ -153,7 +154,7 @@ export class EnhancedChartService {
 
         results.push(result);
       } catch (error) {
-        console.error(`Error generating ${chartType} chart:`, error);
+        clientLogger.error(`Error generating ${chartType} chart:`, error);
         // Continue with other charts even if one fails
       }
     }
@@ -201,7 +202,7 @@ export class EnhancedChartService {
 
       return signedUrl;
     } catch (error) {
-      console.error('Error saving chart to storage:', error);
+      clientLogger.error('Error saving chart to storage:', error);
       throw new Error(`Failed to save chart: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

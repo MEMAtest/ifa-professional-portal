@@ -43,6 +43,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
+import clientLogger from '@/lib/logging/clientLogger'
 import { WorkflowBoard, StatusPipeline, CommentThread, OwnerPicker, WORKFLOW_CONFIGS } from './workflow'
 import type { WorkflowItem } from './workflow'
 import { CreateTaskModal } from '@/modules/tasks/components/CreateTaskModal'
@@ -130,14 +131,14 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
       const { data, error } = await query
 
       if (error) {
-        console.error('Error loading complaints:', error)
+        clientLogger.error('Error loading complaints:', error)
         setComplaints([])
         return
       }
 
       setComplaints(data || [])
     } catch (error) {
-      console.error('Error loading complaints:', error)
+      clientLogger.error('Error loading complaints:', error)
       setComplaints([])
     } finally {
       setLoading(false)
@@ -183,7 +184,7 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
       await loadComplaints()
       onStatsChange?.()
     } catch (error) {
-      console.error('Error updating complaint status:', error)
+      clientLogger.error('Error updating complaint status:', error)
       toast({
         title: 'Error',
         description: 'Failed to update complaint status',
@@ -779,7 +780,7 @@ function ComplaintFormModal({
       })
       onSaved()
     } catch (error) {
-      console.error('Error creating complaint:', error)
+      clientLogger.error('Error creating complaint:', error)
       toast({
         title: 'Error',
         description: 'Failed to log complaint',
@@ -1031,7 +1032,7 @@ function ComplaintDetailModal({
       })
       onSaved()
     } catch (error) {
-      console.error('Error updating complaint:', error)
+      clientLogger.error('Error updating complaint:', error)
       toast({
         title: 'Error',
         description: 'Failed to update complaint',
