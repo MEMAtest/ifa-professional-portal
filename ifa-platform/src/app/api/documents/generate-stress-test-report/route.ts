@@ -4,6 +4,8 @@
 // Generates professional PDF reports for stress testing results
 // ================================================================
 
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server';
 import { jsPDF } from 'jspdf';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'

@@ -3,6 +3,8 @@
 // AI COMPLETION API WITH MULTIPLE PROVIDER SUPPORT - FIXED
 // =====================================================
 
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { z } from 'zod'

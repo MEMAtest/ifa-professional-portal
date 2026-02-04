@@ -105,16 +105,23 @@ const DEFAULT_FIRM: FirmProfile = {
 
 export class AdvisorContextService {
   private static instance: AdvisorContextService
-  private supabase: SupabaseClient<Database>
+  private _supabase: SupabaseClient<Database> | null = null
   private cache: Map<string, { data: AdvisorContext; expiry: number }> = new Map()
   private cacheExpiry = 5 * 60 * 1000 // 5 minutes
 
   private constructor() {
-    if (typeof window === 'undefined') {
-      this.supabase = getSupabaseServiceClient()
-    } else {
-      this.supabase = createBrowserClient()
+    // Lazy initialization - supabase client created on first access
+  }
+
+  private get supabase(): SupabaseClient<Database> {
+    if (!this._supabase) {
+      if (typeof window === 'undefined') {
+        this._supabase = getSupabaseServiceClient()
+      } else {
+        this._supabase = createBrowserClient()
+      }
     }
+    return this._supabase!
   }
 
   static getInstance(): AdvisorContextService {
