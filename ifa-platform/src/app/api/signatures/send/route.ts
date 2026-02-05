@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (signatureRequest.status !== 'draft') {
+    if (!['draft', 'pending'].includes(signatureRequest.status)) {
       return NextResponse.json(
         {
           success: false,
@@ -85,11 +85,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let signers = signatureRequest.signers
+    if (!signers && signatureRequest.opensign_metadata?.signers) {
+      signers = signatureRequest.opensign_metadata.signers
+    }
+    if (typeof signers === 'string') {
+      try {
+        signers = JSON.parse(signers)
+      } catch {
+        signers = null
+      }
+    }
+    if (!Array.isArray(signers) || signers.length === 0) {
+      if (signatureRequest.recipient_email && signatureRequest.recipient_name) {
+        signers = [{
+          email: signatureRequest.recipient_email,
+          name: signatureRequest.recipient_name,
+          role: signatureRequest.recipient_role || 'Client'
+        }]
+      }
+    }
+
+    if (!Array.isArray(signers) || signers.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Signer details are missing'
+        },
+        { status: 400 }
+      )
+    }
+
     // Send for signature via OpenSign
     log.info('SEND SIGNATURE: Sending via OpenSign')
     const openSignResult = await openSignService.sendForSignature(
       signatureRequest.opensign_document_id,
-      signatureRequest.signers,
+      signers,
       {
         autoReminder: signatureRequest.auto_reminder,
         remindOnceInEvery: signatureRequest.remind_once_in_every,

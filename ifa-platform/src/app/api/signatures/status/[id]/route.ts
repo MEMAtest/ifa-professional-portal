@@ -44,15 +44,7 @@ export async function GET(
     // Get the signature request from database
     const { data: signatureRequest, error: signatureError } = await (supabase
       .from('signature_requests') as any)
-      .select(`
-        *,
-        generated_documents!inner(
-          id,
-          name,
-          file_url,
-          user_id
-        )
-      `)
+      .select('*')
       .eq('id', signatureRequestId)
       .eq('firm_id', firmId)
       .single()
@@ -66,6 +58,38 @@ export async function GET(
         },
         { status: 404 }
       )
+    }
+
+    let document: any = null
+    if (signatureRequest.document_id) {
+      const { data: doc } = await (supabase
+        .from('documents') as any)
+        .select('id, name, file_name, file_path, storage_path')
+        .eq('id', signatureRequest.document_id)
+        .eq('firm_id', firmId)
+        .maybeSingle()
+      document = doc || null
+    }
+
+    let signers = signatureRequest.signers
+    if (!signers && signatureRequest.opensign_metadata?.signers) {
+      signers = signatureRequest.opensign_metadata.signers
+    }
+    if (typeof signers === 'string') {
+      try {
+        signers = JSON.parse(signers)
+      } catch {
+        signers = null
+      }
+    }
+    if (!Array.isArray(signers) || signers.length === 0) {
+      if (signatureRequest.recipient_email && signatureRequest.recipient_name) {
+        signers = [{
+          email: signatureRequest.recipient_email,
+          name: signatureRequest.recipient_name,
+          role: signatureRequest.recipient_role || 'Client'
+        }]
+      }
     }
 
     // If we have an OpenSign document ID, get the latest status
@@ -117,7 +141,7 @@ export async function GET(
         documentId: signatureRequest.document_id,
         opensignDocumentId: signatureRequest.opensign_document_id,
         status: signatureRequest.status,
-        signers: signatureRequest.signers,
+        signers: signers || [],
         createdAt: signatureRequest.created_at,
         updatedAt: signatureRequest.updated_at,
         expiresAt: signatureRequest.expires_at,
@@ -128,7 +152,7 @@ export async function GET(
         mergeCertificate: signatureRequest.merge_certificate,
         metadata: signatureRequest.opensign_metadata
       },
-      document: signatureRequest.generated_documents,
+      document: document,
       openSignStatus: openSignStatus
     })
 

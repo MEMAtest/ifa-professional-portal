@@ -888,8 +888,8 @@ export default function SignaturesPage() {
                       document that requires signature.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] gap-4">
-                      <div className="border border-gray-200 rounded-md p-2 max-h-52 lg:max-h-[260px] overflow-y-auto space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,200px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,220px)_minmax(0,1fr)] gap-4">
+                      <div className="border border-gray-200 rounded-md p-2 max-h-44 lg:max-h-[220px] overflow-y-auto space-y-4">
                         {groupedDocuments.map(([groupLabel, docs]) => (
                           <div key={groupLabel}>
                             <div className="flex items-center justify-between px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -933,14 +933,14 @@ export default function SignaturesPage() {
                           </div>
                         ))}
                       </div>
-                      <div className="border border-gray-200 rounded-md bg-gray-50 flex flex-col overflow-hidden min-h-[360px] lg:min-h-[520px]">
+                      <div className="border border-gray-200 rounded-md bg-gray-50 flex flex-col overflow-hidden min-h-[420px] lg:min-h-[620px]">
                         <div className="px-3 py-2 border-b border-gray-200 bg-white">
                           <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Preview</div>
                           <div className="text-sm font-medium text-gray-900 truncate">
                             {previewDocument ? (previewDocument.name || previewDocument.file_name || 'Document') : 'Select a document'}
                           </div>
                         </div>
-                        <div className="flex-1 min-h-[260px] lg:min-h-[420px]">
+                        <div className="flex-1 min-h-[320px] lg:min-h-[520px]">
                           {previewDocument ? (
                             !previewHasPdf ? (
                               <div className="h-full flex flex-col items-center justify-center text-xs text-gray-500 gap-3 px-4">
