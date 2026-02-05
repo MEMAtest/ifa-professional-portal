@@ -6,8 +6,9 @@ import clientLogger from '@/lib/logging/clientLogger'
 
 interface OwnerOption {
   id: string
-  first_name: string | null
-  last_name: string | null
+  full_name: string | null
+  first_name?: string | null
+  last_name?: string | null
   avatar_url: string | null
 }
 
@@ -29,8 +30,8 @@ export default function OwnerPicker({ value, firmId, onChange, compact }: OwnerP
       try {
         let query = supabase
           .from('profiles')
-          .select('id, first_name, last_name, avatar_url')
-          .order('first_name')
+          .select('id, full_name, avatar_url')
+          .order('full_name')
 
         if (firmId) {
           query = query.eq('firm_id', firmId)
@@ -70,7 +71,7 @@ export default function OwnerPicker({ value, firmId, onChange, compact }: OwnerP
     >
       <option value="">{error ? 'Failed to load' : 'Unassigned'}</option>
       {owners.map((owner) => {
-        const name = `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unknown'
+        const name = owner.full_name || `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unknown'
         return (
           <option key={owner.id} value={owner.id}>
             {name}

@@ -39,16 +39,85 @@ export class AuthHelpers {
    * @param password - User password (defaults to TEST_CONFIG.password)
    */
   async login(email = TEST_CONFIG.email, password = TEST_CONFIG.password): Promise<void> {
-    await this.page.goto('/login');
-    await this.page.fill('#email', email);
-    await this.page.fill('#password', password);
-    await this.page.getByRole('button', { name: /sign in/i }).click();
-    await this.page.waitForURL(/\/(dashboard|setup|onboarding)/, { timeout: TEST_CONFIG.timeout.long });
+    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    const existingUrl = this.page.url();
+    if (!existingUrl.includes('/login')) {
+      return;
+    }
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await this.page.goto('/login', { waitUntil: 'domcontentloaded' });
+      await this.page.waitForLoadState('networkidle').catch(() => {});
+      await this.page.waitForTimeout(500);
+
+      const onLoginPage = this.page.url().includes('/login');
+      if (!onLoginPage) {
+        return;
+      }
+
+      await this.page
+        .waitForSelector('form[data-hydrated="true"]', { timeout: TEST_CONFIG.timeout.medium })
+        .catch(() => {});
+      try {
+        await this.page.waitForSelector('#email', { state: 'visible', timeout: TEST_CONFIG.timeout.medium });
+      } catch (error) {
+        if (!this.page.url().includes('/login')) {
+          return;
+        }
+        throw error;
+      }
+      await this.page.fill('#email', email);
+      await this.page.fill('#password', password);
+
+      const signInButton = this.page.getByRole('button', { name: /sign in/i });
+      const submitButton = this.page.locator('button[type="submit"]').first();
+      await this.page
+        .waitForSelector('button[type="submit"]:not([disabled])', { timeout: TEST_CONFIG.timeout.medium })
+        .catch(() => {});
+      if (await signInButton.isVisible().catch(() => false)) {
+        await signInButton.click();
+      } else if (await submitButton.isVisible().catch(() => false)) {
+        await submitButton.click();
+      }
+
+      const loginOutcome = await Promise.race([
+        this.page
+          .waitForURL(/\/(dashboard|setup|onboarding)/, { timeout: TEST_CONFIG.timeout.long })
+          .then(() => 'success')
+          .catch(() => 'timeout'),
+        this.page
+          .waitForURL(/\/login\?/, { timeout: TEST_CONFIG.timeout.short })
+          .then(() => 'login')
+          .catch(() => 'timeout'),
+      ]);
+
+      const authCookieSet = await this.waitForAuthCookie(TEST_CONFIG.timeout.short);
+      if (loginOutcome === 'success' || authCookieSet) {
+        break;
+      }
+      if (attempt === 0) {
+        await this.page.waitForTimeout(500);
+        continue;
+      }
+      throw new Error('Login failed: did not reach dashboard');
+    }
 
     if (!this.page.url().includes('/dashboard')) {
       await this.page.goto('/dashboard');
       await this.page.waitForURL(/\/dashboard/, { timeout: TEST_CONFIG.timeout.long }).catch(() => {});
     }
+  }
+
+  private async waitForAuthCookie(timeoutMs: number): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const cookies = await this.page.context().cookies();
+      if (cookies.some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'))) {
+        return true;
+      }
+      await this.page.waitForTimeout(250);
+    }
+    return false;
   }
 
   /**
@@ -243,7 +312,7 @@ export class WaitHelpers {
    * Wait for element to be visible
    */
   async waitForVisible(selector: string, timeout = TEST_CONFIG.timeout.medium): Promise<void> {
-    await this.page.locator(selector).waitFor({ state: 'visible', timeout });
+    await this.page.locator(selector).first().waitFor({ state: 'visible', timeout });
   }
 
   /**

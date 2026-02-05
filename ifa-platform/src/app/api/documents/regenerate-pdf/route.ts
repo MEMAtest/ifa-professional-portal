@@ -126,7 +126,7 @@ const buildPdfBuffer = async (plainText: string) => {
 
   let buffer: Buffer
   try {
-    const nodeBuffer = (pdfDoc as any).output('nodebuffer') as unknown
+    const nodeBuffer = pdfDoc.output('nodebuffer' as any) as unknown
     if (nodeBuffer && Buffer.isBuffer(nodeBuffer)) {
       buffer = nodeBuffer as Buffer
     } else if (nodeBuffer instanceof Uint8Array) {

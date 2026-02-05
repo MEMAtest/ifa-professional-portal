@@ -3,7 +3,7 @@
 // PURPOSE: Fetch wrapper that attaches CSRF token headers
 // =====================================================
 
-import { CSRF_HEADER_NAME } from '@/lib/security'
+import { CSRF_HEADER_NAME } from '@/lib/security/csrfConstants'
 import { getCsrfToken } from '@/lib/security/csrfClient'
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])

@@ -17,6 +17,18 @@ async function openMobileNavIfNeeded(page: Page) {
   }
 }
 
+async function gotoConsumerDuty(page: Page) {
+  await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await page.waitForTimeout(2000);
+
+  if (page.url().includes('/login')) {
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
+    await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.waitForTimeout(2000);
+  }
+}
+
 async function ensureConsumerDutySettings(page: Page) {
   await page.goto('/settings?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForTimeout(3000);
@@ -37,8 +49,7 @@ test.describe('Consumer Duty Dashboard', () => {
 
   test.describe('Dashboard Navigation', () => {
     test('should navigate to Consumer Duty section', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       // Should show Consumer Duty content
       const hasFourOutcomes = await page.getByText(/products.*services|price.*value|consumer understanding|consumer support/i).first().isVisible().catch(() => false);
@@ -48,8 +59,8 @@ test.describe('Consumer Duty Dashboard', () => {
     });
 
     test('should display Consumer Duty overview statistics', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(4000);
+      await gotoConsumerDuty(page);
+      await page.waitForTimeout(2000);
 
       // Check for statistics or any content
       const hasComplianceRate = await page.getByText(/compliance|compliant/i).first().isVisible().catch(() => false);
@@ -62,32 +73,28 @@ test.describe('Consumer Duty Dashboard', () => {
 
   test.describe('Four Outcomes Display', () => {
     test('should display Products & Services outcome', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       const hasProductsOutcome = await page.getByText(/products.*services/i).first().isVisible().catch(() => false);
       expect(hasProductsOutcome || true).toBeTruthy();
     });
 
     test('should display Price & Value outcome', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       const hasPriceOutcome = await page.getByText(/price.*value/i).first().isVisible().catch(() => false);
       expect(hasPriceOutcome || true).toBeTruthy();
     });
 
     test('should display Consumer Understanding outcome', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       const hasUnderstandingOutcome = await page.getByText(/consumer understanding/i).first().isVisible().catch(() => false);
       expect(hasUnderstandingOutcome || true).toBeTruthy();
     });
 
     test('should display Consumer Support outcome', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       const hasSupportOutcome = await page.getByText(/consumer support/i).first().isVisible().catch(() => false);
       expect(hasSupportOutcome || true).toBeTruthy();
@@ -96,8 +103,8 @@ test.describe('Consumer Duty Dashboard', () => {
 
   test.describe('Client List & Filtering', () => {
     test('should display client list with Consumer Duty status', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(4000);
+      await gotoConsumerDuty(page);
+      await page.waitForTimeout(2000);
 
       // Should show client rows, table, or any structured content
       const hasClientRows = await page.locator('tr, [class*="client-row"], [class*="card"]').count() > 0;
@@ -108,8 +115,7 @@ test.describe('Consumer Duty Dashboard', () => {
     });
 
     test('should have filter options', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       // Look for filter options
       const hasSearch = await page.locator('input[placeholder*="search" i]').first().isVisible().catch(() => false);
@@ -119,8 +125,7 @@ test.describe('Consumer Duty Dashboard', () => {
     });
 
     test('should search for clients by name', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       const searchInput = page.locator('input[placeholder*="search" i]').first();
       if (await searchInput.isVisible().catch(() => false)) {
@@ -131,8 +136,7 @@ test.describe('Consumer Duty Dashboard', () => {
     });
 
     test('should show incomplete assessment indicator if present', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       // Look for incomplete badges (may or may not be present)
       const hasIncompleteBadge = await page.getByText(/incomplete/i).first().isVisible().catch(() => false);
@@ -145,8 +149,7 @@ test.describe('Consumer Duty Dashboard', () => {
 
   test.describe('Client Assessment Modal', () => {
     test('should open client assessment modal on eye icon click', async ({ page }) => {
-      await page.goto('/compliance?tab=consumer-duty', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await gotoConsumerDuty(page);
 
       // Find eye icon button
       const eyeButton = page.locator('button').filter({ has: page.locator('svg') }).first();

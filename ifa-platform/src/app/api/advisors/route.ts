@@ -25,12 +25,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Query advisors/profiles with mandatory firm_id filter
-    const { data: advisors, error } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, role, firm_id')
+    const { data: advisors, error } = await (supabase
+      .from('profiles') as any)
+      .select('id, full_name, role, firm_id')
       .in('role', ['advisor', 'admin', 'senior_advisor'])
       .eq('firm_id', firmId)
-      .order('first_name')
+      .order('full_name')
 
     if (error) {
       log.error('Error fetching advisors', error)
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     // Format response
     const formattedAdvisors = (advisors || []).map((advisor: any) => ({
       id: advisor.id,
-      name: `${advisor.first_name || ''} ${advisor.last_name || ''}`.trim() || advisor.id,
+      name: (advisor.full_name || '').trim() || advisor.id,
       email: null,
       role: advisor.role
     }))

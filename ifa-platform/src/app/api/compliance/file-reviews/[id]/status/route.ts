@@ -11,10 +11,10 @@ const statusSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'approved', 'rejected', 'escalated'])
 })
 
-const formatName = (profile?: { first_name?: string | null; last_name?: string | null }) => {
+const formatName = (profile?: { full_name?: string | null; first_name?: string | null; last_name?: string | null }) => {
   if (!profile) return ''
-  const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
-  return name
+  const name = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+  return name.trim()
 }
 
 const formatClientName = (client?: { personal_details?: Record<string, any> | null; client_ref?: string | null }) => {
@@ -61,9 +61,9 @@ export async function PATCH(request: NextRequest, context: { params: { id: strin
       return NextResponse.json({ error: 'Review not found' }, { status: 404 })
     }
 
-    const { data: reviewerProfile } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name')
+    const { data: reviewerProfile } = await (supabase
+      .from('profiles') as any)
+      .select('id, full_name, first_name, last_name')
       .eq('id', authResult.context.userId)
       .single()
 

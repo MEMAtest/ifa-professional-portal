@@ -5,6 +5,7 @@ import { Search, X, Command } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useGlobalSearch } from '@/hooks/useGlobalSearch'
 import { SearchResultsDropdown } from './SearchResultsDropdown'
+import { usePathname } from 'next/navigation'
 
 interface GlobalSearchInputProps {
   className?: string
@@ -13,6 +14,7 @@ interface GlobalSearchInputProps {
 export function GlobalSearchInput({ className }: GlobalSearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
 
   const {
     query,
@@ -56,6 +58,14 @@ export function GlobalSearchInput({ className }: GlobalSearchInputProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [setIsOpen])
 
+  // Close and blur search on route changes to prevent stray input capture
+  useEffect(() => {
+    setIsOpen(false)
+    if (document.activeElement === inputRef.current) {
+      inputRef.current?.blur()
+    }
+  }, [pathname, setIsOpen])
+
   const handleFocus = useCallback(() => {
     if (query.length >= 2) {
       setIsOpen(true)
@@ -81,11 +91,15 @@ export function GlobalSearchInput({ className }: GlobalSearchInputProps) {
         <input
           ref={inputRef}
           type="text"
+          name="global-search"
           placeholder="Search... (⌘K)"
           value={query}
           onChange={handleChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
+          autoComplete="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
           className={cn(
             'w-full pl-10 pr-20 py-2 border border-gray-300 rounded-md',
             'focus:ring-2 focus:ring-plannetic-primary focus:border-transparent',

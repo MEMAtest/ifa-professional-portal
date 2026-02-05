@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
 
     const firmIdResult = requireFirmId(authResult.context)
-    if (firmIdResult instanceof NextResponse) {
+    if (!('firmId' in firmIdResult)) {
       return firmIdResult
     }
 
@@ -127,11 +127,19 @@ export async function POST(request: NextRequest) {
     }
 
     const firmIdResult = requireFirmId(authResult.context)
-    if (firmIdResult instanceof NextResponse) {
+    if (!('firmId' in firmIdResult)) {
       return firmIdResult
     }
 
-    const body: InviteUserInput = await parseRequestBody(request, inviteSchema)
+    let body: InviteUserInput
+    try {
+      body = await parseRequestBody(request, inviteSchema)
+    } catch (parseError) {
+      return NextResponse.json(
+        { error: parseError instanceof Error ? parseError.message : 'Invalid request body' },
+        { status: 400 }
+      )
+    }
 
     // Validate email with RFC 5322 compliant regex
     // This catches most common email format issues while being permissive enough for real-world use
@@ -157,6 +165,17 @@ export async function POST(request: NextRequest) {
 
     const supabase: any = getSupabaseServiceClient()
     const supabaseService: any = getSupabaseServiceClient()
+
+    const { error: inviteTableError } = await supabase
+      .from('user_invitations' as any)
+      .select('id', { count: 'exact', head: true })
+      .limit(1)
+
+    const hasInvitationsTable = !inviteTableError
+    const invitationsTableMissing =
+      inviteTableError &&
+      (inviteTableError.code === '42P01' ||
+        inviteTableError.message?.includes('does not exist'))
 
     // ========================================
     // CHECK FOR EXISTING USER
@@ -206,6 +225,73 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'A user with this email already exists' },
         { status: 400 }
+      )
+    }
+
+    // If invitations table is missing, fall back to Supabase auth invite flow
+    if (!hasInvitationsTable && invitationsTableMissing) {
+      const { data: firm } = await supabase
+        .from('firms')
+        .select('settings, name')
+        .eq('id', firmIdResult.firmId)
+        .single()
+
+      const settings = firm?.settings as { billing?: { maxSeats?: number } } | null
+      const maxSeats = settings?.billing?.maxSeats ?? 3
+
+      const { count: activeUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('firm_id', firmIdResult.firmId)
+        .neq('status', 'deactivated')
+
+      if ((activeUsers ?? 0) >= maxSeats) {
+        return NextResponse.json(
+          {
+            error: 'Seat limit reached',
+            message: `Your firm has ${maxSeats} seats. Contact support to upgrade.`,
+            currentSeats: activeUsers ?? 0,
+            maxSeats,
+          },
+          { status: 400 }
+        )
+      }
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+      const inviteResponse = await supabaseService.auth.admin.inviteUserByEmail(
+        body.email.toLowerCase(),
+        {
+          data: {
+            firm_id: firmIdResult.firmId,
+            role: body.role,
+            invited_by: authResult.context.userId
+          },
+          redirectTo: `${baseUrl}/auth/accept-invite`
+        }
+      )
+
+      if (inviteResponse.error) {
+        log.error('[Invite API] Supabase invite failed', inviteResponse.error)
+        return NextResponse.json({ error: 'Failed to send invitation' }, { status: 500 })
+      }
+
+      const actionLink = inviteResponse.data?.action_link
+      const createdAt = new Date()
+
+      return NextResponse.json(
+        {
+          id: inviteResponse.data?.user?.id ?? crypto.randomUUID(),
+          firmId: firmIdResult.firmId,
+          email: body.email.toLowerCase(),
+          role: body.role,
+          invitedBy: authResult.context.userId,
+          expiresAt: new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000),
+          createdAt,
+          inviteUrl: actionLink,
+          emailSent: true,
+          warning: 'Invitation tracking is unavailable until the user_invitations table is created.'
+        },
+        { status: 201 }
       )
     }
 
@@ -369,15 +455,18 @@ export async function POST(request: NextRequest) {
       .eq('id', firmIdResult.firmId)
       .single()
 
-    const { data: inviterProfile } = await supabase
-      .from('profiles')
-      .select('first_name, last_name')
+    const { data: inviterProfile } = await (supabase
+      .from('profiles') as any)
+      .select('full_name, first_name, last_name')
       .eq('id', authResult.context.userId)
       .single()
 
     const firmName = firmData?.name || 'your firm'
     const inviterName = inviterProfile
-      ? `${inviterProfile.first_name || ''} ${inviterProfile.last_name || ''}`.trim() || 'Your administrator'
+      ? (
+          inviterProfile.full_name ||
+          `${inviterProfile.first_name || ''} ${inviterProfile.last_name || ''}`.trim()
+        ) || 'Your administrator'
       : 'Your administrator'
 
     // Send invitation email

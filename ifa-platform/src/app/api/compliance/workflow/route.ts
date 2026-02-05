@@ -32,10 +32,10 @@ const getClientName = (client?: { personal_details?: Record<string, any> | null;
   return name || client.client_ref || 'Client'
 }
 
-const getOwnerName = (owner?: { first_name?: string | null; last_name?: string | null }) => {
+const getOwnerName = (owner?: { full_name?: string | null; first_name?: string | null; last_name?: string | null }) => {
   if (!owner) return undefined
-  const name = `${owner.first_name || ''} ${owner.last_name || ''}`.trim()
-  return name || undefined
+  const name = owner.full_name || `${owner.first_name || ''} ${owner.last_name || ''}`.trim()
+  return name?.trim() || undefined
 }
 
 async function safeQuery<T>(promise: Promise<{ data: T[] | null; error: any }>, label: string): Promise<T[]> {
@@ -308,9 +308,9 @@ export async function GET(request: NextRequest) {
 
     const ownerProfiles = ownerIds.size
       ? await safeQuery(
-          supabase
-            .from('profiles')
-            .select('id, first_name, last_name, avatar_url')
+          (supabase
+            .from('profiles') as any)
+            .select('id, full_name, first_name, last_name, avatar_url')
             .in('id', Array.from(ownerIds)),
           'profiles'
         )

@@ -42,8 +42,9 @@ import type { WorkflowItem } from './workflow'
 // Types
 interface Profile {
   id: string
-  first_name: string
-  last_name: string
+  full_name?: string | null
+  first_name?: string | null
+  last_name?: string | null
   role?: string
 }
 
@@ -127,7 +128,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
       // First, fetch all profiles for manual joining
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, role')
+        .select('id, full_name, role')
 
       const profilesMap = new Map<string, Profile>()
       profilesData?.forEach((p: Profile) => profilesMap.set(p.id, p))
@@ -193,7 +194,8 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
 
   const getProfileName = (profile: Profile | null | undefined): string => {
     if (!profile) return 'Not Assigned'
-    return `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
+    const name = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+    return name?.trim() || 'Unknown'
   }
 
   const getReviewerLabel = (review: FileReview): string => {
@@ -921,8 +923,8 @@ function CreateReviewModal({
       // Load advisers/reviewers from profiles
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, role')
-        .order('first_name')
+        .select('id, full_name, role')
+        .order('full_name')
       setAdvisers(profilesData || [])
 
       setLoading(false)
@@ -977,10 +979,10 @@ function CreateReviewModal({
       const selectedAdviser = advisers.find(a => a.id === formData.adviser_id)
       const selectedReviewer = advisers.find(a => a.id === formData.reviewer_id)
       const adviserDisplayName = selectedAdviser
-        ? `${selectedAdviser.first_name || ''} ${selectedAdviser.last_name || ''}`.trim()
+        ? (selectedAdviser.full_name || `${selectedAdviser.first_name || ''} ${selectedAdviser.last_name || ''}`).trim()
         : 'Unknown Adviser'
       const reviewerDisplayName = selectedReviewer
-        ? `${selectedReviewer.first_name || ''} ${selectedReviewer.last_name || ''}`.trim()
+        ? (selectedReviewer.full_name || `${selectedReviewer.first_name || ''} ${selectedReviewer.last_name || ''}`).trim()
         : 'Reviewer'
 
       const response = await fetch('/api/compliance/file-reviews', {
@@ -1025,8 +1027,9 @@ function CreateReviewModal({
   }
 
   const getAdviserDisplayName = (adviser: Profile) => {
-    const name = `${adviser.first_name || ''} ${adviser.last_name || ''}`.trim()
-    return adviser.role ? `${name} (${adviser.role})` : name
+    const name = adviser.full_name || `${adviser.first_name || ''} ${adviser.last_name || ''}`.trim()
+    const trimmed = name?.trim() || 'Unknown'
+    return adviser.role ? `${trimmed} (${adviser.role})` : trimmed
   }
 
   return (

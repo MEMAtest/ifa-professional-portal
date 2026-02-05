@@ -208,7 +208,7 @@ export const Sidebar = ({ isOpen = true, onClose }: SidebarProps) => {
     {
       title: 'Administration',
       items: [
-        { name: 'Preferences', href: '/settings', icon: Settings },
+        { name: 'Preferences', href: '/settings?tab=preferences', icon: Settings },
         { name: 'Bulk Setup', href: '/setup', icon: Upload },
         ...(isPlatformAdmin ? [{ name: 'Owner Admin', href: '/admin', icon: Lock }] : []),
       ],

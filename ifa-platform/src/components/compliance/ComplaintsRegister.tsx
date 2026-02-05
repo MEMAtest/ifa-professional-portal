@@ -81,8 +81,9 @@ interface Complaint {
   }
   assigned_user?: {
     id: string
-    first_name: string | null
-    last_name: string | null
+    full_name?: string | null
+    first_name?: string | null
+    last_name?: string | null
     avatar_url: string | null
   }
 }
@@ -117,8 +118,7 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
           ),
           assigned_user:assigned_to (
             id,
-            first_name,
-            last_name,
+            full_name,
             avatar_url
           )
         `)
@@ -248,7 +248,10 @@ export default function ComplaintsRegister({ onStatsChange }: Props) {
   function getOwnerName(complaint: Complaint): string {
     const owner = complaint.assigned_user
     if (!owner) return 'Unassigned'
-    return `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unassigned'
+    return (
+      owner.full_name ||
+      `${owner.first_name || ''} ${owner.last_name || ''}`.trim()
+    ) || 'Unassigned'
   }
 
   function getComplaintDueDate(complaint: Complaint): string {

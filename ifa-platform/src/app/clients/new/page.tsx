@@ -97,21 +97,17 @@ export default function NewClientPage() {
       updateWorkflowStep('schedule-assessment', 'completed');
       
       // Step 2: Initialize document workflow (optional enhancement)
-      try {
-        updateWorkflowStep('init-workflow', 'in-progress');
-        
-        // INTEGRATION: Create onboarding workflow
-        await realDocumentService.createClientWorkflow(newClient.id, 'onboarding');
-        
-        updateWorkflowStep('init-workflow', 'completed');
-      } catch (error) {
-        clientLogger.error('Workflow initialization failed:', error);
-        // Non-critical error - don't fail the entire process
-        updateWorkflowStep('init-workflow', 'error');
-      }
-      
-      // Add delay for better UX
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      updateWorkflowStep('init-workflow', 'in-progress');
+      void realDocumentService
+        .createClientWorkflow(newClient.id, 'onboarding')
+        .then(() => {
+          updateWorkflowStep('init-workflow', 'completed');
+        })
+        .catch((error) => {
+          clientLogger.error('Workflow initialization failed:', error);
+          // Non-critical error - don't fail the entire process
+          updateWorkflowStep('init-workflow', 'error');
+        });
       
       // Show success toast
       toast({
@@ -136,7 +132,7 @@ export default function NewClientPage() {
         if (typeof window !== 'undefined' && window.location.pathname.includes('/clients/new')) {
           window.location.assign(targetUrl);
         }
-      }, 1500);
+      }, 800);
       
     } catch (error) {
       clientLogger.error('Error creating client:', error);

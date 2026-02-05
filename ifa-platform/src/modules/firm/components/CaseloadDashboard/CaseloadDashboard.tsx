@@ -87,14 +87,12 @@ export function CaseloadDashboard() {
       // Run all queries in parallel for better performance
       const [
         clientCountsResult,
-        unassignedCountResult,
-        assessmentsResult,
-        reviewsResult
+        unassignedCountResult
       ] = await Promise.all([
-        // Fetch client counts per advisor
+        // Fetch clients per advisor
         supabase
           .from('clients')
-          .select('advisor_id')
+          .select('id, advisor_id')
           .in('advisor_id', advisorIds),
 
         // Fetch unassigned clients count
@@ -102,25 +100,47 @@ export function CaseloadDashboard() {
           .from('clients')
           .select('*', { count: 'exact', head: true })
           .is('advisor_id', null),
+      ])
 
-        // Fetch active assessments per advisor (status in_progress or draft)
-        supabase
-          .from('suitability_assessments')
-          .select('advisor_id, status')
-          .in('advisor_id', advisorIds)
-          .in('status', ['in_progress', 'draft']),
+      const clientRows = clientCountsResult.data ?? []
+      const clientIds = clientRows
+        .map((c: { id: string | null }) => c.id)
+        .filter((id: string | null): id is string => Boolean(id))
 
-        // Fetch pending file reviews per advisor
+      const clientAdvisorMap = new Map<string, string>()
+      clientRows.forEach((c: { id: string | null; advisor_id: string | null }) => {
+        if (c.id && c.advisor_id) {
+          clientAdvisorMap.set(c.id, c.advisor_id)
+        }
+      })
+
+      const [
+        assessmentsResult,
+        reviewsResult
+      ] = await Promise.all([
+        clientIds.length > 0
+          ? supabase
+              .from('suitability_assessments')
+              .select('client_id, status')
+              .in('client_id', clientIds)
+              .in('status', ['in_progress', 'draft'])
+          : Promise.resolve({ data: [], error: null }),
         supabase
           .from('file_reviews')
-          .select('assigned_to, status')
-          .in('assigned_to', advisorIds)
+          .select('adviser_id, status')
+          .in('adviser_id', advisorIds)
           .eq('status', 'pending')
       ])
 
       const handleOptionalQueryError = (err: any, label: string) => {
         if (!err) return false
-        if (err.code === '42703' || err.code === '42P01') {
+        const message = (err.message || '').toString()
+        if (
+          err.code === '42703' ||
+          err.code === '42P01' ||
+          message.includes('does not exist') ||
+          message.includes('column')
+        ) {
           clientLogger.warn(`Caseload optional query skipped: ${label}`, err)
           return true
         }
@@ -138,7 +158,7 @@ export function CaseloadDashboard() {
       if (assessmentsResult.error && !skipAssessments) throw assessmentsResult.error
       if (reviewsResult.error && !skipReviews) throw reviewsResult.error
 
-      const clientCounts = clientCountsResult.data
+      const clientCounts = clientRows
       const unassignedCount = unassignedCountResult.count
       const assessments = skipAssessments ? [] : assessmentsResult.data
       const reviews = skipReviews ? [] : reviewsResult.data
@@ -154,15 +174,17 @@ export function CaseloadDashboard() {
         }
       })
 
-      assessments?.forEach((a: { advisor_id: string | null; status: string }) => {
-        if (a.advisor_id) {
-          assessmentCountMap.set(a.advisor_id, (assessmentCountMap.get(a.advisor_id) || 0) + 1)
+      assessments?.forEach((a: { client_id: string | null; status: string }) => {
+        if (!a.client_id) return
+        const advisorId = clientAdvisorMap.get(a.client_id)
+        if (advisorId) {
+          assessmentCountMap.set(advisorId, (assessmentCountMap.get(advisorId) || 0) + 1)
         }
       })
 
-      reviews?.forEach((r: { assigned_to: string | null; status: string }) => {
-        if (r.assigned_to) {
-          reviewCountMap.set(r.assigned_to, (reviewCountMap.get(r.assigned_to) || 0) + 1)
+      reviews?.forEach((r: { adviser_id: string | null; status: string }) => {
+        if (r.adviser_id) {
+          reviewCountMap.set(r.adviser_id, (reviewCountMap.get(r.adviser_id) || 0) + 1)
         }
       })
 

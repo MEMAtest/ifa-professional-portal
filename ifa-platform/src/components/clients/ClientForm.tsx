@@ -144,14 +144,16 @@ export default function ClientForm({
         variant: 'default'
       });
 
-      // Delay redirect to show success message
-      setTimeout(() => {
-        if (client?.id) {
-          router.push(`/clients/${client.id}`);
-        } else {
-          router.push('/clients');
-        }
-      }, 1500);
+      if (!onSave) {
+        // Delay redirect to show success message for default flow
+        setTimeout(() => {
+          if (client?.id) {
+            router.push(`/clients/${client.id}`)
+          } else {
+            router.push('/clients')
+          }
+        }, 1500)
+      }
       
     } catch (error) {
       clientLogger.error('❌ Save error:', error);

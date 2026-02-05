@@ -32,10 +32,10 @@ const DEFAULT_CHECKLIST = {
   consumer_duty: false
 }
 
-const formatName = (profile?: { first_name?: string | null; last_name?: string | null }) => {
+const formatName = (profile?: { full_name?: string | null; first_name?: string | null; last_name?: string | null }) => {
   if (!profile) return ''
-  const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
-  return name
+  const name = profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+  return name.trim()
 }
 
 const formatClientName = (client?: { personal_details?: Record<string, any> | null; client_ref?: string | null }) => {
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const firmResult = requireFirmId(authResult.context)
-    if (firmResult instanceof NextResponse) return firmResult
+    if (!('firmId' in firmResult)) return firmResult
 
     const permissionError = requirePermission(authResult.context, 'reports:generate')
     if (permissionError) return permissionError
@@ -88,15 +88,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
-    const { data: adviserProfile } = await supabase
-      .from('profiles')
-      .select('id, firm_id, first_name, last_name')
+    const { data: adviserProfile } = await (supabase
+      .from('profiles') as any)
+      .select('id, firm_id, full_name, first_name, last_name')
       .eq('id', adviser_id)
       .single()
 
-    const { data: reviewerProfile } = await supabase
-      .from('profiles')
-      .select('id, firm_id, first_name, last_name')
+    const { data: reviewerProfile } = await (supabase
+      .from('profiles') as any)
+      .select('id, firm_id, full_name, first_name, last_name')
       .eq('id', reviewer_id)
       .single()
 

@@ -1,6 +1,6 @@
 // File: src/components/auth/LoginForm.tsx
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
@@ -19,6 +19,7 @@ export const LoginForm: React.FC = () => {
   const router = useRouter()
   const { signIn } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
+  const [isHydrated, setIsHydrated] = useState(false)
   
   const {
     register,
@@ -41,6 +42,10 @@ export const LoginForm: React.FC = () => {
     
     setIsLoading(false)
   }
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -110,7 +115,7 @@ export const LoginForm: React.FC = () => {
             <p className="text-gray-400 text-sm mb-6">Enter your email and password to access the platform</p>
 
             {/* Form */}
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" data-hydrated={isHydrated ? 'true' : 'false'}>
               {errors.root && (
                 <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-2 rounded-lg text-sm">
                   {errors.root.message}
@@ -153,7 +158,7 @@ export const LoginForm: React.FC = () => {
               
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || !isHydrated}
                 className="w-full py-3 bg-gradient-to-r from-teal-500 to-blue-500 text-white font-medium rounded-lg hover:from-teal-600 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02]"
               >
                 {isLoading ? (

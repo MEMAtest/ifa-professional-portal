@@ -3,39 +3,22 @@
 // ===================================================================
 
 import { test, expect, Page } from '@playwright/test';
+import { createTestHelpers } from './helpers/test-utils';
 
 // Helper to login before tests
 async function login(page: Page) {
-  await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await page.waitForTimeout(2000);
-
-  const emailField = page.getByLabel('Email');
-  const isLoginPage = page.url().includes('/login');
-  const hasEmailField = await emailField.isVisible().catch(() => false);
-
-  if (isLoginPage && hasEmailField) {
-    await emailField.fill('demo@plannetic.com');
-    const passwordLabel = page.getByLabel('Password');
-    const passwordInput = page.locator('input[type="password"]').first();
-    if (await passwordLabel.isVisible().catch(() => false)) {
-      await passwordLabel.fill('demo123');
-    } else if (await passwordInput.isVisible().catch(() => false)) {
-      await passwordInput.fill('demo123');
-    }
-    const signInButton = page.getByRole('button', { name: /sign in/i });
-    const submitButton = page.locator('button[type=\"submit\"]').first();
-    if (await signInButton.isVisible().catch(() => false)) {
-      await signInButton.click();
-    } else if (await submitButton.isVisible().catch(() => false)) {
-      await submitButton.click();
-    }
-    await page.waitForTimeout(4000);
-  }
+  const helpers = createTestHelpers(page);
+  await helpers.auth.loginIfNeeded();
 }
 
 // Helper to navigate with reliable wait
 async function navigateTo(page: Page, url: string) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  if (page.url().includes('/login')) {
+    const helpers = createTestHelpers(page);
+    await helpers.auth.loginIfNeeded();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  }
   await page.waitForTimeout(2000);
 }
 

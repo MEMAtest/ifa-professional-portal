@@ -12,6 +12,15 @@ import type { FirmUser } from '@/modules/firm/types/user.types'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
 
+type AuthUser = {
+  id: string
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
+  app_metadata?: Record<string, unknown> | null
+  created_at?: string
+  last_sign_in_at?: string | null
+}
+
 export async function GET(request: NextRequest) {
   // Rate limit: 100 requests per minute per IP
   const rateLimitResponse = await rateLimit(request, 'api')
@@ -36,42 +45,64 @@ export async function GET(request: NextRequest) {
     }
 
     const firmIdResult = requireFirmId(authResult.context)
-    if (firmIdResult instanceof NextResponse) {
+    if (!('firmId' in firmIdResult)) {
       return firmIdResult
     }
 
     const supabase = getSupabaseServiceClient()
 
-    const { data: profiles, error } = await (supabase.from('profiles') as any)
+    const { data: profiles, error: profilesError } = await (supabase.from('profiles') as any)
       .select('*')
       .eq('firm_id', firmIdResult.firmId)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      log.error('[Users API] Error fetching users:', error)
+    const shouldFallbackToAuth =
+      !!profilesError &&
+      (profilesError.code === '42P01' ||
+        profilesError.code === '42703' ||
+        profilesError.message?.includes('does not exist') ||
+        profilesError.message?.includes('column'))
+
+    const listFirmAuthUsers = async (): Promise<AuthUser[]> => {
+      const firmUsers: AuthUser[] = []
+      let page = 1
+      const perPage = 1000
+      while (true) {
+        const { data: usersPage, error: listError } = await supabase.auth.admin.listUsers({
+          page,
+          perPage,
+        })
+        if (listError) throw listError
+        if (!usersPage?.users || usersPage.users.length === 0) break
+
+        for (const user of usersPage.users as AuthUser[]) {
+          const metadata = (user.user_metadata || {}) as Record<string, unknown>
+          const appMetadata = (user.app_metadata || {}) as Record<string, unknown>
+          const userFirmId =
+            (metadata.firm_id as string | undefined) ||
+            (metadata.firmId as string | undefined) ||
+            (appMetadata.firm_id as string | undefined) ||
+            (appMetadata.firmId as string | undefined)
+          if (userFirmId && userFirmId === firmIdResult.firmId) {
+            firmUsers.push(user)
+          }
+        }
+
+        if (usersPage.users.length < perPage) break
+        page += 1
+      }
+      return firmUsers
+    }
+
+    if (profilesError && !shouldFallbackToAuth) {
+      log.error('[Users API] Error fetching users:', profilesError)
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
-    // Get emails using RPC function (SECURITY DEFINER to access auth.users, not in generated types)
-    const emailMap = new Map<string, string>()
-    try {
-      const { data: emailData, error: emailError } = await (supabase as any)
-        .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
-
-      if (emailError) {
-        log.warn('[Users API] Unable to load user emails via RPC', {
-          error: emailError.message || String(emailError)
-        })
-      } else if (emailData) {
-        for (const item of emailData as { user_id: string; email: string }[]) {
-          emailMap.set(item.user_id, item.email)
-        }
-      }
-    } catch (err) {
-      log.warn('[Users API] Email RPC failed, continuing without emails', {
-        error: err instanceof Error ? err.message : String(err)
-      })
-    }
+    const shouldLoadAuthUsers =
+      shouldFallbackToAuth || (profiles ?? []).some((profile: Record<string, any>) => !profile.email)
+    const authUsers = shouldLoadAuthUsers ? await listFirmAuthUsers() : []
+    const authUserMap = new Map(authUsers.map((user) => [user.id, user]))
 
     const users: FirmUser[] = (profiles ?? []).map((profile: Record<string, any>) => {
       const fullName = (profile.full_name || profile.fullName || '').trim()
@@ -88,9 +119,12 @@ export async function GET(request: NextRequest) {
       const updatedAt = profile.updated_at ? new Date(profile.updated_at) : createdAt
       const lastLoginRaw = profile.last_login_at || profile.last_login
 
+      const authUser = authUserMap.get(profile.id)
+      const authMetadata = (authUser?.user_metadata || {}) as Record<string, unknown>
+
       return {
         id: profile.id,
-        email: emailMap.get(profile.id) || profile.email || '',
+        email: profile.email || authUser?.email || (authMetadata.email as string | undefined) || '',
         firstName,
         lastName,
         fullName: fullName || `${firstName} ${lastName}`.trim(),
@@ -105,7 +139,39 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(users)
+    if (profiles?.length || !shouldFallbackToAuth) {
+      return NextResponse.json(users)
+    }
+
+    const fallbackUsers: FirmUser[] = authUsers.map((authUser) => {
+      const metadata = (authUser.user_metadata || {}) as Record<string, unknown>
+      const fullName = (metadata.full_name as string | undefined) || ''
+      const firstName = (metadata.first_name as string | undefined) || ''
+      const lastName = (metadata.last_name as string | undefined) || ''
+      const role =
+        (metadata.role as FirmUser['role'] | undefined) ||
+        (authUser.app_metadata?.role as FirmUser['role'] | undefined) ||
+        'advisor'
+      const status = (metadata.status as FirmUser['status'] | undefined) || 'active'
+
+      return {
+        id: authUser.id,
+        email: authUser.email || '',
+        firstName,
+        lastName,
+        fullName: fullName || `${firstName} ${lastName}`.trim() || 'User',
+        role,
+        status,
+        firmId: firmIdResult.firmId,
+        phone: (metadata.phone as string | undefined) || undefined,
+        avatarUrl: (metadata.avatar_url as string | undefined) || undefined,
+        lastLoginAt: authUser.last_sign_in_at ? new Date(authUser.last_sign_in_at) : undefined,
+        createdAt: authUser.created_at ? new Date(authUser.created_at) : new Date(),
+        updatedAt: authUser.created_at ? new Date(authUser.created_at) : new Date(),
+      }
+    })
+
+    return NextResponse.json(fallbackUsers)
   } catch (error) {
     log.error('[Users API] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -102,11 +102,44 @@ export class IntegratedClientService {
     this.supabase = createClient()
   }
 
+  // Resolve authenticated user + firm context
+  private async getCurrentUserContext() {
+    const { data: { user }, error } = await this.supabase.auth.getUser()
+    if (error || !user) {
+      throw new Error('Authentication required to create clients')
+    }
+
+    let firmId = user.user_metadata?.firm_id || user.user_metadata?.firmId
+
+    if (!firmId) {
+      const { data: profile, error: profileError } = await this.supabase
+        .from('profiles')
+        .select('firm_id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (profileError) {
+        clientLogger.warn('Unable to resolve firm from profile', profileError)
+      }
+
+      firmId = profile?.firm_id || null
+    }
+
+    if (!firmId) {
+      throw new Error('Firm association required to create a client')
+    }
+
+    return { user, firmId }
+  }
+
   // Create client
   async createClient(formData: ClientFormData): Promise<Client> {
     try {
+      const { user, firmId } = await this.getCurrentUserContext()
       const clientData = {
         client_ref: formData.clientRef || `CLI${Date.now().toString().slice(-6)}`,
+        advisor_id: formData.advisorId || user.id,
+        firm_id: formData.firmId || firmId,
         personal_details: {
           title: formData.personalDetails?.title || '',
           firstName: formData.personalDetails?.firstName || '',

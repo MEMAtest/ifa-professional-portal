@@ -17,6 +17,8 @@ export function FirmSettingsPanel() {
   const { firm, isLoading, updateFirmAsync, isUpdating, uploadLogoAsync, isUploadingLogo } = useFirm()
   const { canEditFirm, isAdmin } = usePermissions()
   const { toast } = useToast()
+  const labelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1'
+  const inputClass = 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700'
 
   // FCA Lookup state
   const [fcaLookup, setFcaLookup] = useState<{
@@ -194,18 +196,18 @@ export function FirmSettingsPanel() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={labelClass}>
                 Firm Name
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={labelClass}>
                 FCA Number
               </label>
               <div className="flex gap-2">
@@ -216,14 +218,14 @@ export function FirmSettingsPanel() {
                     setFormData({ ...formData, fcaNumber: e.target.value })
                     setFcaLookup({ status: 'idle' })
                   }}
-                  className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                   placeholder="e.g., 123456"
                 />
                 <button
                   type="button"
                   onClick={handleFCALookup}
                   disabled={fcaLookup.status === 'loading' || !formData.fcaNumber.trim()}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 disabled:opacity-50 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800"
                 >
                   {fcaLookup.status === 'loading' ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -263,7 +265,7 @@ export function FirmSettingsPanel() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className={labelClass}>
               Address Line 1
             </label>
             <input
@@ -275,12 +277,12 @@ export function FirmSettingsPanel() {
                   address: { ...formData.address, line1: e.target.value },
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              className={inputClass}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className={labelClass}>
               Address Line 2
             </label>
             <input
@@ -292,13 +294,13 @@ export function FirmSettingsPanel() {
                   address: { ...formData.address, line2: e.target.value },
                 })
               }
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              className={inputClass}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={labelClass}>
                 City
               </label>
               <input
@@ -310,11 +312,11 @@ export function FirmSettingsPanel() {
                     address: { ...formData.address, city: e.target.value },
                   })
                 }
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                className={inputClass}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={labelClass}>
                 Postcode
               </label>
               <input
@@ -326,7 +328,7 @@ export function FirmSettingsPanel() {
                     address: { ...formData.address, postcode: e.target.value },
                   })
                 }
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                className={inputClass}
               />
             </div>
           </div>
@@ -362,7 +364,7 @@ export function FirmSettingsPanel() {
                 className="hidden"
                 disabled={isUploadingLogo}
               />
-              <span className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700">
+              <span className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-800">
                 <Upload className="h-4 w-4" />
                 {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
               </span>
@@ -387,7 +389,7 @@ export function FirmSettingsPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className={labelClass}>
               Email Signature (HTML)
             </label>
             <textarea
@@ -399,7 +401,7 @@ export function FirmSettingsPanel() {
                 })
               }
               rows={4}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              className={`${inputClass} font-mono text-sm`}
               placeholder="<p>Kind regards,<br/>The Team</p>"
             />
           </div>

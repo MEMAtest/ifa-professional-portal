@@ -73,9 +73,18 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
   }, [shouldRedirectToOnboarding, router])
 
   if (loading) {
+    if (isPublicPage) {
+      return <>{children}</>
+    }
+
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-50">
+        <header className="h-[var(--app-header-height)] border-b border-gray-200 bg-white flex items-center px-4">
+          <div className="h-6 w-32 rounded-md bg-gray-200 animate-pulse" />
+        </header>
+        <div className="flex items-center justify-center min-h-[calc(100vh-var(--app-header-height))]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
       </div>
     )
   }

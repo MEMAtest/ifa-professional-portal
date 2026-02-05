@@ -14,5 +14,4 @@ export {
 } from './csrf'
 
 // CSRF constants
-export const CSRF_COOKIE_NAME = 'csrf_token'
-export const CSRF_HEADER_NAME = 'x-csrf-token'
+export { CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from './csrfConstants'

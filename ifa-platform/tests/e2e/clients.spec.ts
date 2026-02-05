@@ -3,6 +3,7 @@
 // ===================================================================
 
 import { test, expect, Page } from '@playwright/test';
+import { createTestHelpers } from './helpers/test-utils';
 
 async function safeGoto(page: Page, url: string, attempts = 3) {
   let lastError: unknown;
@@ -20,31 +21,17 @@ async function safeGoto(page: Page, url: string, attempts = 3) {
 
 // Helper to login before tests (if needed)
 async function login(page: Page) {
-  await safeGoto(page, '/login');
-  await page.waitForTimeout(2000);
+  const helpers = createTestHelpers(page);
+  await helpers.auth.loginIfNeeded();
+}
 
-  const emailField = page.getByLabel('Email');
-  const isLoginPage = page.url().includes('/login');
-  const hasEmailField = await emailField.isVisible().catch(() => false);
-
-  if (isLoginPage && hasEmailField) {
-    await emailField.fill('demo@plannetic.com');
-    const passwordLabel = page.getByLabel('Password');
-    const passwordInput = page.locator('input[type="password"]').first();
-    if (await passwordLabel.isVisible().catch(() => false)) {
-      await passwordLabel.fill('demo123');
-    } else if (await passwordInput.isVisible().catch(() => false)) {
-      await passwordInput.fill('demo123');
-    }
-    const signInButton = page.getByRole('button', { name: /sign in/i });
-    const submitButton = page.locator('button[type="submit"]').first();
-    if (await signInButton.isVisible().catch(() => false)) {
-      await signInButton.click();
-    } else if (await submitButton.isVisible().catch(() => false)) {
-      await submitButton.click();
-    }
-    await page.waitForTimeout(4000);
+async function gotoNewClient(page: Page) {
+  await safeGoto(page, '/clients/new');
+  if (page.url().includes('/login')) {
+    await login(page);
+    await safeGoto(page, '/clients/new');
   }
+  await page.waitForTimeout(2000);
 }
 
 test.describe('Client Management', () => {
@@ -223,8 +210,7 @@ test.describe('Client Management', () => {
 
   test.describe('Add New Client', () => {
     test('should display new client form', async ({ page }) => {
-      await page.goto('/clients/new', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(2000);
+      await gotoNewClient(page);
 
       // Check for form fields - look for any input fields or form
       const hasHeading = await page.getByRole('heading', { name: /add new client/i }).isVisible().catch(() => false);
@@ -238,8 +224,7 @@ test.describe('Client Management', () => {
     });
 
     test('should validate required fields', async ({ page }) => {
-      await page.goto('/clients/new', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(2000);
+      await gotoNewClient(page);
 
       // Try to submit empty form
       const submitButton = page.getByRole('button', { name: /save|create|submit|next/i }).first();
@@ -265,8 +250,7 @@ test.describe('Client Management', () => {
     });
 
     test('should create new client with valid data', async ({ page }) => {
-      await page.goto('/clients/new', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(2000);
+      await gotoNewClient(page);
 
       const timestamp = Date.now();
 
@@ -296,8 +280,7 @@ test.describe('Client Management', () => {
     });
 
     test('should validate email format', async ({ page }) => {
-      await page.goto('/clients/new', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(2000);
+      await gotoNewClient(page);
 
       const emailInput = page.getByLabel(/email/i).first();
 
@@ -321,8 +304,7 @@ test.describe('Client Management', () => {
     });
 
     test('should allow canceling client creation', async ({ page }) => {
-      await page.goto('/clients/new', { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(2000);
+      await gotoNewClient(page);
 
       const cancelButton = page.getByRole('button', { name: /cancel|back/i }).first();
 

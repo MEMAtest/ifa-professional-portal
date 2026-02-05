@@ -4,22 +4,21 @@
 // ===================================================================
 
 import { test, expect, Page } from '@playwright/test';
+import { createTestHelpers } from './helpers/test-utils';
 
 // Helper to login before tests
 async function login(page: Page) {
-  await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await page.waitForTimeout(2000);
+  const helpers = createTestHelpers(page);
+  await helpers.auth.loginIfNeeded();
+}
 
-  const emailField = page.getByLabel('Email');
-  const isLoginPage = page.url().includes('/login');
-  const hasEmailField = await emailField.isVisible().catch(() => false);
-
-  if (isLoginPage && hasEmailField) {
-    await emailField.fill('demo@plannetic.com');
-    await page.getByLabel('Password').fill('demo123');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForTimeout(4000);
+async function gotoSettings(page: Page) {
+  await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  if (page.url().includes('/login')) {
+    await login(page);
+    await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 30000 });
   }
+  await page.waitForTimeout(2000);
 }
 
 async function openMobileNavIfNeeded(page: Page) {
@@ -56,7 +55,7 @@ test.describe('PROD & Services Settings', () => {
 
   test.describe('Settings Page Navigation', () => {
     test('should navigate to Services & PROD settings tab', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Should show Services & PROD panel
@@ -67,7 +66,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should display PROD wizard steps', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(4000);
 
       // Check for wizard step indicators, form elements, or any content
@@ -81,7 +80,7 @@ test.describe('PROD & Services Settings', () => {
 
   test.describe('Governance Step', () => {
     test('should display governance options', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Look for governance-related fields
@@ -92,7 +91,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should allow selecting governance owner', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       const ownerSelect = page.locator('select').first();
@@ -109,7 +108,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should have form input options', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       const hasInputs = await page.locator('input, select').count() > 0;
@@ -119,7 +118,7 @@ test.describe('PROD & Services Settings', () => {
 
   test.describe('Wizard Navigation', () => {
     test('should navigate between wizard steps', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Find step buttons or navigation
@@ -137,7 +136,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should show step indicator', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Look for active/highlighted step or any UI indicator
@@ -150,7 +149,7 @@ test.describe('PROD & Services Settings', () => {
 
   test.describe('Services Configuration', () => {
     test('should display services content', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Navigate to Services step if available
@@ -166,7 +165,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should have form elements for configuration', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       const hasFormElements = await page.locator('select, input, textarea').count() > 0;
@@ -174,7 +173,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should show target market options', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Look for target market content
@@ -187,7 +186,7 @@ test.describe('PROD & Services Settings', () => {
 
   test.describe('Summary Step', () => {
     test('should display summary content', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Navigate to Summary step
@@ -204,7 +203,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should have copy button in summary', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Navigate to Summary step
@@ -225,7 +224,7 @@ test.describe('PROD & Services Settings', () => {
 
   test.describe('Save Functionality', () => {
     test('should have save button', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       const saveButton = page.getByRole('button', { name: /save/i }).first();
@@ -235,7 +234,7 @@ test.describe('PROD & Services Settings', () => {
     });
 
     test('should show version history if available', async ({ page }) => {
-      await page.goto('/settings?tab=services', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await gotoSettings(page);
       await page.waitForTimeout(3000);
 
       // Navigate to Summary step

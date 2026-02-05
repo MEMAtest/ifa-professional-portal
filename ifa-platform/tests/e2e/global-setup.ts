@@ -71,11 +71,18 @@ async function authenticateAndSaveState(baseURL: string = 'http://localhost:3000
     const email = process.env.E2E_EMAIL || 'demo@plannetic.com';
     const password = process.env.E2E_PASSWORD || 'demo123';
 
+    await page
+      .waitForSelector('form[data-hydrated="true"]', { timeout: 15_000 })
+      .catch(() => {});
     await page.fill('#email', email);
     await page.fill('#password', password);
 
     // Click login button
-    await page.getByRole('button', { name: /sign in/i }).click();
+    const signInButton = page.getByRole('button', { name: /sign in/i });
+    await page
+      .waitForSelector('button[type="submit"]:not([disabled])', { timeout: 15_000 })
+      .catch(() => {});
+    await signInButton.click();
 
     // Wait for navigation to a post-login page (dashboard/setup/onboarding)
     await page.waitForURL(/\/(dashboard|setup|onboarding)/, { timeout: 30_000 });

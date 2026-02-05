@@ -1,21 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
-
-const EMAIL = process.env.E2E_EMAIL || 'demo@plannetic.com';
-const PASSWORD = process.env.E2E_PASSWORD || 'demo123';
+import { createTestHelpers } from './helpers/test-utils';
 
 async function loginIfNeeded(page: Page) {
-  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-  if (page.url().includes('/login')) {
-    await page.fill('#email', EMAIL);
-    await page.fill('#password', PASSWORD);
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
-    await page.waitForTimeout(500);
-  }
-  if (page.url().includes('/setup') || page.url().includes('/onboarding')) {
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    await page.waitForURL(/\/dashboard/, { timeout: 30_000 }).catch(() => {});
-  }
+  const helpers = createTestHelpers(page);
+  await helpers.auth.loginIfNeeded();
 }
 
 async function safeGoto(page: Page, url: string, urlPattern: RegExp) {

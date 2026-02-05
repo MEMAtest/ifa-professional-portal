@@ -58,8 +58,9 @@ interface Breach {
   breach_affected_clients?: BreachAffectedClient[]
   assigned_user?: {
     id: string
-    first_name: string | null
-    last_name: string | null
+    full_name?: string | null
+    first_name?: string | null
+    last_name?: string | null
     avatar_url: string | null
   }
 }
@@ -124,8 +125,7 @@ export default function BreachesRegister({ onStatsChange }: Props) {
           ),
           assigned_user:assigned_to (
             id,
-            first_name,
-            last_name,
+            full_name,
             avatar_url
           )
         `)
@@ -177,7 +177,10 @@ export default function BreachesRegister({ onStatsChange }: Props) {
   const getOwnerName = (breach: Breach): string => {
     const owner = breach.assigned_user
     if (!owner) return 'Unassigned'
-    return `${owner.first_name || ''} ${owner.last_name || ''}`.trim() || 'Unassigned'
+    return (
+      owner.full_name ||
+      `${owner.first_name || ''} ${owner.last_name || ''}`.trim()
+    ) || 'Unassigned'
   }
 
   const getBreachDueDate = (breach: Breach): string => {

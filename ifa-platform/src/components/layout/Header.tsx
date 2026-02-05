@@ -377,14 +377,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
                           Profile Settings
                         </Link>
                         <Link
-                          href="/settings/preferences"
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
-                          onClick={() => setUserMenuOpen(false)}
-                        >
-                          <Settings className="h-4 w-4 mr-3" />
-                          Preferences
-                        </Link>
-                        <Link
                           href="/help"
                           className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-white/50 transition-colors"
                           onClick={() => setUserMenuOpen(false)}

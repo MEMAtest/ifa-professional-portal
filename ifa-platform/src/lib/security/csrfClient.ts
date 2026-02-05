@@ -3,7 +3,7 @@
 // PURPOSE: Client-side helpers for CSRF token access
 // =====================================================
 
-import { CSRF_COOKIE_NAME } from '@/lib/security'
+import { CSRF_COOKIE_NAME } from '@/lib/security/csrfConstants'
 
 export function getCsrfToken(): string | null {
   if (typeof document === 'undefined') return null

@@ -73,11 +73,15 @@ const DEFAULT_PREFERENCES = {
 
 const InfoHint = ({ content }: { content: string }) => (
   <Tooltip content={content}>
-    <span className="ml-2 inline-flex h-4 w-4 items-center justify-center text-gray-400 hover:text-gray-600">
+    <span className="ml-2 inline-flex h-4 w-4 items-center justify-center text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200">
       <Info className="h-4 w-4" />
     </span>
   </Tooltip>
 )
+
+const fieldLabelClass = 'block text-sm font-medium text-gray-700 dark:text-slate-200 mb-1'
+const fieldInputClass = 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-950 dark:text-slate-100 dark:border-slate-700 dark:placeholder:text-slate-400 dark:focus:ring-blue-400'
+const fieldSelectClass = fieldInputClass
 
 
 export default function SettingsPage() {
@@ -89,7 +93,7 @@ export default function SettingsPage() {
   // State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users' | 'caseload'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users' | 'caseload'>('profile')
   const { isAdmin, canManageUsers } = usePermissions()
   const firmContext = useFirmContext({
     supabase,
@@ -174,9 +178,20 @@ export default function SettingsPage() {
     updated_at: ''
   })
 
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [passwordSaving, setPasswordSaving] = useState(false)
+
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab === 'services') {
+    if (tab === 'preferences') {
+      setActiveTab('preferences')
+    } else if (tab === 'security') {
+      setActiveTab('security')
+    } else if (tab === 'services') {
       setActiveTab('services')
     } else if (tab === 'consumer-duty') {
       setActiveTab('consumer-duty')
@@ -190,6 +205,85 @@ export default function SettingsPage() {
       setActiveTab('caseload')
     }
   }, [searchParams])
+
+  const handleChangePassword = async () => {
+    if (!user?.email) {
+      toast({
+        title: 'Error',
+        description: 'No user email found for password update.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      toast({
+        title: 'Missing fields',
+        description: 'Please fill in all password fields.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      toast({
+        title: 'Password too short',
+        description: 'New password must be at least 8 characters.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({
+        title: 'Passwords do not match',
+        description: 'Please confirm the new password.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      setPasswordSaving(true)
+
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: passwordForm.currentPassword
+      })
+
+      if (reauthError) {
+        throw new Error('Current password is incorrect.')
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordForm.newPassword
+      })
+
+      if (updateError) {
+        throw new Error(updateError.message)
+      }
+
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      })
+
+      toast({
+        title: 'Password updated',
+        description: 'Your password has been changed successfully.'
+      })
+    } catch (error) {
+      clientLogger.error('Error updating password:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to update password',
+        variant: 'destructive'
+      })
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
 
   const createDefaultProfile = useCallback(() => {
     // Create default profile data
@@ -354,7 +448,8 @@ export default function SettingsPage() {
                 </div>
                 {[
                   { key: 'profile', label: 'Profile', icon: User },
-                  { key: 'preferences', label: 'Preferences', icon: Settings }
+                  { key: 'preferences', label: 'Preferences', icon: Settings },
+                  { key: 'security', label: 'Security', icon: Shield }
                 ].map(({ key, label, icon: Icon }) => (
                   <button
                     key={key}
@@ -362,8 +457,8 @@ export default function SettingsPage() {
                     className={`
                       w-full flex items-center space-x-3 px-4 py-3 text-left text-sm font-medium
                       ${activeTab === key
-                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-500'
+                        : 'text-gray-700 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800'
                       }
                     `}
                   >
@@ -390,8 +485,8 @@ export default function SettingsPage() {
                     className={`
                       w-full flex items-center space-x-3 px-4 py-3 text-left text-sm font-medium
                       ${activeTab === key
-                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-500'
+                        : 'text-gray-700 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800'
                       }
                     `}
                   >
@@ -414,63 +509,63 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className={fieldLabelClass}>
                       Full Name
                     </label>
                     <input
                       type="text"
                       value={userProfile.full_name || ''}
                       onChange={(e) => setUserProfile({ ...userProfile, full_name: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldInputClass}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className={fieldLabelClass}>
                       Email Address
                     </label>
                     <input
                       type="email"
                       value={user?.email || ''}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                      className={`${fieldInputClass} bg-gray-50 dark:bg-slate-900`}
                       disabled
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className={fieldLabelClass}>
                       Phone Number
                     </label>
                     <input
                       type="tel"
                       value={userProfile.phone || ''}
                       onChange={(e) => setUserProfile({ ...userProfile, phone: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldInputClass}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className={fieldLabelClass}>
                       Job Title
                     </label>
                     <input
                       type="text"
                       value={userProfile.job_title || ''}
                       onChange={(e) => setUserProfile({ ...userProfile, job_title: e.target.value })}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldInputClass}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className={fieldLabelClass}>
                     Bio
                   </label>
                   <textarea
                     value={userProfile.bio || ''}
                     onChange={(e) => setUserProfile({ ...userProfile, bio: e.target.value })}
                     rows={4}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    className={fieldInputClass}
                     placeholder="Tell us about yourself..."
                   />
                 </div>
@@ -493,7 +588,7 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
+                    <label className={`flex items-center ${fieldLabelClass}`}>
                       Theme
                       <InfoHint content="Choose light, dark, or follow your system preference." />
                     </label>
@@ -508,9 +603,9 @@ export default function SettingsPage() {
                             theme: nextTheme 
                           }
                         })
-                        applyThemePreference(nextTheme)
+                        persistThemePreference(nextTheme)
                       }}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldSelectClass}
                     >
                       <option value="light">Light</option>
                       <option value="dark">Dark</option>
@@ -519,7 +614,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
+                    <label className={`flex items-center ${fieldLabelClass}`}>
                       Language
                       <InfoHint content="Controls UI language for menus and labels." />
                     </label>
@@ -532,7 +627,7 @@ export default function SettingsPage() {
                           language: e.target.value 
                         }
                       })}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldSelectClass}
                     >
                       <option value="en-GB">English (UK)</option>
                       <option value="en-US">English (US)</option>
@@ -540,7 +635,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
+                    <label className={`flex items-center ${fieldLabelClass}`}>
                       Currency
                       <InfoHint content="Default currency formatting across reports and dashboards." />
                     </label>
@@ -553,7 +648,7 @@ export default function SettingsPage() {
                           currency: e.target.value 
                         }
                       })}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldSelectClass}
                     >
                       <option value="GBP">GBP (£)</option>
                       <option value="USD">USD ($)</option>
@@ -562,7 +657,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
+                    <label className={`flex items-center ${fieldLabelClass}`}>
                       Date Format
                       <InfoHint content="Default date format used across the platform." />
                     </label>
@@ -575,7 +670,7 @@ export default function SettingsPage() {
                           date_format: e.target.value 
                         }
                       })}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      className={fieldSelectClass}
                     >
                       <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                       <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -587,7 +682,7 @@ export default function SettingsPage() {
                 {/* Notifications */}
                 <div>
                   <div className="flex items-center">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Notifications</h3>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-slate-100 mb-3">Notifications</h3>
                     <InfoHint content="Control how you receive system notifications." />
                   </div>
                   <div className="space-y-3">
@@ -612,7 +707,7 @@ export default function SettingsPage() {
                           })}
                           className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                         />
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-gray-700 dark:text-slate-200">
                           {label}
                         </span>
                       </label>
@@ -624,6 +719,61 @@ export default function SettingsPage() {
                   <Button onClick={handleSaveProfile} disabled={saving}>
                     <Save className="h-4 w-4 mr-2" />
                     {saving ? 'Saving...' : 'Save Preferences'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === 'security' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Security Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <label className={fieldLabelClass}>
+                    Current Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                    autoComplete="current-password"
+                    className={fieldInputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={fieldLabelClass}>
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    autoComplete="new-password"
+                    className={fieldInputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={fieldLabelClass}>
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    autoComplete="new-password"
+                    className={fieldInputClass}
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleChangePassword} disabled={passwordSaving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {passwordSaving ? 'Updating...' : 'Change Password'}
                   </Button>
                 </div>
               </CardContent>

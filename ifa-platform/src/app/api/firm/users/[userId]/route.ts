@@ -22,6 +22,16 @@ function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value)
 }
 
+function splitFullName(fullName?: string | null): { firstName: string; lastName: string } {
+  const safeName = (fullName || '').trim()
+  if (!safeName) return { firstName: '', lastName: '' }
+  const parts = safeName.split(' ').filter(Boolean)
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ')
+  }
+}
+
 interface RouteParams {
   params: Promise<{ userId: string }>
 }
@@ -51,19 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Get the user profile (status column not in generated types)
     const { data: profile, error } = await (supabase
       .from('profiles') as any)
-      .select(`
-        id,
-        first_name,
-        last_name,
-        role,
-        status,
-        firm_id,
-        phone,
-        avatar_url,
-        last_login_at,
-        created_at,
-        updated_at
-      `)
+      .select('*')
       .eq('id', userId)
       .eq('firm_id', firmIdResult.firmId)
       .single()
@@ -72,19 +70,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Get email using RPC function (not in generated types)
-    const { data: emailData } = await (supabase as any)
-      .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
+    let userEmail = (profile as any)?.email || ''
+    if (!userEmail) {
+      const { data: authUser, error: authUserError } = await supabase.auth.admin.getUserById(userId)
+      if (!authUserError) {
+        userEmail = authUser?.user?.email || ''
+      }
+    }
 
-    const userEmail = emailData?.find((e: { user_id: string; email: string }) => e.user_id === userId)?.email || ''
+    const rawFullName = ((profile as any).full_name || `${(profile as any).first_name || ''} ${(profile as any).last_name || ''}`).trim()
+    const nameParts = splitFullName(rawFullName)
+    const resolvedFirstName = (profile as any).first_name ?? nameParts.firstName
+    const resolvedLastName = (profile as any).last_name ?? nameParts.lastName
 
     const user: FirmUser = {
       id: profile.id,
       email: userEmail,
-      firstName: profile.first_name,
-      lastName: profile.last_name,
-      fullName: `${profile.first_name} ${profile.last_name}`.trim(),
-      role: profile.role as UserRole,
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      fullName: rawFullName || `${resolvedFirstName} ${resolvedLastName}`.trim(),
+      role: (profile as any).role as UserRole,
       status: (profile.status ?? 'active') as UserStatus,
       firmId: profile.firm_id ?? '',
       phone: profile.phone ?? undefined,
@@ -183,8 +188,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       updated_at: new Date().toISOString(),
     }
 
-    if (firstName !== undefined) updateData.first_name = firstName.trim()
-    if (lastName !== undefined) updateData.last_name = lastName.trim()
     if (phone !== undefined) updateData.phone = phone
 
     // Only admins can change role and status (including self if not last admin)
@@ -197,12 +200,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Verify user belongs to the same firm and get current values for rollback
     const { data: existingProfile } = await (supabase
       .from('profiles') as any)
-      .select('firm_id, role, status, first_name, last_name, phone')
+      .select('firm_id, role, status, phone, full_name')
       .eq('id', userId)
       .single()
 
     if (!existingProfile || existingProfile.firm_id !== firmIdResult.firmId) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    if (firstName !== undefined || lastName !== undefined) {
+      const existingNameParts = splitFullName(existingProfile.full_name)
+      const nextFirstName = firstName?.trim() || existingNameParts.firstName
+      const nextLastName = lastName?.trim() || existingNameParts.lastName
+      const combinedName = `${nextFirstName} ${nextLastName}`.trim()
+      if (combinedName) {
+        updateData.full_name = combinedName
+      }
     }
 
     // ========================================
@@ -242,8 +255,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       .eq('firm_id', firmIdResult.firmId)
       .select(`
         id,
-        first_name,
-        last_name,
+        full_name,
         role,
         status,
         firm_id,
@@ -281,8 +293,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           .update({
             role: existingProfile.role,
             status: existingProfile.status,
-            first_name: existingProfile.first_name,
-            last_name: existingProfile.last_name,
+            full_name: existingProfile.full_name,
             phone: existingProfile.phone,
             updated_at: new Date().toISOString()
           })
@@ -313,16 +324,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }> = []
 
     // Get performer name
-    const { data: performerProfile } = await supabase
-      .from('profiles')
-      .select('first_name, last_name')
+    const { data: performerProfile } = await (supabase
+      .from('profiles') as any)
+      .select('full_name')
       .eq('id', authResult.context.userId)
       .single()
 
     const performerName = performerProfile
-      ? `${performerProfile.first_name || ''} ${performerProfile.last_name || ''}`.trim() || 'Admin'
+      ? performerProfile.full_name?.trim() || 'Admin'
       : 'Admin'
-    const targetUserName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'User'
+    const targetUserName = (profile.full_name as string | null | undefined)?.trim() || 'User'
     const nowIso = new Date().toISOString()
 
     // Log role change
@@ -378,24 +389,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Get email using RPC function (not in generated types)
-    const { data: emailData } = await (supabase as any)
-      .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
+    let userEmail = (profile as any)?.email || ''
+    if (!userEmail) {
+      const { data: authUser, error: authUserError } = await supabase.auth.admin.getUserById(userId)
+      if (!authUserError) {
+        userEmail = authUser?.user?.email || ''
+      }
+    }
 
-    const userEmail = emailData?.find((e: { user_id: string; email: string }) => e.user_id === userId)?.email || ''
+    const updatedFullName = (profile as any).full_name || ''
+    const updatedNameParts = splitFullName(updatedFullName)
 
     const user: FirmUser = {
       id: profile.id,
       email: userEmail,
-      firstName: profile.first_name,
-      lastName: profile.last_name,
-      fullName: `${profile.first_name} ${profile.last_name}`.trim(),
-      role: profile.role as UserRole,
-      status: (profile.status ?? 'active') as UserStatus,
-      firmId: profile.firm_id ?? '',
-      phone: profile.phone ?? undefined,
-      avatarUrl: profile.avatar_url ?? undefined,
-      lastLoginAt: profile.last_login_at ? new Date(profile.last_login_at) : undefined,
+      firstName: (profile as any).first_name ?? updatedNameParts.firstName,
+      lastName: (profile as any).last_name ?? updatedNameParts.lastName,
+      fullName: updatedFullName || `${updatedNameParts.firstName} ${updatedNameParts.lastName}`.trim(),
+      role: (profile as any).role as UserRole,
+      status: ((profile as any).status ?? 'active') as UserStatus,
+      firmId: (profile as any).firm_id ?? '',
+      phone: (profile as any).phone ?? undefined,
+      avatarUrl: (profile as any).avatar_url ?? undefined,
+      lastLoginAt: (profile as any).last_login_at ? new Date((profile as any).last_login_at) : undefined,
       createdAt: new Date(profile.created_at),
       updatedAt: new Date(profile.updated_at),
     }
@@ -516,14 +532,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get user info before deactivation for logging
-    const { data: targetProfile } = await supabase
-      .from('profiles')
-      .select('first_name, last_name')
+    const { data: targetProfile } = await (supabase
+      .from('profiles') as any)
+      .select('full_name')
       .eq('id', userId)
       .single()
 
     const targetUserName = targetProfile
-      ? `${targetProfile.first_name || ''} ${targetProfile.last_name || ''}`.trim() || 'User'
+      ? targetProfile.full_name?.trim() || 'User'
       : 'User'
 
     // Soft delete - set status to deactivated
@@ -578,14 +594,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const supabaseService = getSupabaseServiceClient()
 
     // Get performer name
-    const { data: performerProfile } = await supabase
-      .from('profiles')
-      .select('first_name, last_name')
+    const { data: performerProfile } = await (supabase
+      .from('profiles') as any)
+      .select('full_name')
       .eq('id', authResult.context.userId)
       .single()
 
     const performerName = performerProfile
-      ? `${performerProfile.first_name || ''} ${performerProfile.last_name || ''}`.trim() || 'Admin'
+      ? performerProfile.full_name?.trim() || 'Admin'
       : 'Admin'
 
     const { error: activityError } = await supabaseService
