@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import crypto from 'crypto'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { rateLimit } from '@/lib/security/rateLimit'

@@ -50,8 +50,8 @@ export async function PATCH(request: NextRequest, context: { params: { id: strin
     const nextStatus = parsed.data.status
     const supabase = getSupabaseServiceClient()
 
-    const { data: review, error: reviewError } = await supabase
-      .from('file_reviews')
+    const { data: review, error: reviewError }: { data: any; error: any } = await supabase
+      .from('file_reviews' as any)
       .select('id, firm_id, client_id, adviser_id, reviewer_id, status, review_type, reviewer_started_at')
       .eq('id', reviewId)
       .eq('firm_id', firmResult.firmId)
@@ -84,11 +84,11 @@ export async function PATCH(request: NextRequest, context: { params: { id: strin
     if (['approved', 'rejected', 'escalated'].includes(nextStatus)) {
       updateData.reviewer_completed_at = now
       updateData.completed_at = nextStatus === 'escalated' ? null : now
-      updateData.reviewer_name = formatName(reviewerProfile) || 'Reviewer'
+      updateData.reviewer_name = formatName(reviewerProfile ?? undefined) || 'Reviewer'
     }
 
-    const { data: updatedReview, error: updateError } = await supabase
-      .from('file_reviews')
+    const { data: updatedReview, error: updateError }: { data: any; error: any } = await supabase
+      .from('file_reviews' as any)
       .update(updateData)
       .eq('id', reviewId)
       .eq('firm_id', firmResult.firmId)
@@ -101,7 +101,7 @@ export async function PATCH(request: NextRequest, context: { params: { id: strin
     }
 
     if (['approved', 'rejected', 'escalated'].includes(nextStatus)) {
-      const clientName = formatClientName(client)
+      const clientName = formatClientName(client as any)
       const messageSuffix =
         nextStatus === 'approved'
           ? 'approved'

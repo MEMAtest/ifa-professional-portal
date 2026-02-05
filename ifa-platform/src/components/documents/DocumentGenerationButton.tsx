@@ -15,6 +15,7 @@ interface DocumentGenerationButtonProps {
 
 interface GeneratedDocument {
   id: string
+  name?: string
   url: string
   pdfUrl?: string
   metadata?: any

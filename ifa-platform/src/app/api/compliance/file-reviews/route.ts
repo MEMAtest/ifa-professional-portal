@@ -110,22 +110,24 @@ export async function POST(request: NextRequest) {
     const adviserName = formatName(adviserProfile) || 'Adviser'
     const reviewerName = formatName(reviewerProfile) || 'Reviewer'
 
-    const { data: review, error } = await supabase
-      .from('file_reviews')
-      .insert({
-        firm_id: firmResult.firmId,
-        client_id,
-        adviser_id,
-        reviewer_id,
-        review_type,
-        due_date: due_date || null,
-        risk_rating: risk_rating || null,
-        checklist: DEFAULT_CHECKLIST,
-        status: 'pending',
-        adviser_submitted_at: new Date().toISOString(),
-        adviser_name: adviserName,
-        reviewer_name: reviewerName
-      })
+    const insertPayload = {
+      firm_id: firmResult.firmId,
+      client_id,
+      adviser_id,
+      reviewer_id,
+      review_type,
+      due_date: due_date || null,
+      risk_rating: risk_rating || null,
+      checklist: DEFAULT_CHECKLIST,
+      status: 'pending' as const,
+      adviser_submitted_at: new Date().toISOString(),
+      adviser_name: adviserName,
+      reviewer_name: reviewerName
+    }
+
+    const { data: review, error }: { data: any; error: any } = await supabase
+      .from('file_reviews' as any)
+      .insert(insertPayload as any)
       .select('*')
       .single()
 
@@ -134,7 +136,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create file review' }, { status: 500 })
     }
 
-    const clientName = formatClientName(client)
+    const clientName = formatClientName(client as any)
     const actionUrl = `/compliance?tab=qa&filter=my-reviews`
 
     const reviewerNotification = await NotificationService.create({

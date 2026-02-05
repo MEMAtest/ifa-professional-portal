@@ -42,53 +42,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    // Get all profiles in the firm (be resilient to schema differences)
-    let profiles: any[] | null = null
-    let error: any = null
-
-    const fullSelect = `
-      id,
-      first_name,
-      last_name,
-      role,
-      status,
-      firm_id,
-      phone,
-      avatar_url,
-      last_login_at,
-      created_at,
-      updated_at
-    `
-
-    const minimalSelect = `
-      id,
-      first_name,
-      last_name,
-      role,
-      firm_id,
-      created_at,
-      updated_at
-    `
-
-    const fullQuery = await (supabase.from('profiles') as any)
-      .select(fullSelect)
+    const { data: profiles, error } = await (supabase.from('profiles') as any)
+      .select('*')
       .eq('firm_id', firmIdResult.firmId)
       .order('created_at', { ascending: false })
-
-    profiles = fullQuery.data
-    error = fullQuery.error
-
-    if (error && error.code === '42703') {
-      log.warn('[Users API] Profile schema mismatch, falling back to minimal select', {
-        error: error.message || String(error)
-      })
-      const minimalQuery = await (supabase.from('profiles') as any)
-        .select(minimalSelect)
-        .eq('firm_id', firmIdResult.firmId)
-        .order('created_at', { ascending: false })
-      profiles = minimalQuery.data
-      error = minimalQuery.error
-    }
 
     if (error) {
       log.error('[Users API] Error fetching users:', error)
@@ -116,33 +73,37 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const users: FirmUser[] = (profiles ?? []).map((profile: {
-      id: string
-      first_name: string
-      last_name: string
-      role: string
-      status: string | null
-      firm_id: string | null
-      phone: string | null
-      avatar_url: string | null
-      last_login_at: string | null
-      created_at: string
-      updated_at: string
-    }) => ({
-      id: profile.id,
-      email: emailMap.get(profile.id) || (profile as any).email || '',
-      firstName: profile.first_name,
-      lastName: profile.last_name,
-      fullName: `${profile.first_name} ${profile.last_name}`.trim(),
-      role: profile.role as FirmUser['role'],
-      status: (profile.status ?? 'active') as FirmUser['status'],
-      firmId: profile.firm_id ?? '',
-      phone: profile.phone ?? undefined,
-      avatarUrl: profile.avatar_url ?? undefined,
-      lastLoginAt: profile.last_login_at ? new Date(profile.last_login_at) : undefined,
-      createdAt: new Date(profile.created_at),
-      updatedAt: new Date(profile.updated_at),
-    }))
+    const users: FirmUser[] = (profiles ?? []).map((profile: Record<string, any>) => {
+      const fullName = (profile.full_name || profile.fullName || '').trim()
+      let firstName = (profile.first_name || profile.firstName || '').trim()
+      let lastName = (profile.last_name || profile.lastName || '').trim()
+
+      if ((!firstName || !lastName) && fullName) {
+        const parts = fullName.split(' ').filter(Boolean)
+        firstName = firstName || parts[0] || ''
+        lastName = lastName || parts.slice(1).join(' ')
+      }
+
+      const createdAt = profile.created_at ? new Date(profile.created_at) : new Date()
+      const updatedAt = profile.updated_at ? new Date(profile.updated_at) : createdAt
+      const lastLoginRaw = profile.last_login_at || profile.last_login
+
+      return {
+        id: profile.id,
+        email: emailMap.get(profile.id) || profile.email || '',
+        firstName,
+        lastName,
+        fullName: fullName || `${firstName} ${lastName}`.trim(),
+        role: (profile.role || 'advisor') as FirmUser['role'],
+        status: (profile.status ?? 'active') as FirmUser['status'],
+        firmId: profile.firm_id ?? '',
+        phone: profile.phone ?? undefined,
+        avatarUrl: profile.avatar_url ?? undefined,
+        lastLoginAt: lastLoginRaw ? new Date(lastLoginRaw) : undefined,
+        createdAt,
+        updatedAt,
+      }
+    })
 
     return NextResponse.json(users)
   } catch (error) {

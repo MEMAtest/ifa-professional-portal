@@ -129,7 +129,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const buildPdfBuffer = () => {
       try {
-        const nodeBuffer = pdfDoc.output('nodebuffer') as unknown
+        const nodeBuffer = pdfDoc.output('nodebuffer' as any) as unknown
         if (nodeBuffer && Buffer.isBuffer(nodeBuffer)) {
           return nodeBuffer as Buffer
         }

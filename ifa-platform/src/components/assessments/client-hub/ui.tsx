@@ -22,7 +22,7 @@ export const Card = ({
   </div>
 )
 
-export const Badge = ({ children, variant = 'default' }: { children: React.ReactNode; variant?: string }) => {
+export const Badge = ({ children, variant = 'default', className }: { children: React.ReactNode; variant?: string; className?: string }) => {
   const variants = {
     default: 'bg-blue-100 text-blue-800',
     success: 'bg-green-100 text-green-800',
