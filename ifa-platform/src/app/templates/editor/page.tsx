@@ -488,7 +488,8 @@ export default function TemplateEditorPage() {
                               ...sanitizeHtml.defaults.allowedAttributes,
                               img: ['src', 'alt', 'width', 'height', 'style'],
                               '*': ['style', 'class', 'id']
-                            }
+                            },
+                            allowProtocolRelative: false
                           })
                         }}
                       />

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 import { parseEml, parseMsg } from '@/lib/documents/emailParser'
@@ -164,6 +164,7 @@ function renderEmailHtml(
           img: ['src', 'alt', 'width', 'height'],
         },
         allowedSchemes: ['http', 'https', 'mailto', 'data'],
+        allowProtocolRelative: false,
       })
     : `<div class="email-body">${escapeHtml(parsed.bodyText)}</div>`
 
@@ -298,8 +299,17 @@ function markdownToHtml(markdown: string): string {
 }
 
 function getEffectiveMimeType(document: Record<string, any>): string {
-  const mime = document.file_type || document.mime_type || ''
-  if (mime && mime !== 'application/octet-stream') return mime
+  const rawFileType = document.file_type || ''
+  const rawMime = document.mime_type || ''
+
+  // Prefer explicit mime_type when file_type is just an extension (e.g. "pdf")
+  const looksLikeMime = (value: string) => value.includes('/')
+  if (rawMime && rawMime !== 'application/octet-stream') {
+    return rawMime
+  }
+  if (rawFileType && looksLikeMime(rawFileType)) {
+    return rawFileType
+  }
 
   // Fallback: infer from file extension
   const fileName = document.file_name || document.name || ''
@@ -319,7 +329,7 @@ function getEffectiveMimeType(document: Record<string, any>): string {
     '.jpeg': 'image/jpeg',
     '.gif': 'image/gif',
   }
-  return extMap[ext] || mime || 'application/octet-stream'
+  return extMap[ext] || rawMime || 'application/octet-stream'
 }
 
 export async function GET(
@@ -338,6 +348,10 @@ export async function GET(
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'documents:read')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult
 
@@ -359,14 +373,7 @@ export async function GET(
       )
     }
 
-    // Option 1: If we have a direct storage URL, redirect to it
-    if (document.storage_path && document.storage_path.startsWith('http')) {
-      log.info('Using storage URL for preview', { documentId, storage_path: document.storage_path })
-      const url = new URL(document.storage_path)
-      return NextResponse.redirect(url.toString())
-    }
-
-    // Option 2: If we have a file_path, download from Supabase storage and convert if needed
+    // Option 1: If we have a file_path, download from Supabase storage and convert if needed
     if (document.file_path) {
       log.info('Downloading from Supabase storage', { documentId, file_path: document.file_path })
       const { data: fileData, error: downloadError } = await supabase.storage
@@ -378,86 +385,99 @@ export async function GET(
         const fileName = document.file_name || document.name || 'document'
         const buffer = Buffer.from(await fileData.arrayBuffer())
 
-        // Helper: build headers for converted HTML responses
-        const htmlHeaders = () => {
-          const h = new Headers()
-          h.set('Content-Type', 'text/html; charset=utf-8')
-          h.set('Content-Security-Policy', PREVIEW_CSP)
-          h.set('Cache-Control', 'public, max-age=3600')
-          return h
-        }
+        if (buffer.length === 0) {
+          log.warn('Preview file is empty, falling back to metadata/html', { documentId, file_path: document.file_path })
+        } else {
 
-        // Helper: force-download response when conversion fails
-        const downloadFallback = (buf: Buffer, name: string, contentType: string) => {
-          const h = new Headers()
-          h.set('Content-Type', contentType)
-          h.set('Content-Disposition', `attachment; filename="${name}"`)
-          h.set('Cache-Control', 'public, max-age=3600')
-          return new NextResponse(buf, { headers: h })
-        }
-
-        // DOCX → HTML
-        if (
-          mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-          mimeType === 'application/msword'
-        ) {
-          try {
-            const html = await convertDocxToHtml(buffer, fileName)
-            return new NextResponse(html, { headers: htmlHeaders() })
-          } catch (convError) {
-            log.error('DOCX conversion failed, falling back to download', { documentId, error: convError })
-            return downloadFallback(buffer, fileName, mimeType)
+          // Helper: build headers for converted HTML responses
+          const htmlHeaders = () => {
+            const h = new Headers()
+            h.set('Content-Type', 'text/html; charset=utf-8')
+            h.set('Content-Security-Policy', PREVIEW_CSP)
+            h.set('Cache-Control', 'public, max-age=3600')
+            return h
           }
-        }
 
-        // XLSX → HTML
-        if (
-          mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-          mimeType === 'application/vnd.ms-excel'
-        ) {
-          if (buffer.length > MAX_CONVERSION_SIZE) {
-            log.info('XLSX too large for preview, forcing download', { documentId, size: buffer.length })
-            return downloadFallback(buffer, fileName, mimeType)
+          // Helper: force-download response when conversion fails
+          const downloadFallback = (buf: Buffer, name: string, contentType: string) => {
+            const h = new Headers()
+            h.set('Content-Type', contentType)
+            h.set('Content-Disposition', `attachment; filename="${name}"`)
+            h.set('Cache-Control', 'public, max-age=3600')
+            return new NextResponse(buf, { headers: h })
           }
-          try {
-            const html = convertXlsxToHtml(buffer, fileName)
-            return new NextResponse(html, { headers: htmlHeaders() })
-          } catch (convError) {
-            log.error('XLSX conversion failed, falling back to download', { documentId, error: convError })
-            return downloadFallback(buffer, fileName, mimeType)
+
+          // DOCX → HTML
+          if (
+            mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            mimeType === 'application/msword'
+          ) {
+            try {
+              const html = await convertDocxToHtml(buffer, fileName)
+              return new NextResponse(html, { headers: htmlHeaders() })
+            } catch (convError) {
+              log.error('DOCX conversion failed, falling back to download', { documentId, error: convError })
+              return downloadFallback(buffer, fileName, mimeType)
+            }
           }
-        }
 
-        // EML → HTML
-        if (mimeType === 'message/rfc822') {
-          try {
-            const html = convertEmlToHtml(buffer, fileName)
-            return new NextResponse(html, { headers: htmlHeaders() })
-          } catch (convError) {
-            log.error('EML conversion failed, falling back to download', { documentId, error: convError })
-            return downloadFallback(buffer, fileName, mimeType)
+          // XLSX → HTML
+          if (
+            mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            mimeType === 'application/vnd.ms-excel'
+          ) {
+            if (buffer.length > MAX_CONVERSION_SIZE) {
+              log.info('XLSX too large for preview, forcing download', { documentId, size: buffer.length })
+              return downloadFallback(buffer, fileName, mimeType)
+            }
+            try {
+              const html = convertXlsxToHtml(buffer, fileName)
+              return new NextResponse(html, { headers: htmlHeaders() })
+            } catch (convError) {
+              log.error('XLSX conversion failed, falling back to download', { documentId, error: convError })
+              return downloadFallback(buffer, fileName, mimeType)
+            }
           }
-        }
 
-        // MSG → HTML (parse with MsgReader, fall back to download on failure)
-        if (mimeType === 'application/vnd.ms-outlook') {
-          try {
-            const html = convertMsgToHtml(buffer, fileName)
-            return new NextResponse(html, { headers: htmlHeaders() })
-          } catch (convError) {
-            log.error('MSG conversion failed, falling back to download', { documentId, error: convError })
-            return downloadFallback(buffer, fileName, mimeType)
+          // EML → HTML
+          if (mimeType === 'message/rfc822') {
+            try {
+              const html = convertEmlToHtml(buffer, fileName)
+              return new NextResponse(html, { headers: htmlHeaders() })
+            } catch (convError) {
+              log.error('EML conversion failed, falling back to download', { documentId, error: convError })
+              return downloadFallback(buffer, fileName, mimeType)
+            }
           }
+
+          // MSG → HTML (parse with MsgReader, fall back to download on failure)
+          if (mimeType === 'application/vnd.ms-outlook') {
+            try {
+              const html = convertMsgToHtml(buffer, fileName)
+              return new NextResponse(html, { headers: htmlHeaders() })
+            } catch (convError) {
+              log.error('MSG conversion failed, falling back to download', { documentId, error: convError })
+              return downloadFallback(buffer, fileName, mimeType)
+            }
+          }
+
+          // Browser-native types (PDF, images, text) → serve raw bytes
+          const headers = new Headers()
+          headers.set('Content-Type', mimeType || 'application/pdf')
+          headers.set('Content-Disposition', `inline; filename="${fileName}"`)
+          headers.set('Content-Security-Policy', PREVIEW_CSP)
+          headers.set('Cache-Control', 'public, max-age=3600')
+
+          return new NextResponse(fileData, { headers })
         }
-
-        // Browser-native types (PDF, images, text) → serve raw bytes
-        const headers = new Headers()
-        headers.set('Content-Type', mimeType || 'application/pdf')
-        headers.set('Content-Disposition', `inline; filename="${fileName}"`)
-        headers.set('Cache-Control', 'public, max-age=3600')
-
-        return new NextResponse(fileData, { headers })
       }
+    }
+
+    // Option 2: If we have a direct storage URL, redirect to it
+    if (document.storage_path && document.storage_path.startsWith('http')) {
+      log.info('Using storage URL for preview', { documentId, storage_path: document.storage_path })
+      const url = new URL(document.storage_path)
+      return NextResponse.redirect(url.toString())
     }
 
     // Option 3: Check for base64 PDF in metadata (fallback)

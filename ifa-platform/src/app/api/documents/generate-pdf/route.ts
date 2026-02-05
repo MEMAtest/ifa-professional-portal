@@ -8,8 +8,9 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createRequestLogger, getRequestMetadata } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext } from '@/lib/auth/apiAuth'
+import { getAuthContext, requirePermission } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 // ✅ FIXED: Removed Supabase dependency and created standalone implementation
 
@@ -185,9 +186,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'api')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const permissionError = requirePermission(auth.context, 'reports:generate')
+    if (permissionError) {
+      return permissionError
     }
 
     const body: PDFGenerationRequest = await parseRequestBody(request)

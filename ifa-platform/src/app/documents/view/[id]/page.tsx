@@ -162,14 +162,18 @@ export default function DocumentViewerPage() {
 
     setSending(true)
     try {
-      const response = await fetch('/api/documents/send-email', {
+      const documentLink = `${window.location.origin}/documents/view/${document.id}`
+      const response = await fetch('/api/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          documentId: document.id,
-          clientEmail: document.metadata.clientEmail,
-          clientName: document.client_name,
-          documentType: document.type
+          type: 'documentSent',
+          recipient: document.metadata.clientEmail,
+          data: {
+            clientName: document.client_name || 'Client',
+            documentName: document.name || 'Document',
+            documentLink
+          }
         })
       })
 

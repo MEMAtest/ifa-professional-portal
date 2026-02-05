@@ -6,6 +6,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { log } from '@/lib/logging/structured'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 // Max file size: 15MB
 const MAX_FILE_SIZE = 15 * 1024 * 1024
@@ -74,6 +75,11 @@ function sniffMagic(buffer: Buffer): 'pdf' | 'png' | 'jpeg' | 'gif' | 'zip' | 'o
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'api')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     // Verify authentication
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {

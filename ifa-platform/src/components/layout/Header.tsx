@@ -320,9 +320,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarOpen, 
           {!isPlatformAdmin && (
             <>
               <NotificationBell />
-              <button className="p-2 text-gray-400 hover:text-gray-600 rounded-md">
-                <Settings className="h-5 w-5" />
-              </button>
             </>
           )}
 

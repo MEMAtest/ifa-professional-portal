@@ -38,6 +38,7 @@ export default function DocumentGenerationButton({
   // Modal states
   const [showViewerModal, setShowViewerModal] = useState(false)
   const [viewerDocumentId, setViewerDocumentId] = useState<string | null>(null)
+  const [viewerDocumentUrl, setViewerDocumentUrl] = useState<string | null>(null)
 
   const handleGenerateDocument = async () => {
     setIsGenerating(true)
@@ -148,6 +149,7 @@ export default function DocumentGenerationButton({
   const handlePreview = () => {
     if (generatedDocument?.id) {
       setViewerDocumentId(generatedDocument.id)
+      setViewerDocumentUrl(generatedDocument.pdfUrl || generatedDocument.url || null)
       setShowViewerModal(true)
       setShowOptions(false)
     }
@@ -174,16 +176,20 @@ export default function DocumentGenerationButton({
     }
 
     try {
-      const response = await fetch('/api/documents/send-email', {
+      const documentLink = `${window.location.origin}/documents/view/${generatedDocument.id}`
+      const response = await fetch('/api/notifications/send-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          documentId: generatedDocument.id,
-          clientEmail,
-          clientName,
-          documentType: assessmentType
+          type: 'documentSent',
+          recipient: clientEmail,
+          data: {
+            clientName: clientName || 'Client',
+            documentName: generatedDocument.name || `${getAssessmentTypeName(assessmentType)} Report`,
+            documentLink
+          }
         })
       })
 
@@ -371,11 +377,14 @@ export default function DocumentGenerationButton({
           onClose={() => {
             setShowViewerModal(false)
             setViewerDocumentId(null)
+            setViewerDocumentUrl(null)
           }}
           documentId={viewerDocumentId}
+          documentUrl={viewerDocumentUrl || undefined}
           documentName={`${getAssessmentTypeName(assessmentType)} Report`}
           clientName={clientName}
           clientEmail={clientEmail}
+          defaultFullscreen={false}
         />
       )}
     </div>

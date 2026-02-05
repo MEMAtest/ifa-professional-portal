@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +18,10 @@ export async function GET(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'assessments:read')
+    if (permissionError) {
+      return permissionError
     }
 
     const { searchParams } = new URL(request.url)

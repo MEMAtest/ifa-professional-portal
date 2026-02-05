@@ -123,14 +123,14 @@ export async function POST(
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text().catch(() => '')
       log.warn('Field AI generation failed', { status: aiResponse.status, errorText })
-      return NextResponse.json({ error: 'AI generation failed' }, { status: 502 })
+      return NextResponse.json({ error: 'AI currently unavailable' }, { status: 503 })
     }
 
     const aiPayload = await aiResponse.json()
     const generatedText = extractGeneratedText(aiPayload?.content || '')
 
     if (!generatedText) {
-      return NextResponse.json({ error: 'AI response was empty' }, { status: 502 })
+      return NextResponse.json({ error: 'AI currently unavailable' }, { status: 503 })
     }
 
     return NextResponse.json({

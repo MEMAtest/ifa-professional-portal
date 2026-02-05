@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 // src/app/api/documents/save-report/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
@@ -17,6 +17,10 @@ export async function POST(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult
 
@@ -50,6 +54,7 @@ export async function POST(request: NextRequest) {
     if (uploadError) throw uploadError
 
     // Create document record
+    const normalizedType = `${assessmentType}_report`
     const { data: document, error: dbError } = await supabase
       .from('documents')
       .insert({
@@ -58,8 +63,9 @@ export async function POST(request: NextRequest) {
         created_by: auth.context.userId,
         assessment_id: assessmentId,
         name: fileName,
-        type: `${assessmentType}_report`,
-        category: 'assessment_report',
+        type: normalizedType,
+        document_type: normalizedType,
+        category: 'Assessment Reports',
         file_path: filePath,
         status: 'completed',
         metadata,

@@ -79,8 +79,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Generate unique document ID
     const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    const fileName = `${body.title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`
-    const filePath = `documents/${firmId}/${documentId}/${fileName}`
+    const safeTitle = body.title.replace(/[^a-zA-Z0-9]/g, '_')
+    const fileName = `${safeTitle}_${Date.now()}.pdf`
+    const filePath = `firms/${firmId}/documents/${fileName}`
 
     const metadata = {
       templateId: body.templateId,
@@ -95,6 +96,93 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const documentType = (metadata as any)?.document_type || (isFileReview ? 'compliance_document' : 'generated_document')
     const type = (metadata as any)?.type || (isFileReview ? 'file_review' : 'generated')
 
+    const stripHtml = (html: string) => {
+      return html
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<\/(p|div|br|li|tr|h1|h2|h3|h4|h5|h6)>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim()
+    }
+
+    const plainText = stripHtml(body.content)
+    const { jsPDF } = await import('jspdf')
+    const pdfDoc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const pageWidth = pdfDoc.internal.pageSize.getWidth()
+    const pageHeight = pdfDoc.internal.pageSize.getHeight()
+    const margin = 48
+    const lineHeight = 16
+    const maxWidth = pageWidth - margin * 2
+    const lines = pdfDoc.splitTextToSize(plainText || ' ', maxWidth)
+
+    let cursorY = margin
+    lines.forEach((line: string) => {
+      if (cursorY + lineHeight > pageHeight - margin) {
+        pdfDoc.addPage()
+        cursorY = margin
+      }
+      pdfDoc.text(line, margin, cursorY)
+      cursorY += lineHeight
+    })
+
+    const buildPdfBuffer = () => {
+      try {
+        const nodeBuffer = pdfDoc.output('nodebuffer') as unknown
+        if (nodeBuffer && Buffer.isBuffer(nodeBuffer)) {
+          return nodeBuffer as Buffer
+        }
+        if (nodeBuffer instanceof Uint8Array) {
+          return Buffer.from(nodeBuffer)
+        }
+      } catch {
+        // Fall back to arraybuffer output
+      }
+
+      const pdfArrayBuffer = pdfDoc.output('arraybuffer') as ArrayBuffer
+      let buffer = Buffer.from(pdfArrayBuffer)
+      if (buffer.length === 0) {
+        try {
+          const dataUri = pdfDoc.output('datauristring') as string
+          const base64 = dataUri.split(',')[1] || ''
+          buffer = Buffer.from(base64, 'base64')
+        } catch {
+          // Ignore, we'll return empty buffer and error upstream
+        }
+      }
+      return buffer
+    }
+
+    let pdfBuffer = buildPdfBuffer()
+    if (pdfBuffer.length === 0) {
+      // Ensure we don't store an empty PDF
+      pdfDoc.text(' ', margin, margin)
+      pdfBuffer = buildPdfBuffer()
+    }
+
+    // Upload PDF content to storage so previews work reliably
+    const contentBuffer = pdfBuffer
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(filePath, contentBuffer, {
+        contentType: 'application/pdf',
+        upsert: false,
+        cacheControl: '3600'
+      })
+
+    if (uploadError) {
+      log.error('Document upload error', uploadError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to upload document content' },
+        { status: 500 }
+      )
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(filePath)
+
     // Create document record in database
     const { data: document, error: dbError } = await supabase
       .from('documents')
@@ -104,9 +192,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         category,
         file_name: fileName,
         file_path: filePath,
-        storage_path: filePath,
-        file_type: 'application/pdf',
+        storage_path: urlData?.publicUrl || filePath,
+        file_type: 'pdf',
         mime_type: 'application/pdf',
+        file_size: contentBuffer.length,
         type,
         document_type: documentType,
         firm_id: firmId,
@@ -114,7 +203,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         created_by: userId,
         status: 'active',
         compliance_status: 'pending',
-        metadata
+        metadata: {
+          ...metadata,
+          html_content: body.content
+        }
       })
       .select()
       .single()

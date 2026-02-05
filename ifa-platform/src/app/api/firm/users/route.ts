@@ -42,24 +42,53 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    // Get all profiles in the firm with user email (status column not in generated types)
-    const { data: profiles, error } = await (supabase
-      .from('profiles') as any)
-      .select(`
-        id,
-        first_name,
-        last_name,
-        role,
-        status,
-        firm_id,
-        phone,
-        avatar_url,
-        last_login_at,
-        created_at,
-        updated_at
-      `)
+    // Get all profiles in the firm (be resilient to schema differences)
+    let profiles: any[] | null = null
+    let error: any = null
+
+    const fullSelect = `
+      id,
+      first_name,
+      last_name,
+      role,
+      status,
+      firm_id,
+      phone,
+      avatar_url,
+      last_login_at,
+      created_at,
+      updated_at
+    `
+
+    const minimalSelect = `
+      id,
+      first_name,
+      last_name,
+      role,
+      firm_id,
+      created_at,
+      updated_at
+    `
+
+    const fullQuery = await (supabase.from('profiles') as any)
+      .select(fullSelect)
       .eq('firm_id', firmIdResult.firmId)
       .order('created_at', { ascending: false })
+
+    profiles = fullQuery.data
+    error = fullQuery.error
+
+    if (error && error.code === '42703') {
+      log.warn('[Users API] Profile schema mismatch, falling back to minimal select', {
+        error: error.message || String(error)
+      })
+      const minimalQuery = await (supabase.from('profiles') as any)
+        .select(minimalSelect)
+        .eq('firm_id', firmIdResult.firmId)
+        .order('created_at', { ascending: false })
+      profiles = minimalQuery.data
+      error = minimalQuery.error
+    }
 
     if (error) {
       log.error('[Users API] Error fetching users:', error)
@@ -67,15 +96,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Get emails using RPC function (SECURITY DEFINER to access auth.users, not in generated types)
-    const { data: emailData } = await (supabase as any)
-      .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
-
-    // Create a map of user_id -> email for quick lookup
     const emailMap = new Map<string, string>()
-    if (emailData) {
-      for (const item of emailData as { user_id: string; email: string }[]) {
-        emailMap.set(item.user_id, item.email)
+    try {
+      const { data: emailData, error: emailError } = await (supabase as any)
+        .rpc('get_firm_user_emails', { firm_uuid: firmIdResult.firmId })
+
+      if (emailError) {
+        log.warn('[Users API] Unable to load user emails via RPC', {
+          error: emailError.message || String(emailError)
+        })
+      } else if (emailData) {
+        for (const item of emailData as { user_id: string; email: string }[]) {
+          emailMap.set(item.user_id, item.email)
+        }
       }
+    } catch (err) {
+      log.warn('[Users API] Email RPC failed, continuing without emails', {
+        error: err instanceof Error ? err.message : String(err)
+      })
     }
 
     const users: FirmUser[] = (profiles ?? []).map((profile: {
@@ -92,7 +130,7 @@ export async function GET(request: NextRequest) {
       updated_at: string
     }) => ({
       id: profile.id,
-      email: emailMap.get(profile.id) || '',
+      email: emailMap.get(profile.id) || (profile as any).email || '',
       firstName: profile.first_name,
       lastName: profile.last_name,
       fullName: `${profile.first_name} ${profile.last_name}`.trim(),

@@ -46,10 +46,13 @@ export interface UserInvitation {
   role: UserRole
   invitedBy?: string
   invitedByName?: string
-  token: string
+  token?: string
   expiresAt: Date
   acceptedAt?: Date
   createdAt: Date
+  inviteUrl?: string
+  emailSent?: boolean
+  warning?: string
 }
 
 export interface InviteUserInput {

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
 import { parseRequestBody } from '@/app/api/utils'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 
 // Review type configurations
@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'clients:read')
+    if (permissionError) {
+      return permissionError
     }
     const supabase = getSupabaseServiceClient()
     const userId = auth.context.userId
@@ -190,6 +194,10 @@ export async function POST(request: NextRequest) {
     if (!('firmId' in firmResult)) {
       return firmResult
     }
+    const permissionError = requirePermission(auth.context, 'clients:write')
+    if (permissionError) {
+      return permissionError
+    }
     const supabase = getSupabaseServiceClient()
     const userId = auth.context.userId
 
@@ -274,6 +282,10 @@ export async function PATCH(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'clients:write')
+    if (permissionError) {
+      return permissionError
     }
     const supabase = getSupabaseServiceClient()
     const userId = auth.context.userId
@@ -376,6 +388,10 @@ export async function DELETE(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'clients:write')
+    if (permissionError) {
+      return permissionError
     }
     const supabase = getSupabaseServiceClient()
     const userId = auth.context.userId

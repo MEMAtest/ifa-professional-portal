@@ -72,11 +72,28 @@ export default function TeamSetupStep({ onNext, onBack, onSkip }: TeamSetupStepP
     }
 
     try {
-      await inviteUserAsync({ email: email.trim(), role: role as UserRole })
-      toast({
-        title: 'Invitation sent',
-        description: `An invitation has been sent to ${email}.`,
-      })
+      const invitation = await inviteUserAsync({ email: email.trim(), role: role as UserRole })
+
+      if (invitation?.emailSent === false && invitation.inviteUrl) {
+        try {
+          await navigator.clipboard.writeText(invitation.inviteUrl)
+          toast({
+            title: 'Invite link copied',
+            description: 'Email delivery failed. The invite link has been copied so you can share it manually.',
+          })
+        } catch {
+          toast({
+            title: 'Email failed',
+            description: `Email delivery failed. Share this invite link manually: ${invitation.inviteUrl}`,
+            variant: 'destructive',
+          })
+        }
+      } else {
+        toast({
+          title: 'Invitation sent',
+          description: `An invitation has been sent to ${email}.`,
+        })
+      }
       setEmail('')
       setRole('advisor')
     } catch (err) {

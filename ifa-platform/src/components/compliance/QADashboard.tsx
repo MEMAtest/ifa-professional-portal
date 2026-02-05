@@ -33,6 +33,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/hooks/use-toast'
 import clientLogger from '@/lib/logging/clientLogger'
+import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import FileReviewModal from './FileReviewModal'
 import { WorkflowBoard, WORKFLOW_CONFIGS } from './workflow'
@@ -91,6 +92,7 @@ type FilterTab = 'pending' | 'my-reviews' | 'completed' | 'all' | 'overdue'
 export default function QADashboard({ onStatsChange, initialFilter, riskFilter }: Props) {
   const supabase = createClient()
   const { toast } = useToast()
+  const { user } = useAuth()
   const router = useRouter()
 
   // State
@@ -139,27 +141,10 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
       clientsData?.forEach((c: any) => clientsMap.set(c.id, c))
 
       // Now fetch reviews without foreign key joins
-      let query = supabase
+      const query = supabase
         .from('file_reviews')
         .select('*')
         .order('created_at', { ascending: false })
-
-      // Apply filters
-      if (activeFilter === 'pending') {
-        query = query.eq('status', 'pending')
-      } else if (activeFilter === 'completed') {
-        query = query.in('status', ['approved', 'rejected'])
-      } else if (activeFilter === 'overdue') {
-        // Filter for overdue: not completed and due_date in the past
-        query = query.in('status', ['pending', 'in_progress'])
-        query = query.lt('due_date', new Date().toISOString())
-      }
-      // 'my-reviews' and 'all' show all reviews (would filter by reviewer_id in production)
-
-      // Apply risk filter if provided
-      if (activeRiskFilter) {
-        query = query.eq('risk_rating', activeRiskFilter)
-      }
 
       const { data, error } = await query
 
@@ -185,7 +170,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     } finally {
       setLoading(false)
     }
-  }, [supabase, activeFilter, activeRiskFilter])
+  }, [supabase])
 
   useEffect(() => {
     loadReviews()
@@ -211,8 +196,31 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     return `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
   }
 
-  // Filter reviews by search term
+  const getReviewerLabel = (review: FileReview): string => {
+    return review.reviewer_name || getProfileName(review.reviewer)
+  }
+
+  const getAdviserLabel = (review: FileReview): string => {
+    return review.adviser_name || getProfileName(review.adviser)
+  }
+
+  const matchesActiveFilter = (review: FileReview) => {
+    if (activeFilter === 'pending') return review.status === 'pending'
+    if (activeFilter === 'completed') return ['approved', 'rejected'].includes(review.status)
+    if (activeFilter === 'overdue') {
+      return ['pending', 'in_progress'].includes(review.status) &&
+        Boolean(review.due_date && new Date(review.due_date) < new Date())
+    }
+    if (activeFilter === 'my-reviews') {
+      return Boolean(user?.id && review.reviewer_id === user.id)
+    }
+    return true
+  }
+
+  // Filter reviews by active filter, risk filter, and search term
   const filteredReviews = reviews.filter(review => {
+    if (!matchesActiveFilter(review)) return false
+    if (activeRiskFilter && review.risk_rating !== activeRiskFilter) return false
     if (!searchTerm) return true
     const clientName = getClientName(review)
     return clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -324,7 +332,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     return new Date(dueDate) < new Date()
   }
 
-  const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject' | 'escalate', reviewerDisplayName?: string) => {
+  const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject' | 'escalate') => {
     try {
       const statusMap = {
         approve: 'approved',
@@ -332,27 +340,16 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
         escalate: 'escalated'
       }
 
-      const now = new Date().toISOString()
-      const updateData: Record<string, any> = {
-        status: statusMap[action],
-        completed_at: action !== 'escalate' ? now : null,
-        // Maker/Checker workflow: Record reviewer completion
-        reviewer_completed_at: now,
-        reviewer_name: reviewerDisplayName || 'Current User' // TODO: Get from auth context
+      const response = await fetch(`/api/compliance/file-reviews/${reviewId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: statusMap[action] })
+      })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody?.error || 'Failed to update review')
       }
-
-      // If this is the first action on a pending review, also mark reviewer_started_at
-      const review = reviews.find(r => r.id === reviewId)
-      if (review && !review.reviewer_started_at) {
-        updateData.reviewer_started_at = now
-      }
-
-      const { error } = await supabase
-        .from('file_reviews')
-        .update(updateData)
-        .eq('id', reviewId)
-
-      if (error) throw error
 
       toast({
         title: 'Review Updated',
@@ -377,9 +374,10 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
     setShowReviewModal(true)
   }
 
+  const myReviewCount = user?.id ? reviews.filter(r => r.reviewer_id === user.id).length : 0
   const filterTabs = [
     { key: 'pending' as FilterTab, label: 'Pending', count: reviews.filter(r => r.status === 'pending').length },
-    { key: 'my-reviews' as FilterTab, label: 'My Reviews', count: reviews.length },
+    { key: 'my-reviews' as FilterTab, label: 'My Reviews', count: myReviewCount },
     { key: 'completed' as FilterTab, label: 'Completed', count: reviews.filter(r => ['approved', 'rejected'].includes(r.status)).length },
     { key: 'all' as FilterTab, label: 'All', count: reviews.length }
   ]
@@ -682,14 +680,14 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
                         <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
                           <span className="flex items-center" title={review.adviser_submitted_at ? `Submitted: ${formatDate(review.adviser_submitted_at)}` : ''}>
                             <User className="h-3 w-3 mr-1" />
-                            Adviser: {review.adviser_name || getProfileName(review.adviser)}
+                            Adviser: {getAdviserLabel(review)}
                             {review.adviser_submitted_at && (
                               <CheckCircle className="h-3 w-3 ml-1 text-green-500" />
                             )}
                           </span>
                           <span className="flex items-center" title={review.reviewer_completed_at ? `Completed: ${formatDate(review.reviewer_completed_at)}` : ''}>
                             <Eye className="h-3 w-3 mr-1" />
-                            Reviewer: {review.reviewer_name || getProfileName(review.reviewer)}
+                            Reviewer: {getReviewerLabel(review)}
                             {review.reviewer_completed_at && (
                               <CheckCircle className="h-3 w-3 ml-1 text-green-500" />
                             )}
@@ -799,6 +797,7 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
                       <th className="text-left p-3 font-medium text-gray-600">Risk</th>
                       <th className="text-left p-3 font-medium text-gray-600">Due Date</th>
                       <th className="text-left p-3 font-medium text-gray-600">Adviser</th>
+                      <th className="text-left p-3 font-medium text-gray-600">Reviewer</th>
                       <th className="text-center p-3 font-medium text-gray-600">Action</th>
                     </tr>
                   </thead>
@@ -841,7 +840,12 @@ export default function QADashboard({ onStatsChange, initialFilter, riskFilter }
                           </td>
                           <td className="p-3">
                             <span className="text-xs text-gray-600">
-                              {review.adviser_name || getProfileName(review.adviser)}
+                              {getAdviserLabel(review)}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="text-xs text-gray-600">
+                              {getReviewerLabel(review)}
                             </span>
                           </td>
                           <td className="p-3 text-center">
@@ -969,52 +973,45 @@ function CreateReviewModal({
 
     setSubmitting(true)
     try {
-      // Default checklist items
-      const defaultChecklist = {
-        'client_suitability': false,
-        'risk_profile_current': false,
-        'capacity_for_loss': false,
-        'product_recommendations': false,
-        'fees_disclosed': false,
-        'documentation_complete': false,
-        'aml_checks': false,
-        'consumer_duty': false
-      }
-
       // Get adviser name for workflow tracking
       const selectedAdviser = advisers.find(a => a.id === formData.adviser_id)
+      const selectedReviewer = advisers.find(a => a.id === formData.reviewer_id)
       const adviserDisplayName = selectedAdviser
         ? `${selectedAdviser.first_name || ''} ${selectedAdviser.last_name || ''}`.trim()
         : 'Unknown Adviser'
+      const reviewerDisplayName = selectedReviewer
+        ? `${selectedReviewer.first_name || ''} ${selectedReviewer.last_name || ''}`.trim()
+        : 'Reviewer'
 
-      const { error } = await supabase
-        .from('file_reviews')
-        .insert({
+      const response = await fetch('/api/compliance/file-reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           client_id: formData.client_id,
           adviser_id: formData.adviser_id,
           reviewer_id: formData.reviewer_id,
           review_type: formData.review_type,
           due_date: formData.due_date || null,
-          risk_rating: formData.risk_rating,
-          checklist: defaultChecklist,
-          status: 'pending',
-          // Maker/Checker workflow: Record adviser submission
-          adviser_submitted_at: new Date().toISOString(),
-          adviser_name: adviserDisplayName
+          risk_rating: formData.risk_rating
         })
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        throw new Error(errorBody?.error || 'Failed to create review')
+      }
 
       toast({
         title: 'Review Created',
-        description: 'New file review has been created successfully'
+        description: `Assigned to ${reviewerDisplayName}. ${adviserDisplayName} will see the submission in QA reviews.`
       })
       onCreated()
     } catch (error) {
       clientLogger.error('Error creating review:', error)
+      const message = error instanceof Error ? error.message : 'Failed to create review'
       toast({
         title: 'Error',
-        description: 'Failed to create review',
+        description: message,
         variant: 'destructive'
       })
     } finally {

@@ -616,6 +616,9 @@ export class DocumentTemplateService {
           { key: 'CLIENT_NAME', label: 'Client Name', type: 'text', required: true },
           { key: 'ADVISOR_NAME', label: 'Advisor Name', type: 'text', required: true },
           { key: 'REPORT_DATE', label: 'Report Date', type: 'date', required: true },
+          { key: 'FIRM_NAME', label: 'Firm Name', type: 'text', required: false },
+          { key: 'FIRM_FCA_NUMBER', label: 'FCA Number', type: 'text', required: false },
+          { key: 'FIRM_ADDRESS', label: 'Firm Address', type: 'text', required: false },
           { key: 'RISK_PROFILE', label: 'Risk Profile', type: 'text', required: true },
           { key: 'INVESTMENT_AMOUNT', label: 'Investment Amount', type: 'number', required: true },
           { key: 'RECOMMENDATION', label: 'Recommendation', type: 'text', required: true }
@@ -630,6 +633,9 @@ export class DocumentTemplateService {
         variables: [
           { key: 'CLIENT_NAME', label: 'Client Name', type: 'text', required: true },
           { key: 'ASSESSMENT_DATE', label: 'Assessment Date', type: 'date', required: true },
+          { key: 'FIRM_NAME', label: 'Firm Name', type: 'text', required: false },
+          { key: 'FIRM_FCA_NUMBER', label: 'FCA Number', type: 'text', required: false },
+          { key: 'FIRM_ADDRESS', label: 'Firm Address', type: 'text', required: false },
           { key: 'COMPLETION_PERCENTAGE', label: 'Completion %', type: 'number', required: true }
         ],
         content: this.getDraftReportTemplate()
@@ -642,6 +648,9 @@ export class DocumentTemplateService {
         variables: [
           { key: 'CLIENT_NAME', label: 'Client Name', type: 'text', required: true },
           { key: 'REVIEW_DATE', label: 'Review Date', type: 'date', required: true },
+          { key: 'FIRM_NAME', label: 'Firm Name', type: 'text', required: false },
+          { key: 'FIRM_FCA_NUMBER', label: 'FCA Number', type: 'text', required: false },
+          { key: 'FIRM_ADDRESS', label: 'Firm Address', type: 'text', required: false },
           { key: 'ADVISOR_NAME', label: 'Advisor Name', type: 'text', required: true }
         ],
         content: this.getAnnualReviewTemplate()
@@ -654,6 +663,9 @@ export class DocumentTemplateService {
         variables: [
           { key: 'CLIENT_NAME', label: 'Client Name', type: 'text', required: true },
           { key: 'AGREEMENT_DATE', label: 'Agreement Date', type: 'date', required: true },
+          { key: 'FIRM_NAME', label: 'Firm Name', type: 'text', required: false },
+          { key: 'FIRM_FCA_NUMBER', label: 'FCA Number', type: 'text', required: false },
+          { key: 'FIRM_ADDRESS', label: 'Firm Address', type: 'text', required: false },
           { key: 'SERVICE_LEVEL', label: 'Service Level', type: 'text', required: true }
         ],
         content: this.getClientAgreementTemplate()
@@ -730,6 +742,7 @@ ${Object.entries(metadata).map(([key, value]) => `${key}: ${value}`).join('\n')}
     <p>Prepared for: <strong>[CLIENT_NAME]</strong></p>
     <p>Date: <strong>[REPORT_DATE]</strong></p>
     <p>Advisor: <strong>[ADVISOR_NAME]</strong></p>
+    <p>Firm: <strong>[FIRM_NAME]</strong> <span style="color:#718096;">(FCA [FIRM_FCA_NUMBER])</span></p>
   </div>
 
   <div class="section">
@@ -850,6 +863,9 @@ ${Object.entries(metadata).map(([key, value]) => `${key}: ${value}`).join('\n')}
 </head>
 <body>
   <div class="letterhead">
+    <p><strong>[FIRM_NAME]</strong></p>
+    <p>[FIRM_ADDRESS]</p>
+    <p>FCA: [FIRM_FCA_NUMBER]</p>
     <p>[REVIEW_DATE]</p>
   </div>
 
@@ -902,6 +918,8 @@ ${Object.entries(metadata).map(([key, value]) => `${key}: ${value}`).join('\n')}
     <h1>Client Service Agreement</h1>
     <p>This agreement is made on <strong>[AGREEMENT_DATE]</strong></p>
     <p>Between the advisory firm and <strong>[CLIENT_NAME]</strong></p>
+    <p><strong>[FIRM_NAME]</strong> — FCA [FIRM_FCA_NUMBER]</p>
+    <p>[FIRM_ADDRESS]</p>
   </div>
 
   <div class="section">

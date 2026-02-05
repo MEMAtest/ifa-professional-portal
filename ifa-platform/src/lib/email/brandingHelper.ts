@@ -98,6 +98,7 @@ function sanitizeHtml(html: string): string {
       'th': ['style', 'width', 'colspan', 'rowspan']
     },
     allowedSchemes: ['https', 'mailto'],
+    allowProtocolRelative: false,
     allowedStyles: {
       '*': {
         'color': [/.*/],

@@ -8,7 +8,7 @@ import { z } from 'zod'
 import { sendNotificationEmail } from '@/services/emailService'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
 
@@ -63,9 +63,21 @@ export async function POST(request: NextRequest) {
     if (!('firmId' in firmResult)) {
       return firmResult
     }
+    const permissionError = requirePermission(auth.context, 'documents:sign')
+    if (permissionError) {
+      return permissionError
+    }
     const { firmId } = firmResult
 
-    const body: CreateSignatureRequest = await parseRequestBody(request, requestSchema)
+    let body: CreateSignatureRequest
+    try {
+      body = await parseRequestBody(request, requestSchema)
+    } catch (parseError) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body' },
+        { status: 400 }
+      )
+    }
     logger.debug('CREATE SIGNATURE: Request body', { documentId: body.documentId, clientId: body.clientId, signerCount: body.signers?.length })
 
     const { documentId, clientId, templateId, signers, options = {} } = body
@@ -138,23 +150,71 @@ export async function POST(request: NextRequest) {
 
     // Create signature request record using basic schema
     // (using recipient_name/recipient_email instead of signers JSONB)
-    const signatureRequestData: any = {
+    const primaryPayload: any = {
       client_id: clientId || null,
       document_id: documentId || null,
       firm_id: firmId,
       created_by: auth.context.userId,
       recipient_name: signers[0]?.name || '',
       recipient_email: signers[0]?.email || '',
+      recipient_role: signers[0]?.role || 'Client',
+      expires_at: expiryDate.toISOString(),
       status: 'pending'
     }
 
-    logger.debug('CREATE SIGNATURE: Creating signature request', { clientId: signatureRequestData.client_id, documentId: signatureRequestData.document_id })
+    const fallbackPayloads: any[] = [
+      {
+        client_id: clientId || null,
+        document_id: documentId || null,
+        recipient_name: signers[0]?.name || '',
+        recipient_email: signers[0]?.email || '',
+        status: 'pending'
+      },
+      {
+        document_id: documentId || null,
+        recipient_name: signers[0]?.name || '',
+        recipient_email: signers[0]?.email || '',
+        status: 'pending'
+      },
+      {
+        recipient_name: signers[0]?.name || '',
+        recipient_email: signers[0]?.email || '',
+        status: 'pending'
+      }
+    ]
 
-    const { data: signatureRequest, error: insertError } = await (supabase
-      .from('signature_requests') as any)
-      .insert(signatureRequestData)
-      .select()
-      .single()
+    const attemptInsert = async (payload: any) => {
+      return await (supabase
+        .from('signature_requests') as any)
+        .insert(payload)
+        .select()
+        .single()
+    }
+
+    logger.debug('CREATE SIGNATURE: Creating signature request', { clientId, documentId })
+
+    let insertResult = await attemptInsert(primaryPayload)
+    let insertError = insertResult.error
+
+    if (insertError && (insertError.message?.includes('does not exist') || insertError.code === '42P01')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Signature requests table not yet created.',
+        code: 'TABLE_NOT_FOUND'
+      }, { status: 500 })
+    }
+
+    if (insertError && (insertError.code === '42703' || insertError.message?.includes('column') || insertError.message?.includes('schema cache'))) {
+      logger.warn('CREATE SIGNATURE: Falling back to legacy schema', { error: insertError.message })
+
+      for (const payload of fallbackPayloads) {
+        insertResult = await attemptInsert(payload)
+        insertError = insertResult.error
+        if (!insertError) break
+      }
+    }
+
+    const signatureRequest = insertResult.data
 
     if (insertError) {
       logger.error('CREATE SIGNATURE: Database insert failed', insertError)

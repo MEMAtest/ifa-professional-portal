@@ -4,7 +4,7 @@ export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
 import type { DbRow } from '@/types/db'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { advisorContextService } from '@/services/AdvisorContextService'
 import { buildClientDossierReportModel } from '@/lib/assessments/clientDossier/buildClientDossierReportModel'
 import { generateClientDossierReportPDF } from '@/lib/pdf-templates/client-dossier-report'
@@ -12,6 +12,7 @@ import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 interface GenerateClientDossierRequest {
   clientId: string
@@ -61,6 +62,11 @@ function safeFileToken(value: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'api')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     // Verify authentication (multi-firm safety)
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
@@ -71,6 +77,10 @@ export async function POST(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'reports:generate')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult
 

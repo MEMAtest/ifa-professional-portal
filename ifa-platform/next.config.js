@@ -9,23 +9,8 @@ function getDevPortFromArgv() {
 const isDev = process.env.NODE_ENV === 'development'
 const devPort = getDevPortFromArgv()
 
-const baseContentSecurityPolicy = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'none'",
-  "img-src 'self' data: https:",
-  "font-src 'self' data: https://fonts.gstatic.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com",
-  "frame-src https://js.stripe.com"
-].join('; ')
-
-const previewContentSecurityPolicy = baseContentSecurityPolicy.replace(
-  "frame-ancestors 'none'",
-  "frame-ancestors 'self' https://www.plannetic.com https://plannetic.com"
-)
+// CSP is now set dynamically in middleware with per-request nonces.
+// See src/middleware.ts for the nonce-based Content-Security-Policy.
 
 const nextConfig = {
   // Avoid .next corruption when multiple `next dev` processes run concurrently.
@@ -120,10 +105,6 @@ const nextConfig = {
             value: 'SAMEORIGIN',
           },
           {
-            key: 'Content-Security-Policy',
-            value: previewContentSecurityPolicy,
-          },
-          {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
@@ -134,6 +115,7 @@ const nextConfig = {
         ],
       },
       // Default security headers for all other routes
+      // Note: Content-Security-Policy is set dynamically in middleware (nonce-based)
       {
         source: '/((?!api/documents/preview).*)',
         headers: [
@@ -148,10 +130,6 @@ const nextConfig = {
           {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
-          },
-          {
-            key: 'Content-Security-Policy',
-            value: baseContentSecurityPolicy,
           },
           {
             key: 'Referrer-Policy',

@@ -53,8 +53,13 @@ export async function POST(request: NextRequest) {
     // Simple template population for preview
     let content = template.template_content ?? ''
     Object.entries(variables).forEach(([key, value]) => {
-      const regex = new RegExp(`{{${key}}}`, 'g')
-      content = content.replace(regex, String(value))
+      const safeValue = String(value ?? '')
+      const curlyRegex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')
+      const bracketRegex = new RegExp(`\\[${key}\\]`, 'g')
+      const dollarRegex = new RegExp(`\\$\\{${key}\\}`, 'g')
+      content = content.replace(curlyRegex, safeValue)
+      content = content.replace(bracketRegex, safeValue)
+      content = content.replace(dollarRegex, safeValue)
     })
 
     return NextResponse.json({

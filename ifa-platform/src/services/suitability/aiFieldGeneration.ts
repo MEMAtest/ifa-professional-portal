@@ -20,7 +20,7 @@ export async function generateSuitabilityFieldText(args: {
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))
-    const message = payload?.error || 'AI generation failed'
+    const message = payload?.error || 'AI currently unavailable'
     throw new Error(message)
   }
 

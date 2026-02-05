@@ -5,7 +5,6 @@
 
 export {
   generateCsrfToken,
-  getOrCreateCsrfToken,
   validateCsrfToken,
   validateCsrfWithExemptions,
   csrfError,

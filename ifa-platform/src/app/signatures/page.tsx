@@ -3,14 +3,16 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSignatureRequests } from '@/lib/hooks/useDocuments'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
+import DocumentViewerModal from '@/components/documents/DocumentViewerModal'
 import clientLogger from '@/lib/logging/clientLogger'
+import type { Firm, FirmAddress } from '@/modules/firm/types/firm.types'
 import {
   PenToolIcon,
   ClockIcon,
@@ -44,16 +46,31 @@ interface Template {
   name: string
 }
 
+interface ClientDocument {
+  id: string
+  name?: string
+  file_name?: string
+  document_type?: string
+  category?: string
+  status?: string
+  created_at?: string
+}
+
 export default function SignaturesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
+  const [firm, setFirm] = useState<Firm | null>(null)
   const [selectedClient, setSelectedClient] = useState<string>('')
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+  const [clientDocuments, setClientDocuments] = useState<ClientDocument[]>([])
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
   const [signerEmail, setSignerEmail] = useState('')
   const [signerName, setSignerName] = useState('')
+  const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
+  const [generatingTemplate, setGeneratingTemplate] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -77,6 +94,12 @@ export default function SignaturesPage() {
         if (templatesData.templates) {
           setTemplates(templatesData.templates)
         }
+
+        const firmRes = await fetch('/api/firm')
+        if (firmRes.ok) {
+          const firmData = await firmRes.json()
+          setFirm(firmData)
+        }
       } catch (err) {
         clientLogger.error('Failed to fetch data:', err)
       }
@@ -96,9 +119,126 @@ export default function SignaturesPage() {
     }
   }, [selectedClient, clients])
 
+  const loadClientDocuments = useCallback(async () => {
+    if (!selectedClient) {
+      setClientDocuments([])
+      setSelectedDocumentIds([])
+      return
+    }
+    try {
+      const res = await fetch(`/api/documents/client/${selectedClient}`)
+      const data = await res.json()
+      setClientDocuments(Array.isArray(data?.documents) ? data.documents : [])
+    } catch (err) {
+      clientLogger.error('Failed to fetch client documents:', err)
+      setClientDocuments([])
+    }
+  }, [selectedClient])
+
+  useEffect(() => {
+    void loadClientDocuments()
+  }, [loadClientDocuments])
+
+  const formatFirmAddress = (address?: FirmAddress) => {
+    if (!address) return ''
+    return [address.line1, address.line2, address.city, address.postcode, address.country]
+      .filter(Boolean)
+      .join(', ')
+  }
+
+  const buildTemplateVariables = (client: Client | undefined) => {
+    const displayName = client ? getClientDisplayName(client) : ''
+    return {
+      CLIENT_NAME: displayName,
+      CLIENT_EMAIL: client?.contact_info?.email || '',
+      CLIENT_REF: client?.client_ref || '',
+      REPORT_DATE: new Date().toLocaleDateString('en-GB'),
+      DOCUMENT_TITLE: templates.find(t => t.id === selectedTemplate)?.name || 'Document',
+      FIRM_NAME: firm?.name || '',
+      FIRM_FCA_NUMBER: firm?.fcaNumber || '',
+      FIRM_ADDRESS: formatFirmAddress(firm?.address)
+    }
+  }
+
+  const handleGenerateFromTemplate = async () => {
+    if (!selectedClient || !selectedTemplate) {
+      setCreateError('Select a client and template first')
+      return
+    }
+
+    const client = clients.find(c => c.id === selectedClient)
+    const variables = buildTemplateVariables(client)
+
+    setGeneratingTemplate(true)
+    setCreateError(null)
+
+    try {
+      const previewRes = await fetch('/api/documents/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId: selectedTemplate,
+          variables
+        })
+      })
+
+      if (!previewRes.ok) {
+        throw new Error('Failed to preview template')
+      }
+
+      const previewPayload = await previewRes.json()
+      const previewContent = previewPayload?.preview?.content
+      const previewTitle = previewPayload?.preview?.title || 'Generated Document'
+
+      if (!previewContent) {
+        throw new Error('Template preview is empty')
+      }
+
+      const generateRes = await fetch('/api/documents/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: previewContent,
+          title: previewTitle,
+          clientId: selectedClient,
+          templateId: selectedTemplate,
+          metadata: {
+            category: 'Client Documents',
+            document_type: 'template_document',
+            type: 'template_document',
+            templateId: selectedTemplate
+          }
+        })
+      })
+
+      if (!generateRes.ok) {
+        throw new Error('Failed to generate document from template')
+      }
+
+      const generated = await generateRes.json()
+      const generatedId = generated?.document?.id
+      if (!generatedId) {
+        throw new Error('Generated document missing id')
+      }
+
+      await loadClientDocuments()
+      setSelectedDocumentIds((prev) => (prev.includes(generatedId) ? prev : [...prev, generatedId]))
+      setPreviewDocumentId(generatedId)
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to generate document')
+    } finally {
+      setGeneratingTemplate(false)
+    }
+  }
+
   const handleCreateSignatureRequest = async () => {
     if (!selectedClient || !signerEmail || !signerName) {
       setCreateError('Please fill in all required fields')
+      return
+    }
+
+    if (selectedDocumentIds.length === 0) {
+      setCreateError('Please select at least one document to sign')
       return
     }
 
@@ -106,43 +246,60 @@ export default function SignaturesPage() {
     setCreateError(null)
 
     try {
-      const response = await fetch('/api/signatures/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientId: selectedClient,
-          templateId: selectedTemplate || undefined,
-          signers: [{
-            email: signerEmail,
-            name: signerName,
-            role: 'Client'
-          }],
-          options: {
-            expiryDays: 30,
-            autoReminder: true,
-            remindOnceInEvery: 3
-          }
-        })
-      })
+      const results = await Promise.allSettled(
+        selectedDocumentIds.map((documentId) =>
+          fetch('/api/signatures/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clientId: selectedClient,
+              documentId,
+              templateId: selectedTemplate || undefined,
+              signers: [{
+                email: signerEmail,
+                name: signerName,
+                role: 'Client'
+              }],
+              options: {
+                expiryDays: 30,
+                autoReminder: true,
+                remindOnceInEvery: 3
+              }
+            })
+          }).then(async (response) => {
+            const payload = await response.json().catch(() => ({}))
+            if (!response.ok || !payload?.success) {
+              throw new Error(payload?.error || 'Failed to create signature request')
+            }
+            return payload
+          })
+        )
+      )
 
-      const result = await response.json()
-
-      if (result.success) {
-        setShowCreateModal(false)
-        setSelectedClient('')
-        setSelectedTemplate('')
-        setSignerEmail('')
-        setSignerName('')
-        // Refresh the list
-        window.location.reload()
-      } else {
-        setCreateError(result.error || 'Failed to create signature request')
+      const failed = results.filter((result) => result.status === 'rejected')
+      if (failed.length > 0) {
+        setCreateError(`Failed to create ${failed.length} signature request(s).`)
+        return
       }
+
+      setShowCreateModal(false)
+      setSelectedClient('')
+      setSelectedTemplate('')
+      setSelectedDocumentIds([])
+      setSignerEmail('')
+      setSignerName('')
+      window.location.reload()
     } catch (err) {
       setCreateError('Failed to create signature request')
     } finally {
       setIsCreating(false)
     }
+  }
+
+  const toggleDocumentSelection = (documentId: string) => {
+    setSelectedDocumentIds((prev) => (
+      prev.includes(documentId) ? prev.filter((id) => id !== documentId) : [...prev, documentId]
+    ))
   }
 
   const getClientDisplayName = (client: Client) => {
@@ -450,6 +607,7 @@ export default function SignaturesPage() {
                 onClick={() => {
                   setShowCreateModal(false)
                   setCreateError(null)
+                  setSelectedDocumentIds([])
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -493,14 +651,78 @@ export default function SignaturesPage() {
                   onChange={(e) => setSelectedTemplate(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">No template - upload document</option>
+                  <option value="">Select template (optional)</option>
                   {templates.map((template) => (
                     <option key={template.id} value={template.id}>
                       {template.name}
                     </option>
                   ))}
                 </select>
+                {selectedTemplate && selectedClient && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateFromTemplate}
+                      disabled={generatingTemplate}
+                    >
+                      {generatingTemplate ? 'Generating...' : 'Generate & Preview'}
+                    </Button>
+                    <span className="text-xs text-gray-500">
+                      Creates a document from the selected template.
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {/* Document Picker */}
+              {selectedClient && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Documents to Sign *
+                  </label>
+                  {clientDocuments.length === 0 ? (
+                    <div className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-md p-3">
+                      No documents found for this client.
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-md p-2 max-h-44 overflow-y-auto space-y-2">
+                      {clientDocuments.map((doc) => (
+                        <div key={doc.id} className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedDocumentIds.includes(doc.id)}
+                            onChange={() => toggleDocumentSelection(doc.id)}
+                            className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 truncate">
+                                  {doc.name || doc.file_name || 'Document'}
+                                </div>
+                                <div className="text-xs text-gray-500 truncate">
+                                  {doc.document_type || doc.category || 'Document'} • {doc.status || 'draft'}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDocumentId(doc.id)}
+                                className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                              >
+                                Preview
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2">
+                    One email will be sent per selected document.
+                  </p>
+                </div>
+              )}
 
               {/* Signer Name */}
               <div>
@@ -549,6 +771,7 @@ export default function SignaturesPage() {
                 onClick={() => {
                   setShowCreateModal(false)
                   setCreateError(null)
+                  setSelectedDocumentIds([])
                 }}
                 disabled={isCreating}
               >
@@ -557,7 +780,7 @@ export default function SignaturesPage() {
               <Button
                 className="bg-blue-600 hover:bg-blue-700"
                 onClick={handleCreateSignatureRequest}
-                disabled={isCreating || !selectedClient || !signerEmail || !signerName}
+                disabled={isCreating || !selectedClient || !signerEmail || !signerName || selectedDocumentIds.length === 0}
               >
                 {isCreating ? (
                   <>
@@ -574,6 +797,15 @@ export default function SignaturesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {previewDocumentId && (
+        <DocumentViewerModal
+          isOpen={!!previewDocumentId}
+          onClose={() => setPreviewDocumentId(null)}
+          documentId={previewDocumentId}
+          defaultFullscreen={false}
+        />
       )}
     </Layout>
   )

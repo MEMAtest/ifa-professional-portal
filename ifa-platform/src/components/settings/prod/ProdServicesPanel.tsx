@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -101,6 +102,13 @@ export function ProdServicesPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          These settings feed the Compliance Hub&#8217;s PROD &amp; Services view.{' '}
+          <Link href="/compliance?tab=prod-services" className="font-medium underline">
+            View in Compliance Hub
+          </Link>
+          .
+        </div>
         <div className="flex flex-wrap gap-2">
           {prodServiceSteps.map((step, index) => (
             <button

@@ -1,9 +1,11 @@
 // src/app/providers.tsx
 'use client'
 
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { installFetchWithCsrf } from '@/lib/api/fetchWithCsrf'
+import { initThemePreference } from '@/lib/theme/themePreference'
 
 const ReactQueryDevtools = dynamic(
   () => import('@tanstack/react-query-devtools').then((mod) => mod.ReactQueryDevtools),
@@ -51,6 +53,12 @@ export default function Providers({ children }: { children: ReactNode }) {
   // because React will throw away the client on the initial render if it
   // suspends and there is no boundary
   const queryClient = getQueryClient()
+
+  useEffect(() => {
+    installFetchWithCsrf()
+    const cleanupTheme = initThemePreference()
+    return () => cleanupTheme()
+  }, [])
 
   return (
     <QueryClientProvider client={queryClient}>

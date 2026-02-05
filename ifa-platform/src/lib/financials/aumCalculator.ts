@@ -39,8 +39,9 @@ export interface FirmAUM {
 /**
  * Calculate total investment value from investments array
  */
-export function calculateInvestmentTotal(investments: Investment[] = []): number {
-  return investments.reduce((total, inv) => {
+export function calculateInvestmentTotal(investments: Investment[] | unknown = []): number {
+  const safeInvestments = Array.isArray(investments) ? investments : []
+  return safeInvestments.reduce((total, inv) => {
     return total + (inv.currentValue || 0)
   }, 0)
 }
@@ -49,10 +50,11 @@ export function calculateInvestmentTotal(investments: Investment[] = []): number
  * Calculate total pension value (excluding DB pensions which are income-based)
  * Only includes DC, SIPP, SSAS which have actual fund values
  */
-export function calculatePensionTotal(pensions: PensionArrangement[] = []): number {
+export function calculatePensionTotal(pensions: PensionArrangement[] | unknown = []): number {
+  const safePensions = Array.isArray(pensions) ? pensions : []
   const valuablePensionTypes = ['defined_contribution', 'sipp', 'ssas']
 
-  return pensions.reduce((total, pension) => {
+  return safePensions.reduce((total, pension) => {
     if (valuablePensionTypes.includes(pension.type) && pension.currentValue) {
       return total + pension.currentValue
     }
@@ -142,10 +144,11 @@ export function calculateFirmAUM(clients: Client[]): FirmAUM {
 /**
  * Get investment breakdown by type
  */
-export function getInvestmentBreakdown(investments: Investment[] = []): { type: string; value: number; count: number }[] {
+export function getInvestmentBreakdown(investments: Investment[] | unknown = []): { type: string; value: number; count: number }[] {
+  const safeInvestments = Array.isArray(investments) ? investments : []
   const byType: Record<string, { value: number; count: number }> = {}
 
-  investments.forEach(inv => {
+  safeInvestments.forEach(inv => {
     const type = inv.type || 'other'
     if (!byType[type]) {
       byType[type] = { value: 0, count: 0 }
@@ -164,10 +167,11 @@ export function getInvestmentBreakdown(investments: Investment[] = []): { type: 
 /**
  * Get pension breakdown by type
  */
-export function getPensionBreakdown(pensions: PensionArrangement[] = []): { type: string; value: number; count: number }[] {
+export function getPensionBreakdown(pensions: PensionArrangement[] | unknown = []): { type: string; value: number; count: number }[] {
+  const safePensions = Array.isArray(pensions) ? pensions : []
   const byType: Record<string, { value: number; count: number }> = {}
 
-  pensions.forEach(pension => {
+  safePensions.forEach(pension => {
     const type = pension.type || 'other'
     if (!byType[type]) {
       byType[type] = { value: 0, count: 0 }

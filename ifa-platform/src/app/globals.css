@@ -105,6 +105,33 @@
   }
 }
 
+/* Legacy gray utility overrides for dark mode */
+.dark .bg-gray-50 { background-color: hsl(var(--background)); }
+.dark .bg-gray-100 { background-color: hsl(var(--card)); }
+.dark .bg-white { background-color: hsl(var(--card)); }
+.dark .text-gray-900 { color: hsl(var(--foreground)); }
+.dark .text-gray-800 { color: hsl(var(--foreground)); }
+.dark .text-gray-700 { color: hsl(var(--muted-foreground)); }
+.dark .text-gray-600 { color: hsl(var(--muted-foreground)); }
+.dark .text-gray-500 { color: hsl(var(--muted-foreground)); }
+.dark .border-gray-200 { border-color: hsl(var(--border)); }
+.dark .border-gray-300 { border-color: hsl(var(--border)); }
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+.dark select option {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
 /* Mobile menu button and responsive utilities */
 @media (max-width: 1023px) {
   .sidebar-mobile {

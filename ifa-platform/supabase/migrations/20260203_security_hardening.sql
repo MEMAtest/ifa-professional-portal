@@ -136,34 +136,36 @@ BEGIN
 END $$;
 CREATE INDEX IF NOT EXISTS idx_consumer_duty_status_firm_id ON consumer_duty_status(firm_id);
 
--- 5) Backfill firm_id for assessments where needed
-UPDATE consumer_duty_assessments cda
-SET firm_id = c.firm_id
-FROM clients c
-WHERE cda.client_id = c.id
-  AND cda.firm_id IS NULL;
-
-UPDATE vulnerability_assessments va
-SET firm_id = c.firm_id
-FROM clients c
-WHERE va.client_id = c.id
-  AND va.firm_id IS NULL;
+-- 5) Backfill firm_id for assessments where needed (tables may not exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'consumer_duty_assessments') THEN
+    EXECUTE 'UPDATE consumer_duty_assessments cda SET firm_id = c.firm_id FROM clients c WHERE cda.client_id = c.id AND cda.firm_id IS NULL';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'vulnerability_assessments') THEN
+    EXECUTE 'UPDATE vulnerability_assessments va SET firm_id = c.firm_id FROM clients c WHERE va.client_id = c.id AND va.firm_id IS NULL';
+  END IF;
+END $$;
 
 -- 5b) Add firm_id to assessment_shares (tokened access) and backfill
 ALTER TABLE IF EXISTS assessment_shares
   ADD COLUMN IF NOT EXISTS firm_id UUID REFERENCES firms(id);
-UPDATE assessment_shares s
-SET firm_id = c.firm_id
-FROM clients c
-WHERE s.client_id = c.id
-  AND s.firm_id IS NULL;
-CREATE INDEX IF NOT EXISTS idx_assessment_shares_firm_id ON assessment_shares(firm_id);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'assessment_shares') THEN
+    EXECUTE 'UPDATE assessment_shares s SET firm_id = c.firm_id FROM clients c WHERE s.client_id = c.id AND s.firm_id IS NULL';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_assessment_shares_firm_id ON assessment_shares(firm_id)';
+  END IF;
+END $$;
 
 -- 6) Tighten RLS policies (replace permissive USING (true))
 -- Align legacy review statuses
-UPDATE client_reviews
-SET status = 'scheduled'
-WHERE status = 'pending';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'client_reviews') THEN
+    EXECUTE 'UPDATE client_reviews SET status = ''scheduled'' WHERE status = ''pending''';
+  END IF;
+END $$;
 
 -- Communications
 ALTER TABLE IF EXISTS communications ENABLE ROW LEVEL SECURITY;
@@ -260,41 +262,43 @@ CREATE POLICY "rules_update" ON compliance_rules FOR UPDATE
 CREATE POLICY "rules_delete" ON compliance_rules FOR DELETE
   USING (firm_id = public.get_my_firm_id());
 
--- Vulnerability assessments
+-- Vulnerability assessments (table may not exist)
 ALTER TABLE IF EXISTS vulnerability_assessments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_all_vuln" ON vulnerability_assessments;
-DROP POLICY IF EXISTS "vuln_assessments_select" ON vulnerability_assessments;
-DROP POLICY IF EXISTS "vuln_assessments_insert" ON vulnerability_assessments;
-DROP POLICY IF EXISTS "vuln_assessments_update" ON vulnerability_assessments;
-DROP POLICY IF EXISTS "vuln_assessments_delete" ON vulnerability_assessments;
-CREATE POLICY "vuln_assessments_select" ON vulnerability_assessments FOR SELECT
-  USING (firm_id = public.get_my_firm_id());
-CREATE POLICY "vuln_assessments_insert" ON vulnerability_assessments FOR INSERT
-  WITH CHECK (firm_id = public.get_my_firm_id());
-CREATE POLICY "vuln_assessments_update" ON vulnerability_assessments FOR UPDATE
-  USING (firm_id = public.get_my_firm_id());
-CREATE POLICY "vuln_assessments_delete" ON vulnerability_assessments FOR DELETE
-  USING (firm_id = public.get_my_firm_id());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'vulnerability_assessments') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "allow_all_vuln" ON vulnerability_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "vuln_assessments_select" ON vulnerability_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "vuln_assessments_insert" ON vulnerability_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "vuln_assessments_update" ON vulnerability_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "vuln_assessments_delete" ON vulnerability_assessments';
+    EXECUTE 'CREATE POLICY "vuln_assessments_select" ON vulnerability_assessments FOR SELECT USING (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "vuln_assessments_insert" ON vulnerability_assessments FOR INSERT WITH CHECK (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "vuln_assessments_update" ON vulnerability_assessments FOR UPDATE USING (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "vuln_assessments_delete" ON vulnerability_assessments FOR DELETE USING (firm_id = public.get_my_firm_id())';
+  END IF;
+END $$;
 
--- Consumer duty assessments
+-- Consumer duty assessments (table may not exist)
 ALTER TABLE IF EXISTS consumer_duty_assessments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "allow_all_cd" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "cd_assessments_select" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "cd_assessments_insert" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "cd_assessments_update" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "cd_assessments_delete" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "consumer_duty_assessments_select" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "consumer_duty_assessments_insert" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "consumer_duty_assessments_update" ON consumer_duty_assessments;
-DROP POLICY IF EXISTS "consumer_duty_assessments_delete" ON consumer_duty_assessments;
-CREATE POLICY "consumer_duty_assessments_select" ON consumer_duty_assessments FOR SELECT
-  USING (firm_id = public.get_my_firm_id());
-CREATE POLICY "consumer_duty_assessments_insert" ON consumer_duty_assessments FOR INSERT
-  WITH CHECK (firm_id = public.get_my_firm_id());
-CREATE POLICY "consumer_duty_assessments_update" ON consumer_duty_assessments FOR UPDATE
-  USING (firm_id = public.get_my_firm_id());
-CREATE POLICY "consumer_duty_assessments_delete" ON consumer_duty_assessments FOR DELETE
-  USING (firm_id = public.get_my_firm_id());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'consumer_duty_assessments') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "allow_all_cd" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "cd_assessments_select" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "cd_assessments_insert" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "cd_assessments_update" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "cd_assessments_delete" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "consumer_duty_assessments_select" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "consumer_duty_assessments_insert" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "consumer_duty_assessments_update" ON consumer_duty_assessments';
+    EXECUTE 'DROP POLICY IF EXISTS "consumer_duty_assessments_delete" ON consumer_duty_assessments';
+    EXECUTE 'CREATE POLICY "consumer_duty_assessments_select" ON consumer_duty_assessments FOR SELECT USING (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "consumer_duty_assessments_insert" ON consumer_duty_assessments FOR INSERT WITH CHECK (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "consumer_duty_assessments_update" ON consumer_duty_assessments FOR UPDATE USING (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "consumer_duty_assessments_delete" ON consumer_duty_assessments FOR DELETE USING (firm_id = public.get_my_firm_id())';
+  END IF;
+END $$;
 
 -- Consumer duty status
 ALTER TABLE IF EXISTS consumer_duty_status ENABLE ROW LEVEL SECURITY;
@@ -315,6 +319,10 @@ CREATE POLICY "consumer_duty_status_delete" ON consumer_duty_status FOR DELETE
 -- AML tables
 ALTER TABLE IF EXISTS aml_client_status ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all aml_client_status" ON aml_client_status;
+DROP POLICY IF EXISTS "aml_client_status_select" ON aml_client_status;
+DROP POLICY IF EXISTS "aml_client_status_insert" ON aml_client_status;
+DROP POLICY IF EXISTS "aml_client_status_update" ON aml_client_status;
+DROP POLICY IF EXISTS "aml_client_status_delete" ON aml_client_status;
 CREATE POLICY "aml_client_status_select" ON aml_client_status FOR SELECT
   USING (firm_id = public.get_my_firm_id());
 CREATE POLICY "aml_client_status_insert" ON aml_client_status FOR INSERT
@@ -326,6 +334,10 @@ CREATE POLICY "aml_client_status_delete" ON aml_client_status FOR DELETE
 
 ALTER TABLE IF EXISTS aml_check_history ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all aml_check_history" ON aml_check_history;
+DROP POLICY IF EXISTS "aml_check_history_select" ON aml_check_history;
+DROP POLICY IF EXISTS "aml_check_history_insert" ON aml_check_history;
+DROP POLICY IF EXISTS "aml_check_history_update" ON aml_check_history;
+DROP POLICY IF EXISTS "aml_check_history_delete" ON aml_check_history;
 CREATE POLICY "aml_check_history_select" ON aml_check_history FOR SELECT
   USING (firm_id = public.get_my_firm_id());
 CREATE POLICY "aml_check_history_insert" ON aml_check_history FOR INSERT
@@ -337,17 +349,18 @@ CREATE POLICY "aml_check_history_delete" ON aml_check_history FOR DELETE
 
 -- Assessment shares (keep token access controlled; firm scoping for internal access)
 ALTER TABLE IF EXISTS assessment_shares ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "assessment_shares_select" ON assessment_shares;
-DROP POLICY IF EXISTS "assessment_shares_insert" ON assessment_shares;
-DROP POLICY IF EXISTS "assessment_shares_update" ON assessment_shares;
-DROP POLICY IF EXISTS "assessment_shares_delete" ON assessment_shares;
-CREATE POLICY "assessment_shares_select" ON assessment_shares FOR SELECT
-  USING (firm_id = public.get_my_firm_id());
-CREATE POLICY "assessment_shares_insert" ON assessment_shares FOR INSERT
-  WITH CHECK (firm_id = public.get_my_firm_id());
-CREATE POLICY "assessment_shares_update" ON assessment_shares FOR UPDATE
-  USING (firm_id = public.get_my_firm_id());
-CREATE POLICY "assessment_shares_delete" ON assessment_shares FOR DELETE
-  USING (firm_id = public.get_my_firm_id());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'assessment_shares') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "assessment_shares_select" ON assessment_shares';
+    EXECUTE 'DROP POLICY IF EXISTS "assessment_shares_insert" ON assessment_shares';
+    EXECUTE 'DROP POLICY IF EXISTS "assessment_shares_update" ON assessment_shares';
+    EXECUTE 'DROP POLICY IF EXISTS "assessment_shares_delete" ON assessment_shares';
+    EXECUTE 'CREATE POLICY "assessment_shares_select" ON assessment_shares FOR SELECT USING (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "assessment_shares_insert" ON assessment_shares FOR INSERT WITH CHECK (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "assessment_shares_update" ON assessment_shares FOR UPDATE USING (firm_id = public.get_my_firm_id())';
+    EXECUTE 'CREATE POLICY "assessment_shares_delete" ON assessment_shares FOR DELETE USING (firm_id = public.get_my_firm_id())';
+  END IF;
+END $$;
 
 COMMIT;

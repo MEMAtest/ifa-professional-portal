@@ -44,7 +44,8 @@ interface AIConfig {
 // =====================================================
 
 const getAIConfig = (): AIConfig => {
-  const provider = (process.env.AI_PROVIDER || 'mock') as AIProvider
+  const deepseekKey = process.env.DEEPSEEK_API_KEY || null
+  const provider = ((process.env.AI_PROVIDER as AIProvider | undefined) || (deepseekKey ? 'deepseek' : 'mock')) as AIProvider
   
   const configs: Record<AIProvider, AIConfig> = {
     openai: {
@@ -328,6 +329,13 @@ export async function POST(request: NextRequest) {
     
     // Get AI configuration
     const config = getAIConfig()
+
+    if (config.provider !== 'mock' && !config.apiKey) {
+      return NextResponse.json(
+        { error: 'AI currently unavailable', provider: config.provider },
+        { status: 503 }
+      )
+    }
     provider = config.provider
     
     // Check if provider is configured

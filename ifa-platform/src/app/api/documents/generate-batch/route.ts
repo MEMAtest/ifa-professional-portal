@@ -9,12 +9,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { enhancedDocumentService } from '@/services/EnhancedDocumentGenerationService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'strict')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -22,6 +28,10 @@ export async function POST(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'reports:generate')
+    if (permissionError) {
+      return permissionError
     }
 
     const supabase = getSupabaseServiceClient()

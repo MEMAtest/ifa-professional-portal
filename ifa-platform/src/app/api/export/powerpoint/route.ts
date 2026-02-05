@@ -10,8 +10,9 @@ import { PowerPointGenerator } from '@/lib/export/PowerPointGenerator';
 import { ProjectionEngine } from '@/lib/cashflow/projectionEngine';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth';
 import { parseRequestBody } from '@/app/api/utils'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 function transformToCamelCase(obj: any): any {
   if (!obj || typeof obj !== 'object') return obj;
@@ -26,6 +27,11 @@ function transformToCamelCase(obj: any): any {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'api')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const auth = await getAuthContext(request);
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,6 +39,10 @@ export async function POST(request: NextRequest) {
     const firmResult = requireFirmId(auth.context);
     if (!('firmId' in firmResult)) {
       return firmResult;
+    }
+    const permissionError = requirePermission(auth.context, 'reports:generate')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult;
 

@@ -10,9 +10,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jsPDF } from 'jspdf';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 // ================================================================
 // TYPES
@@ -505,6 +506,11 @@ function generateStressTestPdf(
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'api')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const auth = await getAuthContext(request)
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
@@ -512,6 +518,10 @@ export async function POST(request: NextRequest) {
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'reports:generate')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult
 
@@ -580,7 +590,9 @@ export async function POST(request: NextRequest) {
             created_by: auth.context.userId,
             name: `Stress Test Report - ${new Date().toLocaleDateString('en-GB')}`,
             file_name: fileName,
-            document_type: 'stress_test',
+            document_type: 'stress_test_report',
+            type: 'stress_test_report',
+            category: 'Planning Reports',
             storage_path: storagePath,
             file_path: storagePath,
             file_size: pdfBuffer.length,

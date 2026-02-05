@@ -34,6 +34,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const normalizeType = (value?: string | null) => {
+      if (!value) return null
+      const normalized = String(value)
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/-+/g, '_')
+
+      if (!normalized) return null
+      if (normalized.endsWith('_assessment')) return normalized.replace('_assessment', '_report')
+      if (normalized === 'assessment_report') return 'suitability_report'
+      if (normalized === 'monte_carlo') return 'monte_carlo_report'
+      if (normalized === 'stress_test') return 'stress_test_report'
+      return normalized
+    }
+
+    const normalizeCategory = (rawCategory?: string | null, inferredType?: string | null) => {
+      const raw = (rawCategory || '').toLowerCase()
+      const assessmentTypes = new Set(['atr_report', 'cfl_report', 'persona_report', 'suitability_report'])
+      const planningTypes = new Set(['monte_carlo_report', 'cashflow_report', 'stress_test_report'])
+
+      if (raw === 'assessment_report' || raw === 'assessment reports') return 'Assessment Reports'
+      if (raw === 'planning reports' || raw === 'monte_carlo') return 'Planning Reports'
+      if (!rawCategory && inferredType) {
+        if (assessmentTypes.has(inferredType)) return 'Assessment Reports'
+        if (planningTypes.has(inferredType)) return 'Planning Reports'
+      }
+      return rawCategory || null
+    }
+
     // Fetch documents missing type/document_type (null, empty string, or 'Unknown')
     let query = supabase
       .from('documents')
@@ -44,7 +74,7 @@ export async function POST(request: NextRequest) {
         category,
         document_categories(name)
       `)
-      .or('type.is.null,type.eq.,type.ilike.unknown')
+      .or('type.is.null,type.eq.,type.ilike.unknown,category.ilike.assessment_report,category.ilike.monte_carlo')
       .limit(500)
 
     // Always scope to firm for user-authenticated requests;
@@ -63,17 +93,20 @@ export async function POST(request: NextRequest) {
     }
 
     const updates = docs.map((doc: any) => {
-      const inferredType =
+      const inferredType = normalizeType(
         doc.document_type ||
-        doc.type ||
-        doc.document_categories?.name ||
-        doc.category ||
-        'other'
+          doc.type ||
+          doc.document_categories?.name ||
+          doc.category ||
+          'other'
+      )
+      const normalizedCategory = normalizeCategory(doc.category, inferredType)
 
       return {
         id: doc.id,
         type: inferredType,
-        document_type: inferredType
+        document_type: inferredType,
+        ...(normalizedCategory ? { category: normalizedCategory } : {})
       }
     })
 

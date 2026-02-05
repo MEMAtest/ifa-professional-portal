@@ -6,7 +6,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Building2, Save, Palette, AlertCircle, Search, Loader2, CheckCircle2 } from 'lucide-react'
+import { Building2, Save, Palette, Upload, AlertCircle, Search, Loader2, CheckCircle2 } from 'lucide-react'
 import { useFirm } from '../hooks/useFirm'
 import { usePermissions } from '../hooks/usePermissions'
 import { Button } from '@/components/ui/Button'
@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/hooks/use-toast'
 
 export function FirmSettingsPanel() {
-  const { firm, isLoading, updateFirmAsync, isUpdating, uploadLogoAsync } = useFirm()
+  const { firm, isLoading, updateFirmAsync, isUpdating, uploadLogoAsync, isUploadingLogo } = useFirm()
   const { canEditFirm, isAdmin } = usePermissions()
   const { toast } = useToast()
 
@@ -330,6 +330,47 @@ export function FirmSettingsPanel() {
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Firm Logo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Palette className="h-5 w-5" />
+            Firm Logo
+          </CardTitle>
+          <CardDescription>
+            Used on client-facing reports and exports.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            {firm?.settings?.branding?.logoUrl && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={firm.settings.branding.logoUrl}
+                alt="Firm logo"
+                className="h-12 w-auto object-contain border rounded bg-white"
+              />
+            )}
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="hidden"
+                disabled={isUploadingLogo}
+              />
+              <span className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700">
+                <Upload className="h-4 w-4" />
+                {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
+              </span>
+            </label>
+          </div>
+          <p className="text-xs text-gray-500">
+            Recommended: 300px wide PNG with transparent background.
+          </p>
         </CardContent>
       </Card>
 

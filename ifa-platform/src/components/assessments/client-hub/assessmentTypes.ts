@@ -18,18 +18,6 @@ export interface AssessmentTypeConfig {
 
 // Assessment configuration with FIXED routes
 export const assessmentTypes: Record<AssessmentTypeId, AssessmentTypeConfig> = {
-  suitability: {
-    id: 'suitability',
-    name: 'Full Suitability',
-    shortName: 'Suitability',
-    description: 'Comprehensive suitability assessment',
-    icon: FileText,
-    route: '/assessments/suitability',
-    resultsRoute: '/assessments/suitability/results',
-    estimatedTime: '30-45 mins',
-    color: 'green',
-    order: 1
-  },
   atr: {
     id: 'atr',
     name: 'Attitude to Risk',
@@ -40,7 +28,7 @@ export const assessmentTypes: Record<AssessmentTypeId, AssessmentTypeConfig> = {
     resultsRoute: '/assessments/atr/results',
     estimatedTime: '15-20 mins',
     color: 'blue',
-    order: 2
+    order: 1
   },
   cfl: {
     id: 'cfl',
@@ -52,7 +40,7 @@ export const assessmentTypes: Record<AssessmentTypeId, AssessmentTypeConfig> = {
     resultsRoute: '/assessments/cfl/results',
     estimatedTime: '20-25 mins',
     color: 'purple',
-    order: 3
+    order: 2
   },
   persona: {
     id: 'persona',
@@ -64,6 +52,18 @@ export const assessmentTypes: Record<AssessmentTypeId, AssessmentTypeConfig> = {
     resultsRoute: '/assessments/personas/results',
     estimatedTime: '10-15 mins',
     color: 'indigo',
+    order: 3
+  },
+  suitability: {
+    id: 'suitability',
+    name: 'Full Suitability',
+    shortName: 'Suitability',
+    description: 'Comprehensive suitability assessment',
+    icon: FileText,
+    route: '/assessments/suitability',
+    resultsRoute: '/assessments/suitability/results',
+    estimatedTime: '30-45 mins',
+    color: 'green',
     order: 4
   },
   monte_carlo: {
@@ -91,4 +91,3 @@ export const assessmentTypes: Record<AssessmentTypeId, AssessmentTypeConfig> = {
     order: 6
   }
 }
-

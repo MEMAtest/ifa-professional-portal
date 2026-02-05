@@ -118,16 +118,30 @@ export function CaseloadDashboard() {
           .eq('status', 'pending')
       ])
 
-      // Check for errors in all queries
+      const handleOptionalQueryError = (err: any, label: string) => {
+        if (!err) return false
+        if (err.code === '42703' || err.code === '42P01') {
+          clientLogger.warn(`Caseload optional query skipped: ${label}`, err)
+          return true
+        }
+        return false
+      }
+
+      // Required queries
       if (clientCountsResult.error) throw clientCountsResult.error
       if (unassignedCountResult.error) throw unassignedCountResult.error
-      if (assessmentsResult.error) throw assessmentsResult.error
-      if (reviewsResult.error) throw reviewsResult.error
+
+      // Optional queries: ignore missing columns/tables
+      const skipAssessments = handleOptionalQueryError(assessmentsResult.error, 'suitability_assessments')
+      const skipReviews = handleOptionalQueryError(reviewsResult.error, 'file_reviews')
+
+      if (assessmentsResult.error && !skipAssessments) throw assessmentsResult.error
+      if (reviewsResult.error && !skipReviews) throw reviewsResult.error
 
       const clientCounts = clientCountsResult.data
       const unassignedCount = unassignedCountResult.count
-      const assessments = assessmentsResult.data
-      const reviews = reviewsResult.data
+      const assessments = skipAssessments ? [] : assessmentsResult.data
+      const reviews = skipReviews ? [] : reviewsResult.data
 
       // Count per advisor
       const clientCountMap = new Map<string, number>()

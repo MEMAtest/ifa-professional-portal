@@ -25,7 +25,7 @@ import { AssessmentHubHeader } from '@/components/assessments/client-hub/compone
 import { AssessmentHubSummaryCards } from '@/components/assessments/client-hub/components/AssessmentHubSummaryCards'
 import { AssessmentHubOverviewTab } from '@/components/assessments/client-hub/components/AssessmentHubOverviewTab'
 import { AssessmentHubHistoryTab } from '@/components/assessments/client-hub/components/AssessmentHubHistoryTab'
-import { AssessmentHubComplianceTab } from '@/components/assessments/client-hub/components/AssessmentHubComplianceTab'
+import { AssessmentHubDocumentsTab } from '@/components/assessments/client-hub/components/AssessmentHubDocumentsTab'
 
 export function AssessmentClientHubPage(props: { clientId: string }) {
   const supabase = createClient()
@@ -42,7 +42,7 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
   const [assessmentVersions, setAssessmentVersions] = useState<Record<string, any>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'compliance'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'documents'>('overview')
 
   const parseCompletionPercentage = (raw: unknown): number | null => {
     if (typeof raw === 'number' && Number.isFinite(raw)) return raw
@@ -58,31 +58,84 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
   }
 
   const checkComplianceAlerts = useCallback(
-    (progress: AssessmentProgress[]) => {
+    (progress: AssessmentProgress[], versions: Record<string, any>) => {
       const alerts: ComplianceAlert[] = []
       const now = new Date()
 
+      const requiredTypes: Array<'atr' | 'cfl' | 'persona' | 'suitability'> = ['atr', 'cfl', 'persona', 'suitability']
+      const progressByType = new Map<string, AssessmentProgress>()
+
+      const normalizeProgressType = (value: string) => {
+        const normalized = value.replace('-', '_')
+        return normalized === 'investor_persona' ? 'persona' : normalized
+      }
+
       progress.forEach((p) => {
-        if (!p.completed_at) return
+        const normalizedType = normalizeProgressType(String(p.assessment_type || ''))
+        progressByType.set(normalizedType, p)
+      })
 
-        const completedDate = new Date(p.completed_at)
-        const monthsSince = differenceInDays(now, completedDate) / 30
-        if (monthsSince <= 12) return
+      for (const type of requiredTypes) {
+        const progressRow = progressByType.get(type)
+        const assessment = (assessmentTypes as any)[type]
 
-        const normalizedType = p.assessment_type.replace('_', '-')
-        const assessment =
-          (assessmentTypes as any)[p.assessment_type] || (assessmentTypes as any)[normalizedType]
+        if (!progressRow || progressRow.status !== 'completed') {
+          alerts.push({
+            id: `missing-${type}`,
+            clientId,
+            type: 'incomplete',
+            assessmentType: type,
+            message: `${assessment?.name || type} assessment is not completed`,
+            severity: 'medium',
+            createdAt: new Date().toISOString()
+          })
+          continue
+        }
 
+        if (progressRow.completed_at) {
+          const completedDate = new Date(progressRow.completed_at)
+          const monthsSince = differenceInDays(now, completedDate) / 30
+          if (monthsSince > 12) {
+            alerts.push({
+              id: `overdue-${type}`,
+              clientId,
+              type: 'overdue',
+              assessmentType: type,
+              message: `${assessment?.name || type} assessment is overdue for annual review`,
+              severity: 'high',
+              createdAt: new Date().toISOString()
+            })
+          }
+        }
+      }
+
+      const atrScore = typeof versions?.atr?.score === 'number' ? versions.atr.score : null
+      const cflScore = typeof versions?.cfl?.score === 'number' ? versions.cfl.score : null
+
+      if (atrScore !== null && cflScore !== null && Math.abs(atrScore - cflScore) >= 3) {
         alerts.push({
-          id: `overdue-${p.assessment_type}`,
+          id: 'risk-mismatch',
           clientId,
-          type: 'overdue',
-          assessmentType: p.assessment_type,
-          message: `${assessment?.name || p.assessment_type} assessment is overdue for annual review`,
+          type: 'mismatch',
+          assessmentType: 'risk',
+          message: `ATR and CFL scores are misaligned (${atrScore} vs ${cflScore}).`,
           severity: 'high',
           createdAt: new Date().toISOString()
         })
-      })
+      }
+
+      const suitabilityCompletion = versions?.suitability?.completionPercentage
+      if (typeof suitabilityCompletion === 'number' && suitabilityCompletion < 100) {
+        alerts.push({
+          id: 'suitability-incomplete',
+          clientId,
+          type: 'incomplete',
+          assessmentType: 'suitability',
+          message: `Suitability assessment is ${Math.round(suitabilityCompletion)}% complete.`,
+          severity: 'medium',
+          createdAt: new Date().toISOString()
+        })
+      }
 
       setComplianceAlerts(alerts)
     },
@@ -270,7 +323,6 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
       setAssessmentHistory(normalizedHistory)
 
       await loadAssessmentVersions()
-      checkComplianceAlerts(normalizedProgress)
     } catch (err) {
       clientLogger.error('Error loading data:', err)
       if (mountedRef.current) {
@@ -282,7 +334,15 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
         loadingRef.current = false
       }
     }
-  }, [checkComplianceAlerts, clientId, loadAssessmentVersions, supabase])
+  }, [clientId, loadAssessmentVersions, supabase])
+
+  useEffect(() => {
+    if (!assessmentProgress.length) {
+      setComplianceAlerts([])
+      return
+    }
+    checkComplianceAlerts(assessmentProgress, assessmentVersions)
+  }, [assessmentProgress, assessmentVersions, checkComplianceAlerts])
 
   useEffect(() => {
     mountedRef.current = true
@@ -545,14 +605,14 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
               History
             </button>
             <button
-              onClick={() => setActiveTab('compliance')}
+              onClick={() => setActiveTab('documents')}
               className={`py-2 px-1 border-b-2 font-medium text-sm relative ${
-                activeTab === 'compliance'
+                activeTab === 'documents'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Compliance
+              Documents
               {complianceAlerts.length > 0 && <span className="absolute -top-1 -right-2 h-2 w-2 bg-red-500 rounded-full"></span>}
             </button>
           </nav>
@@ -574,7 +634,12 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
           </div>
         )}
 
-        {activeTab === 'compliance' && <AssessmentHubComplianceTab alerts={complianceAlerts} onUpdate={handleStartAssessment} />}
+        {activeTab === 'documents' && (
+          <AssessmentHubDocumentsTab
+            clientId={clientId}
+            complianceAlerts={complianceAlerts}
+          />
+        )}
       </div>
     </div>
   )

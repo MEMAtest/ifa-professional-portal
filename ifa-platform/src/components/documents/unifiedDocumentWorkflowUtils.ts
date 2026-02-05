@@ -9,7 +9,8 @@ export const sanitizeDocumentHtml = (html: string) =>
       ...sanitizeHtml.defaults.allowedAttributes,
       img: ['src', 'alt', 'width', 'height', 'style'],
       '*': ['style', 'class', 'id']
-    }
+    },
+    allowProtocolRelative: false
   })
 
 export const formatCurrency = (amount: number): string => {

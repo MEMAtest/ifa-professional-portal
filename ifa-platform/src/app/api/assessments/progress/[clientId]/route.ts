@@ -4,9 +4,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { log } from '@/lib/logging/structured';
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient';
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth';
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth';
 import { requireClientAccess } from '@/lib/auth/requireClientAccess';
 import { parseRequestBody } from '@/app/api/utils'
+import { rateLimit } from '@/lib/security/rateLimit'
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,11 @@ export async function GET(
   { params }: { params: { clientId: string } }
 ) {
   try {
+    const rateLimitResponse = await rateLimit(request, 'api')
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const auth = await getAuthContext(request);
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,6 +37,10 @@ export async function GET(
     const firmResult = requireFirmId(auth.context);
     if (!('firmId' in firmResult)) {
       return firmResult;
+    }
+    const permissionError = requirePermission(auth.context, 'assessments:read')
+    if (permissionError) {
+      return permissionError
     }
 
     const supabase = getSupabaseServiceClient();
@@ -217,6 +227,10 @@ export async function POST(
     const firmResult = requireFirmId(auth.context);
     if (!('firmId' in firmResult)) {
       return firmResult;
+    }
+    const permissionError = requirePermission(auth.context, 'assessments:write')
+    if (permissionError) {
+      return permissionError
     }
 
     const supabase = getSupabaseServiceClient();

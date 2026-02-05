@@ -5,8 +5,6 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import crypto from 'crypto'
 
 const CSRF_COOKIE_NAME = 'csrf_token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
@@ -16,22 +14,12 @@ const CSRF_TOKEN_LENGTH = 32
  * Generate a cryptographically secure CSRF token
  */
 export function generateCsrfToken(): string {
-  return crypto.randomBytes(CSRF_TOKEN_LENGTH).toString('hex')
-}
-
-/**
- * Get or create CSRF token from cookies
- */
-export async function getOrCreateCsrfToken(): Promise<string> {
-  const cookieStore = await cookies()
-  let token = cookieStore.get(CSRF_COOKIE_NAME)?.value
-
-  if (!token) {
-    token = generateCsrfToken()
-    // Note: Setting cookie should be done in middleware or response
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error('Secure crypto unavailable for CSRF token generation')
   }
-
-  return token
+  const bytes = new Uint8Array(CSRF_TOKEN_LENGTH)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
 /**
@@ -68,10 +56,11 @@ function timingSafeEqual(a: string, b: string): boolean {
     return false
   }
 
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
-
-  return crypto.timingSafeEqual(bufA, bufB)
+  let result = 0
+  for (let i = 0; i < a.length; i += 1) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return result === 0
 }
 
 /**
@@ -131,6 +120,7 @@ const CSRF_EXEMPT_PATHS = [
   '/api/health',
   '/api/readiness',
   '/api/signatures/webhook',
+  '/api/stripe/webhook',
   '/api/assessments/share/', // Token-based auth
   '/api/cron/', // Server-to-server
   '/api/auth/accept-invite', // Already protected by rate limiting + token validation

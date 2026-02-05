@@ -357,8 +357,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
     }
 
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
     // Use plain token in URL (user receives this in email)
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/auth/accept-invite?token=${plainToken}`
+    const inviteUrl = `${baseUrl}/auth/accept-invite?token=${plainToken}`
 
     // Get firm name and inviter name for the email
     const { data: firmData } = await supabase
@@ -383,7 +384,7 @@ export async function POST(request: NextRequest) {
     let emailError: string | undefined
 
     try {
-      const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/notifications/send-email`, {
+      const emailResponse = await fetch(`${baseUrl}/api/notifications/send-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -455,22 +456,44 @@ export async function POST(request: NextRequest) {
     // Return error status so client knows to handle appropriately
     // ========================================
     if (!emailSent) {
-      // Delete the invitation if email failed to prevent orphaned records
-      await supabase
-        .from('user_invitations')
-        .delete()
-        .eq('id', invitation.id)
+      const allowManualInvite = process.env.ALLOW_INVITE_URL_FALLBACK === 'true' || process.env.NODE_ENV !== 'production'
 
-      log.error('[Invite API] Email failed - invitation deleted for security')
+      if (!allowManualInvite) {
+        // Delete the invitation if email failed to prevent orphaned records
+        await supabase
+          .from('user_invitations')
+          .delete()
+          .eq('id', invitation.id)
 
-      return NextResponse.json(
-        {
-          error: 'Failed to send invitation email',
-          message: emailError || 'The email service is unavailable. Please try again later.',
-          code: 'EMAIL_FAILED'
-        },
-        { status: 500 }
-      )
+        log.error('[Invite API] Email failed - invitation deleted for security')
+
+        return NextResponse.json(
+          {
+            error: 'Failed to send invitation email',
+            message: emailError || 'The email service is unavailable. Please try again later.',
+            code: 'EMAIL_FAILED'
+          },
+          { status: 500 }
+        )
+      }
+
+      log.warn('[Invite API] Email failed - returning manual invite URL for non-production use')
+
+      const response: Omit<UserInvitation, 'token'> & { inviteUrl: string; emailSent: boolean; warning?: string } = {
+        id: invitation.id,
+        firmId: invitation.firm_id,
+        email: invitation.email,
+        role: invitation.role as UserInvitation['role'],
+        invitedBy: invitation.invited_by ?? undefined,
+        expiresAt: new Date(invitation.expires_at),
+        acceptedAt: undefined,
+        createdAt: new Date(invitation.created_at),
+        inviteUrl,
+        emailSent: false,
+        warning: emailError || 'Email delivery failed; copy and share the invite link manually.'
+      }
+
+      return NextResponse.json(response, { status: 201 })
     }
 
     // SECURITY: Only include inviteUrl if email was successfully sent

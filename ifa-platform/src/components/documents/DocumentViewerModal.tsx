@@ -27,6 +27,7 @@ interface DocumentViewerModalProps {
   documentName?: string
   clientName?: string
   clientEmail?: string
+  defaultFullscreen?: boolean
 }
 
 interface DocumentData {
@@ -56,14 +57,17 @@ export default function DocumentViewerModal({
   documentUrl,
   documentName = 'Document',
   clientName,
-  clientEmail
+  clientEmail,
+  defaultFullscreen = false
 }: DocumentViewerModalProps) {
   const [documentData, setDocumentData] = useState<DocumentData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isFullscreen, setIsFullscreen] = useState(true)
+  const [isFullscreen, setIsFullscreen] = useState(defaultFullscreen)
   const [downloading, setDownloading] = useState(false)
   const [sending, setSending] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState(false)
 
   const fetchDocument = useCallback(async () => {
     setLoading(true)
@@ -73,19 +77,23 @@ export default function DocumentViewerModal({
         const data = await response.json()
         setDocumentData(data)
         setPreviewUrl(`/api/documents/preview/${documentId}`)
+        setFallbackUrl(documentUrl || null)
+        setPreviewError(false)
       }
     } catch (error) {
       clientLogger.error('Error fetching document:', error)
     } finally {
       setLoading(false)
     }
-  }, [documentId])
+  }, [documentId, documentUrl])
 
   useEffect(() => {
     if (isOpen && documentId) {
       fetchDocument()
+      setPreviewError(false)
+      setIsFullscreen(defaultFullscreen)
     }
-  }, [isOpen, documentId, fetchDocument])
+  }, [isOpen, documentId, fetchDocument, defaultFullscreen])
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -147,14 +155,18 @@ export default function DocumentViewerModal({
 
     setSending(true)
     try {
-      const response = await fetch('/api/documents/send-email', {
+      const documentLink = `${window.location.origin}/documents/view/${documentId}`
+      const response = await fetch('/api/notifications/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          documentId,
-          clientEmail: email,
-          clientName: clientName || documentData?.client_name,
-          documentType: documentData?.type || 'document'
+          type: 'documentSent',
+          recipient: email,
+          data: {
+            clientName: clientName || documentData?.client_name || 'Client',
+            documentName: documentData?.name || documentName,
+            documentLink
+          }
         })
       })
 
@@ -190,11 +202,15 @@ export default function DocumentViewerModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm">
-      <div className={`
-        ${isFullscreen ? 'fixed inset-0' : 'fixed inset-4 md:inset-8'}
-        bg-white rounded-lg shadow-2xl flex flex-col
-        transition-all duration-300 ease-in-out
-      `}>
+      <div
+        className={`
+          ${isFullscreen
+            ? 'fixed inset-0'
+            : 'fixed left-1/2 top-1/2 w-[96vw] h-[88vh] max-w-6xl -translate-x-1/2 -translate-y-1/2'}
+          bg-white rounded-lg shadow-2xl flex flex-col
+          transition-all duration-300 ease-in-out
+        `}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
           <div className="flex items-center gap-3">
@@ -292,23 +308,32 @@ export default function DocumentViewerModal({
                   <p className="text-gray-600">Loading document...</p>
                 </div>
               </div>
-            ) : previewUrl ? (
+            ) : previewUrl && !previewError ? (
               <iframe
                 src={previewUrl}
                 className="w-full h-full"
                 title="Document Preview"
+                onError={() => setPreviewError(true)}
               />
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <FileText className="h-12 w-12 mx-auto mb-3 text-gray-400" />
                   <p className="text-gray-600">Preview not available</p>
-                  <button
-                    onClick={handleDownload}
-                    className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                  >
-                    Download to View
-                  </button>
+                  <div className="mt-4 flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => window.open(fallbackUrl || previewUrl || '#', '_blank')}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                    >
+                      Open in New Tab
+                    </button>
+                    <button
+                      onClick={handleDownload}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                    >
+                      Download
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

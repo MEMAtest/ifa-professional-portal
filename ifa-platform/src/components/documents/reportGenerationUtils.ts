@@ -7,5 +7,6 @@ export const sanitizeReportHtml = (html: string) =>
       ...sanitizeHtml.defaults.allowedAttributes,
       img: ['src', 'alt', 'width', 'height', 'style'],
       '*': ['style', 'class', 'id']
-    }
+    },
+    allowProtocolRelative: false
   })

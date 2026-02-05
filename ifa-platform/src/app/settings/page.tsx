@@ -9,8 +9,7 @@ import {
   Shield,
   Briefcase,
   Save,
-  Eye,
-  EyeOff,
+  Info,
   Users,
   Building2,
   BarChart3
@@ -19,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { useSearchParams } from 'next/navigation'
 import { InvestorPersonaLibrary } from '@/components/settings/InvestorPersonaLibrary'
@@ -32,6 +32,7 @@ import { UserTable } from '@/modules/firm/components/UserManagement/UserTable'
 import { CaseloadDashboard } from '@/modules/firm/components/CaseloadDashboard/CaseloadDashboard'
 import { usePermissions } from '@/modules/firm/hooks/usePermissions'
 import clientLogger from '@/lib/logging/clientLogger'
+import { applyThemePreference, persistThemePreference, type ThemePreference } from '@/lib/theme/themePreference'
 
 // Types based on actual database schema
 interface UserProfile {
@@ -51,12 +52,32 @@ interface UserProfile {
       email: boolean
       sms: boolean
       push: boolean
-      marketing: boolean
     }
   }
   created_at: string
   updated_at?: string
 }
+
+const DEFAULT_PREFERENCES = {
+  theme: 'light' as ThemePreference,
+  language: 'en-GB',
+  timezone: 'Europe/London',
+  currency: 'GBP',
+  date_format: 'DD/MM/YYYY',
+  notifications: {
+    email: true,
+    sms: false,
+    push: true
+  }
+}
+
+const InfoHint = ({ content }: { content: string }) => (
+  <Tooltip content={content}>
+    <span className="ml-2 inline-flex h-4 w-4 items-center justify-center text-gray-400 hover:text-gray-600">
+      <Info className="h-4 w-4" />
+    </span>
+  </Tooltip>
+)
 
 
 export default function SettingsPage() {
@@ -68,9 +89,8 @@ export default function SettingsPage() {
   // State
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users' | 'caseload'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'services' | 'consumer-duty' | 'personas' | 'firm' | 'users' | 'caseload'>('profile')
   const { isAdmin, canManageUsers } = usePermissions()
-  const [showPassword, setShowPassword] = useState(false)
   const firmContext = useFirmContext({
     supabase,
     userId: user?.id,
@@ -149,28 +169,9 @@ export default function SettingsPage() {
     job_title: '',
     bio: '',
     avatar_url: '',
-    preferences: {
-      theme: 'light',
-      language: 'en-GB',
-      timezone: 'Europe/London',
-      currency: 'GBP',
-      date_format: 'DD/MM/YYYY',
-      notifications: {
-        email: true,
-        sms: false,
-        push: true,
-        marketing: false
-      }
-    },
+    preferences: { ...DEFAULT_PREFERENCES },
     created_at: '',
     updated_at: ''
-  })
-
-  // Security state
-  const [passwordData, setPasswordData] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: ''
   })
 
   useEffect(() => {
@@ -224,15 +225,24 @@ export default function SettingsPage() {
     if (profileData) {
       const profileFirmId = (profileData as any).firm_id || null
       const resolvedFirmId = firmContext.resolveFirmId(profileFirmId)
+      const mergedPreferences = {
+        ...DEFAULT_PREFERENCES,
+        ...((profileData as any).preferences || {}),
+        notifications: {
+          email: ((profileData as any).preferences?.notifications?.email) ?? DEFAULT_PREFERENCES.notifications.email,
+          sms: ((profileData as any).preferences?.notifications?.sms) ?? DEFAULT_PREFERENCES.notifications.sms,
+          push: ((profileData as any).preferences?.notifications?.push) ?? DEFAULT_PREFERENCES.notifications.push
+        }
+      }
+
       setUserProfile(prev => ({
         ...prev,
         ...(profileData as any),
         phone: (profileData as any).phone || '',
-        preferences: {
-          ...prev.preferences,
-          ...((profileData as any).preferences || {})
-        }
+        preferences: mergedPreferences
       }))
+
+      persistThemePreference((mergedPreferences.theme || 'light') as ThemePreference)
       firmContext.setFirmId(resolvedFirmId)
       return resolvedFirmId
     }
@@ -289,6 +299,10 @@ export default function SettingsPage() {
         throw new Error(`Failed to save profile: ${error.message}`)
       }
 
+      if (userProfile.preferences?.theme) {
+        persistThemePreference(userProfile.preferences.theme as ThemePreference)
+      }
+
       toast({
         title: 'Success',
         description: 'Profile updated successfully',
@@ -300,61 +314,6 @@ export default function SettingsPage() {
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to save profile',
-        variant: 'destructive'
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleChangePassword = async () => {
-    try {
-      if (passwordData.new_password !== passwordData.confirm_password) {
-        toast({
-          title: 'Error',
-          description: 'New passwords do not match',
-          variant: 'destructive'
-        })
-        return
-      }
-
-      if (passwordData.new_password.length < 8) {
-        toast({
-          title: 'Error',
-          description: 'Password must be at least 8 characters long',
-          variant: 'destructive'
-        })
-        return
-      }
-
-      setSaving(true)
-
-      // In a real app, you would use Supabase auth to change password
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.new_password
-      })
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Password changed successfully',
-        variant: 'default'
-      })
-
-      setPasswordData({
-        current_password: '',
-        new_password: '',
-        confirm_password: ''
-      })
-
-    } catch (error) {
-      clientLogger.error('Error changing password:', error)
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to change password',
         variant: 'destructive'
       })
     } finally {
@@ -389,8 +348,7 @@ export default function SettingsPage() {
                 </div>
                 {[
                   { key: 'profile', label: 'Profile', icon: User },
-                  { key: 'preferences', label: 'Preferences', icon: Settings },
-                  { key: 'security', label: 'Security', icon: Shield }
+                  { key: 'preferences', label: 'Preferences', icon: Settings }
                 ].map(({ key, label, icon: Icon }) => (
                   <button
                     key={key}
@@ -529,18 +487,23 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
                       Theme
+                      <InfoHint content="Choose light, dark, or follow your system preference." />
                     </label>
                     <select
                       value={userProfile.preferences?.theme || 'light'}
-                      onChange={(e) => setUserProfile({
-                        ...userProfile,
-                        preferences: { 
-                          ...userProfile.preferences!, 
-                          theme: e.target.value as any 
-                        }
-                      })}
+                      onChange={(e) => {
+                        const nextTheme = e.target.value as ThemePreference
+                        setUserProfile({
+                          ...userProfile,
+                          preferences: { 
+                            ...userProfile.preferences!, 
+                            theme: nextTheme 
+                          }
+                        })
+                        applyThemePreference(nextTheme)
+                      }}
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="light">Light</option>
@@ -550,8 +513,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
                       Language
+                      <InfoHint content="Controls UI language for menus and labels." />
                     </label>
                     <select
                       value={userProfile.preferences?.language || 'en-GB'}
@@ -570,8 +534,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
                       Currency
+                      <InfoHint content="Default currency formatting across reports and dashboards." />
                     </label>
                     <select
                       value={userProfile.preferences?.currency || 'GBP'}
@@ -591,8 +556,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="flex items-center text-sm font-medium text-gray-700 mb-1">
                       Date Format
+                      <InfoHint content="Default date format used across the platform." />
                     </label>
                     <select
                       value={userProfile.preferences?.date_format || 'DD/MM/YYYY'}
@@ -614,13 +580,20 @@ export default function SettingsPage() {
 
                 {/* Notifications */}
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Notifications</h3>
+                  <div className="flex items-center">
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Notifications</h3>
+                    <InfoHint content="Control how you receive system notifications." />
+                  </div>
                   <div className="space-y-3">
-                    {Object.entries(userProfile.preferences?.notifications || {}).map(([key, value]) => (
+                    {[
+                      { key: 'email', label: 'Email notifications' },
+                      { key: 'sms', label: 'SMS notifications' },
+                      { key: 'push', label: 'Push notifications' }
+                    ].map(({ key, label }) => (
                       <label key={key} className="flex items-center space-x-3">
                         <input
                           type="checkbox"
-                          checked={value}
+                          checked={Boolean(userProfile.preferences?.notifications?.[key as 'email' | 'sms' | 'push'])}
                           onChange={(e) => setUserProfile({
                             ...userProfile,
                             preferences: {
@@ -633,8 +606,8 @@ export default function SettingsPage() {
                           })}
                           className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                         />
-                        <span className="text-sm font-medium text-gray-700 capitalize">
-                          {key.replace('_', ' ')} notifications
+                        <span className="text-sm font-medium text-gray-700">
+                          {label}
                         </span>
                       </label>
                     ))}
@@ -646,88 +619,6 @@ export default function SettingsPage() {
                     <Save className="h-4 w-4 mr-2" />
                     {saving ? 'Saving...' : 'Save Preferences'}
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === 'security' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Security Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Change Password</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Current Password
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={passwordData.current_password}
-                          onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
-                          className="w-full p-2 pr-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                        >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4 text-gray-400" />
-                          ) : (
-                            <Eye className="h-4 w-4 text-gray-400" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.new_password}
-                        onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={passwordData.confirm_password}
-                        onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <Button onClick={handleChangePassword} disabled={saving}>
-                      <Shield className="h-4 w-4 mr-2" />
-                      {saving ? 'Changing...' : 'Change Password'}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Two-Factor Authentication */}
-                <div className="border-t pt-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3">Two-Factor Authentication</h3>
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">SMS Authentication</h4>
-                      <p className="text-sm text-gray-600">Receive verification codes via SMS</p>
-                    </div>
-                    <Button variant="outline" disabled>
-                      Enable (Coming Soon)
-                    </Button>
-                  </div>
                 </div>
               </CardContent>
             </Card>

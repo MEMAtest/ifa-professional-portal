@@ -72,10 +72,26 @@ export function InviteModal({ open, onClose }: InviteModalProps) {
     try {
       const result = await inviteUserAsync({ email: email.toLowerCase().trim(), role })
 
-      toast({
-        title: 'Invitation Sent',
-        description: `Invitation sent to ${email}`,
-      })
+      if (result?.emailSent === false && result.inviteUrl) {
+        try {
+          await navigator.clipboard.writeText(result.inviteUrl)
+          toast({
+            title: 'Invite link copied',
+            description: 'Email delivery failed. The invite link has been copied so you can share it manually.',
+          })
+        } catch {
+          toast({
+            title: 'Email failed',
+            description: `Email delivery failed. Share this invite link manually: ${result.inviteUrl}`,
+            variant: 'destructive',
+          })
+        }
+      } else {
+        toast({
+          title: 'Invitation Sent',
+          description: `Invitation sent to ${email}`,
+        })
+      }
 
       // Reset and close
       setEmail('')

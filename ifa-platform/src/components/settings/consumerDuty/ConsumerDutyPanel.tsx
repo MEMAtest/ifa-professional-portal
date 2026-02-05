@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { Save, Copy, Clock, CheckCircle, AlertTriangle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -167,6 +168,13 @@ export function ConsumerDutyPanel({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          These responses feed the Compliance Hub&#8217;s Consumer Duty view.{' '}
+          <Link href="/compliance?tab=consumer-duty" className="font-medium underline">
+            View in Compliance Hub
+          </Link>
+          .
+        </div>
         {/* Step navigation */}
         <div className="flex flex-wrap gap-2">
           {consumerDutySteps.map((s, index) => (

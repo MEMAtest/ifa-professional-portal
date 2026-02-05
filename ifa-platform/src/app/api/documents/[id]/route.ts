@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 
 // GET - Fetch single document
@@ -21,6 +21,10 @@ export async function GET(
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'documents:read')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult
 
@@ -124,6 +128,10 @@ export async function PUT(
     if (!('firmId' in firmResult)) {
       return firmResult
     }
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) {
+      return permissionError
+    }
     const { firmId } = firmResult
 
     const documentId = params.id
@@ -195,6 +203,10 @@ export async function DELETE(
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
+    }
+    const permissionError = requirePermission(auth.context, 'documents:delete')
+    if (permissionError) {
+      return permissionError
     }
     const { firmId } = firmResult
 
