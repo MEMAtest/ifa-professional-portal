@@ -320,16 +320,15 @@ export default function UnifiedDocumentWorkflow() {
           </head>
           <body>
             ${generatedDocument.content}
-            <script>
-              window.onload = function() { 
-                window.print(); 
-                setTimeout(() => window.close(), 1000);
-              }
-            </script>
           </body>
           </html>
         `)
         printWindow.document.close()
+        printWindow.onload = () => {
+          printWindow.focus()
+          printWindow.print()
+          setTimeout(() => printWindow.close(), 1000)
+        }
       }
     } catch (err) {
       clientLogger.error('PDF generation error:', err)

@@ -164,6 +164,27 @@ export async function POST(request: NextRequest) {
 
     const fallbackPayloads: any[] = [
       {
+        firm_id: firmId,
+        client_id: clientId || null,
+        document_id: documentId || null,
+        recipient_name: signers[0]?.name || '',
+        recipient_email: signers[0]?.email || '',
+        status: 'pending'
+      },
+      {
+        firm_id: firmId,
+        document_id: documentId || null,
+        recipient_name: signers[0]?.name || '',
+        recipient_email: signers[0]?.email || '',
+        status: 'pending'
+      },
+      {
+        firm_id: firmId,
+        recipient_name: signers[0]?.name || '',
+        recipient_email: signers[0]?.email || '',
+        status: 'pending'
+      },
+      {
         client_id: clientId || null,
         document_id: documentId || null,
         recipient_name: signers[0]?.name || '',

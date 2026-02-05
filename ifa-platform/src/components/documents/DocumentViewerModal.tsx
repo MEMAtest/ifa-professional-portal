@@ -1,7 +1,7 @@
 // src/components/documents/DocumentViewerModal.tsx
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { 
   X, 
   Download, 
@@ -68,6 +68,9 @@ export default function DocumentViewerModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  const [regenerateError, setRegenerateError] = useState<string | null>(null)
+  const hasAutoRegenerated = useRef(false)
 
   const fetchDocument = useCallback(async () => {
     setLoading(true)
@@ -89,6 +92,7 @@ export default function DocumentViewerModal({
 
   useEffect(() => {
     if (isOpen && documentId) {
+      hasAutoRegenerated.current = false
       fetchDocument()
       setPreviewError(false)
       setIsFullscreen(defaultFullscreen)
@@ -116,6 +120,39 @@ export default function DocumentViewerModal({
       setDownloading(false)
     }
   }
+
+  const handleRegeneratePdf = useCallback(async () => {
+    if (!documentId) return
+    setRegenerating(true)
+    setRegenerateError(null)
+    try {
+      const response = await fetch('/api/documents/regenerate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId })
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.success) {
+        setRegenerateError(data.error || 'Failed to regenerate PDF')
+        return
+      }
+      await fetchDocument()
+      setPreviewError(false)
+    } catch (err) {
+      setRegenerateError(err instanceof Error ? err.message : 'Failed to regenerate PDF')
+    } finally {
+      setRegenerating(false)
+    }
+  }, [documentId, fetchDocument])
+
+  useEffect(() => {
+    if (!documentData || hasAutoRegenerated.current) return
+    const hasSource = Boolean(documentData.metadata?.html_content || documentData.metadata?.reviewMarkdown)
+    if (documentData.file_size === 0 && hasSource) {
+      hasAutoRegenerated.current = true
+      void handleRegeneratePdf()
+    }
+  }, [documentData, handleRegeneratePdf])
 
   const handlePrint = () => {
     if (previewUrl) {
@@ -320,7 +357,19 @@ export default function DocumentViewerModal({
                 <div className="text-center">
                   <FileText className="h-12 w-12 mx-auto mb-3 text-gray-400" />
                   <p className="text-gray-600">Preview not available</p>
+                  {regenerateError && (
+                    <p className="mt-2 text-sm text-red-600">{regenerateError}</p>
+                  )}
                   <div className="mt-4 flex items-center justify-center gap-3">
+                    {documentData?.file_size === 0 && (documentData?.metadata?.html_content || documentData?.metadata?.reviewMarkdown) && (
+                      <button
+                        onClick={handleRegeneratePdf}
+                        disabled={regenerating}
+                        className="px-4 py-2 border border-blue-300 rounded-lg text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                      >
+                        {regenerating ? 'Regenerating…' : 'Regenerate PDF'}
+                      </button>
+                    )}
                     <button
                       onClick={() => window.open(fallbackUrl || previewUrl || '#', '_blank')}
                       className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
