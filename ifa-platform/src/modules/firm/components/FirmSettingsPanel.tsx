@@ -6,16 +6,15 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Building2, Upload, Save, Palette, FileText, AlertCircle, Search, Loader2, CheckCircle2 } from 'lucide-react'
-import { useFirm, useFirmSeats } from '../hooks/useFirm'
+import { Building2, Save, Palette, AlertCircle, Search, Loader2, CheckCircle2 } from 'lucide-react'
+import { useFirm } from '../hooks/useFirm'
 import { usePermissions } from '../hooks/usePermissions'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { useToast } from '@/hooks/use-toast'
 
 export function FirmSettingsPanel() {
-  const { firm, isLoading, updateFirmAsync, isUpdating, uploadLogoAsync, isUploadingLogo } = useFirm()
-  const { maxSeats, currentSeats, seatsRemaining } = useFirmSeats()
+  const { firm, isLoading, updateFirmAsync, isUpdating, uploadLogoAsync } = useFirm()
   const { canEditFirm, isAdmin } = usePermissions()
   const { toast } = useToast()
 
@@ -66,8 +65,6 @@ export function FirmSettingsPanel() {
       postcode: firm?.address?.postcode ?? '',
     },
     branding: {
-      primaryColor: firm?.settings?.branding?.primaryColor ?? '#2563eb',
-      reportFooterText: firm?.settings?.branding?.reportFooterText ?? '',
       emailSignature: firm?.settings?.branding?.emailSignature ?? '',
     },
   })
@@ -85,8 +82,6 @@ export function FirmSettingsPanel() {
           postcode: firm.address?.postcode ?? '',
         },
         branding: {
-          primaryColor: firm.settings?.branding?.primaryColor ?? '#2563eb',
-          reportFooterText: firm.settings?.branding?.reportFooterText ?? '',
           emailSignature: firm.settings?.branding?.emailSignature ?? '',
         },
       })
@@ -100,7 +95,10 @@ export function FirmSettingsPanel() {
         fcaNumber: formData.fcaNumber,
         address: formData.address,
         settings: {
-          branding: formData.branding,
+          branding: {
+            ...(firm?.settings?.branding ?? {}),
+            emailSignature: formData.branding.emailSignature,
+          },
         },
       })
       toast({
@@ -335,99 +333,18 @@ export function FirmSettingsPanel() {
         </CardContent>
       </Card>
 
-      {/* Branding for Reports */}
+      {/* Email Signature */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-5 w-5" />
-            Report Branding
+            Email Signature
           </CardTitle>
           <CardDescription>
-            Customize how your firm appears on client-facing reports
+            This signature is appended to client emails sent from the platform.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Firm Logo (for PDF reports)
-            </label>
-            <div className="flex items-center gap-4">
-              {firm?.settings?.branding?.logoUrl && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={firm.settings.branding.logoUrl}
-                  alt="Firm logo"
-                  className="h-12 w-auto object-contain border rounded"
-                />
-              )}
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  className="hidden"
-                  disabled={isUploadingLogo}
-                />
-                <span className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 text-sm font-medium text-gray-700">
-                  <Upload className="h-4 w-4" />
-                  {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
-                </span>
-              </label>
-            </div>
-            <p className="mt-1 text-xs text-gray-500">
-              Recommended: 300px wide PNG with transparent background
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Primary Color (for report headers)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={formData.branding.primaryColor}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    branding: { ...formData.branding, primaryColor: e.target.value },
-                  })
-                }
-                className="h-10 w-10 rounded border border-gray-300 cursor-pointer"
-              />
-              <input
-                type="text"
-                value={formData.branding.primaryColor}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    branding: { ...formData.branding, primaryColor: e.target.value },
-                  })
-                }
-                className="w-32 p-2 border border-gray-300 rounded-md text-sm font-mono"
-                placeholder="#2563eb"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Report Footer Text
-            </label>
-            <textarea
-              value={formData.branding.reportFooterText}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  branding: { ...formData.branding, reportFooterText: e.target.value },
-                })
-              }
-              rows={2}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-              placeholder="e.g., Authorised and regulated by the Financial Conduct Authority"
-            />
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Email Signature (HTML)
@@ -445,39 +362,6 @@ export function FirmSettingsPanel() {
               placeholder="<p>Kind regards,<br/>The Team</p>"
             />
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Subscription Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Subscription
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Plan</div>
-              <div className="text-lg font-semibold capitalize">
-                {firm?.subscriptionTier ?? 'Starter'}
-              </div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Users</div>
-              <div className="text-lg font-semibold">
-                {currentSeats} / {maxSeats}
-              </div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Available Seats</div>
-              <div className="text-lg font-semibold">{seatsRemaining}</div>
-            </div>
-          </div>
-          <p className="mt-4 text-sm text-gray-500">
-            Contact support to upgrade your plan or add more seats.
-          </p>
         </CardContent>
       </Card>
 
