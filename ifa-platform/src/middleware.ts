@@ -7,15 +7,9 @@ export async function middleware(request: NextRequest) {
   // Generate per-request nonce for Content Security Policy (128 bits of entropy)
   const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('base64')
 
-  // Forward nonce to server components via request header
-  const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-nonce', nonce)
-
-  const response = NextResponse.next({
-    request: { headers: requestHeaders },
-  })
-
-  // Build dynamic CSP with nonce (replaces static unsafe-inline in script-src)
+  // Build CSP BEFORE creating the response so it can be set on request headers.
+  // Next.js reads the CSP from the request header to detect nonce mode and
+  // automatically applies nonce="..." to its inline <script> tags.
   const pathname = request.nextUrl.pathname
   const isDev = process.env.NODE_ENV === 'development'
   const isPreviewRoute = pathname.startsWith('/api/documents/preview/')
@@ -40,6 +34,15 @@ export async function middleware(request: NextRequest) {
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com",
     "frame-src 'self' blob: https://js.stripe.com",
   ].join('; ')
+
+  // Set nonce AND CSP on request headers so Next.js applies nonces to inline scripts
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-nonce', nonce)
+  requestHeaders.set('Content-Security-Policy', csp)
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
 
   // Helper: apply CSRF cookie + CSP header to any response
   const finalizeResponse = (res: NextResponse) => {
