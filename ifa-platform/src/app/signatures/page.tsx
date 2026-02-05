@@ -3,14 +3,13 @@
 
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSignatureRequests } from '@/lib/hooks/useDocuments'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
-import DocumentViewerModal from '@/components/documents/DocumentViewerModal'
 import clientLogger from '@/lib/logging/clientLogger'
 import type { Firm, FirmAddress } from '@/modules/firm/types/firm.types'
 import {
@@ -52,8 +51,10 @@ interface ClientDocument {
   file_name?: string
   document_type?: string
   category?: string
+  type?: string
   status?: string
   created_at?: string
+  file_size?: number
 }
 
 export default function SignaturesPage() {
@@ -138,6 +139,53 @@ export default function SignaturesPage() {
   useEffect(() => {
     void loadClientDocuments()
   }, [loadClientDocuments])
+
+  const formatLabel = (value?: string | null) => {
+    if (!value) return ''
+    return value
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+
+  const getDocumentGroupLabel = (doc: ClientDocument) => {
+    const rawCategory = doc.category || ''
+    const category = rawCategory.toLowerCase()
+
+    if (category.includes('assessment')) return 'Assessment Reports'
+    if (category.includes('planning')) return 'Planning Reports'
+    if (category.includes('client')) return 'Client Documents'
+    if (category.includes('compliance')) return 'Compliance'
+
+    const type = doc.document_type || doc.type || ''
+    return formatLabel(type) || 'Other'
+  }
+
+  const groupedDocuments = useMemo(() => {
+    const groups = new Map<string, ClientDocument[]>()
+    clientDocuments.forEach((doc) => {
+      const label = getDocumentGroupLabel(doc)
+      const current = groups.get(label) || []
+      current.push(doc)
+      groups.set(label, current)
+    })
+
+    const order = ['Assessment Reports', 'Client Documents', 'Compliance', 'Planning Reports', 'Other']
+    const sorted = Array.from(groups.entries()).sort((a, b) => {
+      const aIndex = order.indexOf(a[0])
+      const bIndex = order.indexOf(b[0])
+      if (aIndex === -1 && bIndex === -1) return a[0].localeCompare(b[0])
+      if (aIndex === -1) return 1
+      if (bIndex === -1) return -1
+      return aIndex - bIndex
+    })
+
+    return sorted
+  }, [clientDocuments])
+
+  const previewDocument = previewDocumentId
+    ? clientDocuments.find((doc) => doc.id === previewDocumentId) || null
+    : null
+  const previewUrl = previewDocumentId ? `/api/documents/preview/${previewDocumentId}` : null
 
   const formatFirmAddress = (address?: FirmAddress) => {
     if (!address) return ''
@@ -686,36 +734,90 @@ export default function SignaturesPage() {
                       No documents found for this client.
                     </div>
                   ) : (
-                    <div className="border border-gray-200 rounded-md p-2 max-h-44 overflow-y-auto space-y-2">
-                      {clientDocuments.map((doc) => (
-                        <div key={doc.id} className="flex items-start gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={selectedDocumentIds.includes(doc.id)}
-                            onChange={() => toggleDocumentSelection(doc.id)}
-                            className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="font-medium text-gray-900 truncate">
-                                  {doc.name || doc.file_name || 'Document'}
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4">
+                      <div className="border border-gray-200 rounded-md p-2 max-h-56 overflow-y-auto space-y-4">
+                        {groupedDocuments.map(([groupLabel, docs]) => (
+                          <div key={groupLabel}>
+                            <div className="flex items-center justify-between px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              <span>{groupLabel}</span>
+                              <span>{docs.length}</span>
+                            </div>
+                            <div className="space-y-2">
+                              {docs.map((doc) => (
+                                <div
+                                  key={doc.id}
+                                  className="flex items-start gap-2 rounded-md px-2 py-1 text-sm hover:bg-gray-50"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDocumentIds.includes(doc.id)}
+                                    onChange={() => toggleDocumentSelection(doc.id)}
+                                    className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="font-medium text-gray-900 truncate">
+                                          {doc.name || doc.file_name || 'Document'}
+                                        </div>
+                                        <div className="text-xs text-gray-500 truncate">
+                                          {doc.document_type || doc.type || doc.category || 'Document'} • {doc.status || 'draft'}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewDocumentId(doc.id)}
+                                        className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                                      >
+                                        Preview
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="text-xs text-gray-500 truncate">
-                                  {doc.document_type || doc.category || 'Document'} • {doc.status || 'draft'}
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setPreviewDocumentId(doc.id)}
-                                className="text-xs text-blue-600 hover:text-blue-700 whitespace-nowrap"
-                              >
-                                Preview
-                              </button>
+                              ))}
                             </div>
                           </div>
+                        ))}
+                      </div>
+                      <div className="border border-gray-200 rounded-md bg-gray-50 flex flex-col overflow-hidden">
+                        <div className="px-3 py-2 border-b border-gray-200 bg-white">
+                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Preview</div>
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {previewDocument ? (previewDocument.name || previewDocument.file_name || 'Document') : 'Select a document'}
+                          </div>
                         </div>
-                      ))}
+                        <div className="flex-1 min-h-[180px]">
+                          {previewUrl ? (
+                            <iframe
+                              src={previewUrl}
+                              title="Document preview"
+                              className="w-full h-full"
+                            />
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-xs text-gray-500">
+                              Choose a document to preview it here.
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-3 py-2 border-t border-gray-200 bg-white flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => previewDocumentId && window.open(`/api/documents/preview/${previewDocumentId}`, '_blank')}
+                            disabled={!previewDocumentId}
+                          >
+                            Open Full Preview
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => previewDocumentId && window.open(`/api/documents/download/${previewDocumentId}`, '_blank')}
+                            disabled={!previewDocumentId}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )}
                   <p className="text-xs text-gray-500 mt-2">
@@ -799,14 +901,6 @@ export default function SignaturesPage() {
         </div>
       )}
 
-      {previewDocumentId && (
-        <DocumentViewerModal
-          isOpen={!!previewDocumentId}
-          onClose={() => setPreviewDocumentId(null)}
-          documentId={previewDocumentId}
-          defaultFullscreen={false}
-        />
-      )}
     </Layout>
   )
 }

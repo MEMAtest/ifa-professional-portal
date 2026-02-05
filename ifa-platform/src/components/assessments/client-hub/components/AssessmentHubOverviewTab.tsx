@@ -15,14 +15,16 @@ export function AssessmentHubOverviewTab(props: {
   onViewResults: (assessmentId: string) => void
 }) {
   const { getAssessmentStatus, getStatusBadge, onStartAssessment, onViewResults } = props
+  const orderedIds = ['atr', 'cfl', 'persona', 'suitability', 'monte_carlo', 'cashflow'] as const
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Assessments</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {Object.values(assessmentTypes)
-            .sort((a, b) => a.order - b.order)
+          {orderedIds
+            .map((id) => assessmentTypes[id])
+            .filter(Boolean)
             .map((assessment) => {
               const status = getAssessmentStatus(assessment.id)
               const colors = getAssessmentColorClasses(assessment.color)
@@ -113,4 +115,3 @@ export function AssessmentHubOverviewTab(props: {
     </div>
   )
 }
-

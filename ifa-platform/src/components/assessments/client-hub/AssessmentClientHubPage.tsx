@@ -613,7 +613,6 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
               }`}
             >
               Documents
-              {complianceAlerts.length > 0 && <span className="absolute -top-1 -right-2 h-2 w-2 bg-red-500 rounded-full"></span>}
             </button>
           </nav>
         </div>
@@ -637,7 +636,6 @@ export function AssessmentClientHubPage(props: { clientId: string }) {
         {activeTab === 'documents' && (
           <AssessmentHubDocumentsTab
             clientId={clientId}
-            complianceAlerts={complianceAlerts}
           />
         )}
       </div>

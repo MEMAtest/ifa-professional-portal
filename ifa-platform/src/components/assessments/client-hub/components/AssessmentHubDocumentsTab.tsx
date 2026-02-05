@@ -1,9 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle, Download, Eye, FileText, Loader2, AlertCircle } from 'lucide-react'
-
-import type { ComplianceAlert } from '@/types/assessment'
+import { Download, Eye, FileText, Loader2 } from 'lucide-react'
 import { Card, Badge, Button } from '@/components/assessments/client-hub/ui'
 import DocumentViewerModal from '@/components/documents/DocumentViewerModal'
 
@@ -25,9 +23,8 @@ type DocumentRow = {
 
 export function AssessmentHubDocumentsTab(props: {
   clientId: string
-  complianceAlerts: ComplianceAlert[]
 }) {
-  const { clientId, complianceAlerts } = props
+  const { clientId } = props
   const [documents, setDocuments] = useState<DocumentRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -94,33 +91,6 @@ export function AssessmentHubDocumentsTab(props: {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Compliance Checks</h2>
-          {complianceAlerts.length > 0 && (
-            <Badge className="bg-red-100 text-red-700">Action needed</Badge>
-          )}
-        </div>
-        {complianceAlerts.length === 0 ? (
-          <div className="flex items-center gap-3 text-green-700">
-            <CheckCircle className="h-5 w-5" />
-            <span>All assessments are current and aligned.</span>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {complianceAlerts.map((alert) => (
-              <div key={alert.id} className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 p-3">
-                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-                <div className="flex-1">
-                  <div className="font-medium text-red-900">{alert.message}</div>
-                  <div className="text-xs text-red-700 mt-1">Severity: {alert.severity}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
