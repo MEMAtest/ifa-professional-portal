@@ -55,14 +55,25 @@ export async function GET(request: NextRequest) {
 
     const templateService = DocumentTemplateService.getInstance()
     const defaults = templateService.getDefaultTemplates()
+    const slugify = (value: string) => value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
     const fallbackTemplates = defaults.map((template) => {
-      const documentType = template.documentType || template.name?.toLowerCase().replace(/\s+/g, '_')
+      const templateName = template.name || 'Template'
+      const slug = slugify(templateName)
+      const documentType = template.documentType || slug || 'template_document'
+      const inferredRequiresSignature = templateName.toLowerCase().includes('draft')
+        ? false
+        : DocumentGenerationRouter.requiresSignature(documentType)
       return {
-        id: documentType || template.name?.toLowerCase().replace(/\s+/g, '_'),
-        name: template.name,
+        id: slug || documentType,
+        name: templateName,
         description: template.description || null,
         assessment_type: documentType || null,
-        requires_signature: documentType ? DocumentGenerationRouter.requiresSignature(documentType) : false,
+        document_type: documentType || null,
+        requires_signature: inferredRequiresSignature,
         is_default: true,
         is_active: true,
         firm_id: firmId,

@@ -46,6 +46,7 @@ interface Template {
   name: string
   description?: string | null
   assessment_type?: string | null
+  document_type?: string | null
   requires_signature?: boolean | null
   source?: string | null
 }
@@ -77,18 +78,11 @@ export default function SignaturesPage() {
   const [signerEmail, setSignerEmail] = useState('')
   const [signerName, setSignerName] = useState('')
   const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState(false)
   const [generatingTemplate, setGeneratingTemplate] = useState(false)
   const [isRegeneratingPreview, setIsRegeneratingPreview] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-
-  const SIGNABLE_DOCUMENT_TYPES = useMemo(() => new Set([
-    'client_agreement',
-    'fee_agreement',
-    'suitability_report',
-    'fca_disclosure',
-    'template_document'
-  ]), [])
 
   // This would typically load all signature requests for the firm
   const { signatureRequests, loading, error, createSignatureRequest } = useSignatureRequests()
@@ -133,6 +127,7 @@ export default function SignaturesPage() {
         setSignerEmail(client.contact_info?.email || '')
       }
       setPreviewDocumentId(null)
+      setPreviewError(false)
     }
   }, [selectedClient, clients])
 
@@ -141,10 +136,11 @@ export default function SignaturesPage() {
       setClientDocuments([])
       setSelectedDocumentIds([])
       setPreviewDocumentId(null)
+      setPreviewError(false)
       return
     }
     try {
-      const res = await fetch(`/api/documents/client/${selectedClient}`)
+      const res = await fetch(`/api/documents/client/${selectedClient}?requires_signature=true`)
       const data = await res.json()
       setClientDocuments(Array.isArray(data?.documents) ? data.documents : [])
     } catch (err) {
@@ -179,19 +175,30 @@ export default function SignaturesPage() {
     return formatLabel(type) || 'Other'
   }, [])
 
-  const signableDocuments = useMemo(() => (
-    clientDocuments.filter((doc) => {
-      if (doc.requires_signature === true) return true
-      const docType = doc.document_type || doc.type
-      return doc.requires_signature == null && docType ? SIGNABLE_DOCUMENT_TYPES.has(docType) : false
-    })
-  ), [clientDocuments, SIGNABLE_DOCUMENT_TYPES])
+  const isSignableType = useCallback((doc: ClientDocument) => {
+    const raw = `${doc.document_type || doc.type || ''} ${doc.category || ''}`.toLowerCase()
+    if (!raw) return false
+    return (
+      raw.includes('suitability') ||
+      raw.startsWith('atr') ||
+      raw.startsWith('cfl') ||
+      raw.includes('agreement') ||
+      raw.includes('contract') ||
+      raw.includes('terms')
+    )
+  }, [])
+
+  const signableDocuments = useMemo(
+    () => clientDocuments.filter((doc) => doc.requires_signature === true && isSignableType(doc)),
+    [clientDocuments, isSignableType]
+  )
 
   useEffect(() => {
     if (!previewDocumentId) return
     const stillExists = signableDocuments.some((doc) => doc.id === previewDocumentId)
     if (!stillExists) {
       setPreviewDocumentId(null)
+      setPreviewError(false)
     }
   }, [signableDocuments, previewDocumentId])
 
@@ -224,6 +231,9 @@ export default function SignaturesPage() {
     ? signableDocuments.find((doc) => doc.id === previewDocumentId) || null
     : null
   const previewUrl = previewDocumentId ? `/api/documents/preview/${previewDocumentId}` : null
+  useEffect(() => {
+    setPreviewError(false)
+  }, [previewDocumentId])
 
   const formatFirmAddress = (address?: FirmAddress) => {
     if (!address) return ''
@@ -255,7 +265,11 @@ export default function SignaturesPage() {
     const client = clients.find(c => c.id === selectedClient)
     const template = selectedTemplateObj
     const variables = buildTemplateVariables(client)
-    const templateDocumentType = template?.assessment_type || 'template_document'
+    const templateDocumentType =
+      template?.assessment_type || template?.document_type || 'template_document'
+    const templateName = template?.name?.toLowerCase() || ''
+    const templateRequiresSignature =
+      template?.requires_signature ?? (templateName.includes('draft') ? false : undefined)
 
     setGeneratingTemplate(true)
     setCreateError(null)
@@ -293,7 +307,7 @@ export default function SignaturesPage() {
           metadata: {
             document_type: templateDocumentType,
             type: templateDocumentType,
-            requires_signature: template?.requires_signature ?? undefined,
+            requires_signature: templateRequiresSignature,
             templateId: selectedTemplate
           }
         })
@@ -880,11 +894,23 @@ export default function SignaturesPage() {
                                   {isRegeneratingPreview ? 'Regenerating...' : 'Regenerate PDF'}
                                 </Button>
                               </div>
+                            ) : previewError ? (
+                              <div className="h-full flex flex-col items-center justify-center text-xs text-gray-500 gap-3 px-4">
+                                <span>Preview failed to load.</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => previewDocumentId && window.open(`/api/documents/preview/${previewDocumentId}`, '_blank')}
+                                >
+                                  Open Full Preview
+                                </Button>
+                              </div>
                             ) : (
                               <iframe
                                 src={previewUrl || undefined}
                                 title="Document preview"
                                 className="w-full h-full"
+                                onError={() => setPreviewError(true)}
                               />
                             )
                           ) : (

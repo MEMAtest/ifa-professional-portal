@@ -73,13 +73,21 @@ export interface GenerateDocumentRequest {
 // ✅ ENHANCED: Template name to ID mapping
 // =====================================================
 const TEMPLATE_NAME_MAPPING: Record<string, string> = {
-  'draft_report': 'suitability_report',
+  'draft_report': 'draft_report',
   'suitability_report': 'suitability_report',
   'annual_review': 'annual_review',
   'client_agreement': 'client_agreement',
   'risk_assessment': 'risk_assessment_report',
   'investment_proposal': 'investment_proposal',
   'compliance_report': 'compliance_report'
+}
+
+const slugifyTemplateName = (value: string) => {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
 }
 
 // ===================================================================
@@ -325,7 +333,7 @@ export class DocumentTemplateService {
     const mappedId = TEMPLATE_NAME_MAPPING[templateId] || templateId
     const defaultTemplates = this.getDefaultTemplates()
     const template = defaultTemplates.find(t => {
-      const templateName = t.name?.toLowerCase().replace(/\s+/g, '_')
+      const templateName = t.name ? slugifyTemplateName(t.name) : ''
       return templateName === mappedId || t.documentType === mappedId
     })
 
@@ -350,10 +358,11 @@ export class DocumentTemplateService {
   // =====================================================
   private getDefaultTemplateByName(templateName: string): DocumentTemplate | null {
     const defaultTemplates = this.getDefaultTemplates()
-    const template = defaultTemplates.find(t =>
-      t.name?.toLowerCase() === templateName.toLowerCase() ||
-      t.name?.toLowerCase().replace(/\s+/g, '_') === templateName.toLowerCase()
-    )
+    const normalized = templateName.toLowerCase()
+    const template = defaultTemplates.find(t => {
+      const candidate = t.name ? slugifyTemplateName(t.name) : ''
+      return t.name?.toLowerCase() === normalized || candidate === normalized
+    })
 
     if (template) {
       return {
@@ -375,17 +384,22 @@ export class DocumentTemplateService {
   // ✅ ENHANCED: Get default templates as list
   // =====================================================
   private getDefaultTemplatesAsList(): DocumentTemplate[] {
-    return this.getDefaultTemplates().map((t, index) => ({
-      id: t.documentType || `template_${index}`,
-      name: t.name || '',
-      description: t.description,
-      category_id: undefined,
-      content: t.content || '',
-      merge_fields: this.variablesToMergeFields(t.variables || []),
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }))
+    return this.getDefaultTemplates().map((t, index) => {
+      const fallbackName = t.name || `Template ${index + 1}`
+      const slug = slugifyTemplateName(fallbackName)
+      const id = slug || t.documentType || `template_${index}`
+      return {
+        id,
+        name: t.name || '',
+        description: t.description,
+        category_id: undefined,
+        content: t.content || '',
+        merge_fields: this.variablesToMergeFields(t.variables || []),
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    })
   }
 
   // Get templates by category

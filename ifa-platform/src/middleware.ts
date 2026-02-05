@@ -32,7 +32,8 @@ export async function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     scriptSrc,
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com",
-    "frame-src 'self' blob: https://js.stripe.com",
+    "child-src 'self' blob: data:",
+    "frame-src 'self' blob: data: https://js.stripe.com",
   ].join('; ')
 
   // Set nonce AND CSP on request headers so Next.js applies nonces to inline scripts

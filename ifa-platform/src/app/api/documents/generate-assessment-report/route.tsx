@@ -52,6 +52,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
     const safeReportType = normalizeSuitabilityReportVariant(reportType)
+    const requiresSignature =
+      assessmentType === 'suitability'
+        ? safeReportType === 'fullReport'
+        : ['atr', 'cfl'].includes(assessmentType)
 
     // Fetch client first (and enforce firm/advisor access)
     const { data: client, error: clientError } = await supabase
@@ -302,6 +306,7 @@ export async function POST(request: NextRequest) {
             version_number: 1,
             is_template: false,
             is_archived: false,
+            requires_signature: requiresSignature,
             created_by: ctx.userId,
             metadata: {
               assessmentId,

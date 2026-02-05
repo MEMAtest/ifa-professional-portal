@@ -40,7 +40,7 @@ export class DocumentGenerationRouter {
     'atr_assessment': {
       category: 'assessment',
       strategy: 'hybrid',
-      requiresSignature: false,
+      requiresSignature: true,
       hasCharts: true,
       isRegulated: true,
       complexity: 'moderate',
@@ -50,7 +50,7 @@ export class DocumentGenerationRouter {
     'cfl_assessment': {
       category: 'assessment',
       strategy: 'hybrid',
-      requiresSignature: false,
+      requiresSignature: true,
       hasCharts: true,
       isRegulated: true,
       complexity: 'moderate',
