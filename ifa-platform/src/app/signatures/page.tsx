@@ -61,6 +61,8 @@ interface ClientDocument {
   status?: string
   created_at?: string
   file_size?: number
+  file_path?: string | null
+  storage_path?: string | null
   requires_signature?: boolean | null
 }
 
@@ -160,6 +162,48 @@ export default function SignaturesPage() {
       .replace(/\b\w/g, (char) => char.toUpperCase())
   }
 
+  const normalizeKey = (value?: string | null) => {
+    if (!value) return ''
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+  }
+
+  const SIGNABLE_CATEGORY_KEYS = new Set(['agreement', 'agreements', 'contract', 'contracts'])
+  const SIGNABLE_TYPE_KEYS = new Set([
+    'suitability_fullreport',
+    'suitability_executivesummary',
+    'suitability_compliancereport',
+    'suitability_report',
+    'atr_assessment',
+    'cfl_assessment',
+    'client_agreement',
+    'fee_agreement',
+    'service_agreement',
+    'terms_of_business',
+    'terms_of_service',
+    'client_contract',
+    'service_contract'
+  ])
+
+  const isSignableType = useCallback((doc: ClientDocument) => {
+    const typeKey = normalizeKey(doc.type || doc.document_type || '')
+    const categoryKey = normalizeKey(doc.category || '')
+
+    if (categoryKey.includes('upload') || categoryKey.includes('vault')) {
+      return false
+    }
+
+    if (SIGNABLE_CATEGORY_KEYS.has(categoryKey)) return true
+    if (SIGNABLE_TYPE_KEYS.has(typeKey)) return true
+    if (typeKey.startsWith('suitability_')) return true
+    if (typeKey.startsWith('atr_') || typeKey.startsWith('cfl_')) return true
+    if (typeKey.includes('agreement') || typeKey.includes('contract') || typeKey.includes('terms')) return true
+
+    return false
+  }, [])
+
   const getDocumentGroupLabel = useCallback((doc: ClientDocument) => {
     const rawCategory = doc.category || ''
     const category = rawCategory.toLowerCase()
@@ -173,19 +217,6 @@ export default function SignaturesPage() {
 
     const type = doc.document_type || doc.type || ''
     return formatLabel(type) || 'Other'
-  }, [])
-
-  const isSignableType = useCallback((doc: ClientDocument) => {
-    const raw = `${doc.document_type || doc.type || ''} ${doc.category || ''}`.toLowerCase()
-    if (!raw) return false
-    return (
-      raw.includes('suitability') ||
-      raw.startsWith('atr') ||
-      raw.startsWith('cfl') ||
-      raw.includes('agreement') ||
-      raw.includes('contract') ||
-      raw.includes('terms')
-    )
   }, [])
 
   const signableDocuments = useMemo(
@@ -224,16 +255,45 @@ export default function SignaturesPage() {
     return sorted
   }, [signableDocuments, getDocumentGroupLabel])
 
+  const signableTemplates = useMemo(() => {
+    return templates
+      .filter((template) => {
+      const templateTypeKey = normalizeKey(template.document_type || template.assessment_type || '')
+      const templateNameKey = normalizeKey(template.name || '')
+      if (template.requires_signature === true) return true
+      if (SIGNABLE_TYPE_KEYS.has(templateTypeKey)) return true
+      if (templateTypeKey.startsWith('suitability_') || templateTypeKey.startsWith('atr_') || templateTypeKey.startsWith('cfl_')) {
+        return true
+      }
+      if (templateNameKey.includes('agreement') || templateNameKey.includes('contract') || templateNameKey.includes('terms')) {
+        return true
+      }
+      return false
+    })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  }, [templates])
+
   const selectedTemplateObj = selectedTemplate
-    ? templates.find((template) => template.id === selectedTemplate) || null
+    ? signableTemplates.find((template) => template.id === selectedTemplate) || null
     : null
   const previewDocument = previewDocumentId
     ? signableDocuments.find((doc) => doc.id === previewDocumentId) || null
     : null
+  const previewHasPdf = Boolean(
+    previewDocument && (previewDocument.file_path || previewDocument.storage_path) && (previewDocument.file_size ?? 0) !== 0
+  )
   const previewUrl = previewDocumentId ? `/api/documents/preview/${previewDocumentId}` : null
   useEffect(() => {
     setPreviewError(false)
   }, [previewDocumentId])
+
+  useEffect(() => {
+    if (!selectedTemplate) return
+    const stillExists = signableTemplates.some((template) => template.id === selectedTemplate)
+    if (!stillExists) {
+      setSelectedTemplate('')
+    }
+  }, [selectedTemplate, signableTemplates])
 
   const formatFirmAddress = (address?: FirmAddress) => {
     if (!address) return ''
@@ -249,7 +309,7 @@ export default function SignaturesPage() {
       CLIENT_EMAIL: client?.contact_info?.email || '',
       CLIENT_REF: client?.client_ref || '',
       REPORT_DATE: new Date().toLocaleDateString('en-GB'),
-      DOCUMENT_TITLE: templates.find(t => t.id === selectedTemplate)?.name || 'Document',
+      DOCUMENT_TITLE: signableTemplates.find(t => t.id === selectedTemplate)?.name || 'Document',
       FIRM_NAME: firm?.name || '',
       FIRM_FCA_NUMBER: firm?.fcaNumber || '',
       FIRM_ADDRESS: formatFirmAddress(firm?.address)
@@ -269,7 +329,7 @@ export default function SignaturesPage() {
       template?.assessment_type || template?.document_type || 'template_document'
     const templateName = template?.name?.toLowerCase() || ''
     const templateRequiresSignature =
-      template?.requires_signature ?? (templateName.includes('draft') ? false : undefined)
+      template?.requires_signature ?? (templateName.includes('draft') ? false : true)
 
     setGeneratingTemplate(true)
     setCreateError(null)
@@ -770,9 +830,9 @@ export default function SignaturesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Document Template (Optional)
                 </label>
-                {templates.length === 0 ? (
+                {signableTemplates.length === 0 ? (
                   <div className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-md p-3">
-                    No templates available yet.{' '}
+                    No signature-ready templates available yet.{' '}
                     <Link href="/templates/editor" className="text-blue-600 hover:text-blue-700">
                       Create a template
                     </Link>
@@ -785,7 +845,7 @@ export default function SignaturesPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select template (optional)</option>
-                    {templates.map((template) => (
+                    {signableTemplates.map((template) => (
                       <option key={template.id} value={template.id}>
                         {template.name}
                       </option>
@@ -828,8 +888,8 @@ export default function SignaturesPage() {
                       document that requires signature.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-4">
-                      <div className="border border-gray-200 rounded-md p-2 max-h-56 overflow-y-auto space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] gap-4">
+                      <div className="border border-gray-200 rounded-md p-2 max-h-52 lg:max-h-[260px] overflow-y-auto space-y-4">
                         {groupedDocuments.map(([groupLabel, docs]) => (
                           <div key={groupLabel}>
                             <div className="flex items-center justify-between px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -873,16 +933,16 @@ export default function SignaturesPage() {
                           </div>
                         ))}
                       </div>
-                      <div className="border border-gray-200 rounded-md bg-gray-50 flex flex-col overflow-hidden min-h-[320px] lg:min-h-[360px]">
+                      <div className="border border-gray-200 rounded-md bg-gray-50 flex flex-col overflow-hidden min-h-[360px] lg:min-h-[520px]">
                         <div className="px-3 py-2 border-b border-gray-200 bg-white">
                           <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Preview</div>
                           <div className="text-sm font-medium text-gray-900 truncate">
                             {previewDocument ? (previewDocument.name || previewDocument.file_name || 'Document') : 'Select a document'}
                           </div>
                         </div>
-                        <div className="flex-1 min-h-[240px]">
+                        <div className="flex-1 min-h-[260px] lg:min-h-[420px]">
                           {previewDocument ? (
-                            previewDocument.file_size === 0 ? (
+                            !previewHasPdf ? (
                               <div className="h-full flex flex-col items-center justify-center text-xs text-gray-500 gap-3 px-4">
                                 <span>This document has no PDF preview yet.</span>
                                 <Button
@@ -909,7 +969,7 @@ export default function SignaturesPage() {
                               <iframe
                                 src={previewUrl || undefined}
                                 title="Document preview"
-                                className="w-full h-full"
+                                className="w-full h-full bg-white"
                                 onError={() => setPreviewError(true)}
                               />
                             )

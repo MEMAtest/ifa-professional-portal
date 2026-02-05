@@ -76,6 +76,37 @@ export class DocumentGenerationRouter {
       complexity: 'complex',
       templateSource: 'Suitability Report'
     },
+
+    // New suitability report variants
+    'suitability_fullReport': {
+      category: 'assessment',
+      strategy: 'hybrid',
+      requiresSignature: true,
+      hasCharts: true,
+      isRegulated: true,
+      complexity: 'complex',
+      templateSource: 'Suitability Report (Full)'
+    },
+
+    'suitability_executiveSummary': {
+      category: 'assessment',
+      strategy: 'hybrid',
+      requiresSignature: false,
+      hasCharts: true,
+      isRegulated: true,
+      complexity: 'moderate',
+      templateSource: 'Suitability Executive Summary'
+    },
+
+    'suitability_complianceReport': {
+      category: 'assessment',
+      strategy: 'hybrid',
+      requiresSignature: false,
+      hasCharts: true,
+      isRegulated: true,
+      complexity: 'moderate',
+      templateSource: 'Suitability Compliance Report'
+    },
     
     'annual_review': {
       category: 'assessment',
