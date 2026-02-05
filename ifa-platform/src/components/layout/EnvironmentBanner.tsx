@@ -30,7 +30,8 @@ export function EnvironmentBanner() {
       return
     }
 
-    setResolvedEnv('development')
+    // Default to production for unknown hostnames (e.g. www.plannetic.com)
+    setResolvedEnv('production')
   }, [resolvedEnv])
 
   // Don't show in production
