@@ -129,7 +129,14 @@ export default function NewClientPage() {
       
       // Navigate to the new client's detail page
       // Using replace to prevent back navigation to create form
-      router.replace(`/clients/${newClient.id}?welcome=true`);
+      const targetUrl = `/clients/${newClient.id}?welcome=true`;
+      router.replace(targetUrl);
+      // Fallback for slow router transitions (ensures navigation in automated flows)
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && window.location.pathname.includes('/clients/new')) {
+          window.location.assign(targetUrl);
+        }
+      }, 1500);
       
     } catch (error) {
       clientLogger.error('Error creating client:', error);

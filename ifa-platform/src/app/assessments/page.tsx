@@ -389,6 +389,9 @@ export default function AssessmentsPage() {
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600">Loading assessments...</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Gathering client assessment status and compliance checks.
+          </p>
         </div>
       </div>
     );

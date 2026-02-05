@@ -342,6 +342,9 @@ export default function ClientsPage() {
         <div className="text-center">
           <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
           <p className="text-gray-600">Loading clients...</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Fetching client profiles and advisor assignments.
+          </p>
         </div>
       </div>
     );
