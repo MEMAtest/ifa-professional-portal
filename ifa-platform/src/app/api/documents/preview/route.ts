@@ -10,6 +10,7 @@ import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
+import { DocumentTemplateService } from '@/services/documentTemplateService'
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,15 +36,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch template
-    const { data: template, error: templateError } = await supabase
+    // Fetch template from DB, fall back to defaults if missing
+    let template: any = null
+    const { data: dbTemplate, error: templateError } = await supabase
       .from('document_templates')
       .select('*')
       .eq('id', templateId)
       .eq('firm_id', firmId)
-      .single()
+      .maybeSingle()
 
-    if (templateError || !template) {
+    if (!templateError && dbTemplate) {
+      template = dbTemplate
+    } else {
+      const templateService = DocumentTemplateService.getInstance()
+      template = await templateService.getTemplateById(templateId)
+    }
+
+    if (!template) {
       return NextResponse.json(
         { error: 'Template not found' },
         { status: 404 }
@@ -51,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Simple template population for preview
-    let content = template.template_content ?? ''
+    let content = template.template_content ?? template.content ?? ''
     Object.entries(variables).forEach(([key, value]) => {
       const safeValue = String(value ?? '')
       const curlyRegex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')

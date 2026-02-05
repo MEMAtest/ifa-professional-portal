@@ -308,6 +308,14 @@ export class DocumentGenerationRouter {
   }
 
   /**
+   * Get the document category for a document type
+   */
+  static getCategory(documentType: string): DocumentCategory {
+    const config = this.getDocumentConfig(documentType);
+    return config.category;
+  }
+
+  /**
    * Check if a document type includes charts
    */
   static hasCharts(documentType: string): boolean {

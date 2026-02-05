@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { DocumentTemplateService } from '@/services/documentTemplateService'
+import { DocumentGenerationRouter } from '@/services/DocumentGenerationRouter'
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,10 +44,37 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const hydratedTemplates = templates || []
+    if (hydratedTemplates.length > 0) {
+      return NextResponse.json({
+        success: true,
+        templates: hydratedTemplates,
+        count: hydratedTemplates.length
+      })
+    }
+
+    const templateService = DocumentTemplateService.getInstance()
+    const defaults = templateService.getDefaultTemplates()
+    const fallbackTemplates = defaults.map((template) => {
+      const documentType = template.documentType || template.name?.toLowerCase().replace(/\s+/g, '_')
+      return {
+        id: documentType || template.name?.toLowerCase().replace(/\s+/g, '_'),
+        name: template.name,
+        description: template.description || null,
+        assessment_type: documentType || null,
+        requires_signature: documentType ? DocumentGenerationRouter.requiresSignature(documentType) : false,
+        is_default: true,
+        is_active: true,
+        firm_id: firmId,
+        source: 'default'
+      }
+    })
+
     return NextResponse.json({
       success: true,
-      templates: templates || [],
-      count: templates?.length || 0
+      templates: fallbackTemplates,
+      count: fallbackTemplates.length,
+      source: 'default'
     })
   } catch (error) {
     log.error('Error in all templates route:', error)

@@ -4,6 +4,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { useSignatureRequests } from '@/lib/hooks/useDocuments'
 import { Layout } from '@/components/layout/Layout'
 import { Card } from '@/components/ui/Card'
@@ -43,6 +44,10 @@ interface Client {
 interface Template {
   id: string
   name: string
+  description?: string | null
+  assessment_type?: string | null
+  requires_signature?: boolean | null
+  source?: string | null
 }
 
 interface ClientDocument {
@@ -55,6 +60,7 @@ interface ClientDocument {
   status?: string
   created_at?: string
   file_size?: number
+  requires_signature?: boolean | null
 }
 
 export default function SignaturesPage() {
@@ -72,8 +78,17 @@ export default function SignaturesPage() {
   const [signerName, setSignerName] = useState('')
   const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
   const [generatingTemplate, setGeneratingTemplate] = useState(false)
+  const [isRegeneratingPreview, setIsRegeneratingPreview] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+
+  const SIGNABLE_DOCUMENT_TYPES = useMemo(() => new Set([
+    'client_agreement',
+    'fee_agreement',
+    'suitability_report',
+    'fca_disclosure',
+    'template_document'
+  ]), [])
 
   // This would typically load all signature requests for the firm
   const { signatureRequests, loading, error, createSignatureRequest } = useSignatureRequests()
@@ -142,14 +157,6 @@ export default function SignaturesPage() {
     void loadClientDocuments()
   }, [loadClientDocuments])
 
-  useEffect(() => {
-    if (!previewDocumentId) return
-    const stillExists = clientDocuments.some((doc) => doc.id === previewDocumentId)
-    if (!stillExists) {
-      setPreviewDocumentId(null)
-    }
-  }, [clientDocuments, previewDocumentId])
-
   const formatLabel = (value?: string | null) => {
     if (!value) return ''
     return value
@@ -165,21 +172,39 @@ export default function SignaturesPage() {
     if (category.includes('planning')) return 'Planning Reports'
     if (category.includes('client')) return 'Client Documents'
     if (category.includes('compliance')) return 'Compliance'
+    if (category.includes('agreement')) return 'Agreements'
+    if (category.includes('letter')) return 'Letters'
 
     const type = doc.document_type || doc.type || ''
     return formatLabel(type) || 'Other'
   }, [])
 
+  const signableDocuments = useMemo(() => (
+    clientDocuments.filter((doc) => {
+      if (doc.requires_signature === true) return true
+      const docType = doc.document_type || doc.type
+      return doc.requires_signature == null && docType ? SIGNABLE_DOCUMENT_TYPES.has(docType) : false
+    })
+  ), [clientDocuments, SIGNABLE_DOCUMENT_TYPES])
+
+  useEffect(() => {
+    if (!previewDocumentId) return
+    const stillExists = signableDocuments.some((doc) => doc.id === previewDocumentId)
+    if (!stillExists) {
+      setPreviewDocumentId(null)
+    }
+  }, [signableDocuments, previewDocumentId])
+
   const groupedDocuments = useMemo(() => {
     const groups = new Map<string, ClientDocument[]>()
-    clientDocuments.forEach((doc) => {
+    signableDocuments.forEach((doc) => {
       const label = getDocumentGroupLabel(doc)
       const current = groups.get(label) || []
       current.push(doc)
       groups.set(label, current)
     })
 
-    const order = ['Assessment Reports', 'Client Documents', 'Compliance', 'Planning Reports', 'Other']
+    const order = ['Assessment Reports', 'Agreements', 'Letters', 'Client Documents', 'Compliance', 'Planning Reports', 'Other']
     const sorted = Array.from(groups.entries()).sort((a, b) => {
       const aIndex = order.indexOf(a[0])
       const bIndex = order.indexOf(b[0])
@@ -190,10 +215,13 @@ export default function SignaturesPage() {
     })
 
     return sorted
-  }, [clientDocuments, getDocumentGroupLabel])
+  }, [signableDocuments, getDocumentGroupLabel])
 
+  const selectedTemplateObj = selectedTemplate
+    ? templates.find((template) => template.id === selectedTemplate) || null
+    : null
   const previewDocument = previewDocumentId
-    ? clientDocuments.find((doc) => doc.id === previewDocumentId) || null
+    ? signableDocuments.find((doc) => doc.id === previewDocumentId) || null
     : null
   const previewUrl = previewDocumentId ? `/api/documents/preview/${previewDocumentId}` : null
 
@@ -225,7 +253,9 @@ export default function SignaturesPage() {
     }
 
     const client = clients.find(c => c.id === selectedClient)
+    const template = selectedTemplateObj
     const variables = buildTemplateVariables(client)
+    const templateDocumentType = template?.assessment_type || 'template_document'
 
     setGeneratingTemplate(true)
     setCreateError(null)
@@ -261,9 +291,9 @@ export default function SignaturesPage() {
           clientId: selectedClient,
           templateId: selectedTemplate,
           metadata: {
-            category: 'Client Documents',
-            document_type: 'template_document',
-            type: 'template_document',
+            document_type: templateDocumentType,
+            type: templateDocumentType,
+            requires_signature: template?.requires_signature ?? undefined,
             templateId: selectedTemplate
           }
         })
@@ -348,7 +378,7 @@ export default function SignaturesPage() {
       setSignerName('')
       window.location.reload()
     } catch (err) {
-      setCreateError('Failed to create signature request')
+      setCreateError(err instanceof Error ? err.message : 'Failed to create signature request')
     } finally {
       setIsCreating(false)
     }
@@ -358,6 +388,28 @@ export default function SignaturesPage() {
     setSelectedDocumentIds((prev) => (
       prev.includes(documentId) ? prev.filter((id) => id !== documentId) : [...prev, documentId]
     ))
+  }
+
+  const handleRegeneratePreview = async () => {
+    if (!previewDocumentId) return
+    setIsRegeneratingPreview(true)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/documents/regenerate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: previewDocumentId })
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Failed to regenerate PDF')
+      }
+      await loadClientDocuments()
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to regenerate PDF')
+    } finally {
+      setIsRegeneratingPreview(false)
+    }
   }
 
   const getClientDisplayName = (client: Client) => {
@@ -656,7 +708,7 @@ export default function SignaturesPage() {
       {/* Create Signature Request Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-semibold text-gray-900">
                 Create Signature Request
@@ -704,20 +756,36 @@ export default function SignaturesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Document Template (Optional)
                 </label>
-                <select
-                  value={selectedTemplate}
-                  onChange={(e) => setSelectedTemplate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select template (optional)</option>
-                  {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
+                {templates.length === 0 ? (
+                  <div className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-md p-3">
+                    No templates available yet.{' '}
+                    <Link href="/templates/editor" className="text-blue-600 hover:text-blue-700">
+                      Create a template
+                    </Link>
+                    {' '}to generate signature-ready documents.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedTemplate}
+                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select template (optional)</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {selectedTemplate && selectedClient && (
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-col gap-2">
+                    {selectedTemplateObj?.description && (
+                      <p className="text-xs text-gray-500">
+                        {selectedTemplateObj.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -729,6 +797,7 @@ export default function SignaturesPage() {
                     <span className="text-xs text-gray-500">
                       Creates a document from the selected template.
                     </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -739,13 +808,14 @@ export default function SignaturesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Documents to Sign *
                   </label>
-                  {clientDocuments.length === 0 ? (
+                  {signableDocuments.length === 0 ? (
                     <div className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-md p-3">
-                      No documents found for this client.
+                      No signature-ready documents found for this client. Generate a document from a template or upload a
+                      document that requires signature.
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4">
-                      <div className="border border-gray-200 rounded-md p-2 max-h-56 overflow-y-auto space-y-4">
+                      <div className="border border-gray-200 rounded-md p-2 max-h-72 overflow-y-auto space-y-4">
                         {groupedDocuments.map(([groupLabel, docs]) => (
                           <div key={groupLabel}>
                             <div className="flex items-center justify-between px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -796,13 +866,27 @@ export default function SignaturesPage() {
                             {previewDocument ? (previewDocument.name || previewDocument.file_name || 'Document') : 'Select a document'}
                           </div>
                         </div>
-                        <div className="flex-1 min-h-[180px]">
-                          {previewUrl ? (
-                            <iframe
-                              src={previewUrl}
-                              title="Document preview"
-                              className="w-full h-full"
-                            />
+                        <div className="flex-1 min-h-[200px]">
+                          {previewDocument ? (
+                            previewDocument.file_size === 0 ? (
+                              <div className="h-full flex flex-col items-center justify-center text-xs text-gray-500 gap-3 px-4">
+                                <span>This document has no PDF preview yet.</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleRegeneratePreview}
+                                  disabled={isRegeneratingPreview}
+                                >
+                                  {isRegeneratingPreview ? 'Regenerating...' : 'Regenerate PDF'}
+                                </Button>
+                              </div>
+                            ) : (
+                              <iframe
+                                src={previewUrl || undefined}
+                                title="Document preview"
+                                className="w-full h-full"
+                              />
+                            )
                           ) : (
                             <div className="h-full flex items-center justify-center text-xs text-gray-500">
                               Choose a document to preview it here.

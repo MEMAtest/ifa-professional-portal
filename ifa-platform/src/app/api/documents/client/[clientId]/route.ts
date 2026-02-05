@@ -45,12 +45,16 @@ export async function GET(
     const assessmentType = searchParams.get('assessmentType')
     const assessmentVersion = searchParams.get('version')
     const summaryOnly = searchParams.get('summary') === '1' || searchParams.get('summary') === 'true'
+    const requiresSignatureParam = searchParams.get('requires_signature')
+    const requiresSignature =
+      requiresSignatureParam === null ? null : requiresSignatureParam === 'true' || requiresSignatureParam === '1'
 
     log.debug('Document fetch params', {
       clientId,
       assessmentId,
       assessmentType,
-      assessmentVersion
+      assessmentVersion,
+      requiresSignature
     })
 
     const supabase = getSupabaseServiceClient()
@@ -114,6 +118,10 @@ export async function GET(
         .eq('assessment_version', Number(assessmentVersion))
     } else if (assessmentType) {
       idQuery = idQuery.eq('document_type', `${assessmentType}_report`)
+    }
+
+    if (requiresSignature !== null) {
+      idQuery = idQuery.eq('requires_signature', requiresSignature)
     }
 
     const { data: idRows, error: idError } = await idQuery

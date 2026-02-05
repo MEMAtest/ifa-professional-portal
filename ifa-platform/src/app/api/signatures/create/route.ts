@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { sendNotificationEmail } from '@/services/emailService'
 import { createRequestLogger } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
+import { createClient } from '@/lib/supabase/server'
 import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
@@ -117,7 +118,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const supabase = getSupabaseServiceClient()
+    let supabase: any
+    try {
+      supabase = getSupabaseServiceClient()
+    } catch (serviceError) {
+      logger.warn('CREATE SIGNATURE: Service role unavailable, falling back to user client', {
+        error: serviceError instanceof Error ? serviceError.message : 'Unknown'
+      })
+      supabase = await createClient()
+    }
 
     if (clientId) {
       const access = await requireClientAccess({
@@ -212,9 +221,36 @@ export async function POST(request: NextRequest) {
         .single()
     }
 
+    const stripMissingColumn = (payload: Record<string, any>, error: any) => {
+      const message = error?.message || ''
+      const match = message.match(/column \"(.+?)\" does not exist/i)
+      if (!match) return null
+      const column = match[1]
+      if (!Object.prototype.hasOwnProperty.call(payload, column)) return null
+      const next = { ...payload }
+      delete next[column]
+      return next
+    }
+
+    const attemptWithAdaptivePayload = async (payload: Record<string, any>) => {
+      let current = { ...payload }
+      let result = await attemptInsert(current)
+      let error = result.error
+
+      for (let i = 0; i < 5 && error; i += 1) {
+        const stripped = stripMissingColumn(current, error)
+        if (!stripped) break
+        current = stripped
+        result = await attemptInsert(current)
+        error = result.error
+      }
+
+      return result
+    }
+
     logger.debug('CREATE SIGNATURE: Creating signature request', { clientId, documentId })
 
-    let insertResult = await attemptInsert(primaryPayload)
+    let insertResult = await attemptWithAdaptivePayload(primaryPayload)
     let insertError = insertResult.error
 
     if (insertError && (insertError.message?.includes('does not exist') || insertError.code === '42P01')) {
@@ -229,7 +265,7 @@ export async function POST(request: NextRequest) {
       logger.warn('CREATE SIGNATURE: Falling back to legacy schema', { error: insertError.message })
 
       for (const payload of fallbackPayloads) {
-        insertResult = await attemptInsert(payload)
+        insertResult = await attemptWithAdaptivePayload(payload)
         insertError = insertResult.error
         if (!insertError) break
       }
@@ -251,7 +287,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: 'Failed to create signature request'
+        error: 'Failed to create signature request',
+        details: process.env.NODE_ENV === 'development' ? insertError.message : undefined
       }, { status: 500 })
     }
 

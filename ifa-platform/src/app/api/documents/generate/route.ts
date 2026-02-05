@@ -12,6 +12,8 @@ import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { parseRequestBody } from '@/app/api/utils'
+import { DocumentTemplateService } from '@/services/documentTemplateService'
+import { DocumentGenerationRouter } from '@/services/DocumentGenerationRouter'
 
 interface GenerateDocumentRequest {
   content: string
@@ -92,9 +94,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const isFileReview = (metadata as any)?.type === 'file_review'
-    const category = (metadata as any)?.category || (isFileReview ? 'Compliance' : 'Generated')
-    const documentType = (metadata as any)?.document_type || (isFileReview ? 'compliance_document' : 'generated_document')
-    const type = (metadata as any)?.type || (isFileReview ? 'file_review' : 'generated')
+    let templateDocumentType: string | null = null
+    let templateRequiresSignature: boolean | null = null
+    let templateCategory: string | null = null
+
+    if (body.templateId) {
+      const { data: templateRow } = await supabase
+        .from('document_templates')
+        .select('assessment_type, requires_signature, category_id, document_categories(name)')
+        .eq('id', body.templateId)
+        .eq('firm_id', firmId)
+        .maybeSingle()
+
+      if (templateRow) {
+        templateDocumentType = templateRow.assessment_type || null
+        templateRequiresSignature = templateRow.requires_signature ?? null
+        templateCategory = (templateRow as any)?.document_categories?.name || null
+      } else {
+        const templateService = DocumentTemplateService.getInstance()
+        const fallbackTemplate = await templateService.getTemplateById(body.templateId)
+        if (fallbackTemplate) {
+          templateDocumentType = body.templateId
+          templateRequiresSignature = DocumentGenerationRouter.requiresSignature(templateDocumentType)
+        }
+      }
+    }
+
+    const documentType =
+      (metadata as any)?.document_type ||
+      templateDocumentType ||
+      (isFileReview ? 'compliance_document' : 'generated_document')
+    const requiresSignature =
+      (metadata as any)?.requires_signature ??
+      templateRequiresSignature ??
+      DocumentGenerationRouter.requiresSignature(documentType)
+    const category =
+      (metadata as any)?.category ||
+      templateCategory ||
+      (isFileReview ? 'Compliance' : DocumentGenerationRouter.getCategory(documentType))
+    const type = (metadata as any)?.type || documentType
 
     const stripHtml = (html: string) => {
       return html
@@ -198,6 +236,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         file_size: contentBuffer.length,
         type,
         document_type: documentType,
+        requires_signature: requiresSignature,
         firm_id: firmId,
         client_id: body.clientId || null,
         created_by: userId,
