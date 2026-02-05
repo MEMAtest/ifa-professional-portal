@@ -5,11 +5,37 @@
  * Shows a banner for non-production environments (UAT, Demo, Preview)
  */
 
+import { useEffect, useState } from 'react'
+
 export function EnvironmentBanner() {
-  const env = process.env.NEXT_PUBLIC_ENV || 'development'
+  const [resolvedEnv, setResolvedEnv] = useState<string | null>(
+    process.env.NEXT_PUBLIC_ENV || null
+  )
+
+  useEffect(() => {
+    if (resolvedEnv) return
+    if (typeof window === 'undefined') return
+
+    const host = window.location.hostname
+    if (host.startsWith('demo.')) {
+      setResolvedEnv('demo')
+      return
+    }
+    if (host.includes('vercel.app')) {
+      setResolvedEnv('preview')
+      return
+    }
+    if (host === 'localhost' || host.endsWith('.local')) {
+      setResolvedEnv('development')
+      return
+    }
+
+    // Default to production for unknown hostnames (e.g. www.plannetic.com)
+    setResolvedEnv('production')
+  }, [resolvedEnv])
 
   // Don't show in production
-  if (env === 'production') return null
+  if (!resolvedEnv || resolvedEnv === 'production') return null
 
   const config: Record<string, { bg: string; text: string; label: string; message: string }> = {
     demo: {
@@ -44,7 +70,7 @@ export function EnvironmentBanner() {
     }
   }
 
-  const { bg, text, label, message } = config[env] || config.development
+  const { bg, text, label, message } = config[resolvedEnv] || config.development
 
   return (
     <div className={`${bg} ${text} text-center text-sm py-1.5 px-4 flex items-center justify-center gap-2`}>
