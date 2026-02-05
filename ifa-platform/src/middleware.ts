@@ -15,8 +15,8 @@ export async function middleware(request: NextRequest) {
   const isPreviewRoute = pathname.startsWith('/api/documents/preview/')
 
   const scriptSrc = isDev
-    ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' https://js.stripe.com`
-    : `script-src 'self' 'nonce-${nonce}' https://js.stripe.com`
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com`
 
   const frameAncestors = isPreviewRoute
     ? "frame-ancestors 'self' https://www.plannetic.com https://plannetic.com"
