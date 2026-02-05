@@ -117,6 +117,7 @@ export default function SignaturesPage() {
         setSignerName(name)
         setSignerEmail(client.contact_info?.email || '')
       }
+      setPreviewDocumentId(null)
     }
   }, [selectedClient, clients])
 
@@ -124,6 +125,7 @@ export default function SignaturesPage() {
     if (!selectedClient) {
       setClientDocuments([])
       setSelectedDocumentIds([])
+      setPreviewDocumentId(null)
       return
     }
     try {
@@ -140,6 +142,14 @@ export default function SignaturesPage() {
     void loadClientDocuments()
   }, [loadClientDocuments])
 
+  useEffect(() => {
+    if (!previewDocumentId) return
+    const stillExists = clientDocuments.some((doc) => doc.id === previewDocumentId)
+    if (!stillExists) {
+      setPreviewDocumentId(null)
+    }
+  }, [clientDocuments, previewDocumentId])
+
   const formatLabel = (value?: string | null) => {
     if (!value) return ''
     return value
@@ -147,7 +157,7 @@ export default function SignaturesPage() {
       .replace(/\b\w/g, (char) => char.toUpperCase())
   }
 
-  const getDocumentGroupLabel = (doc: ClientDocument) => {
+  const getDocumentGroupLabel = useCallback((doc: ClientDocument) => {
     const rawCategory = doc.category || ''
     const category = rawCategory.toLowerCase()
 
@@ -158,7 +168,7 @@ export default function SignaturesPage() {
 
     const type = doc.document_type || doc.type || ''
     return formatLabel(type) || 'Other'
-  }
+  }, [])
 
   const groupedDocuments = useMemo(() => {
     const groups = new Map<string, ClientDocument[]>()
@@ -180,7 +190,7 @@ export default function SignaturesPage() {
     })
 
     return sorted
-  }, [clientDocuments])
+  }, [clientDocuments, getDocumentGroupLabel])
 
   const previewDocument = previewDocumentId
     ? clientDocuments.find((doc) => doc.id === previewDocumentId) || null
