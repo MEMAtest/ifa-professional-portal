@@ -12,6 +12,7 @@ import { sendEmail } from '@/lib/email/emailService'
 import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60 // Allow up to 60s for PDF processing + email
 
 // Rate limiting map (in production, use Redis)
 const submitRateLimitMap = new Map<string, { count: number; resetAt: number }>()
