@@ -322,7 +322,7 @@ export default function SigningViewPage({
                 </p>
 
                 <SignaturePad
-                  onChange={handleSignatureChange}
+                  onSignatureChange={handleSignatureChange}
                   width={320}
                   height={150}
                 />
