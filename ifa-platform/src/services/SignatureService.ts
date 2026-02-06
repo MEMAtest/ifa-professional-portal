@@ -117,7 +117,7 @@ export class SignatureService {
 
       return {
         success: true,
-        token: updated.signing_token,
+        token: updated.signing_token ?? undefined,
         expiresAt: expiresAt.toISOString(),
         signingUrl
       }
@@ -209,15 +209,15 @@ export class SignatureService {
           id: request.id,
           documentId: request.document_id,
           clientId: request.client_id,
-          firmId: request.firm_id,
-          recipientName: request.recipient_name,
-          recipientEmail: request.recipient_email,
+          firmId: request.firm_id || '',
+          recipientName: request.recipient_name || '',
+          recipientEmail: request.recipient_email || '',
           recipientRole: request.recipient_role || 'Client',
-          status: request.status,
+          status: request.status || 'pending',
           documentName: document?.name || document?.file_name || metadata?.document_name || 'Document',
           advisorName: advisor?.full_name || 'Your Advisor',
           expiresAt: request.signing_token_expires_at || request.expires_at,
-          originalDocumentPath: document?.file_path || document?.storage_path,
+          originalDocumentPath: document?.file_path || document?.storage_path || null,
           originalDocumentHash: request.original_document_hash
         }
       }
