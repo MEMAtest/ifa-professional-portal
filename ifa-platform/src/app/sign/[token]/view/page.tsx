@@ -19,8 +19,6 @@ import {
   CheckCircle2,
   RotateCcw,
   Send,
-  ZoomIn,
-  ZoomOut
 } from 'lucide-react'
 
 interface SigningInfo {
@@ -47,9 +45,6 @@ export default function SigningViewPage({
 
   // Document viewing state
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [zoom, setZoom] = useState(100)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Signing state
@@ -218,26 +213,7 @@ export default function SigningViewPage({
         {/* Document viewer */}
         <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
           {/* Document toolbar */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setZoom(Math.max(50, zoom - 25))}
-                disabled={zoom <= 50}
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-gray-600 min-w-[4rem] text-center">{zoom}%</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setZoom(Math.min(200, zoom + 25))}
-                disabled={zoom >= 200}
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-            </div>
+          <div className="flex items-center justify-end px-4 py-2 border-b border-gray-200 bg-gray-50">
             <a
               href={pdfUrl || '#'}
               target="_blank"
@@ -245,21 +221,20 @@ export default function SigningViewPage({
               className="text-sm text-teal-600 hover:text-teal-700 flex items-center gap-1"
             >
               <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Download</span>
+              <span className="hidden sm:inline">Open in New Tab</span>
             </a>
           </div>
 
           {/* PDF viewer */}
-          <div className="flex-1 overflow-auto bg-gray-200 p-4" style={{ minHeight: '400px' }}>
+          <div className="flex-1 bg-gray-200" style={{ minHeight: '400px' }}>
             {pdfUrl ? (
               <iframe
                 ref={iframeRef}
-                src={`${pdfUrl}#toolbar=0&view=FitH`}
-                className="w-full h-full bg-white shadow-lg"
+                src={pdfUrl}
+                className="w-full bg-white border-0"
                 style={{
-                  minHeight: '500px',
-                  transform: `scale(${zoom / 100})`,
-                  transformOrigin: 'top center'
+                  height: 'calc(100vh - 180px)',
+                  minHeight: '500px'
                 }}
                 title="Document Preview"
               />

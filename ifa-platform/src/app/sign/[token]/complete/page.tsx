@@ -88,7 +88,7 @@ export default function SigningCompletePage({
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200">
             <p className="text-xs text-gray-400">
-              Powered by Plannetic &bull; Secure E-Signature Platform
+              Powered by Plannetic
             </p>
           </div>
         </CardContent>
