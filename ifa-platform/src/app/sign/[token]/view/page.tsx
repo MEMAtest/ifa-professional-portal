@@ -309,18 +309,19 @@ export default function SigningViewPage({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <FileText className="h-5 w-5 text-teal-600" />
-                  Draw Your Signature
+                  Your Signature
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-gray-600">
-                  Use your finger or mouse to draw your signature in the box below.
+                  Draw your signature or type your name to generate one.
                 </p>
 
                 <SignaturePad
                   onSignatureChange={handleSignatureChange}
                   width={320}
                   height={150}
+                  signerName={signingInfo?.recipientName || ''}
                 />
 
                 <div className="flex gap-2">

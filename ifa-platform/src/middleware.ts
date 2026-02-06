@@ -18,7 +18,8 @@ export async function middleware(request: NextRequest) {
     ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com`
     : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com`
 
-  const frameAncestors = isPreviewRoute
+  const isSignRoute = pathname.startsWith('/sign/') || pathname.startsWith('/api/public/sign/')
+  const frameAncestors = (isPreviewRoute || isSignRoute)
     ? "frame-ancestors 'self' https://www.plannetic.com https://plannetic.com"
     : "frame-ancestors 'none'"
 
