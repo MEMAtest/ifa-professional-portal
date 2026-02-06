@@ -105,7 +105,9 @@ export async function GET(
         advisorName: request_data.advisorName,
         firmName,
         expiresAt: request_data.expiresAt,
-        status: request_data.status
+        status: request_data.status,
+        hasDocument: !!request_data.originalDocumentPath,
+        documentId: request_data.documentId
       }
     })
 
