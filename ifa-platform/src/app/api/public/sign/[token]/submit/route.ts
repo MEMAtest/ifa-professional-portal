@@ -4,7 +4,6 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { waitUntil } from '@vercel/functions'
 import { z } from 'zod'
 import { signatureService } from '@/services/SignatureService'
 import { log } from '@/lib/logging/structured'
@@ -160,29 +159,21 @@ export async function POST(
 
     log.info('Signature completed successfully', { requestId: request_data.id })
 
-    // Send notifications in background using waitUntil
-    // This allows the response to return immediately while emails send
-    waitUntil(
-      Promise.allSettled([
-        notifySignerConfirmation(request_data).catch(err =>
-          log.error('Failed to send signer confirmation', err instanceof Error ? err : undefined)
-        ),
-        notifyAdvisor(request_data).catch(err =>
-          log.error('Failed to notify advisor', err instanceof Error ? err : undefined)
-        ),
-        createInAppNotification(request_data).catch(err =>
-          log.error('Failed to create in-app notification', err instanceof Error ? err : undefined)
-        )
-      ]).then(results => {
-        log.info('Notification results', {
-          requestId: request_data.id,
-          results: results.map((r, i) => ({
-            task: ['signer_email', 'advisor_email', 'in_app'][i],
-            status: r.status
-          }))
-        })
-      })
-    )
+    // Send all notifications in parallel, await completion
+    const notifResults = await Promise.allSettled([
+      notifySignerConfirmation(request_data),
+      notifyAdvisor(request_data),
+      createInAppNotification(request_data)
+    ])
+
+    notifResults.forEach((r, i) => {
+      const task = ['signer_email', 'advisor_email', 'in_app'][i]
+      if (r.status === 'rejected') {
+        log.error(`Notification failed: ${task}`, r.reason instanceof Error ? r.reason : undefined)
+      } else {
+        log.info(`Notification sent: ${task}`)
+      }
+    })
 
     return NextResponse.json({
       success: true,
