@@ -37,7 +37,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
 
     // Apply firm branding if firmId provided and branding enabled
     let finalHtml = html
-    let fromAddress = `Plannetic <noreply@${process.env.EMAIL_FROM_DOMAIN || 'plannetic.com'}>`
+    let fromAddress = `Plannetic <noreply@${(process.env.EMAIL_FROM_DOMAIN || 'plannetic.com').trim()}>`
 
     if (firmId && applyBranding) {
       const branding = await getFirmBranding(firmId)
