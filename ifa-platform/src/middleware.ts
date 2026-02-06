@@ -91,6 +91,7 @@ export async function middleware(request: NextRequest) {
     '/', // Redirects to login
     '/marketing', // Marketing landing page (public)
     '/client/assessment', // Client assessment portal (public access via token)
+    '/sign', // Public e-signature pages (token-based, no auth required)
     '/login',
     '/signup',
     '/auth',
@@ -117,6 +118,7 @@ export async function middleware(request: NextRequest) {
     '/api/auth/verify-invite',
     '/api/stripe/webhook',
     '/api/signatures/webhook',
+    '/api/public/sign', // Public e-signature API (token-based, no auth required)
     '/api/health',
     '/api/readiness'
   ]

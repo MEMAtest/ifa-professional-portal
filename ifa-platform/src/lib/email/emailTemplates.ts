@@ -22,6 +22,216 @@ export const EMAIL_TEMPLATES = {
     `
   }),
 
+  // Signature request email - branded for firm
+  signatureRequest: (data: {
+    clientName: string
+    advisorName: string
+    firmName: string
+    documentName: string
+    signingUrl: string
+    expiryDate: string
+    customMessage?: string
+  }) => {
+    const siteUrl = 'https://www.plannetic.com'
+    const logoUrl = `${siteUrl}/logo.png`
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+    return {
+      subject: `${esc(data.firmName)}: Document Ready for Signature - ${esc(data.documentName)}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 640px; margin: 0 auto; background-color: #ffffff;">
+
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 32px; text-align: center;">
+            <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 600;">
+              ${esc(data.firmName)}
+            </h1>
+            <p style="color: #5eead4; font-size: 12px; margin: 8px 0 0 0; letter-spacing: 1px; text-transform: uppercase;">
+              Document Signature Request
+            </p>
+          </div>
+
+          <!-- Main content -->
+          <div style="padding: 40px 32px;">
+            <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+              Dear ${esc(data.clientName)},
+            </p>
+
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              <strong>${esc(data.advisorName)}</strong> from <strong>${esc(data.firmName)}</strong> has sent you a document to review and sign electronically.
+            </p>
+
+            ${data.customMessage ? `
+              <div style="background: #f0f9ff; border-left: 4px solid #0d9488; padding: 16px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #374151; font-style: italic;">"${esc(data.customMessage)}"</p>
+                <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">— ${esc(data.advisorName)}</p>
+              </div>
+            ` : ''}
+
+            <!-- Document card -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+              <table cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                <tr>
+                  <td style="width: 48px; vertical-align: top; padding-right: 16px;">
+                    <div style="width: 44px; height: 44px; border-radius: 10px; background: #0d9488; text-align: center; line-height: 44px;">
+                      <span style="color: white; font-size: 20px;">📄</span>
+                    </div>
+                  </td>
+                  <td style="vertical-align: top;">
+                    <p style="margin: 0 0 4px 0; color: #0f172a; font-size: 16px; font-weight: 600;">
+                      ${esc(data.documentName)}
+                    </p>
+                    <p style="margin: 0; color: #64748b; font-size: 14px;">
+                      PDF Document • Ready for signature
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${esc(data.signingUrl)}"
+                 style="display: inline-block; background: #0d9488; color: #ffffff; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                Review & Sign Document
+              </a>
+            </div>
+
+            <!-- Expiry warning -->
+            <div style="background: #fef3c7; border-radius: 8px; padding: 14px 18px; margin: 24px 0;">
+              <p style="margin: 0; color: #92400e; font-size: 14px;">
+                <strong>⏰ Please note:</strong> This signing link will expire on <strong>${esc(data.expiryDate)}</strong>. Please sign before then.
+              </p>
+            </div>
+
+            <!-- What to expect -->
+            <div style="margin: 28px 0;">
+              <p style="color: #374151; font-size: 14px; font-weight: 600; margin: 0 0 12px 0;">
+                What happens when you click the link?
+              </p>
+              <ol style="margin: 0; padding-left: 20px; color: #64748b; font-size: 14px; line-height: 1.8;">
+                <li>Review the document (takes about 1 minute)</li>
+                <li>Draw your signature using your finger or mouse</li>
+                <li>Confirm and submit — you're done!</li>
+              </ol>
+            </div>
+
+            <!-- Security note -->
+            <div style="display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: #f0fdf4; border-radius: 8px; margin-top: 24px;">
+              <div style="font-size: 18px; line-height: 1;">🔒</div>
+              <p style="margin: 0; color: #166534; font-size: 13px; line-height: 1.5;">
+                Your signature is secure and legally binding. We use bank-level encryption and comply with UK electronic signature laws (Electronic Communications Act 2000).
+              </p>
+            </div>
+          </div>
+
+          <!-- Fallback link -->
+          <div style="padding: 0 32px 24px 32px;">
+            <p style="color: #94a3b8; font-size: 12px; line-height: 1.6; margin: 0;">
+              If the button doesn't work, copy and paste this link into your browser:<br>
+              <a href="${esc(data.signingUrl)}" style="color: #0d9488; word-break: break-all;">${esc(data.signingUrl)}</a>
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
+            <p style="color: #64748b; font-size: 13px; margin: 0 0 8px 0;">
+              This email was sent by ${esc(data.firmName)} via Plannetic's secure e-signature platform.
+            </p>
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              If you have questions about this document, please contact ${esc(data.advisorName)} directly.
+            </p>
+          </div>
+
+        </div>
+      `
+    }
+  },
+
+  // Signature completed notification to advisor
+  signatureCompletedToAdvisor: (data: {
+    advisorName: string
+    clientName: string
+    documentName: string
+    signedAt: string
+    downloadUrl: string
+    clientProfileUrl: string
+  }) => {
+    const siteUrl = 'https://www.plannetic.com'
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+    return {
+      subject: `Document Signed: ${esc(data.documentName)} by ${esc(data.clientName)}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 640px; margin: 0 auto; background-color: #ffffff;">
+
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 32px; text-align: center;">
+            <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 12px auto; line-height: 56px;">
+              <span style="font-size: 28px;">✓</span>
+            </div>
+            <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 600;">
+              Document Signed
+            </h1>
+          </div>
+
+          <!-- Main content -->
+          <div style="padding: 40px 32px;">
+            <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+              Hi ${esc(data.advisorName)},
+            </p>
+
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+              Great news! <strong>${esc(data.clientName)}</strong> has signed <strong>${esc(data.documentName)}</strong>.
+            </p>
+
+            <!-- Details card -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+              <table cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                <tr>
+                  <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Client:</td>
+                  <td style="padding: 8px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600;">${esc(data.clientName)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Document:</td>
+                  <td style="padding: 8px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600;">${esc(data.documentName)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Signed at:</td>
+                  <td style="padding: 8px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600;">${esc(data.signedAt)}</td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- Action buttons -->
+            <div style="text-align: center; margin: 32px 0;">
+              <a href="${esc(data.downloadUrl)}"
+                 style="display: inline-block; background: #0d9488; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 0 8px 12px 8px;">
+                Download Signed Document
+              </a>
+              <a href="${esc(data.clientProfileUrl)}"
+                 style="display: inline-block; background: #f1f5f9; color: #475569; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 0 8px 12px 8px;">
+                View Client Profile
+              </a>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0;">
+              The signed document has been automatically saved to the client's document vault and includes a full audit certificate for your records.
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              Plannetic E-Signature Platform • Secure & Compliant
+            </p>
+          </div>
+
+        </div>
+      `
+    }
+  },
+
   signatureCompleted: (advisorName: string, clientName: string, documentName: string) => ({
     subject: `Document Signed: ${documentName}`,
     html: `

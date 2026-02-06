@@ -1,12 +1,13 @@
 // ================================================================
 // UNIFIED SIGNATURE API - GET STATUS
+// Uses custom internal signing flow (replaces OpenSign)
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { openSignService } from '@/services/OpenSignService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { signatureService } from '@/services/SignatureService'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,8 +43,8 @@ export async function GET(
     const supabase = getSupabaseServiceClient()
 
     // Get the signature request from database
-    const { data: signatureRequest, error: signatureError } = await (supabase
-      .from('signature_requests') as any)
+    const { data: signatureRequest, error: signatureError } = await supabase
+      .from('signature_requests')
       .select('*')
       .eq('id', signatureRequestId)
       .eq('firm_id', firmId)
@@ -62,8 +63,8 @@ export async function GET(
 
     let document: any = null
     if (signatureRequest.document_id) {
-      const { data: doc } = await (supabase
-        .from('documents') as any)
+      const { data: doc } = await supabase
+        .from('documents')
         .select('id, name, file_name, file_path, storage_path')
         .eq('id', signatureRequest.document_id)
         .eq('firm_id', firmId)
@@ -92,46 +93,20 @@ export async function GET(
       }
     }
 
-    // If we have an OpenSign document ID, get the latest status
-    let openSignStatus: any = null
-    if (signatureRequest.opensign_document_id) {
-      log.debug('GET STATUS: Fetching from OpenSign', { documentId: signatureRequest.opensign_document_id })
-      openSignStatus = await openSignService.getDocumentStatus(
-        signatureRequest.opensign_document_id
-      )
-
-      // Update local status if OpenSign status is different
-      if (openSignStatus && openSignStatus.status !== signatureRequest.status) {
-        log.info('GET STATUS: Updating local status from OpenSign', {
-          oldStatus: signatureRequest.status,
-          newStatus: openSignStatus.status
-        })
-
-        const { error: updateError } = await (supabase
-          .from('signature_requests') as any)
-          .update({
-            status: openSignStatus.status,
-            download_url: openSignStatus.downloadUrl || signatureRequest.download_url,
-            certificate_url: openSignStatus.certificateUrl || signatureRequest.certificate_url,
-            opensign_metadata: {
-              ...signatureRequest.opensign_metadata,
-              last_sync: new Date().toISOString(),
-              opensign_status: openSignStatus
-            }
-          })
-          .eq('id', signatureRequestId)
-          .eq('firm_id', firmId)
-
-        if (updateError) {
-          log.error('GET STATUS: Failed to sync status:', updateError)
-        } else {
-          // Update our local data
-          signatureRequest.status = openSignStatus.status
-          signatureRequest.download_url = openSignStatus.downloadUrl || signatureRequest.download_url
-          signatureRequest.certificate_url = openSignStatus.certificateUrl || signatureRequest.certificate_url
-        }
-      }
+    // Get signing URL if request is still pending
+    let signingUrl = null
+    if (['draft', 'pending', 'sent', 'viewed'].includes(signatureRequest.status) &&
+        signatureRequest.signing_token &&
+        !signatureRequest.signing_token_used) {
+      signingUrl = signatureService.getSigningUrl(signatureRequest.signing_token)
     }
+
+    // Get audit log events
+    const { data: auditEvents } = await supabase
+      .from('signature_audit_log')
+      .select('event_type, event_timestamp, ip_address, metadata')
+      .eq('signature_request_id', signatureRequestId)
+      .order('event_timestamp', { ascending: true })
 
     log.debug('GET STATUS: Success', { signatureRequestId })
     return NextResponse.json({
@@ -139,21 +114,28 @@ export async function GET(
       signatureRequest: {
         id: signatureRequest.id,
         documentId: signatureRequest.document_id,
-        opensignDocumentId: signatureRequest.opensign_document_id,
+        clientId: signatureRequest.client_id,
         status: signatureRequest.status,
         signers: signers || [],
         createdAt: signatureRequest.created_at,
         updatedAt: signatureRequest.updated_at,
+        sentAt: signatureRequest.sent_at,
+        viewedAt: signatureRequest.viewed_at,
+        completedAt: signatureRequest.completed_at,
         expiresAt: signatureRequest.expires_at,
-        downloadUrl: signatureRequest.download_url,
-        certificateUrl: signatureRequest.certificate_url,
+        signingUrl,
+        signedDocumentPath: signatureRequest.signed_document_path,
+        originalDocumentHash: signatureRequest.original_document_hash,
+        signedDocumentHash: signatureRequest.signed_document_hash,
+        signerConsentGiven: signatureRequest.signer_consent_given,
+        signerConsentTimestamp: signatureRequest.signer_consent_timestamp,
+        signerIpAddress: signatureRequest.signature_ip_address,
         autoReminder: signatureRequest.auto_reminder,
         remindOnceInEvery: signatureRequest.remind_once_in_every,
-        mergeCertificate: signatureRequest.merge_certificate,
         metadata: signatureRequest.opensign_metadata
       },
-      document: document,
-      openSignStatus: openSignStatus
+      document,
+      auditLog: auditEvents || []
     })
 
   } catch (error) {

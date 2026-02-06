@@ -1,6 +1,6 @@
 // ================================================================
 // UNIFIED SIGNATURE API - CREATE SIGNATURE REQUEST
-// Supports both documentId and clientId flows
+// Uses custom internal signing flow (replaces OpenSign)
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,7 +11,9 @@ import { createClient } from '@/lib/supabase/server'
 import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { parseRequestBody } from '@/app/api/utils'
-import { openSignService } from '@/services/OpenSignService'
+import { signatureService } from '@/services/SignatureService'
+import { sendEmail } from '@/lib/email/emailService'
+import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,8 @@ interface CreateSignatureRequest {
     expiryDays?: number
     autoReminder?: boolean
     remindOnceInEvery?: number
+    customMessage?: string
+    sendEmail?: boolean
   }
 }
 
@@ -48,6 +52,8 @@ const requestSchema = z.object({
     expiryDays: z.number().int().min(1).max(365).optional(),
     autoReminder: z.boolean().optional(),
     remindOnceInEvery: z.number().int().min(1).max(30).optional(),
+    customMessage: z.string().optional(),
+    sendEmail: z.boolean().optional()
   }).optional()
 })
 
@@ -376,10 +382,6 @@ export async function POST(request: NextRequest) {
       document = documentData
     }
 
-    // Calculate expiry date
-    const expiryDate = new Date()
-    expiryDate.setDate(expiryDate.getDate() + (options.expiryDays || 30))
-
     if (!document) {
       return NextResponse.json(
         { success: false, error: 'Document is required for signature requests' },
@@ -387,16 +389,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!openSignService.isReady()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Signature service is currently unavailable. Please check configuration and try again.'
-        },
-        { status: 503 }
-      )
-    }
-
+    // Get PDF buffer and compute hash
     const pdfBuffer = await getPdfBufferForDocument(supabase, document, firmId, logger)
     if (!pdfBuffer || pdfBuffer.length === 0) {
       return NextResponse.json(
@@ -408,39 +401,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Compute original document hash
+    const originalDocumentHash = signatureService.hashDocument(pdfBuffer)
+
+    // Calculate expiry date
+    const expiryDays = options.expiryDays || 30
+    const expiryDate = new Date()
+    expiryDate.setDate(expiryDate.getDate() + expiryDays)
+
+    // Get advisor info
+    const { data: advisorProfile } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .eq('id', auth.context.userId)
+      .single()
+
+    // Get firm info
+    const { data: firmInfo } = await supabase
+      .from('firms')
+      .select('name')
+      .eq('id', firmId)
+      .single()
+
     const documentTitle = document.name || document.file_name || 'Document'
-    const openSignCreate = await openSignService.createDocument(
-      pdfBuffer,
-      documentTitle,
-      signers,
-      {
-        expiryDays: options.expiryDays,
-        autoReminder: options.autoReminder,
-        remindOnceInEvery: options.remindOnceInEvery,
-        mergeCertificate: false
-      }
-    )
-
-    if (!openSignCreate.success || !openSignCreate.documentId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: openSignCreate.error || 'Failed to create signature document'
-        },
-        { status: 502 }
-      )
-    }
-
-    const opensignDocumentId = openSignCreate.documentId
     const signersPayload = signers.map((signer) => ({
       email: signer.email,
       name: signer.name,
       role: signer.role || 'Client'
     }))
 
-    // Create signature request record using basic schema
-    const primaryPayload: any = {
-      client_id: clientId || null,
+    // Create signature request record
+    const payload: any = {
+      client_id: clientId || document.client_id || null,
       document_id: documentId || null,
       firm_id: firmId,
       created_by: auth.context.userId,
@@ -448,127 +440,32 @@ export async function POST(request: NextRequest) {
       recipient_email: signers[0]?.email || '',
       recipient_role: signers[0]?.role || 'Client',
       expires_at: expiryDate.toISOString(),
-      status: 'draft',
-      opensign_document_id: opensignDocumentId,
+      status: options.sendEmail !== false ? 'sent' : 'draft',
+      signing_method: 'internal',
+      original_document_hash: originalDocumentHash,
       auto_reminder: options.autoReminder ?? null,
       remind_once_in_every: options.remindOnceInEvery ?? null,
-      merge_certificate: false,
       opensign_metadata: {
         created_at: new Date().toISOString(),
         signers: signersPayload,
         document_name: documentTitle,
-        template_id: templateId || null
-      },
-      signers: signersPayload
-    }
-
-    const fallbackPayloads: any[] = [
-      {
-        firm_id: firmId,
-        client_id: clientId || null,
-        document_id: documentId || null,
-        recipient_name: signers[0]?.name || '',
-        recipient_email: signers[0]?.email || '',
-        status: 'draft'
-      },
-      {
-        firm_id: firmId,
-        document_id: documentId || null,
-        recipient_name: signers[0]?.name || '',
-        recipient_email: signers[0]?.email || '',
-        status: 'draft'
-      },
-      {
-        firm_id: firmId,
-        recipient_name: signers[0]?.name || '',
-        recipient_email: signers[0]?.email || '',
-        status: 'draft'
-      },
-      {
-        client_id: clientId || null,
-        document_id: documentId || null,
-        recipient_name: signers[0]?.name || '',
-        recipient_email: signers[0]?.email || '',
-        status: 'draft'
-      },
-      {
-        document_id: documentId || null,
-        recipient_name: signers[0]?.name || '',
-        recipient_email: signers[0]?.email || '',
-        status: 'draft'
-      },
-      {
-        recipient_name: signers[0]?.name || '',
-        recipient_email: signers[0]?.email || '',
-        status: 'draft'
+        template_id: templateId || null,
+        custom_message: options.customMessage || null
       }
-    ]
-
-    const attemptInsert = async (payload: any) => {
-      return await (supabase
-        .from('signature_requests') as any)
-        .insert(payload)
-        .select()
-        .single()
-    }
-
-    const stripMissingColumn = (payload: Record<string, any>, error: any) => {
-      const message = error?.message || ''
-      const match = message.match(/column \"(.+?)\" does not exist/i)
-      if (!match) return null
-      const column = match[1]
-      if (!Object.prototype.hasOwnProperty.call(payload, column)) return null
-      const next = { ...payload }
-      delete next[column]
-      return next
-    }
-
-    const attemptWithAdaptivePayload = async (payload: Record<string, any>) => {
-      let current = { ...payload }
-      let result = await attemptInsert(current)
-      let error = result.error
-
-      for (let i = 0; i < 5 && error; i += 1) {
-        const stripped = stripMissingColumn(current, error)
-        if (!stripped) break
-        current = stripped
-        result = await attemptInsert(current)
-        error = result.error
-      }
-
-      return result
     }
 
     logger.debug('CREATE SIGNATURE: Creating signature request', { clientId, documentId })
 
-    let insertResult = await attemptWithAdaptivePayload(primaryPayload)
-    let insertError = insertResult.error
-
-    if (insertError && (insertError.message?.includes('does not exist') || insertError.code === '42P01')) {
-      return NextResponse.json({
-        success: false,
-        error: 'Signature requests table not yet created.',
-        code: 'TABLE_NOT_FOUND'
-      }, { status: 500 })
-    }
-
-    if (insertError && (insertError.code === '42703' || insertError.message?.includes('column') || insertError.message?.includes('schema cache'))) {
-      logger.warn('CREATE SIGNATURE: Falling back to legacy schema', { error: insertError.message })
-
-      for (const payload of fallbackPayloads) {
-        insertResult = await attemptWithAdaptivePayload(payload)
-        insertError = insertResult.error
-        if (!insertError) break
-      }
-    }
-
-    const signatureRequest = insertResult.data
+    const { data: signatureRequest, error: insertError } = await supabase
+      .from('signature_requests')
+      .insert(payload)
+      .select()
+      .single()
 
     if (insertError) {
       logger.error('CREATE SIGNATURE: Database insert failed', insertError)
 
-      // Check if table doesn't exist
-      if (insertError.message.includes('does not exist') || insertError.code === '42P01') {
+      if (insertError.message?.includes('does not exist') || insertError.code === '42P01') {
         return NextResponse.json({
           success: false,
           error: 'Signature requests table not yet created.',
@@ -583,50 +480,66 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    logger.info('CREATE SIGNATURE: Success, created request', { requestId: signatureRequest?.id })
+    // Generate signing token
+    const tokenResult = await signatureService.generateSigningToken(signatureRequest.id, expiryDays * 24)
 
-    const sendResult = await openSignService.sendForSignature(
-      opensignDocumentId,
-      signers,
-      {
-        expiryDays: options.expiryDays,
-        autoReminder: options.autoReminder,
-        remindOnceInEvery: options.remindOnceInEvery,
-        mergeCertificate: false
+    if (!tokenResult.success || !tokenResult.signingUrl) {
+      logger.error('CREATE SIGNATURE: Failed to generate signing token', { error: tokenResult.error })
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to generate signing link'
+      }, { status: 500 })
+    }
+
+    // Log audit event
+    await signatureService.logAuditEvent(signatureRequest.id, 'created', {
+      createdBy: auth.context.userId,
+      documentId,
+      signers: signersPayload
+    })
+
+    // Send email if enabled (default: true)
+    if (options.sendEmail !== false) {
+      try {
+        const template = EMAIL_TEMPLATES.signatureRequest({
+          clientName: signers[0].name,
+          advisorName: advisorProfile?.full_name || 'Your Advisor',
+          firmName: firmInfo?.name || 'Your Financial Advisor',
+          documentName: documentTitle,
+          signingUrl: tokenResult.signingUrl,
+          expiryDate: expiryDate.toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+          }),
+          customMessage: options.customMessage
+        })
+
+        await sendEmail({
+          to: signers[0].email,
+          subject: template.subject,
+          html: template.html
+        })
+
+        // Update sent_at
+        await supabase
+          .from('signature_requests')
+          .update({ sent_at: new Date().toISOString() })
+          .eq('id', signatureRequest.id)
+
+        // Log send event
+        await signatureService.logAuditEvent(signatureRequest.id, 'sent', {
+          recipientEmail: signers[0].email
+        })
+
+        logger.info('CREATE SIGNATURE: Email sent successfully', { requestId: signatureRequest.id })
+      } catch (emailError) {
+        logger.error('CREATE SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
+        // Don't fail the request, just log the error
       }
-    )
-
-    if (!sendResult.success) {
-      logger.error('CREATE SIGNATURE: OpenSign send failed', { error: sendResult.error })
-      return NextResponse.json(
-        {
-          success: false,
-          error: sendResult.error || 'Failed to send signature request'
-        },
-        { status: 502 }
-      )
     }
 
-    const { error: updateError } = await (supabase
-      .from('signature_requests') as any)
-      .update({
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        download_url: sendResult.downloadUrl || null,
-        opensign_metadata: {
-          ...signatureRequest.opensign_metadata,
-          sent_at: new Date().toISOString(),
-          send_result: sendResult.metadata
-        }
-      })
-      .eq('id', signatureRequest.id)
-
-    if (updateError) {
-      logger.warn('CREATE SIGNATURE: Failed to update status to sent', { error: updateError.message })
-    } else {
-      signatureRequest.status = 'sent'
-      signatureRequest.sent_at = new Date().toISOString()
-    }
+    logger.info('CREATE SIGNATURE: Success, created request', { requestId: signatureRequest.id })
 
     return NextResponse.json({
       success: true,
@@ -637,9 +550,13 @@ export async function POST(request: NextRequest) {
         recipient_name: signatureRequest.recipient_name,
         recipient_email: signatureRequest.recipient_email,
         created_at: signatureRequest.created_at,
-        opensign_document_id: opensignDocumentId
+        signing_url: tokenResult.signingUrl,
+        signing_token: tokenResult.token,
+        expires_at: tokenResult.expiresAt
       },
-      message: 'Signature request created successfully'
+      message: options.sendEmail !== false
+        ? 'Signature request created and sent successfully'
+        : 'Signature request created successfully'
     })
 
   } catch (error) {

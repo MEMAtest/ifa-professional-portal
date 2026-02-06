@@ -1,6 +1,6 @@
 // ================================================================
-// UNIFIED SIGNATURE API - SEND FOR SIGNATURE
-// Uses custom internal signing flow (replaces OpenSign)
+// UNIFIED SIGNATURE API - RESEND SIGNATURE REQUEST
+// Resends the signature email with same or new token
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -8,19 +8,16 @@ import { signatureService } from '@/services/SignatureService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
-import { parseRequestBody } from '@/app/api/utils'
 import { sendEmail } from '@/lib/email/emailService'
 import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
 
 export const dynamic = 'force-dynamic'
 
-interface SendSignatureRequest {
-  signatureRequestId: string
-  customMessage?: string
-}
-
-export async function POST(request: NextRequest) {
-  log.info('SEND SIGNATURE: API endpoint called')
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  log.info('RESEND SIGNATURE: API endpoint called')
 
   try {
     const auth = await getAuthContext(request)
@@ -33,10 +30,7 @@ export async function POST(request: NextRequest) {
     }
     const firmId = firmResult.firmId
 
-    const body: SendSignatureRequest = await parseRequestBody(request)
-    log.debug('SEND SIGNATURE: Request body', { body })
-
-    const { signatureRequestId, customMessage } = body
+    const signatureRequestId = params.id
 
     if (!signatureRequestId) {
       return NextResponse.json(
@@ -66,7 +60,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (signatureError || !signatureRequest) {
-      log.error('SEND SIGNATURE: Signature request not found', signatureError)
+      log.error('RESEND SIGNATURE: Signature request not found', signatureError)
       return NextResponse.json(
         {
           success: false,
@@ -76,11 +70,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!['draft', 'pending'].includes(signatureRequest.status)) {
+    // Can only resend if not already completed
+    if (['completed', 'signed', 'declined'].includes(signatureRequest.status)) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Signature request has already been sent'
+          error: `Cannot resend - signature request is already ${signatureRequest.status}`
         },
         { status: 400 }
       )
@@ -118,28 +113,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate signing token if not already present
-    let signingUrl = signatureService.getSigningUrl(signatureRequest.signing_token)
+    // Calculate remaining expiry or set new one
+    let expiryDays = 30
+    if (signatureRequest.expires_at) {
+      const remaining = Math.ceil((new Date(signatureRequest.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      expiryDays = Math.max(7, remaining) // At least 7 more days
+    }
 
-    if (!signatureRequest.signing_token || signatureRequest.signing_token_used) {
-      // Generate new token
-      const expiryDays = signatureRequest.expires_at
-        ? Math.max(1, Math.ceil((new Date(signatureRequest.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-        : 30
+    // Generate new signing token
+    const tokenResult = await signatureService.generateSigningToken(signatureRequestId, expiryDays * 24)
 
-      const tokenResult = await signatureService.generateSigningToken(signatureRequestId, expiryDays * 24)
-
-      if (!tokenResult.success || !tokenResult.signingUrl) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Failed to generate signing link'
-          },
-          { status: 500 }
-        )
-      }
-
-      signingUrl = tokenResult.signingUrl
+    if (!tokenResult.success || !tokenResult.signingUrl) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to generate new signing link'
+        },
+        { status: 500 }
+      )
     }
 
     // Get advisor and firm info
@@ -159,25 +150,24 @@ export async function POST(request: NextRequest) {
     const documentName = document?.name || document?.file_name ||
       signatureRequest.opensign_metadata?.document_name || 'Document'
 
-    const expiryDate = signatureRequest.expires_at
-      ? new Date(signatureRequest.expires_at)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    const expiryDate = new Date()
+    expiryDate.setDate(expiryDate.getDate() + expiryDays)
 
     // Send email
-    log.info('SEND SIGNATURE: Sending email to signer')
+    log.info('RESEND SIGNATURE: Sending email to signer')
     try {
       const template = EMAIL_TEMPLATES.signatureRequest({
         clientName: signers[0].name,
         advisorName: advisorProfile?.full_name || 'Your Advisor',
         firmName: firmInfo?.name || 'Your Financial Advisor',
         documentName,
-        signingUrl,
+        signingUrl: tokenResult.signingUrl,
         expiryDate: expiryDate.toLocaleDateString('en-GB', {
           day: 'numeric',
           month: 'long',
           year: 'numeric'
         }),
-        customMessage: customMessage || signatureRequest.opensign_metadata?.custom_message
+        customMessage: signatureRequest.opensign_metadata?.custom_message
       })
 
       await sendEmail({
@@ -186,9 +176,9 @@ export async function POST(request: NextRequest) {
         html: template.html
       })
 
-      log.info('SEND SIGNATURE: Email sent successfully', { recipientEmail: signers[0].email })
+      log.info('RESEND SIGNATURE: Email sent successfully', { recipientEmail: signers[0].email })
     } catch (emailError) {
-      log.error('SEND SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
+      log.error('RESEND SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
       return NextResponse.json(
         {
           success: false,
@@ -198,57 +188,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update signature request status
-    log.info('SEND SIGNATURE: Updating status to sent')
-    const { data: updatedRequest, error: updateError } = await supabase
+    // Update signature request
+    await supabase
       .from('signature_requests')
       .update({
         status: 'sent',
-        sent_at: new Date().toISOString(),
+        expires_at: expiryDate.toISOString(),
         opensign_metadata: {
           ...signatureRequest.opensign_metadata,
-          sent_at: new Date().toISOString(),
-          custom_message: customMessage || signatureRequest.opensign_metadata?.custom_message
+          resent_at: new Date().toISOString()
         }
       })
       .eq('id', signatureRequestId)
       .eq('firm_id', firmId)
-      .select()
-      .single()
-
-    if (updateError) {
-      log.error('SEND SIGNATURE: Database update error', updateError)
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to update signature request status'
-        },
-        { status: 500 }
-      )
-    }
 
     // Log audit event
-    await signatureService.logAuditEvent(signatureRequestId, 'sent', {
+    await signatureService.logAuditEvent(signatureRequestId, 'resent', {
       recipientEmail: signers[0].email
     })
 
-    log.info('SEND SIGNATURE: Success')
+    log.info('RESEND SIGNATURE: Success')
     return NextResponse.json({
       success: true,
-      signatureRequestId: updatedRequest.id,
-      signingUrl,
+      signatureRequestId,
+      signingUrl: tokenResult.signingUrl,
       status: 'sent',
       sentAt: new Date().toISOString(),
-      expiresAt: updatedRequest.expires_at,
-      message: 'Signature request sent successfully'
+      expiresAt: expiryDate.toISOString(),
+      message: 'Signature request resent successfully'
     })
 
   } catch (error) {
-    log.error('SEND SIGNATURE: Error', error)
+    log.error('RESEND SIGNATURE: Error', error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to send signature request'
+        error: 'Failed to resend signature request'
       },
       { status: 500 }
     )
