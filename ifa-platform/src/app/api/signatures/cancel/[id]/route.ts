@@ -62,7 +62,7 @@ export async function POST(
     }
 
     // Can only cancel if not already completed
-    if (['completed', 'signed'].includes(signatureRequest.status)) {
+    if (['completed', 'signed'].includes(signatureRequest.status || '')) {
       return NextResponse.json(
         {
           success: false,
