@@ -11,6 +11,10 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { rateLimit } from '@/lib/security/rateLimit'
 import { parseRequestBody } from '@/app/api/utils'
+import { SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
+import { getSESClient } from '@/lib/email/sesClient'
+import { applyBrandColors, getBrandedSender, getFirmBranding, wrapWithBranding } from '@/lib/email/brandingHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -171,27 +175,45 @@ export async function POST(request: NextRequest) {
     // Send email if requested
     if (sendEmail) {
       try {
-        await fetch(`${baseUrl}/api/notifications/send-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'assessmentInvite',
-            recipient: clientEmail,
-            data: {
-              clientName: finalClientName,
-              advisorName: advisor?.full_name || 'Your Financial Advisor',
-              assessmentType: ASSESSMENT_LABELS[assessmentType] || assessmentType,
-              link: shareUrl,
-              expiryDate: expiresAt.toLocaleDateString('en-GB', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }),
-              customMessage
+        const emailData = {
+          clientName: finalClientName,
+          advisorName: advisor?.full_name || 'Your Financial Advisor',
+          assessmentType: ASSESSMENT_LABELS[assessmentType] || assessmentType,
+          link: shareUrl,
+          expiryDate: expiresAt.toLocaleDateString('en-GB', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          customMessage
+        }
+
+        const emailContent = EMAIL_TEMPLATES.assessmentInvite(emailData)
+        const branding = await getFirmBranding(firmId)
+        let finalHtml = emailContent.html
+        if (branding) {
+          finalHtml = applyBrandColors(finalHtml, branding)
+          finalHtml = wrapWithBranding(finalHtml, branding, { includeHeader: true, includeFooter: true })
+        }
+
+        const fromAddress = branding
+          ? getBrandedSender(branding)
+          : `IFA Platform <noreply@${process.env.EMAIL_FROM_DOMAIN || 'plannetic.com'}>`
+
+        const client = getSESClient()
+        const command = new SendEmailCommand({
+          FromEmailAddress: fromAddress,
+          Destination: { ToAddresses: [clientEmail] },
+          Content: {
+            Simple: {
+              Subject: { Data: emailContent.subject, Charset: 'UTF-8' },
+              Body: { Html: { Data: finalHtml, Charset: 'UTF-8' } }
             }
-          })
+          }
         })
+
+        await client.send(command)
       } catch (emailError) {
         logger.warn('Failed to send share email', { clientEmail, error: getErrorMessage(emailError) })
         // Don't fail the request if email fails

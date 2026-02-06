@@ -55,6 +55,7 @@ interface ClientAssessmentsTabProps {
   clientName: string
   clientEmail: string
   onSendAssessment: () => void
+  refreshKey?: number
 }
 
 const ASSESSMENT_LABELS: Record<string, string> = {
@@ -85,7 +86,8 @@ export function ClientAssessmentsTab({
   clientId,
   clientName,
   clientEmail,
-  onSendAssessment
+  onSendAssessment,
+  refreshKey
 }: ClientAssessmentsTabProps) {
   const [data, setData] = useState<AssessmentsData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -109,6 +111,11 @@ export function ClientAssessmentsTab({
   useEffect(() => {
     fetchAssessments()
   }, [fetchAssessments])
+
+  useEffect(() => {
+    if (refreshKey === undefined) return
+    fetchAssessments()
+  }, [refreshKey, fetchAssessments])
 
   const handleCopyLink = async (token: string) => {
     const link = `${window.location.origin}/client/assessment/${token}`
@@ -158,12 +165,12 @@ export function ClientAssessmentsTab({
       {/* Header with Send Button */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Client Questionnaires</h2>
-          <p className="text-sm text-gray-500">Send risk and suitability questionnaires to {clientName} for completion</p>
+          <h2 className="text-lg font-semibold text-gray-900">Questionnaire Invites</h2>
+          <p className="text-sm text-gray-500">Send questionnaires to {clientName} for completion</p>
         </div>
         <Button onClick={onSendAssessment} className="gap-2">
           <Send className="h-4 w-4" />
-          Send Questionnaire
+          Send Questionnaire Invite
         </Button>
       </div>
 
@@ -268,10 +275,10 @@ export function ClientAssessmentsTab({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5" />
-            Sent Questionnaires
+            Questionnaire Invites
           </CardTitle>
           <CardDescription>
-            History of questionnaires sent to this client
+            History of questionnaire invites sent to this client
           </CardDescription>
         </CardHeader>
         <CardContent>

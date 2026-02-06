@@ -60,6 +60,7 @@ export function ClientDetailPage(props: { clientId: string }) {
   const [showEditReviewModal, setShowEditReviewModal] = useState(false)
   const [selectedReview, setSelectedReview] = useState<any>(null)
   const [showShareAssessmentModal, setShowShareAssessmentModal] = useState(false)
+  const [assessmentsRefreshKey, setAssessmentsRefreshKey] = useState(0)
   const [showDocIntelModal, setShowDocIntelModal] = useState(false)
   const [completedAssessments, setCompletedAssessments] = useState<{
     atr?: boolean
@@ -286,7 +287,7 @@ export function ClientDetailPage(props: { clientId: string }) {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="risk">Risk Profile</TabsTrigger>
-          <TabsTrigger value="assessments">Client Questionnaires</TabsTrigger>
+          <TabsTrigger value="assessments">Questionnaire Invites</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="communications">Communications</TabsTrigger>
           <TabsTrigger value="reviews">Reviews</TabsTrigger>
@@ -322,6 +323,7 @@ export function ClientDetailPage(props: { clientId: string }) {
             clientName={clientName}
             clientEmail={clientEmail}
             onSendAssessment={() => setShowShareAssessmentModal(true)}
+            refreshKey={assessmentsRefreshKey}
           />
         </TabsContent>
 
@@ -442,6 +444,7 @@ export function ClientDetailPage(props: { clientId: string }) {
               title: 'Assessment Sent',
               description: `Assessment link sent to ${share.clientEmail}`
             })
+            setAssessmentsRefreshKey((prev) => prev + 1)
             setShowShareAssessmentModal(false)
           }}
         />
