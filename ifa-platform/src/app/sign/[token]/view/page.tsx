@@ -230,7 +230,7 @@ export default function SigningViewPage({
             {pdfUrl ? (
               <iframe
                 ref={iframeRef}
-                src={pdfUrl}
+                src={`${pdfUrl}#navpanes=0&view=FitH`}
                 className="w-full bg-white border-0"
                 style={{
                   height: 'calc(100vh - 180px)',
