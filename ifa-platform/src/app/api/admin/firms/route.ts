@@ -5,6 +5,7 @@ import { getAuthContext } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { log } from '@/lib/logging/structured'
+import { DEFAULT_INCLUDED_SEATS } from '@/lib/billing/firmBilling'
 
 type BillingSettings = {
   billingEmail?: string
@@ -30,8 +31,6 @@ type FirmRow = {
   created_at: string
   updated_at: string
 }
-
-const DEFAULT_INCLUDED_SEATS = 1
 
 function resolveBilling(settings: FirmRow['settings']) {
   const billing = settings?.billing ?? {}

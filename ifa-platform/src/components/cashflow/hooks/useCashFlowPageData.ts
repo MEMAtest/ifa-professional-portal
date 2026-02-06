@@ -70,14 +70,9 @@ export const useCashFlowPageData = ({
   const toastRef = useRef(toast);
   const linkScenarioRef = useRef(linkScenario);
 
-  // Keep refs up to date
-  useEffect(() => {
-    toastRef.current = toast;
-  }, [toast]);
-
-  useEffect(() => {
-    linkScenarioRef.current = linkScenario;
-  }, [linkScenario]);
+  // Keep refs up to date (direct assignment is more efficient than useEffect)
+  toastRef.current = toast;
+  linkScenarioRef.current = linkScenario;
 
   const refreshCoverage = useCallback(
     async (clientList: Client[]) => {

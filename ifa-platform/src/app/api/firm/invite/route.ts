@@ -18,6 +18,7 @@ import type { UserInvitation, InviteUserInput } from '@/modules/firm/types/user.
 import type { Json } from '@/types/db'
 import { log } from '@/lib/logging/structured'
 import { parseRequestBody } from '@/app/api/utils'
+import { DEFAULT_MAX_SEATS } from '@/lib/billing/firmBilling'
 
 const inviteSchema = z.object({
   email: z.string().min(1),
@@ -237,7 +238,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       const settings = firm?.settings as { billing?: { maxSeats?: number } } | null
-      const maxSeats = settings?.billing?.maxSeats ?? 3
+      const maxSeats = settings?.billing?.maxSeats ?? DEFAULT_MAX_SEATS
 
       const { count: activeUsers } = await supabase
         .from('profiles')
@@ -332,7 +333,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       const settings = firm?.settings as { billing?: { maxSeats?: number } } | null
-      const maxSeats = settings?.billing?.maxSeats ?? 3
+      const maxSeats = settings?.billing?.maxSeats ?? DEFAULT_MAX_SEATS
 
       // Count current active users + pending invitations
       const [{ count: activeUsers }, { count: pendingInvites }] = await Promise.all([
@@ -480,6 +481,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           type: 'userInvitation',
           recipient: body.email.toLowerCase(),
+          firmId: firmIdResult.firmId,
           data: {
             inviteeEmail: body.email.toLowerCase(),
             firmName,
@@ -496,13 +498,22 @@ export async function POST(request: NextRequest) {
         })
       })
 
-      if (emailResponse.ok) {
+      const emailResult = await emailResponse.json().catch(() => ({ success: false, error: 'Invalid email service response' }))
+
+      // Check both HTTP status and explicit success field
+      // The email API returns 200 with success: true on success, success: false on config errors
+      if (emailResponse.ok && emailResult.success === true) {
         emailSent = true
         log.info('[Invite API] Invitation email sent successfully')
       } else {
-        const emailResult = await emailResponse.json().catch(() => ({}))
-        emailError = emailResult.error || 'Failed to send email'
-        log.warn('[Invite API] Failed to send invitation email', { error: emailError })
+        // Handle graceful email failure (SES not configured, etc.)
+        emailError = emailResult.error || emailResult.message || 'Failed to send email'
+        const errorCode = emailResult.code || 'EMAIL_FAILED'
+        log.warn('[Invite API] Failed to send invitation email', {
+          error: emailError,
+          code: errorCode,
+          httpStatus: emailResponse.status
+        })
       }
     } catch (emailErr) {
       emailError = emailErr instanceof Error ? emailErr.message : 'Email service unavailable'

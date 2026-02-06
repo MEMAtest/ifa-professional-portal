@@ -134,11 +134,14 @@ export default function SignaturesPage() {
   }, [selectedClient, clients])
 
   const loadClientDocuments = useCallback(async () => {
+    // Always clear previous selections when client changes to prevent
+    // showing documents from a different client
+    setClientDocuments([])
+    setSelectedDocumentIds([])
+    setPreviewDocumentId(null)
+    setPreviewError(false)
+
     if (!selectedClient) {
-      setClientDocuments([])
-      setSelectedDocumentIds([])
-      setPreviewDocumentId(null)
-      setPreviewError(false)
       return
     }
     try {

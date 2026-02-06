@@ -186,21 +186,16 @@ export class ATRReportService {
     const level = assessment.risk_level;
     const category = assessment.risk_category;
 
-    // Risk descriptions based on level
-    const descriptions = {
-      1: 'Very Conservative - Prefers capital preservation with minimal risk',
-      2: 'Conservative - Willing to accept minimal risk for slightly higher returns',
-      3: 'Cautiously Moderate - Comfortable with low to moderate risk levels',
-      4: 'Moderate - Balanced approach to risk and return',
-      5: 'Moderately Adventurous - Willing to accept moderate risk for potential higher returns',
-      6: 'Adventurous - Comfortable with higher risk for potential significant returns',
-      7: 'Very Adventurous - Seeks high returns despite significant risk',
-      8: 'Highly Adventurous - Embraces high risk for maximum potential returns',
-      9: 'Extremely Adventurous - Thrives on very high risk investments',
-      10: 'Speculative - Willing to accept maximum risk for highest potential returns'
+    // Risk descriptions based on level (1-5 scale matching ATR questionnaire)
+    const descriptions: Record<number, string> = {
+      1: 'Very Low Risk Tolerance - Prioritizes capital preservation and security over growth',
+      2: 'Low Risk Tolerance - Prefers stability with conservative investment approach',
+      3: 'Medium Risk Tolerance - Balanced approach seeking moderate growth with managed volatility',
+      4: 'High Risk Tolerance - Growth-focused with acceptance of above-average volatility',
+      5: 'Very High Risk Tolerance - Comfortable with aggressive strategies and significant volatility'
     };
 
-    const description = descriptions[level as keyof typeof descriptions] || 'Risk level not defined';
+    const description = descriptions[level] || `Risk Level ${level} - ${category}`;
 
     return {
       level,
@@ -308,16 +303,16 @@ export class ATRReportService {
     <div class="section">
         <h3>Risk Profile Summary</h3>
         <div class="risk-level">
-            Risk Level: ${riskProfileSummary.level}/10 - ${riskProfileSummary.category}
+            Risk Level: ${riskProfileSummary.level}/5 - ${riskProfileSummary.category}
         </div>
         <p><strong>Profile Description:</strong></p>
         <p>${riskProfileSummary.description}</p>
 
         <div class="score-bar">
-            <div class="score-fill" style="width: ${(riskProfileSummary.level / 10) * 100}%"></div>
+            <div class="score-fill" style="width: ${(riskProfileSummary.level / 5) * 100}%"></div>
         </div>
         <p style="text-align: center; font-size: 14px; color: #6b7280;">
-            Score: ${assessment.total_score}/100 (Risk Level ${riskProfileSummary.level}/10)
+            Score: ${assessment.total_score.toFixed(1)}/100 (Risk Level ${riskProfileSummary.level}/5)
         </p>
     </div>
 `;
@@ -349,7 +344,7 @@ export class ATRReportService {
             </tr>
             <tr>
                 <td>Risk Level</td>
-                <td>${assessment.risk_level}/10</td>
+                <td>${assessment.risk_level}/5</td>
             </tr>
             <tr>
                 <td>Assessment Status</td>
@@ -451,7 +446,7 @@ export class ATRReportService {
         <div style="display: flex; justify-content: center; align-items: center; height: 200px; background-color: #f3f4f6; border-radius: 8px; margin: 20px 0;">
             <div style="text-align: center;">
                 <div style="width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(45deg, #ef4444, #f59e0b, #22c55e); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 18px;">
-                    Risk Level<br>${assessment.risk_level}/10
+                    Risk Level<br>${assessment.risk_level}/5
                 </div>
             </div>
         </div>

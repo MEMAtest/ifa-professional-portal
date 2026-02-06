@@ -576,12 +576,12 @@ export default function NuclearMonteCarlo({
             <div>
               <label className="text-sm font-medium mb-1 flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
-                Annual Withdrawal
+                Annual Portfolio Withdrawal
                 <HelperTooltip
-                  title="Yearly Income Need"
-                  content="Amount withdrawn each year, adjusted for inflation."
-                  example="4% of portfolio is considered safe"
-                  warning={`Current rate: ${withdrawalRate.toFixed(1)}%`}
+                  title="Annual Portfolio Withdrawal"
+                  content="Amount withdrawn FROM THIS PORTFOLIO each year to fund retirement. This is NOT your total income need - exclude State Pension, rental income, and other income sources."
+                  example="If total income need is £30,000/yr and State Pension provides £10,000/yr, enter £20,000 here (the amount needed from portfolio)"
+                  warning={`Current withdrawal rate: ${withdrawalRate.toFixed(1)}% of portfolio (4% or less is generally sustainable)`}
                 />
               </label>
               <Input
@@ -589,6 +589,7 @@ export default function NuclearMonteCarlo({
                 value={inputs.annualWithdrawal}
                 onChange={(e) => setInputs({...inputs, annualWithdrawal: Number(e.target.value)})}
                 disabled={isRunning}
+                placeholder="Amount withdrawn from portfolio per year"
                 className={withdrawalRate > 6 ? 'border-red-500' : withdrawalRate > 4.5 ? 'border-yellow-500' : ''}
               />
               {inputs.initialPortfolio > 0 && inputs.timeHorizon > 0 && (
@@ -905,7 +906,7 @@ export default function NuclearMonteCarlo({
                     <Area type="monotone" dataKey="p50" stackId="1" stroke={COLORS.purple} fill={COLORS.purple} fillOpacity={0.2} name="Median" strokeWidth={2} />
                     <Area type="monotone" dataKey="p25" stackId="1" stroke={COLORS.warning} fill={COLORS.warning} fillOpacity={0.1} name="25th Percentile" />
                     <Area type="monotone" dataKey="p10" stackId="1" stroke={COLORS.danger} fill={COLORS.danger} fillOpacity={0.1} name="10th Percentile" />
-                    <Line type="monotone" dataKey="expectedWithdrawal" stroke={COLORS.secondary} strokeWidth={2} strokeDasharray="5 5" name="Annual Withdrawal" dot={false} />
+                    <Line type="monotone" dataKey="expectedWithdrawal" stroke={COLORS.secondary} strokeWidth={2} strokeDasharray="5 5" name="Annual Portfolio Withdrawal" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

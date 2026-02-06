@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clientService } from '@/services/ClientService';
 import type { Client } from '@/types/client';
@@ -33,6 +33,29 @@ const emptyCoverageIds: StressCoverageClientIds = {
   retestDue: []
 };
 
+// Combined dashboard data state to prevent render thrashing
+type DashboardDataState = {
+  dashboardStats: StressTestingDashboardStats;
+  stressMetricsByClient: Record<string, StressTestClientMetrics>;
+  coverageClientIds: StressCoverageClientIds;
+  resilienceDistribution: StressDistributionItem[];
+  severityMix: StressDistributionItem[];
+  scenarioMix: StressDistributionItem[];
+  testsOverTime: TestsOverTimeItem[];
+  coverageSeries: StressCoverageSeriesItem[];
+};
+
+const initialDashboardData: DashboardDataState = {
+  dashboardStats: emptyDashboardStats,
+  stressMetricsByClient: {},
+  coverageClientIds: emptyCoverageIds,
+  resilienceDistribution: [],
+  severityMix: [],
+  scenarioMix: [],
+  testsOverTime: [],
+  coverageSeries: []
+};
+
 type StressTestingDashboardState = {
   clients: Client[];
   isLoading: boolean;
@@ -58,33 +81,35 @@ export const useStressTestingDashboardData = (
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dashboardStats, setDashboardStats] = useState<StressTestingDashboardStats>(emptyDashboardStats);
-  const [stressMetricsByClient, setStressMetricsByClient] = useState<Record<string, StressTestClientMetrics>>({});
-  const [coverageClientIds, setCoverageClientIds] = useState<StressCoverageClientIds>(emptyCoverageIds);
-  const [resilienceDistribution, setResilienceDistribution] = useState<StressDistributionItem[]>([]);
-  const [severityMix, setSeverityMix] = useState<StressDistributionItem[]>([]);
-  const [scenarioMix, setScenarioMix] = useState<StressDistributionItem[]>([]);
-  const [testsOverTime, setTestsOverTime] = useState<TestsOverTimeItem[]>([]);
-  const [coverageSeries, setCoverageSeries] = useState<StressCoverageSeriesItem[]>([]);
 
+  // Combined state to prevent render thrashing - single setState call updates all dashboard data
+  const [dashboardData, setDashboardData] = useState<DashboardDataState>(initialDashboardData);
+
+  // Apply all dashboard data in a single state update to prevent multiple re-renders
   const applyDashboardData = useCallback((data: StressTestingDashboardData) => {
-    setDashboardStats(data.dashboardStats);
-    setStressMetricsByClient(data.stressMetricsByClient);
-    setCoverageClientIds(data.coverageClientIds);
-    setResilienceDistribution(data.resilienceDistribution);
-    setSeverityMix(data.severityMix);
-    setScenarioMix(data.scenarioMix);
-    setTestsOverTime(data.testsOverTime);
-    setCoverageSeries(data.coverageSeries);
+    setDashboardData({
+      dashboardStats: data.dashboardStats,
+      stressMetricsByClient: data.stressMetricsByClient,
+      coverageClientIds: data.coverageClientIds,
+      resilienceDistribution: data.resilienceDistribution,
+      severityMix: data.severityMix,
+      scenarioMix: data.scenarioMix,
+      testsOverTime: data.testsOverTime,
+      coverageSeries: data.coverageSeries
+    });
   }, []);
+
+  // Use ref for clients to avoid dependency cycle in refreshDashboard
+  const clientsRef = useRef<Client[]>([]);
+  clientsRef.current = clients; // Direct assignment more efficient than useEffect
 
   const refreshDashboard = useCallback(
     async (clientsOverride?: Client[]) => {
-      const targetClients = clientsOverride ?? clients;
-      const dashboardData = await loadStressTestingDashboardData(supabase, targetClients);
-      applyDashboardData(dashboardData);
+      const targetClients = clientsOverride ?? clientsRef.current;
+      const loadedData = await loadStressTestingDashboardData(supabase, targetClients);
+      applyDashboardData(loadedData);
     },
-    [applyDashboardData, clients, supabase]
+    [applyDashboardData, supabase]
   );
 
   const loadInitialData = useCallback(async () => {
@@ -112,14 +137,14 @@ export const useStressTestingDashboardData = (
     clients,
     isLoading,
     error,
-    dashboardStats,
-    stressMetricsByClient,
-    coverageClientIds,
-    resilienceDistribution,
-    severityMix,
-    scenarioMix,
-    testsOverTime,
-    coverageSeries,
+    dashboardStats: dashboardData.dashboardStats,
+    stressMetricsByClient: dashboardData.stressMetricsByClient,
+    coverageClientIds: dashboardData.coverageClientIds,
+    resilienceDistribution: dashboardData.resilienceDistribution,
+    severityMix: dashboardData.severityMix,
+    scenarioMix: dashboardData.scenarioMix,
+    testsOverTime: dashboardData.testsOverTime,
+    coverageSeries: dashboardData.coverageSeries,
     refreshDashboard,
     setError
   };

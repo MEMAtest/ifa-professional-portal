@@ -6,10 +6,8 @@ import { isPlatformAdminUser } from '@/lib/auth/platformAdmin'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getStripeClient } from '@/lib/billing/stripeClient'
 import { getPlatformBillingConfig, resolveStripePriceConfig } from '@/lib/billing/platformBillingConfig'
-import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billing/firmBilling'
+import { mergeFirmBillingSettings, type FirmBillingSettings, DEFAULT_INCLUDED_SEATS } from '@/lib/billing/firmBilling'
 import { log } from '@/lib/logging/structured'
-
-const DEFAULT_INCLUDED_SEATS = 1
 
 export async function POST(
   request: NextRequest,

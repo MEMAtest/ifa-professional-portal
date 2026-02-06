@@ -1,3 +1,15 @@
+/**
+ * Default maximum seats for firms without explicit configuration.
+ * This should be 1 for new signups - additional seats come from Stripe subscription.
+ * IMPORTANT: All seat limit checks should use this constant, not hardcoded values.
+ */
+export const DEFAULT_MAX_SEATS = 1
+
+/**
+ * Default included seats (seats included in base plan, not billed per-seat).
+ */
+export const DEFAULT_INCLUDED_SEATS = 1
+
 export type FirmBillingSettings = {
   billingEmail?: string
   includedSeats?: number

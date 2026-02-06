@@ -73,6 +73,11 @@ export interface FirmUpdateInput {
   subscriptionTier?: SubscriptionTier
 }
 
+/**
+ * Default firm settings for new firms.
+ * NOTE: maxSeats defaults to 1 - actual seat limit should come from Stripe subscription
+ * or be configured by admin. Do not hardcode seat limits here.
+ */
 export const DEFAULT_FIRM_SETTINGS: FirmSettings = {
   branding: {
     primaryColor: '#2563eb',
@@ -85,7 +90,7 @@ export const DEFAULT_FIRM_SETTINGS: FirmSettings = {
     reviewFrequencyMonths: 12,
   },
   billing: {
-    maxSeats: 3,
+    maxSeats: 1, // Default to 1 - subscription determines actual limit
     currentSeats: 0,
   },
   features: {

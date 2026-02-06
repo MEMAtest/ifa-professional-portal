@@ -199,7 +199,7 @@ export const ScenarioComparison: React.FC<ScenarioComparisonProps> = ({
     const changes: { input: string; values: string[] }[] = [];
     const inputLabels: Record<string, string> = {
       initialWealth: 'Initial Wealth',
-      withdrawalAmount: 'Annual Withdrawal',
+      withdrawalAmount: 'Annual Portfolio Withdrawal',
       withdrawalRate: 'Withdrawal Rate',
       timeHorizon: 'Time Horizon',
       expectedReturn: 'Expected Return',

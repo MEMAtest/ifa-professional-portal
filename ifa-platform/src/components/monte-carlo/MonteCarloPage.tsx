@@ -753,7 +753,7 @@ export default function MonteCarloPage() {
                           <span className="ml-2 font-medium">{formatCurrency(selectedScenario.initial_wealth)}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Annual Withdrawal:</span>
+                          <span className="text-gray-500">Annual Portfolio Withdrawal:</span>
                           <span className="ml-2 font-medium">{formatCurrency(selectedScenario.withdrawal_amount)}</span>
                         </div>
                         <div>

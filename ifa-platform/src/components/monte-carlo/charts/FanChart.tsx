@@ -93,7 +93,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         {data.withdrawal && (
           <div className="mt-2 pt-2 border-t border-gray-200">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-600">Annual Withdrawal:</span>
+              <span className="text-gray-600">Annual Portfolio Withdrawal:</span>
               <span className="font-medium">{formatFullCurrency(data.withdrawal)}</span>
             </div>
           </div>

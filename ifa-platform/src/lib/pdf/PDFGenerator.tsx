@@ -529,7 +529,8 @@ export const CashFlowReportDocument = ({
 // ================================================================
 
 export const ATRReportDocument = ({ data }: { data: PDFReportData }) => {
-  const riskLevelPercentage = ((data.riskLevel || 0) / 10) * 100;
+  // ATR uses a 1-5 risk level scale
+  const riskLevelPercentage = ((data.riskLevel || 0) / 5) * 100;
 
   return (
     <Document>
@@ -547,7 +548,7 @@ export const ATRReportDocument = ({ data }: { data: PDFReportData }) => {
             <View style={baseStyles.headerColumn}>
               <Text style={baseStyles.label}>Risk Level</Text>
               <Text style={[baseStyles.value, { fontWeight: 'bold', color: colors.primary }]}>
-                {data.riskLevel}/10 - {data.riskCategory}
+                {data.riskLevel}/5 - {data.riskCategory}
               </Text>
             </View>
             <View style={baseStyles.headerColumn}>
@@ -571,7 +572,7 @@ export const ATRReportDocument = ({ data }: { data: PDFReportData }) => {
             marginBottom: 15
           }}>
             <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.primary, marginBottom: 10 }}>
-              Risk Level: {data.riskLevel}/10
+              Risk Level: {data.riskLevel}/5
             </Text>
             <Text style={{ fontSize: 14, color: colors.text, marginBottom: 5 }}>
               {data.riskCategory}

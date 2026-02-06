@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { log } from '@/lib/logging/structured'
+import { DEFAULT_MAX_SEATS } from '@/lib/billing/firmBilling'
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     const settings = (firm?.settings as { billing?: { maxSeats?: number } }) || {}
-    const maxSeats = settings.billing?.maxSeats ?? 3
+    const maxSeats = settings.billing?.maxSeats ?? DEFAULT_MAX_SEATS
 
     // Count active profiles
     const { count: activeProfiles } = await supabase

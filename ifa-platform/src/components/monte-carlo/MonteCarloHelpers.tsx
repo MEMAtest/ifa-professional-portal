@@ -70,7 +70,7 @@ export const validateParameters = (params: SimulationParameters): ValidationResu
   }
 
   if (params.annualWithdrawal <= 0) {
-    result.errors.push('Annual withdrawal must be greater than £0');
+    result.errors.push('Annual Portfolio Withdrawal must be greater than £0. Enter the amount you need to withdraw from your portfolio each year (excluding other income sources like State Pension).');
     result.isValid = false;
   }
 
@@ -461,7 +461,7 @@ export const SafeWithdrawalCalculator: React.FC<{ portfolio: number; timeHorizon
 
   return (
     <div className="p-3 bg-blue-50 rounded-lg">
-      <h4 className="text-sm font-medium mb-2">Suggested Safe Withdrawal</h4>
+      <h4 className="text-sm font-medium mb-2">Suggested Safe Portfolio Withdrawal</h4>
       <div className="flex items-baseline gap-2">
         <span className="text-2xl font-bold text-blue-600">
           £{safeWithdrawal.toLocaleString('en-GB', { maximumFractionDigits: 0 })}
@@ -469,7 +469,7 @@ export const SafeWithdrawalCalculator: React.FC<{ portfolio: number; timeHorizon
         <span className="text-sm text-gray-600">per year ({safeRate}%)</span>
       </div>
       <p className="text-xs text-gray-600 mt-1">
-        Based on {timeHorizon}-year time horizon
+        Based on {timeHorizon}-year time horizon. This is the suggested amount to withdraw from your portfolio annually (excluding other income sources).
       </p>
     </div>
   );

@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getFirm, updateFirm, uploadFirmLogo, getFirmSeatCount } from '../api/firm.api'
 import type { FirmUpdateInput } from '../types/firm.types'
+import { DEFAULT_MAX_SEATS } from '@/lib/billing/firmBilling'
 
 export const FIRM_QUERY_KEY = ['firm']
 export const FIRM_SEATS_QUERY_KEY = ['firm', 'seats']
@@ -79,7 +80,7 @@ export function useFirmSeats() {
     staleTime: 60 * 1000, // 1 minute
   })
 
-  const maxSeats = query.data?.maxSeats ?? 3
+  const maxSeats = query.data?.maxSeats ?? DEFAULT_MAX_SEATS
   const currentSeats = query.data?.currentSeats ?? 0
   const canAddUser = currentSeats < maxSeats
   const seatsRemaining = maxSeats - currentSeats

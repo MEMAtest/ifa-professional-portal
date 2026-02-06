@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
-import { useFirm } from '@/modules/firm/hooks/useFirm'
+import { useFirm, FIRM_QUERY_KEY } from '@/modules/firm/hooks/useFirm'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { user, loading: authLoading } = useAuth()
   const { firm, updateFirmAsync, isLoading: firmLoading } = useFirm()
   const [saveError, setSaveError] = useState(false)
@@ -18,20 +20,23 @@ export default function OnboardingPage() {
     setSaving(true)
     try {
       // Mark onboarding as completed in firm settings
-      await updateFirmAsync({
+      // Only send the onboarding and billing settings - the API will deep-merge
+      // with existing settings so we don't overwrite other nested properties
+      const updatedFirm = await updateFirmAsync({
         settings: {
-          ...firm?.settings,
           onboarding: {
             completed: true,
             completedAt: new Date().toISOString(),
             completedBy: user?.id || '',
           },
-          billing: {
-            ...(firm?.settings as any)?.billing,
-            maxSeats: (firm?.settings as any)?.billing?.maxSeats ?? 3,
-          },
+          // Preserve existing billing settings - maxSeats comes from Stripe subscription
+          billing: (firm?.settings as any)?.billing ?? {},
         } as any,
       })
+
+      // Ensure the query cache is updated with the new firm data
+      // before navigating, so SmartLayoutWrapper sees the updated onboarding status
+      queryClient.setQueryData(FIRM_QUERY_KEY, updatedFirm)
 
       // Send welcome email (non-blocking — don't fail onboarding if email fails)
       fetch('/api/notifications/send-email', {

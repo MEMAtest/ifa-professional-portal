@@ -11,7 +11,8 @@ import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billin
 import { log } from '@/lib/logging/structured'
 import { parseRequestBody } from '@/app/api/utils'
 
-const DEFAULT_INCLUDED_SEATS = 1
+import { DEFAULT_INCLUDED_SEATS } from '@/lib/billing/firmBilling'
+
 const DEFAULT_SEAT_PRICE = 85
 
 function normalizeTerm(value: unknown): 12 | 24 | 36 {
@@ -129,12 +130,16 @@ export async function POST(
     const startDate = new Date()
     const contractEnd = addMonths(startDate, termMonths)
 
+    // maxSeats = included seats + billable seats (seats beyond the included amount)
+    const maxSeats = includedSeats + billableSeats
+
     const billingPatch: FirmBillingSettings = {
       termMonths,
       basePrice: BASE_PLAN_PRICES[termMonths],
       seatPrice,
       includedSeats,
       currentSeats: activeUsers,
+      maxSeats, // Set maxSeats based on subscription
       stripeCustomerId,
       stripeSubscriptionId: typeof schedule.subscription === 'string' ? schedule.subscription : (schedule.subscription?.id ?? undefined),
       stripeScheduleId: schedule.id,

@@ -103,12 +103,18 @@ export async function POST(request: NextRequest) {
         .from(assessmentTable as any)
         .select('*')
         .eq('id', assessmentId)
+        .eq('client_id', clientId)
         .maybeSingle()
 
       assessment = data
 
-      if (error || !assessment) {
-        return NextResponse.json({ error: 'Assessment not found' }, { status: 404 })
+      if (error) {
+        log.error(`Failed to fetch ${assessmentType} assessment`, { error, assessmentId, clientId })
+        return NextResponse.json({ error: `Failed to fetch assessment: ${error.message}` }, { status: 500 })
+      }
+
+      if (!assessment) {
+        return NextResponse.json({ error: `${assessmentType} assessment not found` }, { status: 404 })
       }
     }
 

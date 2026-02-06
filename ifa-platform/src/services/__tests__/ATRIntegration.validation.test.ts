@@ -120,7 +120,7 @@ describe('ATR Integration Validation Tests', () => {
       } else {
         expect(atrError).toBeNull();
         expect(atrAssessment).toBeTruthy();
-        console.log(`✅ Existing ATR assessment found: Risk Level ${atrAssessment.risk_level}/10`);
+        console.log(`✅ Existing ATR assessment found: Risk Level ${atrAssessment.risk_level}/5`);
       }
     }, TEST_CONFIG.TIMEOUT_MS);
 

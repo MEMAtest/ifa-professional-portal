@@ -112,11 +112,8 @@ export default function SignatureSetupStep({ onNext, onBack, onSkip }: Signature
             autoReviewReminders: firm?.settings?.compliance?.autoReviewReminders ?? true,
             reviewFrequencyMonths: firm?.settings?.compliance?.reviewFrequencyMonths ?? 12,
           },
-          billing: {
-            ...firm?.settings?.billing,
-            maxSeats: firm?.settings?.billing?.maxSeats ?? 3,
-            currentSeats: firm?.settings?.billing?.currentSeats ?? 0,
-          },
+          // Preserve existing billing settings - maxSeats comes from Stripe subscription
+          billing: firm?.settings?.billing ?? {},
           features: {
             ...firm?.settings?.features,
             cashFlowModeling: firm?.settings?.features?.cashFlowModeling ?? false,

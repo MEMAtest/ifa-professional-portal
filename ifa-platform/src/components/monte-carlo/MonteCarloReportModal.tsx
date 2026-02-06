@@ -824,7 +824,7 @@ const MonteCarloReportModal: React.FC<MonteCarloReportModalProps> = ({
                           <div className="font-bold">{formatCurrency(simulationResult.initialWealth)}</div>
                         </div>
                         <div className="bg-gray-50 p-3 rounded">
-                          <div className="text-gray-500">Annual Withdrawal</div>
+                          <div className="text-gray-500">Annual Portfolio Withdrawal</div>
                           <div className="font-bold">{formatCurrency(simulationResult.withdrawalAmount)}</div>
                         </div>
                         <div className="bg-gray-50 p-3 rounded">

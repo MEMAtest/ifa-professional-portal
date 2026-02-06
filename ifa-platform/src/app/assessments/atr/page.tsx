@@ -236,14 +236,18 @@ const calculateATRScore = (answers: { [questionId: string]: number }): ATRResult
     }
   })
 
-  // Normalize scores
-  const totalScore = totalWeight > 0 ? (weightedScore / totalWeight) * 20 : 0 // Scale to 0-100
-  
-  // Normalize category scores
+  // Normalize scores - Convert 1-5 weighted average to 0-100 scale
+  // Formula: ((average - 1) / 4) * 100 = (average - 1) * 25
+  // This properly maps: 1->0, 2->25, 3->50, 4->75, 5->100
+  const weightedAverage = totalWeight > 0 ? weightedScore / totalWeight : 1
+  const totalScore = (weightedAverage - 1) * 25
+
+  // Normalize category scores using same correct formula
   Object.keys(categoryScores).forEach(category => {
     const cat = category as keyof CategoryScores
     if (categoryWeights[cat] > 0) {
-      categoryScores[cat] = (categoryScores[cat] / categoryWeights[cat]) * 20
+      const catAverage = categoryScores[cat] / categoryWeights[cat]
+      categoryScores[cat] = (catAverage - 1) * 25
     }
   })
 

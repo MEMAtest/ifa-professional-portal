@@ -333,24 +333,48 @@ export async function POST(request: NextRequest) {
     try {
       logger.debug('Updating client risk profile with CFL data', { clientId })
 
-      const { error: clientUpdateError } = await supabase
+      // Fetch existing risk_profile to merge with new values
+      const { data: existingClient, error: fetchError } = await supabase
         .from('clients')
-        .update({
-          'riskProfile.capacityForLoss': capacityCategory,
-          'riskProfile.riskCapacity': capacityCategory,
-          'riskProfile.lastAssessment': new Date().toISOString(),
-          'riskProfile.lastAssessmentId': data.id,
-          'riskProfile.lastAssessmentDate': new Date().toISOString(),
-          'riskProfile.currentCFLVersion': newVersion,
-          updated_at: new Date().toISOString()
-        })
+        .select('risk_profile')
         .eq('id', clientId)
+        .single()
 
-      if (clientUpdateError) {
-        logger.warn('Error updating client risk profile', { clientId, error: getErrorMessage(clientUpdateError) })
-        // Don't fail the request if profile update fails
+      if (fetchError) {
+        logger.warn('Error fetching existing risk profile, skipping update', { clientId, error: getErrorMessage(fetchError) })
+        // Skip risk profile update but don't fail the assessment save
       } else {
-        logger.debug('Client risk profile updated', { clientId })
+        // Safe type guard for risk_profile
+        const existingRiskProfile =
+          existingClient?.risk_profile &&
+          typeof existingClient.risk_profile === 'object' &&
+          !Array.isArray(existingClient.risk_profile)
+            ? (existingClient.risk_profile as Record<string, unknown>)
+            : {}
+
+        const updatedRiskProfile = {
+          ...existingRiskProfile,
+          capacityForLoss: capacityCategory,
+          riskCapacity: capacityCategory,
+          lastAssessment: new Date().toISOString(),
+          lastAssessmentId: data.id,
+          lastAssessmentDate: new Date().toISOString(),
+          currentCFLVersion: newVersion,
+        }
+
+        const { error: clientUpdateError } = await supabase
+          .from('clients')
+          .update({
+            risk_profile: updatedRiskProfile,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', clientId)
+
+        if (clientUpdateError) {
+          logger.warn('Error updating client risk profile', { clientId, error: getErrorMessage(clientUpdateError) })
+        } else {
+          logger.debug('Client risk profile updated', { clientId })
+        }
       }
     } catch (profileError) {
       logger.warn('Exception updating client risk profile', { clientId, error: getErrorMessage(profileError) })
@@ -486,13 +510,33 @@ export async function PUT(request: NextRequest) {
     // Update client risk profile if clientId provided
     if (resolvedClientId && capacityLevel && capacityCategory) {
       try {
+        // Fetch existing risk_profile to merge with new values
+        const { data: existingClient } = await supabase
+          .from('clients')
+          .select('risk_profile')
+          .eq('id', resolvedClientId)
+          .single()
+
+        // Safe type guard for risk_profile
+        const existingRiskProfile =
+          existingClient?.risk_profile &&
+          typeof existingClient.risk_profile === 'object' &&
+          !Array.isArray(existingClient.risk_profile)
+            ? (existingClient.risk_profile as Record<string, unknown>)
+            : {}
+
+        const updatedRiskProfile = {
+          ...existingRiskProfile,
+          capacityForLoss: capacityCategory,
+          riskCapacity: capacityCategory,
+          lastAssessment: new Date().toISOString(),
+          lastAssessmentId: assessmentId,
+        }
+
         await supabase
           .from('clients')
           .update({
-            'riskProfile.capacityForLoss': capacityCategory,
-            'riskProfile.riskCapacity': capacityCategory,
-            'riskProfile.lastAssessment': new Date().toISOString(),
-            'riskProfile.lastAssessmentId': assessmentId,
+            risk_profile: updatedRiskProfile,
             updated_at: new Date().toISOString()
           })
           .eq('id', resolvedClientId)

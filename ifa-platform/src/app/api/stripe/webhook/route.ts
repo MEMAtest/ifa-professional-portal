@@ -5,7 +5,8 @@ import { headers } from 'next/headers'
 import type Stripe from 'stripe'
 import { getStripeClient } from '@/lib/billing/stripeClient'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { mergeFirmBillingSettings, type FirmBillingSettings } from '@/lib/billing/firmBilling'
+import { mergeFirmBillingSettings, type FirmBillingSettings, DEFAULT_INCLUDED_SEATS } from '@/lib/billing/firmBilling'
+import { getPlatformBillingConfig, resolveStripePriceConfig } from '@/lib/billing/platformBillingConfig'
 import { log } from '@/lib/logging/structured'
 
 function parseStripeDate(value?: number | null): string | null {
@@ -85,11 +86,45 @@ export async function POST(request: NextRequest) {
         const firm = await findFirmByCustomerId(customerId)
         if (firm) {
           const settings = (firm.settings ?? {}) as { billing?: FirmBillingSettings }
+          const currentBilling = settings.billing ?? {}
+
+          // Calculate maxSeats from subscription seat quantity + included seats
+          // Seat items in Stripe represent billable (extra) seats beyond included seats
+          let maxSeats: number | undefined
+          try {
+            const platformConfig = await getPlatformBillingConfig()
+            const priceConfig = resolveStripePriceConfig(platformConfig)
+            const seatPriceId = currentBilling.stripeSeatPriceId ?? priceConfig.seatPriceId
+            const includedSeats = currentBilling.includedSeats ?? DEFAULT_INCLUDED_SEATS
+
+            // Find the seat line item in the subscription
+            const seatItem = subscription.items.data.find(
+              (item) => item.price.id === seatPriceId
+            )
+
+            // maxSeats = included seats + billable seats from Stripe
+            const billableSeats = seatItem?.quantity ?? 0
+            maxSeats = includedSeats + billableSeats
+
+            log.info('[Stripe Webhook] Synced seat count from subscription', {
+              firmId: firm.id,
+              includedSeats,
+              billableSeats,
+              maxSeats
+            })
+          } catch (err) {
+            log.warn('[Stripe Webhook] Failed to calculate maxSeats from subscription', {
+              error: err instanceof Error ? err.message : String(err)
+            })
+            // Don't fail the webhook, just skip maxSeats update
+          }
+
           const billingPatch: FirmBillingSettings = {
             stripeSubscriptionId: subscription.id,
             subscriptionStatus: subscription.status ?? undefined,
             contractStart: parseStripeDate(subscription.current_period_start) ?? undefined,
-            contractEnd: parseStripeDate(subscription.current_period_end) ?? undefined
+            contractEnd: parseStripeDate(subscription.current_period_end) ?? undefined,
+            ...(maxSeats !== undefined && { maxSeats })
           }
           const updatedSettings = mergeFirmBillingSettings(settings, billingPatch)
 

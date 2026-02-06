@@ -123,18 +123,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch assessment data
+    // Use maybeSingle() instead of single() to avoid throwing errors when no rows found
     const assessmentTable = `${assessmentType}_assessments`
     const { data: assessment, error: assessmentError } = await supabase
       .from(assessmentTable)
       .select('*')
       .eq('id', assessmentId)
       .eq('client_id', clientId)
-      .single()
+      .maybeSingle()
 
-    if (assessmentError || !assessment) {
-      log.error('Assessment fetch error', assessmentError)
+    if (assessmentError) {
+      log.error('Assessment fetch error', { error: assessmentError, assessmentType, assessmentId, clientId })
       return NextResponse.json(
-        { error: 'Assessment not found' },
+        { error: `Failed to fetch ${assessmentType} assessment: ${assessmentError.message}` },
+        { status: 500 }
+      )
+    }
+
+    if (!assessment) {
+      log.warn('Assessment not found', { assessmentType, assessmentId, clientId })
+      return NextResponse.json(
+        { error: `${assessmentType} assessment not found for the specified client` },
         { status: 404 }
       )
     }
@@ -147,12 +156,20 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('id', clientId)
       .eq('firm_id', firmId)
-      .single()
+      .maybeSingle()
 
-    if (clientError || !client) {
-      log.error('Client fetch error', clientError)
+    if (clientError) {
+      log.error('Client fetch error', { error: clientError, clientId, firmId })
       return NextResponse.json(
-        { error: 'Client not found' },
+        { error: `Failed to fetch client: ${clientError.message}` },
+        { status: 500 }
+      )
+    }
+
+    if (!client) {
+      log.warn('Client not found', { clientId, firmId })
+      return NextResponse.json(
+        { error: 'Client not found or access denied' },
         { status: 404 }
       )
     }
@@ -394,12 +411,20 @@ export async function POST(request: NextRequest) {
     const documentName = `${getDocumentTitle(assessmentType)} - ${clientName}`
 
     const normalizedType = `${assessmentType}_report`
+
+    // Note: assessment_id FK references the 'assessments' table (legacy suitability assessments).
+    // For ATR, CFL, and Persona assessments which are stored in separate tables, we MUST NOT
+    // set assessment_id as it would violate the foreign key constraint. Instead, store
+    // the assessment reference in metadata.
+    const isSuitabilityAssessment = assessmentType === 'suitability'
+
     const documentRecord = {
       id: documentId,
       firm_id: firmId,
       client_id: clientId,
-      assessment_id: assessmentId,
-      assessment_version: assessmentData.version_number || null,
+      // Only set assessment_id for suitability assessments (which match the FK constraint)
+      assessment_id: isSuitabilityAssessment ? assessmentId : null,
+      assessment_version: assessmentData.version_number || assessmentData.version || null,
       name: documentName,
       client_name: clientName,
       file_name: fileName,
@@ -415,17 +440,19 @@ export async function POST(request: NextRequest) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       metadata: {
+        // Always store the assessment reference in metadata for all assessment types
         assessmentId: assessmentId,
         assessmentType: assessmentType,
+        assessmentTable: `${assessmentType}_assessments`,
         clientId: clientId,
         clientName: clientName,
         ...(assessmentType === 'persona' ? {
-          personaType: assessmentData.persona_type,
-          personaLevel: assessmentData.persona_level,
-          confidence: assessmentData.confidence
+          personaType: assessmentData.persona_type || 'Unknown',
+          personaLevel: assessmentData.persona_level || 'Unknown',
+          confidence: assessmentData.confidence ?? 0
         } : {
-          score: assessmentData.total_score,
-          riskCategory: assessmentData.risk_category
+          score: assessmentData.total_score ?? assessmentData.risk_level ?? 0,
+          riskCategory: assessmentData.risk_category || assessmentData.capacity_category || 'Not assessed'
         })
       }
     }
