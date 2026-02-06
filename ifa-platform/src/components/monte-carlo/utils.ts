@@ -26,8 +26,16 @@ export const formatDate = (dateString: string | null | undefined): string => {
   }
 };
 
-export const getClientAge = (_client: Client): number => {
-  return 45;
+export const getClientAge = (client: Client): number => {
+  if (client.personalDetails?.dateOfBirth) {
+    const dob = new Date(client.personalDetails.dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
+    return age;
+  }
+  return 45; // fallback only if no DOB
 };
 
 export const getClientInitials = (client: Client): string => {

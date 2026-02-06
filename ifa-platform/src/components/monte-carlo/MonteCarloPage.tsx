@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -195,10 +196,14 @@ export default function MonteCarloPage() {
 
   // NEW: Handle stat card click for drill-down modal
   const handleStatClick = (data: StatClickData) => {
-    // Build client names map from the data
-    const namesMap = new Map<string, string>();
-    data.clients.forEach(c => namesMap.set(c.id, c.name));
-    setDrillDownClientNames(namesMap);
+    // Use clientNames from callback if available, otherwise build from clients array
+    if (data.clientNames && data.clientNames.size > 0) {
+      setDrillDownClientNames(data.clientNames);
+    } else {
+      const namesMap = new Map<string, string>();
+      data.clients.forEach(c => namesMap.set(c.id, c.name));
+      setDrillDownClientNames(namesMap);
+    }
     setDrillDownData(data);
     setShowDrillDownModal(true);
   };
@@ -458,15 +463,24 @@ export default function MonteCarloPage() {
                     <ArrowLeft className="h-4 w-4" />
                     <span>Back to Clients</span>
                   </Button>
-                  
+
+                  <Link href={`/clients/${selectedClient.id}`}>
+                    <Button variant="outline" size="sm" className="flex items-center space-x-2">
+                      <User className="h-4 w-4" />
+                      <span>View Client Profile</span>
+                    </Button>
+                  </Link>
+
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold">
                       {getClientInitials(selectedClient)}
                     </div>
                     <div>
-                      <p className="font-semibold">
-                        {selectedClient.personalDetails?.firstName} {selectedClient.personalDetails?.lastName}
-                      </p>
+                      <Link href={`/clients/${selectedClient.id}`} className="hover:underline">
+                        <p className="font-semibold">
+                          {selectedClient.personalDetails?.firstName} {selectedClient.personalDetails?.lastName}
+                        </p>
+                      </Link>
                       <p className="text-sm text-gray-500">{selectedClient.clientRef}</p>
                     </div>
                   </div>

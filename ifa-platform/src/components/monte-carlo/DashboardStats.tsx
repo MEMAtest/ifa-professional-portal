@@ -44,6 +44,7 @@ export interface StatClickData {
   scenarios: ScenarioRow[];
   results: ResultRow[];
   clients: { id: string; name: string }[];
+  clientNames?: Map<string, string>;
 }
 
 // Database row types
@@ -120,7 +121,8 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ clientId, onStat
       count,
       scenarios: rawScenarios,
       results: rawResults,
-      clients
+      clients,
+      clientNames
     });
   };
 

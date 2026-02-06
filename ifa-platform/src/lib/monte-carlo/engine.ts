@@ -215,7 +215,7 @@ export class MonteCarloEngine {
       const peak = Math.max(...yearlyWealth);
       if (wealth < peak) {
         currentDrawdown = (peak - wealth) / peak;
-        maxDrawdown = Math.max(maxDrawdown, currentDrawdown);
+        maxDrawdown = Math.max(maxDrawdown, Math.min(currentDrawdown, 1.0));
       } else {
         currentDrawdown = 0;
       }

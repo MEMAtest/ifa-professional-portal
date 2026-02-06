@@ -272,7 +272,43 @@ export async function POST(request: NextRequest) {
         ? getBrandedSender(branding)
         : `IFA Platform <noreply@${process.env.EMAIL_FROM_DOMAIN || 'plannetic.com'}>`
 
-      const client = getSESClient()
+      // Check if SES client can be created (credentials configured)
+      let client;
+      try {
+        client = getSESClient()
+      } catch (sesInitError) {
+        // SES not configured - return graceful error instead of 500
+        log.warn('[send-email] SES not configured, email service unavailable', {
+          error: sesInitError instanceof Error ? sesInitError.message : String(sesInitError)
+        })
+
+        // In development, simulate success
+        if (process.env.NODE_ENV === 'development') {
+          log.debug('Development mode - Email simulated (SES not configured)', {
+            to,
+            cc: ccRecipients,
+            subject: emailContent.subject,
+            attachments: attachments.length
+          })
+
+          return NextResponse.json({
+            success: true,
+            message: 'Email simulated (development mode - SES not configured)',
+            emailId: `dev-${Date.now()}`,
+            preview: emailContent.subject
+          })
+        }
+
+        // In production without SES, return informative error with 200 status
+        // This allows callers to handle gracefully without causing 500 cascades
+        return NextResponse.json({
+          success: false,
+          error: 'Email service not configured',
+          code: 'SES_NOT_CONFIGURED',
+          message: 'AWS SES credentials are not configured. Email was not sent.',
+          preview: emailContent.subject
+        }, { status: 200 })
+      }
 
       let messageId: string | undefined
 
@@ -350,6 +386,25 @@ export async function POST(request: NextRequest) {
           emailId: `dev-${Date.now()}`,
           preview: emailContent.subject
         })
+      }
+
+      // In production, check if this is a credentials/configuration error
+      const errorMessage = sesError instanceof Error ? sesError.message : String(sesError)
+      const isConfigError = errorMessage.includes('credentials') ||
+                           errorMessage.includes('not configured') ||
+                           errorMessage.includes('UnrecognizedClientException') ||
+                           errorMessage.includes('InvalidClientTokenId')
+
+      if (isConfigError) {
+        // Return graceful error for configuration issues
+        log.warn('[send-email] SES configuration error in production', { error: errorMessage })
+        return NextResponse.json({
+          success: false,
+          error: 'Email service not configured',
+          code: 'SES_NOT_CONFIGURED',
+          message: 'AWS SES is not properly configured. Email was not sent.',
+          preview: emailContent.subject
+        }, { status: 200 })
       }
 
       throw sesError

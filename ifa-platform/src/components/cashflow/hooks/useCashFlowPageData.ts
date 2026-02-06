@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clientService } from '@/services/ClientService';
 import { CashFlowDataService } from '@/services/CashFlowDataService';
@@ -65,6 +65,20 @@ export const useCashFlowPageData = ({
     isTracking: false
   });
 
+  // Refs to prevent infinite loops and track state
+  const initialLoadDoneRef = useRef(false);
+  const toastRef = useRef(toast);
+  const linkScenarioRef = useRef(linkScenario);
+
+  // Keep refs up to date
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
+
+  useEffect(() => {
+    linkScenarioRef.current = linkScenario;
+  }, [linkScenario]);
+
   const refreshCoverage = useCallback(
     async (clientList: Client[]) => {
       const clientIds = clientList.map((client) => client.id);
@@ -123,7 +137,7 @@ export const useCashFlowPageData = ({
           }
         });
 
-        toast({
+        toastRef.current({
           title: 'Progress Updated',
           description: 'Cash flow assessment has been recorded',
           variant: 'default',
@@ -135,7 +149,7 @@ export const useCashFlowPageData = ({
         setTrackingState((prev) => ({ ...prev, isTracking: false }));
       }
     },
-    [selectedClient, supabase, toast]
+    [selectedClient, supabase]
   );
 
   const createDefaultScenario = useCallback(
@@ -145,8 +159,8 @@ export const useCashFlowPageData = ({
 
         const defaultScenario = await CashFlowScenarioService.ensureClientHasScenario(client.id);
 
-        if (linkScenario) {
-          await linkScenario(defaultScenario.id);
+        if (linkScenarioRef.current) {
+          await linkScenarioRef.current(defaultScenario.id);
         }
 
         await trackCashFlowProgress(defaultScenario as unknown as CashFlowScenario, client);
@@ -154,14 +168,14 @@ export const useCashFlowPageData = ({
         const updatedScenarios = await CashFlowDataService.getScenariosForClient(client.id);
         setScenarios(updatedScenarios);
 
-        toast({
+        toastRef.current({
           title: 'Default Scenario Created',
           description: 'A base case scenario has been created for this client',
           variant: 'default'
         });
       } catch (createError) {
         clientLogger.error('Error creating default scenario:', createError);
-        toast({
+        toastRef.current({
           title: 'Error',
           description: 'Failed to create default scenario',
           variant: 'destructive'
@@ -170,7 +184,7 @@ export const useCashFlowPageData = ({
         setIsCreatingScenario(false);
       }
     },
-    [linkScenario, toast, trackCashFlowProgress]
+    [trackCashFlowProgress]
   );
 
   const loadClientAndScenarios = useCallback(
@@ -193,6 +207,18 @@ export const useCashFlowPageData = ({
     [createDefaultScenario]
   );
 
+  // Store refs for functions used in loadInitialData to avoid dependency issues
+  const refreshCoverageRef = useRef(refreshCoverage);
+  const loadClientAndScenariosRef = useRef(loadClientAndScenarios);
+
+  useEffect(() => {
+    refreshCoverageRef.current = refreshCoverage;
+  }, [refreshCoverage]);
+
+  useEffect(() => {
+    loadClientAndScenariosRef.current = loadClientAndScenarios;
+  }, [loadClientAndScenarios]);
+
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -204,28 +230,32 @@ export const useCashFlowPageData = ({
         100
       );
       setClients(clientsResponse.clients);
-      await refreshCoverage(clientsResponse.clients);
+      await refreshCoverageRef.current(clientsResponse.clients);
 
       if (clientId) {
-        await loadClientAndScenarios(clientId);
+        await loadClientAndScenariosRef.current(clientId);
       }
     } catch (initialError) {
       clientLogger.error('Error loading initial data:', initialError);
       setError(initialError instanceof Error ? initialError.message : 'Failed to load data');
     } finally {
       setIsLoading(false);
+      initialLoadDoneRef.current = true;
     }
-  }, [clientId, loadClientAndScenarios, refreshCoverage]);
+  }, [clientId]);
 
+  // Run initial data load only once on mount
   useEffect(() => {
     loadInitialData();
-  }, [loadInitialData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Handle clientId changes after initial load
   useEffect(() => {
-    if (clientId) {
-      loadClientAndScenarios(clientId);
+    if (clientId && initialLoadDoneRef.current) {
+      loadClientAndScenariosRef.current(clientId);
     }
-  }, [clientId, loadClientAndScenarios]);
+  }, [clientId]);
 
   return {
     selectedClient,
