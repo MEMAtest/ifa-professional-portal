@@ -94,13 +94,9 @@ export default function SigningViewPage({
     setSignatureDataUrl(dataUrl)
   }
 
-  const handleConsentChange = (checked: boolean) => {
-    setConsentGiven(checked)
-    if (checked) {
-      setConsentTimestamp(new Date().toISOString())
-    } else {
-      setConsentTimestamp(null)
-    }
+  const handleConsentChange = (consented: boolean, timestamp: string | null) => {
+    setConsentGiven(consented)
+    setConsentTimestamp(timestamp)
   }
 
   const handleSubmitSignature = async () => {
@@ -388,8 +384,7 @@ export default function SigningViewPage({
 
                 {/* Consent checkbox */}
                 <SigningConsentCheckbox
-                  checked={consentGiven}
-                  onChange={handleConsentChange}
+                  onConsentChange={handleConsentChange}
                   signerName={signingInfo?.recipientName || ''}
                   documentName={signingInfo?.documentName || 'this document'}
                 />
