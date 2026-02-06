@@ -4,6 +4,7 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { z } from 'zod'
 import { signatureService } from '@/services/SignatureService'
 import { log } from '@/lib/logging/structured'
@@ -159,24 +160,29 @@ export async function POST(
 
     log.info('Signature completed successfully', { requestId: request_data.id })
 
-    // Send all notifications in parallel (non-blocking for response speed)
-    const notificationPromises = [
-      notifySignerConfirmation(request_data).catch(err =>
-        log.error('Failed to send signer confirmation', err instanceof Error ? err : undefined)
-      ),
-      notifyAdvisor(request_data).catch(err =>
-        log.error('Failed to notify advisor', err instanceof Error ? err : undefined)
-      ),
-      createInAppNotification(request_data).catch(err =>
-        log.error('Failed to create in-app notification', err instanceof Error ? err : undefined)
-      )
-    ]
-
-    // Wait for notifications but with a timeout to avoid function timeout
-    await Promise.race([
-      Promise.allSettled(notificationPromises),
-      new Promise(resolve => setTimeout(resolve, 8000)) // 8s max for notifications
-    ])
+    // Send notifications in background using waitUntil
+    // This allows the response to return immediately while emails send
+    waitUntil(
+      Promise.allSettled([
+        notifySignerConfirmation(request_data).catch(err =>
+          log.error('Failed to send signer confirmation', err instanceof Error ? err : undefined)
+        ),
+        notifyAdvisor(request_data).catch(err =>
+          log.error('Failed to notify advisor', err instanceof Error ? err : undefined)
+        ),
+        createInAppNotification(request_data).catch(err =>
+          log.error('Failed to create in-app notification', err instanceof Error ? err : undefined)
+        )
+      ]).then(results => {
+        log.info('Notification results', {
+          requestId: request_data.id,
+          results: results.map((r, i) => ({
+            task: ['signer_email', 'advisor_email', 'in_app'][i],
+            status: r.status
+          }))
+        })
+      })
+    )
 
     return NextResponse.json({
       success: true,
