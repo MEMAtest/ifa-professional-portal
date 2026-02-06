@@ -156,11 +156,17 @@ export async function POST(
       )
     }
 
+    // Send confirmation email to signer
+    try {
+      await notifySignerConfirmation(request_data)
+    } catch (notifyError) {
+      log.error('Failed to send signer confirmation', notifyError instanceof Error ? notifyError : undefined)
+    }
+
     // Send notification to advisor
     try {
       await notifyAdvisor(request_data)
     } catch (notifyError) {
-      // Log but don't fail the request
       log.error('Failed to notify advisor', notifyError instanceof Error ? notifyError : undefined)
     }
 
@@ -289,4 +295,42 @@ async function createInAppNotification(request_data: {
       },
       read: false
     })
+}
+
+async function notifySignerConfirmation(request_data: {
+  id: string
+  documentName: string
+  recipientName: string
+  recipientEmail: string
+  advisorName: string
+  firmId: string
+}): Promise<void> {
+  const supabase = getSupabaseServiceClient()
+
+  // Get firm name
+  const { data: firm } = await supabase
+    .from('firms')
+    .select('name')
+    .eq('id', request_data.firmId)
+    .single()
+
+  const firmName = firm?.name || 'Your Advisor'
+
+  const template = EMAIL_TEMPLATES.signerConfirmation({
+    signerName: request_data.recipientName,
+    documentName: request_data.documentName,
+    firmName,
+    advisorName: request_data.advisorName
+  })
+
+  await sendEmail({
+    to: request_data.recipientEmail,
+    subject: template.subject,
+    html: template.html
+  })
+
+  log.info('Signer confirmation email sent', {
+    recipientEmail: request_data.recipientEmail,
+    requestId: request_data.id
+  })
 }

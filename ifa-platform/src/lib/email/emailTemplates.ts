@@ -249,6 +249,58 @@ export const EMAIL_TEMPLATES = {
     `
   }),
 
+  signerConfirmation: (data: {
+    signerName: string
+    documentName: string
+    firmName: string
+    advisorName: string
+  }) => {
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    return {
+      subject: `Signed: ${data.documentName}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 640px; margin: 0 auto; background-color: #ffffff;">
+          <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 32px; text-align: center;">
+            <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 12px auto; line-height: 56px;">
+              <span style="font-size: 28px; color: #ffffff;">&#10003;</span>
+            </div>
+            <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 600;">
+              Document Signed Successfully
+            </h1>
+          </div>
+          <div style="padding: 40px 32px;">
+            <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+              Hi ${esc(data.signerName)},
+            </p>
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+              This confirms that you have successfully signed <strong>${esc(data.documentName)}</strong>.
+            </p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+              <table cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                <tr>
+                  <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Document:</td>
+                  <td style="padding: 8px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600;">${esc(data.documentName)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #64748b; font-size: 14px;">Signed at:</td>
+                  <td style="padding: 8px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600;">${new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}</td>
+                </tr>
+              </table>
+            </div>
+            <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0;">
+              A copy of the signed document has been securely stored. If you need a copy, please contact ${esc(data.advisorName)} at ${esc(data.firmName)}.
+            </p>
+          </div>
+          <div style="background: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              This email was sent by ${esc(data.firmName)} via Plannetic.
+            </p>
+          </div>
+        </div>
+      `
+    }
+  },
+
   weeklyReport: (advisorName: string, stats: any) => ({
     subject: 'Your Weekly Document Activity Report',
     html: `
