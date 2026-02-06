@@ -156,28 +156,26 @@ export async function POST(
       )
     }
 
-    // Send confirmation email to signer
-    try {
-      await notifySignerConfirmation(request_data)
-    } catch (notifyError) {
-      log.error('Failed to send signer confirmation', notifyError instanceof Error ? notifyError : undefined)
-    }
-
-    // Send notification to advisor
-    try {
-      await notifyAdvisor(request_data)
-    } catch (notifyError) {
-      log.error('Failed to notify advisor', notifyError instanceof Error ? notifyError : undefined)
-    }
-
-    // Create in-app notification
-    try {
-      await createInAppNotification(request_data)
-    } catch (notifyError) {
-      log.error('Failed to create in-app notification', notifyError instanceof Error ? notifyError : undefined)
-    }
-
     log.info('Signature completed successfully', { requestId: request_data.id })
+
+    // Send all notifications in parallel (non-blocking for response speed)
+    const notificationPromises = [
+      notifySignerConfirmation(request_data).catch(err =>
+        log.error('Failed to send signer confirmation', err instanceof Error ? err : undefined)
+      ),
+      notifyAdvisor(request_data).catch(err =>
+        log.error('Failed to notify advisor', err instanceof Error ? err : undefined)
+      ),
+      createInAppNotification(request_data).catch(err =>
+        log.error('Failed to create in-app notification', err instanceof Error ? err : undefined)
+      )
+    ]
+
+    // Wait for notifications but with a timeout to avoid function timeout
+    await Promise.race([
+      Promise.allSettled(notificationPromises),
+      new Promise(resolve => setTimeout(resolve, 8000)) // 8s max for notifications
+    ])
 
     return NextResponse.json({
       success: true,
