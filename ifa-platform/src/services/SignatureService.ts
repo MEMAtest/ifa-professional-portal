@@ -159,10 +159,10 @@ export class SignatureService {
         }
       }
 
-      // Get signature request details (without relational joins to avoid FK issues)
+      // Get signature request details (explicit columns - select('*') with typed client can miss columns)
       const { data: request, error: fetchError } = await supabase
         .from('signature_requests')
-        .select('*')
+        .select('id, document_id, client_id, firm_id, recipient_name, recipient_email, recipient_role, status, signing_token_expires_at, expires_at, original_document_hash, opensign_metadata, created_by, viewed_at')
         .eq('id', validation.signature_request_id)
         .single()
 
