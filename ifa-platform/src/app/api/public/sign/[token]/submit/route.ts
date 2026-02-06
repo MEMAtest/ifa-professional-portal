@@ -202,27 +202,25 @@ async function notifyAdvisor(request_data: {
 }): Promise<void> {
   const supabase = getSupabaseServiceClient()
 
-  // Get the signature request with advisor info
+  // Get the signature request (separate queries - no FK joins)
   const { data: signatureRequest } = await supabase
     .from('signature_requests')
-    .select(`
-      id,
-      created_by,
-      profiles:created_by (
-        id,
-        email,
-        full_name
-      )
-    `)
+    .select('id, created_by')
     .eq('id', request_data.id)
     .single()
 
-  if (!signatureRequest) {
+  if (!signatureRequest?.created_by) {
     log.warn('Could not find signature request for notification', { requestId: request_data.id })
     return
   }
 
-  const advisor = signatureRequest.profiles as any
+  // Fetch advisor profile separately
+  const { data: advisor } = await supabase
+    .from('profiles')
+    .select('id, email, full_name')
+    .eq('id', signatureRequest.created_by)
+    .maybeSingle()
+
   if (!advisor?.email) {
     log.warn('No advisor email for notification', { requestId: request_data.id })
     return

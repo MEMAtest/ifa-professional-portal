@@ -236,20 +236,10 @@ export class SignatureService {
     const supabase = getSupabaseServiceClient()
 
     try {
-      // Get the signature request with document details
+      // Get the signature request (separate queries - no FK joins)
       const { data: request, error: fetchError } = await supabase
         .from('signature_requests')
-        .select(`
-          *,
-          documents:document_id (
-            id,
-            name,
-            file_name,
-            file_path,
-            storage_path,
-            firm_id
-          )
-        `)
+        .select('*')
         .eq('id', requestId)
         .single()
 
@@ -260,7 +250,17 @@ export class SignatureService {
         }
       }
 
-      const document = request.documents as any
+      // Fetch document separately
+      let document: { id: string; name: string; file_name: string; file_path: string | null; storage_path: string | null; firm_id: string } | null = null
+      if (request.document_id) {
+        const { data: doc } = await supabase
+          .from('documents')
+          .select('id, name, file_name, file_path, storage_path, firm_id')
+          .eq('id', request.document_id)
+          .maybeSingle()
+        document = doc
+      }
+
       if (!document?.file_path && !document?.storage_path) {
         return {
           success: false,
