@@ -78,10 +78,25 @@ export async function GET(
     // Log access event
     await signatureService.markTokenAccessed(request_data.id, ip, userAgent)
 
+    // Direct diagnostic query to check what DB returns
+    const supabase = getSupabaseServiceClient()
+    let rawDocumentId: string | null = null
+    let rawStatus: string | null = null
+    try {
+      const { data: rawReq } = await supabase
+        .from('signature_requests')
+        .select('document_id, status')
+        .eq('id', request_data.id)
+        .single()
+      rawDocumentId = rawReq?.document_id ?? null
+      rawStatus = rawReq?.status ?? null
+    } catch {
+      // ignore
+    }
+
     // Get firm info for branding
     let firmName = 'Your Advisor'
     try {
-      const supabase = getSupabaseServiceClient()
       const { data: firm } = await supabase
         .from('firms')
         .select('name')
@@ -107,7 +122,9 @@ export async function GET(
         expiresAt: request_data.expiresAt,
         status: request_data.status,
         hasDocument: !!request_data.originalDocumentPath,
-        documentId: request_data.documentId
+        documentId: request_data.documentId,
+        _rawDocumentId: rawDocumentId,
+        _rawStatus: rawStatus
       }
     })
 
