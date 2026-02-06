@@ -21,6 +21,11 @@ const SIGNATURE_FONTS = [
   { name: 'Script', value: '"Brush Script MT", "Segoe Script", cursive' },
 ]
 
+// Limit typed names to safe characters
+function sanitizeName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9\s\-'.\u00C0-\u024F]/g, '')
+}
+
 export function SignaturePad({
   onSignatureChange,
   width = 500,
@@ -34,6 +39,8 @@ export function SignaturePad({
   const typeCanvasRef = useRef<HTMLCanvasElement>(null)
   const signaturePadRef = useRef<SignaturePadLib | null>(null)
   const savedDataRef = useRef<string | null>(null)
+  const onChangeRef = useRef(onSignatureChange)
+  onChangeRef.current = onSignatureChange
 
   const [mode, setMode] = useState<Mode>('draw')
   const [isEmpty, setIsEmpty] = useState(true)
@@ -56,18 +63,25 @@ export function SignaturePad({
       const savedData = savedDataRef.current
       canvas.width = canvas.offsetWidth * ratio
       canvas.height = canvas.offsetHeight * ratio
-      canvas.getContext('2d')?.scale(ratio, ratio)
+
+      // Reset transform before scaling to prevent compounding
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.scale(ratio, ratio)
+      }
 
       // Restore saved signature data after resize instead of clearing
       if (savedData) {
         const img = new Image()
         img.onload = () => {
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            ctx.fillStyle = backgroundColor
-            ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
-            ctx.drawImage(img, 0, 0, canvas.offsetWidth, canvas.offsetHeight)
+          const ctx2 = canvas.getContext('2d')
+          if (ctx2) {
+            ctx2.fillStyle = backgroundColor
+            ctx2.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
+            ctx2.drawImage(img, 0, 0, canvas.offsetWidth, canvas.offsetHeight)
           }
+          img.onload = null
         }
         img.src = savedData
       } else {
@@ -88,6 +102,7 @@ export function SignaturePad({
           ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
           ctx.drawImage(img, 0, 0, canvas.offsetWidth, canvas.offsetHeight)
         }
+        img.onload = null
       }
       img.src = savedDataRef.current
       setIsEmpty(false)
@@ -99,7 +114,7 @@ export function SignaturePad({
         setIsEmpty(empty)
         const dataUrl = empty ? null : pad.toDataURL('image/png')
         savedDataRef.current = dataUrl
-        onSignatureChange?.(dataUrl)
+        onChangeRef.current?.(dataUrl)
       }
     })
 
@@ -107,31 +122,31 @@ export function SignaturePad({
       window.removeEventListener('resize', resizeCanvas)
       pad.off()
     }
-  }, [mode, penColor, backgroundColor, onSignatureChange])
+    // onSignatureChange excluded - accessed via ref to avoid re-init
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, penColor, backgroundColor])
 
   // Type mode: render typed name on canvas
   useEffect(() => {
-    if (mode !== 'type') return
-    renderTypedSignature()
-  }, [mode, typedName, selectedFont])
+    if (mode !== 'type' || !typeCanvasRef.current) return
 
-  const renderTypedSignature = useCallback(() => {
     const canvas = typeCanvasRef.current
-    if (!canvas) return
-
     const ratio = Math.max(window.devicePixelRatio || 1, 1)
     canvas.width = canvas.offsetWidth * ratio
     canvas.height = canvas.offsetHeight * ratio
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.scale(ratio, ratio)
     ctx.fillStyle = backgroundColor
     ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
 
-    if (!typedName.trim()) {
+    const safeName = sanitizeName(typedName)
+
+    if (!safeName.trim()) {
       setIsEmpty(true)
-      onSignatureChange?.(null)
+      onChangeRef.current?.(null)
       return
     }
 
@@ -143,18 +158,18 @@ export function SignaturePad({
     // Start with a large font and scale down to fit
     let fontSize = 48
     ctx.font = `${fontSize}px ${font}`
-    let textWidth = ctx.measureText(typedName).width
+    let textWidth = ctx.measureText(safeName).width
     while (textWidth > canvasWidth - 40 && fontSize > 16) {
       fontSize -= 2
       ctx.font = `${fontSize}px ${font}`
-      textWidth = ctx.measureText(typedName).width
+      textWidth = ctx.measureText(safeName).width
     }
 
     ctx.fillStyle = penColor
     ctx.textBaseline = 'middle'
     ctx.textAlign = 'center'
     ctx.font = `${fontSize}px ${font}`
-    ctx.fillText(typedName, canvasWidth / 2, canvasHeight / 2)
+    ctx.fillText(safeName, canvasWidth / 2, canvasHeight / 2)
 
     // Draw a signature line
     ctx.strokeStyle = '#d1d5db'
@@ -166,8 +181,59 @@ export function SignaturePad({
 
     const dataUrl = canvas.toDataURL('image/png')
     setIsEmpty(false)
-    onSignatureChange?.(dataUrl)
-  }, [typedName, selectedFont, penColor, backgroundColor, onSignatureChange])
+    onChangeRef.current?.(dataUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, typedName, selectedFont, penColor, backgroundColor])
+
+  // Handle type canvas resize
+  useEffect(() => {
+    if (mode !== 'type') return
+
+    const handleResize = () => {
+      if (!typeCanvasRef.current) return
+      const canvas = typeCanvasRef.current
+      const ratio = Math.max(window.devicePixelRatio || 1, 1)
+      canvas.width = canvas.offsetWidth * ratio
+      canvas.height = canvas.offsetHeight * ratio
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.scale(ratio, ratio)
+      ctx.fillStyle = backgroundColor
+      ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
+
+      const safeName = sanitizeName(typedName)
+      if (!safeName.trim()) return
+
+      const font = SIGNATURE_FONTS[selectedFont].value
+      const canvasWidth = canvas.offsetWidth
+      const canvasHeight = canvas.offsetHeight
+      let fontSize = 48
+      ctx.font = `${fontSize}px ${font}`
+      let textWidth = ctx.measureText(safeName).width
+      while (textWidth > canvasWidth - 40 && fontSize > 16) {
+        fontSize -= 2
+        ctx.font = `${fontSize}px ${font}`
+        textWidth = ctx.measureText(safeName).width
+      }
+      ctx.fillStyle = penColor
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.font = `${fontSize}px ${font}`
+      ctx.fillText(safeName, canvasWidth / 2, canvasHeight / 2)
+
+      ctx.strokeStyle = '#d1d5db'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(20, canvasHeight * 0.75)
+      ctx.lineTo(canvasWidth - 20, canvasHeight * 0.75)
+      ctx.stroke()
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [mode, typedName, selectedFont, penColor, backgroundColor])
 
   const clear = useCallback(() => {
     if (mode === 'draw') {
@@ -177,8 +243,8 @@ export function SignaturePad({
       setTypedName('')
     }
     setIsEmpty(true)
-    onSignatureChange?.(null)
-  }, [mode, onSignatureChange])
+    onChangeRef.current?.(null)
+  }, [mode])
 
   const undo = useCallback(() => {
     if (mode !== 'draw') return
@@ -193,9 +259,9 @@ export function SignaturePad({
       setIsEmpty(empty)
       const dataUrl = empty ? null : pad.toDataURL('image/png')
       savedDataRef.current = dataUrl
-      onSignatureChange?.(dataUrl)
+      onChangeRef.current?.(dataUrl)
     }
-  }, [mode, onSignatureChange])
+  }, [mode])
 
   const switchMode = (newMode: Mode) => {
     // Save current draw data before switching
@@ -205,19 +271,12 @@ export function SignaturePad({
     setMode(newMode)
     // Reset isEmpty based on new mode content
     if (newMode === 'type') {
-      setIsEmpty(!typedName.trim())
-      if (typedName.trim()) {
-        // Will trigger the renderTypedSignature effect
-      } else {
-        onSignatureChange?.(null)
-      }
+      const hasTxt = !!sanitizeName(typedName).trim()
+      setIsEmpty(!hasTxt)
+      if (!hasTxt) onChangeRef.current?.(null)
     } else {
       setIsEmpty(!savedDataRef.current)
-      if (savedDataRef.current) {
-        onSignatureChange?.(savedDataRef.current)
-      } else {
-        onSignatureChange?.(null)
-      }
+      onChangeRef.current?.(savedDataRef.current ?? null)
     }
   }
 
@@ -278,8 +337,9 @@ export function SignaturePad({
             <input
               type="text"
               value={typedName}
-              onChange={(e) => setTypedName(e.target.value)}
+              onChange={(e) => setTypedName(sanitizeName(e.target.value))}
               placeholder="Type your full name"
+              maxLength={100}
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
               autoFocus
             />
