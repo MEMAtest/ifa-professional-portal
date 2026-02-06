@@ -179,11 +179,18 @@ export class SignatureService {
       // Fetch document info separately if document_id exists
       let document: any = null
       if (request.document_id) {
-        const { data: doc } = await supabase
+        const { data: doc, error: docError } = await supabase
           .from('documents')
           .select('id, name, file_name, file_path, storage_path')
           .eq('id', request.document_id)
           .maybeSingle()
+
+        if (docError) {
+          log.error('Failed to fetch document for signing', {
+            documentId: request.document_id,
+            error: docError
+          })
+        }
         document = doc
       }
 
