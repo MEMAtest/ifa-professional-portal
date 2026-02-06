@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { signatureService } from '@/services/SignatureService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 import { sendEmail } from '@/lib/email/emailService'
 import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) return permissionError
+
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
@@ -184,13 +187,24 @@ export async function POST(request: NextRequest) {
         customMessage: customMessage || metadata?.custom_message
       })
 
-      await sendEmail({
+      const emailResult = await sendEmail({
         to: validSigners[0].email,
         subject: template.subject,
         html: template.html
       })
 
-      log.info('SEND SIGNATURE: Email sent successfully', { recipientEmail: validSigners[0].email })
+      if (!emailResult.success) {
+        log.error('SEND SIGNATURE: Email send returned failure', { error: emailResult.error })
+        return NextResponse.json(
+          {
+            success: false,
+            error: emailResult.error || 'Failed to send signature request email. Please try again.'
+          },
+          { status: 500 }
+        )
+      }
+
+      log.info('SEND SIGNATURE: Email sent successfully', { recipientEmail: validSigners[0].email, messageId: emailResult.messageId })
     } catch (emailError) {
       log.error('SEND SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
       return NextResponse.json(

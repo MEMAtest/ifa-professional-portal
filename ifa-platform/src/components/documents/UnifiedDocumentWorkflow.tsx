@@ -204,17 +204,7 @@ export default function UnifiedDocumentWorkflow() {
     setError(null)
 
     try {
-      // Use template content or default
-      const templateContent = selectedTemplate.template_content || DEFAULT_TEMPLATE_CONTENT
-
-      // Process template variables with safe defaults
-      const variables: Record<string, string> = {
-        DOCUMENT_TITLE: selectedTemplate.name,
-        CLIENT_NAME: getClientDisplayName(selectedClient),
-        CLIENT_EMAIL: selectedClient.contact_info?.email || 'Not provided',
-        CLIENT_REF: selectedClient.client_ref || 'N/A',
-        ADVISOR_NAME: 'Professional Advisor',
-        REPORT_DATE: new Date().toLocaleDateString('en-GB'),
+      const overrides: Record<string, string> = {
         RISK_PROFILE: selectedClient.risk_profile?.riskTolerance || 'Not assessed',
         INVESTMENT_AMOUNT: formatCurrency(selectedClient.financial_profile?.investmentAmount || 0),
         ANNUAL_INCOME: formatCurrency(selectedClient.financial_profile?.annualIncome || 0),
@@ -222,12 +212,46 @@ export default function UnifiedDocumentWorkflow() {
         RECOMMENDATION: `Based on your ${selectedClient.risk_profile?.riskTolerance || 'moderate'} risk profile and financial objectives, we recommend a tailored investment strategy.`
       }
 
-      // Replace template variables
-      let processedContent = templateContent
-      Object.entries(variables).forEach(([key, value]) => {
-        const regex = new RegExp(`{{${key}}}`, 'g')
-        processedContent = processedContent.replace(regex, String(value))
-      })
+      // Prefer server-side rendering so firm/advisor data is always correct and tenant-scoped.
+      let processedContent = ''
+      try {
+        const renderRes = await fetch('/api/documents/templates/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            templateId: selectedTemplate.id,
+            clientId: selectedClient.id,
+            overrides
+          })
+        })
+
+        if (renderRes.ok) {
+          const payload = await renderRes.json()
+          processedContent = payload?.rendered?.html || ''
+        }
+      } catch {
+        // Fall back below
+      }
+
+      // Fallback: client-side replacement for fallback templates (when no DB template exists).
+      if (!processedContent) {
+        const templateContent = selectedTemplate.template_content || DEFAULT_TEMPLATE_CONTENT
+        const fallbackVars: Record<string, string> = {
+          DOCUMENT_TITLE: selectedTemplate.name,
+          CLIENT_NAME: getClientDisplayName(selectedClient),
+          CLIENT_EMAIL: selectedClient.contact_info?.email || 'Not provided',
+          CLIENT_REF: selectedClient.client_ref || 'N/A',
+          ADVISOR_NAME: 'Professional Advisor',
+          REPORT_DATE: new Date().toLocaleDateString('en-GB'),
+          ...overrides
+        }
+
+        processedContent = templateContent
+        Object.entries(fallbackVars).forEach(([key, value]) => {
+          const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g')
+          processedContent = processedContent.replace(regex, String(value))
+        })
+      }
 
       // Check if document generation API exists
       try {
@@ -236,10 +260,11 @@ export default function UnifiedDocumentWorkflow() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: processedContent,
-            title: `${selectedTemplate.name} - ${variables.CLIENT_NAME}`,
+            title: `${selectedTemplate.name} - ${getClientDisplayName(selectedClient)}`,
             clientId: selectedClient.id,
             templateId: selectedTemplate.id,
-            variables
+            variables: overrides,
+            format: 'html'
           })
         })
 
@@ -247,7 +272,7 @@ export default function UnifiedDocumentWorkflow() {
           const result = await response.json()
           setGeneratedDocument({
             id: result.document?.id || `doc-${Date.now()}`,
-            name: result.document?.name || `${selectedTemplate.name} - ${variables.CLIENT_NAME}`,
+            name: result.document?.name || `${selectedTemplate.name} - ${getClientDisplayName(selectedClient)}`,
             file_path: result.document?.file_path || '',
             url: result.url || '#',
             content: processedContent
@@ -256,7 +281,7 @@ export default function UnifiedDocumentWorkflow() {
           // Fallback if API doesn't exist
           setGeneratedDocument({
             id: `doc-${Date.now()}`,
-            name: `${selectedTemplate.name} - ${variables.CLIENT_NAME}`,
+            name: `${selectedTemplate.name} - ${getClientDisplayName(selectedClient)}`,
             file_path: '',
             url: '#',
             content: processedContent
@@ -266,7 +291,7 @@ export default function UnifiedDocumentWorkflow() {
         // Fallback for missing API
         setGeneratedDocument({
           id: `doc-${Date.now()}`,
-          name: `${selectedTemplate.name} - ${variables.CLIENT_NAME}`,
+          name: `${selectedTemplate.name} - ${getClientDisplayName(selectedClient)}`,
           file_path: '',
           url: '#',
           content: processedContent
@@ -341,26 +366,37 @@ export default function UnifiedDocumentWorkflow() {
   const sendForSignature = async () => {
     if (!generatedDocument || !selectedClient || !selectedTemplate) return
 
+    const clientEmail = selectedClient.contact_info?.email
+    if (!clientEmail) {
+      setError('Client email is required for signature requests')
+      return
+    }
+
     setLoading(true)
     try {
-      // Check if signature API exists
-      try {
-        const response = await fetch('/api/documents/send-signature', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            documentId: generatedDocument.id,
-            documentUrl: generatedDocument.url,
-            clientEmail: selectedClient.contact_info?.email || '',
-            clientName: getClientDisplayName(selectedClient),
-            templateName: selectedTemplate.name
-          })
+      const response = await fetch('/api/signatures/create', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId: generatedDocument.id,
+          clientId: selectedClient.id,
+          signers: [{
+            email: clientEmail,
+            name: getClientDisplayName(selectedClient),
+            role: 'Client'
+          }],
+          options: {
+            sendEmail: true,
+            customMessage: `Please review and sign the ${selectedTemplate.name}.`
+          }
         })
+      })
 
-        if (!response.ok && response.status !== 404) {
-          throw new Error('Failed to send for signature')
-        }
-      } catch (apiError) {
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send for signature')
       }
 
       setCurrentStep('confirm-send')
@@ -736,12 +772,12 @@ export default function UnifiedDocumentWorkflow() {
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Sending to DocuSeal...
+                        Sending for Signature...
                       </>
                     ) : (
                       <>
                         <Send className="h-4 w-4" />
-                        Send for Signature (DocuSeal)
+                        Send for Signature
                       </>
                     )}
                   </Button>
@@ -757,16 +793,16 @@ export default function UnifiedDocumentWorkflow() {
               </div>
             </div>
 
-            {/* DocuSeal Info */}
+            {/* Signature Info */}
             {selectedTemplate?.requires_signature && (
               <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-                <p className="font-medium">DocuSeal Integration</p>
+                <p className="font-medium">E-Signature</p>
                 <p className="text-xs mt-1">
                   Document will be sent to: <strong>{selectedClient?.contact_info?.email || 'No email provided'}</strong>
                 </p>
                 {!selectedClient?.contact_info?.email && (
                   <p className="text-xs mt-1 text-orange-600">
-                    ⚠️ Client email required for signature
+                    Client email required for signature
                   </p>
                 )}
               </div>
@@ -819,7 +855,7 @@ export default function UnifiedDocumentWorkflow() {
               
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                 <Send className="h-3 w-3" />
-                Sent via DocuSeal for electronic signature
+                Sent for electronic signature
               </div>
             </>
           )}

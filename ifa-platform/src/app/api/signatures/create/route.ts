@@ -189,6 +189,23 @@ const buildPdfBuffer = async (plainText: string) => {
   return buffer
 }
 
+function isPdfBuffer(buffer: Buffer): boolean {
+  if (!buffer || buffer.length < 5) return false
+
+  // Some PDF generators may prefix whitespace/newlines; tolerate a small prefix.
+  let i = 0
+  while (i < buffer.length && i < 32) {
+    const b = buffer[i]
+    if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d) {
+      i += 1
+      continue
+    }
+    break
+  }
+
+  return buffer.slice(i, i + 5).toString('ascii') === '%PDF-'
+}
+
 const getPdfBufferForDocument = async (
   supabase: any,
   document: Record<string, any>,
@@ -204,7 +221,15 @@ const getPdfBufferForDocument = async (
 
   if (document.file_path) {
     const buffer = await downloadFromStorage(document.file_path)
-    if (buffer) return buffer
+    if (buffer && isPdfBuffer(buffer)) return buffer
+    if (buffer) {
+      logger.warn('CREATE SIGNATURE: Stored file is not a PDF; regenerating', {
+        documentId: document.id,
+        file_path: document.file_path,
+        file_type: document.file_type,
+        mime_type: document.mime_type
+      })
+    }
   }
 
   if (document.storage_path && typeof document.storage_path === 'string' && document.storage_path.startsWith('http')) {
@@ -213,7 +238,15 @@ const getPdfBufferForDocument = async (
       if (response.ok) {
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        if (buffer.length) return buffer
+        if (buffer.length && isPdfBuffer(buffer)) return buffer
+        if (buffer.length) {
+          logger.warn('CREATE SIGNATURE: Storage URL is not a PDF; regenerating', {
+            documentId: document.id,
+            storage_path: document.storage_path,
+            file_type: document.file_type,
+            mime_type: document.mime_type
+          })
+        }
       }
     } catch (error) {
       logger.warn('CREATE SIGNATURE: Failed to fetch storage URL', { error: error instanceof Error ? error.message : 'Unknown' })
@@ -223,7 +256,7 @@ const getPdfBufferForDocument = async (
   const meta = (document.metadata || {}) as Record<string, any>
   if (meta.pdf_base64) {
     const buffer = Buffer.from(meta.pdf_base64, 'base64')
-    if (buffer.length) return buffer
+    if (buffer.length && isPdfBuffer(buffer)) return buffer
   }
 
   let html = (document.html_content as string | undefined) || (meta.html_content as string | undefined)
@@ -236,14 +269,21 @@ const getPdfBufferForDocument = async (
     const pdfBuffer = await buildPdfBuffer(plainText)
     if (!pdfBuffer.length) return null
 
-    const safeTitle = (document.file_name || document.name || 'document')
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .slice(0, 80)
-    let fileName = document.file_name || `${safeTitle}_${Date.now()}.pdf`
-    if (!fileName.toLowerCase().endsWith('.pdf')) {
-      fileName = `${fileName}.pdf`
-    }
-    const filePath = document.file_path || `firms/${firmId}/documents/${fileName}`
+    const rawName = String(document.file_name || document.name || 'document')
+    const baseName = rawName.replace(/\.[a-z0-9]+$/i, '')
+    const safeTitle = baseName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 80) || 'document'
+
+    const existingPath = typeof document.file_path === 'string' ? document.file_path : ''
+    const reuseExistingPath = existingPath.toLowerCase().endsWith('.pdf')
+    const existingFileName = typeof document.file_name === 'string' ? document.file_name : ''
+    const existingFileNameIsPdf = existingFileName.toLowerCase().endsWith('.pdf')
+    const fileNameFromPath = reuseExistingPath ? (existingPath.split('/').pop() || '') : ''
+
+    const fileName = reuseExistingPath
+      ? (existingFileNameIsPdf ? existingFileName : (fileNameFromPath || `${safeTitle}_${Date.now()}.pdf`))
+      : `${safeTitle}_${Date.now()}.pdf`
+
+    const filePath = reuseExistingPath ? existingPath : `firms/${firmId}/documents/${fileName}`
 
     const { error: uploadError } = await supabase.storage
       .from('documents')
@@ -291,10 +331,10 @@ export async function POST(request: NextRequest) {
     if (!('firmId' in firmResult)) {
       return firmResult
     }
-    const permissionError = requirePermission(auth.context, 'documents:sign')
-    if (permissionError) {
-      return permissionError
-    }
+    const writePermissionError = requirePermission(auth.context, 'documents:write')
+    if (writePermissionError) return writePermissionError
+    const signPermissionError = requirePermission(auth.context, 'documents:sign')
+    if (signPermissionError) return signPermissionError
     const { firmId } = firmResult
 
     let body: CreateSignatureRequest
@@ -515,24 +555,37 @@ export async function POST(request: NextRequest) {
           customMessage: options.customMessage
         })
 
-        await sendEmail({
+        const emailResult = await sendEmail({
           to: signers[0].email,
           subject: template.subject,
           html: template.html
         })
 
-        // Update sent_at
-        await supabase
-          .from('signature_requests')
-          .update({ sent_at: new Date().toISOString() })
-          .eq('id', signatureRequest.id)
+        if (!emailResult.success) {
+          logger.error('CREATE SIGNATURE: Email send returned failure', { error: emailResult.error })
+          // Update status back to draft since email failed
+          await supabase
+            .from('signature_requests')
+            .update({ status: 'draft' })
+            .eq('id', signatureRequest.id)
+        } else {
+          // Update sent_at only on successful email
+          const { error: sentAtError } = await supabase
+            .from('signature_requests')
+            .update({ sent_at: new Date().toISOString() })
+            .eq('id', signatureRequest.id)
 
-        // Log send event
-        await signatureService.logAuditEvent(signatureRequest.id, 'sent', {
-          recipientEmail: signers[0].email
-        })
+          if (!sentAtError) {
+            // Log send event only if DB update succeeded
+            await signatureService.logAuditEvent(signatureRequest.id, 'sent', {
+              recipientEmail: signers[0].email
+            })
+          } else {
+            logger.error('CREATE SIGNATURE: Failed to update sent_at', { error: sentAtError })
+          }
 
-        logger.info('CREATE SIGNATURE: Email sent successfully', { requestId: signatureRequest.id })
+          logger.info('CREATE SIGNATURE: Email sent successfully', { requestId: signatureRequest.id })
+        }
       } catch (emailError) {
         logger.error('CREATE SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
         // Don't fail the request, just log the error

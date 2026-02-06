@@ -41,6 +41,7 @@ export default function OnboardingPage() {
       // Send welcome email (non-blocking — don't fail onboarding if email fails)
       fetch('/api/notifications/send-email', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'welcome',
@@ -51,7 +52,16 @@ export default function OnboardingPage() {
           },
           firmId: firm?.id,
         }),
-      }).catch(() => {})
+      })
+        .then(res => res.json())
+        .then(result => {
+          if (!result.success) {
+            console.warn('Welcome email not sent:', result.error || result.message)
+          }
+        })
+        .catch((err) => {
+          console.warn('Welcome email request failed:', err)
+        })
 
       router.replace('/dashboard')
     } catch {

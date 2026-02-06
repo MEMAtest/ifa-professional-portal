@@ -92,39 +92,35 @@ export default function DocumentGenerationButton({
     setError(null)
 
     try {
-      const response = await fetch('/api/documents/send-signature', {
+      const response = await fetch('/api/signatures/create', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           documentId: generatedDocument.id,
-          clientEmail,
-          clientName,
-          templateName: `${getAssessmentTypeName(assessmentType)} Report`
+          clientId,
+          signers: [{
+            email: clientEmail,
+            name: clientName,
+            role: 'Client'
+          }],
+          options: {
+            sendEmail: true,
+            customMessage: `Please review and sign the ${getAssessmentTypeName(assessmentType)} Report.`
+          }
         })
       })
 
       const data = await response.json()
 
-      if (!response.ok) {
+      if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to send for signature')
       }
 
-      // Update document status
-      await fetch(`/api/documents/status/${generatedDocument.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          status: 'pending_signature',
-          signatureRequestId: data.signatureRequestId
-        })
-      })
-
       setShowOptions(false)
-      
+
       // Show success message
       const successMessage = document.createElement('div')
       successMessage.className = 'fixed top-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50'
@@ -138,7 +134,7 @@ export default function DocumentGenerationButton({
       `
       document.body.appendChild(successMessage)
       setTimeout(() => successMessage.remove(), 5000)
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to send for signature'
       setError(errorMessage)
