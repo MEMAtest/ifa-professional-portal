@@ -159,34 +159,10 @@ export class SignatureService {
         }
       }
 
-      // Get full signature request details
+      // Get signature request details (without relational joins to avoid FK issues)
       const { data: request, error: fetchError } = await supabase
         .from('signature_requests')
-        .select(`
-          id,
-          document_id,
-          client_id,
-          firm_id,
-          recipient_name,
-          recipient_email,
-          recipient_role,
-          status,
-          expires_at,
-          signing_token_expires_at,
-          original_document_hash,
-          opensign_metadata,
-          documents:document_id (
-            id,
-            name,
-            file_name,
-            file_path,
-            storage_path
-          ),
-          profiles:created_by (
-            id,
-            full_name
-          )
-        `)
+        .select('*')
         .eq('id', validation.signature_request_id)
         .single()
 
@@ -198,10 +174,29 @@ export class SignatureService {
         }
       }
 
-      // Extract document info
-      const document = request.documents as any
-      const advisor = request.profiles as any
-      const metadata = request.opensign_metadata as any
+      const metadata = request.opensign_metadata as Record<string, any> | null
+
+      // Fetch document info separately if document_id exists
+      let document: any = null
+      if (request.document_id) {
+        const { data: doc } = await supabase
+          .from('documents')
+          .select('id, name, file_name, file_path, storage_path')
+          .eq('id', request.document_id)
+          .maybeSingle()
+        document = doc
+      }
+
+      // Fetch advisor info separately if created_by exists
+      let advisor: any = null
+      if (request.created_by) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('id', request.created_by)
+          .maybeSingle()
+        advisor = profile
+      }
 
       return {
         valid: true,

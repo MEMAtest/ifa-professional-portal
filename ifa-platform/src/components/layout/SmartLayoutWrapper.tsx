@@ -46,6 +46,7 @@ export const SmartLayoutWrapper: React.FC<SmartLayoutWrapperProps> = ({ children
                        pathname === '/blog' ||
                        pathname.startsWith('/blog/') ||
                        pathname.startsWith('/client/') ||
+                       pathname.startsWith('/sign/') ||
                        pathname === '/onboarding'
 
   // Fetch firm data to check onboarding status
