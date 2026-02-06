@@ -44,11 +44,22 @@ export async function GET(
 
     // Get the document
     if (!request_data.originalDocumentPath) {
+      log.error('originalDocumentPath is null', {
+        requestId: request_data.id,
+        documentId: request_data.documentId,
+        documentName: request_data.documentName,
+        originalDocumentPath: request_data.originalDocumentPath
+      })
       return NextResponse.json(
         {
           success: false,
           error: 'Document not found',
-          errorCode: 'NOT_FOUND'
+          errorCode: 'NOT_FOUND',
+          debug: {
+            documentId: request_data.documentId,
+            documentName: request_data.documentName,
+            hasPath: !!request_data.originalDocumentPath
+          }
         },
         { status: 404 }
       )
