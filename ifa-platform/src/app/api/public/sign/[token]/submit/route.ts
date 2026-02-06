@@ -166,19 +166,22 @@ export async function POST(
       createInAppNotification(request_data)
     ])
 
-    notifResults.forEach((r, i) => {
+    const notifStatus = notifResults.map((r, i) => {
       const task = ['signer_email', 'advisor_email', 'in_app'][i]
       if (r.status === 'rejected') {
-        log.error(`Notification failed: ${task}`, r.reason instanceof Error ? r.reason : undefined)
-      } else {
-        log.info(`Notification sent: ${task}`)
+        const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason)
+        log.error(`Notification failed: ${task}`, { error: errMsg })
+        return { task, status: 'failed', error: errMsg }
       }
+      log.info(`Notification sent: ${task}`)
+      return { task, status: 'sent' }
     })
 
     return NextResponse.json({
       success: true,
       message: 'Document signed successfully',
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      _notifications: notifStatus
     })
 
   } catch (error) {
@@ -245,13 +248,17 @@ async function notifyAdvisor(request_data: {
     request_data.documentName
   )
 
-  await sendEmail({
+  const result = await sendEmail({
     to: advisor.email,
     subject: template.subject,
     html: template.html
   })
 
-  log.info('Advisor notification sent', { advisorEmail: advisor.email, requestId: request_data.id })
+  if (!result.success) {
+    throw new Error(`Advisor email failed: ${result.error}`)
+  }
+
+  log.info('Advisor notification sent', { advisorEmail: advisor.email, requestId: request_data.id, messageId: result.messageId })
 }
 
 async function createInAppNotification(request_data: {
@@ -319,14 +326,19 @@ async function notifySignerConfirmation(request_data: {
     advisorName: request_data.advisorName
   })
 
-  await sendEmail({
+  const result = await sendEmail({
     to: request_data.recipientEmail,
     subject: template.subject,
     html: template.html
   })
 
+  if (!result.success) {
+    throw new Error(`Signer email failed: ${result.error}`)
+  }
+
   log.info('Signer confirmation email sent', {
     recipientEmail: request_data.recipientEmail,
-    requestId: request_data.id
+    requestId: request_data.id,
+    messageId: result.messageId
   })
 }
