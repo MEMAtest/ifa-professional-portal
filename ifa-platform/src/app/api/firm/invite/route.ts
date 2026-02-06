@@ -19,6 +19,8 @@ import type { Json } from '@/types/db'
 import { log } from '@/lib/logging/structured'
 import { parseRequestBody } from '@/app/api/utils'
 import { DEFAULT_MAX_SEATS } from '@/lib/billing/firmBilling'
+import { sendEmail } from '@/lib/email/emailService'
+import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
 
 const inviteSchema = z.object({
   email: z.string().min(1),
@@ -470,50 +472,39 @@ export async function POST(request: NextRequest) {
         ) || 'Your administrator'
       : 'Your administrator'
 
-    // Send invitation email
+    // Send invitation email directly via SES (not through internal API which lacks auth)
     let emailSent = false
     let emailError: string | undefined
 
     try {
-      const emailResponse = await fetch(`${baseUrl}/api/notifications/send-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'userInvitation',
-          recipient: body.email.toLowerCase(),
-          firmId: firmIdResult.firmId,
-          data: {
-            inviteeEmail: body.email.toLowerCase(),
-            firmName,
-            role: body.role,
-            inviterName,
-            inviteUrl,
-            expiresAt: expiresAt.toLocaleDateString('en-GB', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })
-          }
+      const template = EMAIL_TEMPLATES.userInvitation({
+        inviteeEmail: body.email.toLowerCase(),
+        firmName,
+        role: body.role,
+        inviterName,
+        inviteUrl,
+        expiresAt: expiresAt.toLocaleDateString('en-GB', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
         })
       })
 
-      const emailResult = await emailResponse.json().catch(() => ({ success: false, error: 'Invalid email service response' }))
+      const emailResult = await sendEmail({
+        to: body.email.toLowerCase(),
+        subject: template.subject,
+        html: template.html,
+        firmId: firmIdResult.firmId,
+        applyBranding: true
+      })
 
-      // Check both HTTP status and explicit success field
-      // The email API returns 200 with success: true on success, success: false on config errors
-      if (emailResponse.ok && emailResult.success === true) {
+      if (emailResult.success) {
         emailSent = true
-        log.info('[Invite API] Invitation email sent successfully')
+        log.info('[Invite API] Invitation email sent successfully', { messageId: emailResult.messageId })
       } else {
-        // Handle graceful email failure (SES not configured, etc.)
-        emailError = emailResult.error || emailResult.message || 'Failed to send email'
-        const errorCode = emailResult.code || 'EMAIL_FAILED'
-        log.warn('[Invite API] Failed to send invitation email', {
-          error: emailError,
-          code: errorCode,
-          httpStatus: emailResponse.status
-        })
+        emailError = emailResult.error || 'Failed to send email'
+        log.warn('[Invite API] Failed to send invitation email', { error: emailError })
       }
     } catch (emailErr) {
       emailError = emailErr instanceof Error ? emailErr.message : 'Email service unavailable'
