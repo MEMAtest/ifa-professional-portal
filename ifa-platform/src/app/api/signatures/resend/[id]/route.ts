@@ -114,6 +114,9 @@ export async function POST(
       )
     }
 
+    // At this point signers is guaranteed to be a non-empty array
+    const validSigners = signers as Array<{ email: string; name: string; role: string }>
+
     // Calculate remaining expiry or set new one
     let expiryDays = 30
     if (signatureRequest.expires_at) {
@@ -158,7 +161,7 @@ export async function POST(
     log.info('RESEND SIGNATURE: Sending email to signer')
     try {
       const template = EMAIL_TEMPLATES.signatureRequest({
-        clientName: signers[0].name,
+        clientName: validSigners[0].name,
         advisorName: advisorProfile?.full_name || 'Your Advisor',
         firmName: firmInfo?.name || 'Your Financial Advisor',
         documentName,
@@ -172,12 +175,12 @@ export async function POST(
       })
 
       await sendEmail({
-        to: signers[0].email,
+        to: validSigners[0].email,
         subject: template.subject,
         html: template.html
       })
 
-      log.info('RESEND SIGNATURE: Email sent successfully', { recipientEmail: signers[0].email })
+      log.info('RESEND SIGNATURE: Email sent successfully', { recipientEmail: validSigners[0].email })
     } catch (emailError) {
       log.error('RESEND SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
       return NextResponse.json(
@@ -205,7 +208,7 @@ export async function POST(
 
     // Log audit event
     await signatureService.logAuditEvent(signatureRequestId, 'resent', {
-      recipientEmail: signers[0].email
+      recipientEmail: validSigners[0].email
     })
 
     log.info('RESEND SIGNATURE: Success')

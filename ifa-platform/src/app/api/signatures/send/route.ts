@@ -120,6 +120,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const validSigners = signers as Array<{ email: string; name: string; role: string }>
+
     // Generate signing token if not already present
     let signingUrl = signatureRequest.signing_token ? signatureService.getSigningUrl(signatureRequest.signing_token) : ''
 
@@ -169,7 +171,7 @@ export async function POST(request: NextRequest) {
     log.info('SEND SIGNATURE: Sending email to signer')
     try {
       const template = EMAIL_TEMPLATES.signatureRequest({
-        clientName: signers[0].name,
+        clientName: validSigners[0].name,
         advisorName: advisorProfile?.full_name || 'Your Advisor',
         firmName: firmInfo?.name || 'Your Financial Advisor',
         documentName,
@@ -183,12 +185,12 @@ export async function POST(request: NextRequest) {
       })
 
       await sendEmail({
-        to: signers[0].email,
+        to: validSigners[0].email,
         subject: template.subject,
         html: template.html
       })
 
-      log.info('SEND SIGNATURE: Email sent successfully', { recipientEmail: signers[0].email })
+      log.info('SEND SIGNATURE: Email sent successfully', { recipientEmail: validSigners[0].email })
     } catch (emailError) {
       log.error('SEND SIGNATURE: Failed to send email', emailError instanceof Error ? emailError : undefined)
       return NextResponse.json(
@@ -231,7 +233,7 @@ export async function POST(request: NextRequest) {
 
     // Log audit event
     await signatureService.logAuditEvent(signatureRequestId, 'sent', {
-      recipientEmail: signers[0].email
+      recipientEmail: validSigners[0].email
     })
 
     log.info('SEND SIGNATURE: Success')
