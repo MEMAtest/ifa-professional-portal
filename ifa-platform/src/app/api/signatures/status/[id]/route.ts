@@ -72,9 +72,11 @@ export async function GET(
       document = doc || null
     }
 
+    const metadata = signatureRequest.opensign_metadata as Record<string, any> | null
+
     let signers = signatureRequest.signers
-    if (!signers && signatureRequest.opensign_metadata?.signers) {
-      signers = signatureRequest.opensign_metadata.signers
+    if (!signers && metadata?.signers) {
+      signers = metadata.signers
     }
     if (typeof signers === 'string') {
       try {
@@ -95,7 +97,7 @@ export async function GET(
 
     // Get signing URL if request is still pending
     let signingUrl = null
-    if (['draft', 'pending', 'sent', 'viewed'].includes(signatureRequest.status) &&
+    if (['draft', 'pending', 'sent', 'viewed'].includes(signatureRequest.status || '') &&
         signatureRequest.signing_token &&
         !signatureRequest.signing_token_used) {
       signingUrl = signatureService.getSigningUrl(signatureRequest.signing_token)

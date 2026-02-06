@@ -67,8 +67,10 @@ export async function GET(
       )
     }
 
+    const metadata = signatureRequest.opensign_metadata as Record<string, any> | null
+
     // Check if document is ready for download
-    if (!['signed', 'completed'].includes(signatureRequest.status)) {
+    if (!['signed', 'completed'].includes(signatureRequest.status || '')) {
       return NextResponse.json(
         {
           success: false,
@@ -122,7 +124,7 @@ export async function GET(
     // Set up response headers for file download
     const document = signatureRequest.documents as any
     const documentName = document?.name || document?.file_name ||
-      signatureRequest.opensign_metadata?.document_name || 'document'
+      metadata?.document_name || 'document'
     const safeFileName = documentName
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .replace(/\.pdf$/i, '')

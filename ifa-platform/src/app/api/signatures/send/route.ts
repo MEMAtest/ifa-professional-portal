@@ -76,7 +76,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!['draft', 'pending'].includes(signatureRequest.status)) {
+    const metadata = signatureRequest.opensign_metadata as Record<string, any> | null
+
+    if (!['draft', 'pending'].includes(signatureRequest.status || '')) {
       return NextResponse.json(
         {
           success: false,
@@ -88,8 +90,8 @@ export async function POST(request: NextRequest) {
 
     // Get signers info
     let signers = signatureRequest.signers
-    if (!signers && signatureRequest.opensign_metadata?.signers) {
-      signers = signatureRequest.opensign_metadata.signers
+    if (!signers && metadata?.signers) {
+      signers = metadata.signers
     }
     if (typeof signers === 'string') {
       try {
@@ -157,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     const document = signatureRequest.documents as any
     const documentName = document?.name || document?.file_name ||
-      signatureRequest.opensign_metadata?.document_name || 'Document'
+      metadata?.document_name || 'Document'
 
     const expiryDate = signatureRequest.expires_at
       ? new Date(signatureRequest.expires_at)
@@ -177,7 +179,7 @@ export async function POST(request: NextRequest) {
           month: 'long',
           year: 'numeric'
         }),
-        customMessage: customMessage || signatureRequest.opensign_metadata?.custom_message
+        customMessage: customMessage || metadata?.custom_message
       })
 
       await sendEmail({
@@ -206,9 +208,9 @@ export async function POST(request: NextRequest) {
         status: 'sent',
         sent_at: new Date().toISOString(),
         opensign_metadata: {
-          ...signatureRequest.opensign_metadata,
+          ...metadata,
           sent_at: new Date().toISOString(),
-          custom_message: customMessage || signatureRequest.opensign_metadata?.custom_message
+          custom_message: customMessage || metadata?.custom_message
         }
       })
       .eq('id', signatureRequestId)

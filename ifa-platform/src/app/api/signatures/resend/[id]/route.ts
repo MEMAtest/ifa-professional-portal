@@ -71,7 +71,7 @@ export async function POST(
     }
 
     // Can only resend if not already completed
-    if (['completed', 'signed', 'declined'].includes(signatureRequest.status)) {
+    if (['completed', 'signed', 'declined'].includes(signatureRequest.status || '')) {
       return NextResponse.json(
         {
           success: false,
@@ -82,9 +82,10 @@ export async function POST(
     }
 
     // Get signers info
+    const metadata = signatureRequest.opensign_metadata as Record<string, any> | null
     let signers = signatureRequest.signers
-    if (!signers && signatureRequest.opensign_metadata?.signers) {
-      signers = signatureRequest.opensign_metadata.signers
+    if (!signers && metadata?.signers) {
+      signers = metadata.signers
     }
     if (typeof signers === 'string') {
       try {
@@ -148,7 +149,7 @@ export async function POST(
 
     const document = signatureRequest.documents as any
     const documentName = document?.name || document?.file_name ||
-      signatureRequest.opensign_metadata?.document_name || 'Document'
+      metadata?.document_name || 'Document'
 
     const expiryDate = new Date()
     expiryDate.setDate(expiryDate.getDate() + expiryDays)
@@ -167,7 +168,7 @@ export async function POST(
           month: 'long',
           year: 'numeric'
         }),
-        customMessage: signatureRequest.opensign_metadata?.custom_message
+        customMessage: metadata?.custom_message
       })
 
       await sendEmail({
@@ -195,9 +196,9 @@ export async function POST(
         status: 'sent',
         expires_at: expiryDate.toISOString(),
         opensign_metadata: {
-          ...signatureRequest.opensign_metadata,
+          ...(metadata || {}),
           resent_at: new Date().toISOString()
-        }
+        } as any
       })
       .eq('id', signatureRequestId)
       .eq('firm_id', firmId)

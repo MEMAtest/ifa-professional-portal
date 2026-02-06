@@ -79,10 +79,10 @@ export async function POST(
         status: 'cancelled',
         signing_token_used: true, // Invalidate the token
         opensign_metadata: {
-          ...signatureRequest.opensign_metadata,
+          ...(typeof signatureRequest.opensign_metadata === 'object' && signatureRequest.opensign_metadata !== null ? signatureRequest.opensign_metadata : {}),
           cancelled_at: new Date().toISOString(),
           cancelled_by: auth.context.userId
-        }
+        } as any
       })
       .eq('id', signatureRequestId)
       .eq('firm_id', firmId)
