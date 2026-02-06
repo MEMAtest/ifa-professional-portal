@@ -903,7 +903,7 @@ export function useSignatureRequests() {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch('/api/signatures')
+      const response = await fetch('/api/signatures', { credentials: 'include' })
 
       if (!response.ok) {
         throw new DocumentError('Failed to fetch signature requests', 'FETCH_ERROR', response.status)
@@ -937,6 +937,7 @@ export function useSignatureRequests() {
       setError(null)
       const response = await fetch('/api/signatures/create', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -966,6 +967,7 @@ export function useSignatureRequests() {
       setError(null)
       const response = await fetch('/api/signatures/send', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -993,7 +995,7 @@ export function useSignatureRequests() {
   const getSignatureStatus = async (signatureRequestId: string) => {
     try {
       setError(null)
-      const response = await fetch(`/api/signatures/status/${signatureRequestId}`)
+      const response = await fetch(`/api/signatures/status/${signatureRequestId}`, { credentials: 'include' })
 
       if (!response.ok) {
         throw new DocumentError('Failed to get signature status', 'SIGNATURE_ERROR', response.status)
@@ -1015,7 +1017,7 @@ export function useSignatureRequests() {
   const downloadSignedDocument = async (signatureRequestId: string) => {
     try {
       setError(null)
-      const response = await fetch(`/api/signatures/download/${signatureRequestId}`)
+      const response = await fetch(`/api/signatures/download/${signatureRequestId}`, { credentials: 'include' })
 
       if (!response.ok) {
         throw new DocumentError('Failed to download signed document', 'DOWNLOAD_ERROR', response.status)

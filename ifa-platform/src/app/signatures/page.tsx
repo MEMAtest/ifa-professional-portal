@@ -415,6 +415,7 @@ export default function SignaturesPage() {
         selectedDocumentIds.map((documentId) =>
           fetch('/api/signatures/create', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               clientId: selectedClient,
