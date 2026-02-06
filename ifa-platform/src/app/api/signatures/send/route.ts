@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate signing token if not already present
-    let signingUrl = signatureService.getSigningUrl(signatureRequest.signing_token)
+    let signingUrl = signatureRequest.signing_token ? signatureService.getSigningUrl(signatureRequest.signing_token) : ''
 
     if (!signatureRequest.signing_token || signatureRequest.signing_token_used) {
       // Generate new token
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     const { data: advisorProfile } = await supabase
       .from('profiles')
       .select('id, full_name, email')
-      .eq('id', signatureRequest.created_by)
+      .eq('id', signatureRequest.created_by!)
       .single()
 
     const { data: firmInfo } = await supabase
@@ -208,10 +208,10 @@ export async function POST(request: NextRequest) {
         status: 'sent',
         sent_at: new Date().toISOString(),
         opensign_metadata: {
-          ...metadata,
+          ...(metadata || {}),
           sent_at: new Date().toISOString(),
           custom_message: customMessage || metadata?.custom_message
-        }
+        } as any
       })
       .eq('id', signatureRequestId)
       .eq('firm_id', firmId)

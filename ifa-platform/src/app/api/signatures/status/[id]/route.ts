@@ -66,7 +66,7 @@ export async function GET(
       const { data: doc } = await supabase
         .from('documents')
         .select('id, name, file_name, file_path, storage_path')
-        .eq('id', signatureRequest.document_id)
+        .eq('id', signatureRequest.document_id!)
         .eq('firm_id', firmId)
         .maybeSingle()
       document = doc || null

@@ -138,7 +138,7 @@ export async function POST(
     const { data: advisorProfile } = await supabase
       .from('profiles')
       .select('id, full_name, email')
-      .eq('id', signatureRequest.created_by)
+      .eq('id', signatureRequest.created_by!)
       .single()
 
     const { data: firmInfo } = await supabase
