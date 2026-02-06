@@ -210,7 +210,7 @@ export function useDocuments(initialParams?: DocumentListParams) {
   // Fetch document metrics
   const fetchMetrics = useCallback(async () => {
     try {
-      const response = await fetch('/api/documents/metrics');
+      const response = await fetch('/api/documents/metrics', { credentials: 'include' });
 
       if (!response.ok) {
         throw new DocumentError('Failed to fetch metrics', 'FETCH_ERROR', response.status);
@@ -436,6 +436,7 @@ export function useDocuments(initialParams?: DocumentListParams) {
 
       const response = await fetch('/api/documents/bulk-delete', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -525,6 +526,7 @@ export function useDocuments(initialParams?: DocumentListParams) {
 
       const response = await fetch('/api/documents/signatures', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1110,7 +1112,7 @@ export function useAssessmentMetrics() {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('/api/assessments/metrics')
+      const response = await fetch('/api/assessments/metrics', { credentials: 'include' })
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
@@ -1174,7 +1176,7 @@ export function useClientStatistics() {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('/api/clients/statistics')
+      const response = await fetch('/api/clients/statistics', { credentials: 'include' })
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
