@@ -269,7 +269,7 @@ export class SignatureService {
       }
 
       // Download the original PDF
-      const documentPath = document.file_path || document.storage_path
+      const documentPath = (document.file_path || document.storage_path)!
       let pdfBuffer: Buffer | null = null
 
       if (documentPath.startsWith('http')) {
