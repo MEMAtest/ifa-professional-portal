@@ -3,7 +3,7 @@
 // ================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 
@@ -16,6 +16,9 @@ export async function GET(request: NextRequest) {
     if (!auth.success || !auth.context) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) return permissionError
 
     // SECURITY: Require firm_id for multi-tenant isolation
     const firmIdResult = requireFirmId(auth.context)
@@ -76,9 +79,36 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
+    // Batch-fetch document names for all signature requests
+    const docIds = Array.from(new Set<string>(
+      (signatureRequests || [])
+        .map((r: any) => r.document_id)
+        .filter((id: any): id is string => typeof id === 'string' && id.length > 0)
+    ))
+
+    let docNameMap: Record<string, string> = {}
+    if (docIds.length > 0) {
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('id, name, file_name')
+        .in('id', docIds)
+      if (docs) {
+        for (const d of docs as any[]) {
+          docNameMap[d.id] = d.name || d.file_name || `Document ${d.id.substring(0, 8)}...`
+        }
+      }
+    }
+
     // Transform the data for the frontend
     // Using direct recipient_name/recipient_email columns (basic schema)
-    const transformedRequests = (signatureRequests || []).map((request: any) => ({
+    const transformedRequests = (signatureRequests || []).map((request: any) => {
+      // Resolve document title: documents table > opensign_metadata > fallback
+      const metadataDocName = (request.opensign_metadata as any)?.document_name
+      const docTitle = request.document_id
+        ? (docNameMap[request.document_id] || metadataDocName || `Document ${request.document_id.substring(0, 8)}...`)
+        : null
+
+      return {
       id: request.id,
       document_id: request.document_id,
       client_id: request.client_id,
@@ -87,7 +117,7 @@ export async function GET(request: NextRequest) {
       recipient_email: request.recipient_email || '',
       document: request.document_id ? {
         id: request.document_id,
-        title: `Document ${request.document_id.substring(0, 8)}...`
+        title: docTitle
       } : null,
       client: request.clients ? {
         id: request.clients.id,
@@ -100,7 +130,7 @@ export async function GET(request: NextRequest) {
       viewed_at: request.viewed_at,
       completed_at: request.completed_at,
       expires_at: request.expires_at
-    }))
+    }})
 
     return NextResponse.json({
       success: true,

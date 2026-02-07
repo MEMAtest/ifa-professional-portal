@@ -31,6 +31,12 @@ interface SigningInfo {
 
 type Step = 'view' | 'sign' | 'submit'
 
+const STEP_ORDER: Step[] = ['view', 'sign', 'submit']
+
+function stepIndex(step: Step): number {
+  return STEP_ORDER.indexOf(step)
+}
+
 export default function SigningViewPage({
   params
 }: {
@@ -55,6 +61,27 @@ export default function SigningViewPage({
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // Signature preview state
+  const [previewPageUrl, setPreviewPageUrl] = useState<string | null>(null)
+  const [previewPageInfo, setPreviewPageInfo] = useState<string | null>(null)
+
+  // Mobile PDF rendering state
+  const [isMobile, setIsMobile] = useState(false)
+  const [pageCount, setPageCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pagesLoading, setPagesLoading] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 1024 ||
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+      setIsMobile(mobile)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
   useEffect(() => {
     if (token) {
       loadSigningInfo()
@@ -78,6 +105,17 @@ export default function SigningViewPage({
 
       // Set PDF URL for viewing
       setPdfUrl(`/api/public/sign/${token}/document`)
+
+      // For mobile: fetch page count so we can render pages as images
+      try {
+        const pagesRes = await fetch(`/api/public/sign/${token}/pages`)
+        const pagesData = await pagesRes.json()
+        if (pagesData.success && pagesData.pageCount > 0) {
+          setPageCount(pagesData.pageCount)
+        }
+      } catch {
+        // Non-critical - will fall back to iframe
+      }
     } catch (err) {
       setError('Failed to load document. Please try again.')
     } finally {
@@ -112,7 +150,7 @@ export default function SigningViewPage({
         body: JSON.stringify({
           signatureDataUrl,
           consentGiven,
-          consentTimestamp
+          consentTimestamp,
         })
       })
 
@@ -133,6 +171,23 @@ export default function SigningViewPage({
 
   const goToStep = (step: Step) => {
     setCurrentStep(step)
+    if (step === 'submit' && !previewPageUrl) {
+      loadSignaturePreview()
+    }
+  }
+
+  const loadSignaturePreview = async () => {
+    try {
+      const infoRes = await fetch(`/api/public/sign/${token}/pages`)
+      const info = await infoRes.json()
+      if (info.success && info.pageCount > 0) {
+        const lastPage = info.pageCount - 1
+        setPreviewPageUrl(`/api/public/sign/${token}/pages?page=${lastPage}`)
+        setPreviewPageInfo(`Page ${lastPage + 1} of ${info.pageCount}`)
+      }
+    } catch {
+      // Fallback - just show the iframe
+    }
   }
 
   if (loading) {
@@ -188,14 +243,14 @@ export default function SigningViewPage({
               step={1}
               label="Review"
               active={currentStep === 'view'}
-              completed={currentStep === 'sign' || currentStep === 'submit'}
+              completed={stepIndex(currentStep) > 0}
             />
             <div className="w-8 h-0.5 bg-gray-200" />
             <StepIndicator
               step={2}
               label="Sign"
               active={currentStep === 'sign'}
-              completed={currentStep === 'submit'}
+              completed={stepIndex(currentStep) > 1}
             />
             <div className="w-8 h-0.5 bg-gray-200" />
             <StepIndicator
@@ -227,7 +282,79 @@ export default function SigningViewPage({
 
           {/* PDF viewer */}
           <div className="flex-1 bg-gray-200" style={{ minHeight: '400px' }}>
-            {pdfUrl ? (
+            {currentStep === 'submit' && previewPageUrl && signatureDataUrl ? (
+              <div
+                className="w-full overflow-auto bg-gray-300 flex flex-col items-center p-4"
+                style={{ height: 'calc(100vh - 180px)', minHeight: '500px' }}
+              >
+                {previewPageInfo && (
+                  <div className="mb-2 text-xs text-gray-600 bg-white/80 rounded px-2 py-1">
+                    Signature preview &mdash; {previewPageInfo}
+                  </div>
+                )}
+                <div className="relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewPageUrl}
+                    alt="Document signature page"
+                    className="shadow-lg bg-white"
+                    style={{ maxHeight: 'calc(100vh - 240px)', width: 'auto' }}
+                  />
+                  {/* Signature overlay - positioned at the Client Signature line */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={signatureDataUrl}
+                    alt="Your signature"
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: '8%',
+                      top: '38%',
+                      width: '35%',
+                      objectFit: 'contain',
+                      objectPosition: 'left bottom',
+                      filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.3))',
+                    }}
+                  />
+                </div>
+              </div>
+            ) : pdfUrl && isMobile && pageCount > 0 ? (
+              /* Mobile: render PDF pages as images */
+              <div
+                className="w-full overflow-auto bg-gray-300 flex flex-col items-center"
+                style={{ height: 'calc(100vh - 180px)', minHeight: '400px' }}
+              >
+                {/* Page navigation */}
+                <div className="sticky top-0 z-10 flex items-center gap-3 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-b-lg shadow-sm">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                    disabled={currentPage === 0}
+                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-30"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <span className="text-sm text-gray-700 min-w-[80px] text-center">
+                    Page {currentPage + 1} of {pageCount}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(pageCount - 1, p + 1))}
+                    disabled={currentPage >= pageCount - 1}
+                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-30"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+                {/* Page image */}
+                <div className="p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/public/sign/${token}/pages?page=${currentPage}`}
+                    alt={`Page ${currentPage + 1}`}
+                    className="shadow-lg bg-white max-w-full"
+                    style={{ maxHeight: 'calc(100vh - 260px)', width: 'auto' }}
+                  />
+                </div>
+              </div>
+            ) : pdfUrl ? (
               <iframe
                 ref={iframeRef}
                 src={`${pdfUrl}#navpanes=0&view=FitH`}
@@ -290,6 +417,7 @@ export default function SigningViewPage({
               <CardContent className="space-y-4">
                 <p className="text-sm text-gray-600">
                   Draw your signature or type your name to generate one.
+                  Your signature will be placed at the &quot;Client Signature&quot; area of the document.
                 </p>
 
                 <SignaturePad
@@ -338,6 +466,7 @@ export default function SigningViewPage({
                 {signatureDataUrl && (
                   <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                     <p className="text-xs text-gray-500 mb-2">Your Signature:</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={signatureDataUrl}
                       alt="Your signature"

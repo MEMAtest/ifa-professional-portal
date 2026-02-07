@@ -25,7 +25,10 @@ import {
   PlusIcon,
   XIcon,
   FileTextIcon,
-  UserIcon
+  UserIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  Loader2Icon
 } from 'lucide-react'
 
 interface Client {
@@ -86,6 +89,12 @@ export default function SignaturesPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
+  // View Details modal state
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
+  const [detailData, setDetailData] = useState<any>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+
   // This would typically load all signature requests for the firm
   const { signatureRequests, loading, error, createSignatureRequest } = useSignatureRequests()
 
@@ -118,6 +127,33 @@ export default function SignaturesPage() {
     }
     fetchData()
   }, [])
+
+  // Fetch detail data when View Details is clicked
+  useEffect(() => {
+    if (!selectedRequestId) {
+      setDetailData(null)
+      setDetailError(null)
+      return
+    }
+
+    const fetchDetail = async () => {
+      setDetailLoading(true)
+      setDetailError(null)
+      try {
+        const res = await fetch(`/api/signatures/status/${selectedRequestId}`)
+        const data = await res.json()
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to load details')
+        }
+        setDetailData(data)
+      } catch (err) {
+        setDetailError(err instanceof Error ? err.message : 'Failed to load details')
+      } finally {
+        setDetailLoading(false)
+      }
+    }
+    fetchDetail()
+  }, [selectedRequestId])
 
   // Update signer info when client is selected
   useEffect(() => {
@@ -202,6 +238,7 @@ export default function SignaturesPage() {
     if (SIGNABLE_TYPE_KEYS.has(typeKey)) return true
     if (typeKey.startsWith('suitability_')) return true
     if (typeKey.startsWith('atr_') || typeKey.startsWith('cfl_')) return true
+    if (typeKey.startsWith('plannetic_')) return true
     if (typeKey.includes('agreement') || typeKey.includes('contract') || typeKey.includes('terms')) return true
 
     return false
@@ -298,27 +335,6 @@ export default function SignaturesPage() {
     }
   }, [selectedTemplate, signableTemplates])
 
-  const formatFirmAddress = (address?: FirmAddress) => {
-    if (!address) return ''
-    return [address.line1, address.line2, address.city, address.postcode, address.country]
-      .filter(Boolean)
-      .join(', ')
-  }
-
-  const buildTemplateVariables = (client: Client | undefined) => {
-    const displayName = client ? getClientDisplayName(client) : ''
-    return {
-      CLIENT_NAME: displayName,
-      CLIENT_EMAIL: client?.contact_info?.email || '',
-      CLIENT_REF: client?.client_ref || '',
-      REPORT_DATE: new Date().toLocaleDateString('en-GB'),
-      DOCUMENT_TITLE: signableTemplates.find(t => t.id === selectedTemplate)?.name || 'Document',
-      FIRM_NAME: firm?.name || '',
-      FIRM_FCA_NUMBER: firm?.fcaNumber || '',
-      FIRM_ADDRESS: formatFirmAddress(firm?.address)
-    }
-  }
-
   const handleGenerateFromTemplate = async () => {
     if (!selectedClient || !selectedTemplate) {
       setCreateError('Select a client and template first')
@@ -327,7 +343,6 @@ export default function SignaturesPage() {
 
     const client = clients.find(c => c.id === selectedClient)
     const template = selectedTemplateObj
-    const variables = buildTemplateVariables(client)
     const templateDocumentType =
       template?.assessment_type || template?.document_type || 'template_document'
     const templateName = template?.name?.toLowerCase() || ''
@@ -338,25 +353,26 @@ export default function SignaturesPage() {
     setCreateError(null)
 
     try {
-      const previewRes = await fetch('/api/documents/preview', {
+      const renderRes = await fetch('/api/documents/templates/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           templateId: selectedTemplate,
-          variables
+          clientId: selectedClient,
+          overrides: {}
         })
       })
 
-      if (!previewRes.ok) {
-        throw new Error('Failed to preview template')
+      if (!renderRes.ok) {
+        throw new Error('Failed to render template')
       }
 
-      const previewPayload = await previewRes.json()
-      const previewContent = previewPayload?.preview?.content
-      const previewTitle = previewPayload?.preview?.title || 'Generated Document'
+      const renderPayload = await renderRes.json()
+      const previewContent = renderPayload?.rendered?.html
+      const previewTitle = renderPayload?.rendered?.templateName || 'Generated Document'
 
       if (!previewContent) {
-        throw new Error('Template preview is empty')
+        throw new Error('Rendered template is empty')
       }
 
       const generateRes = await fetch('/api/documents/generate', {
@@ -367,6 +383,7 @@ export default function SignaturesPage() {
           title: previewTitle,
           clientId: selectedClient,
           templateId: selectedTemplate,
+          format: 'html',
           metadata: {
             document_type: templateDocumentType,
             type: templateDocumentType,
@@ -743,7 +760,7 @@ export default function SignaturesPage() {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedRequestId(request.id)}>
                       View Details
                     </Button>
                     {request.status === 'pending' && (
@@ -1079,6 +1096,179 @@ export default function SignaturesPage() {
                     Create Request
                   </>
                 )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Details Modal */}
+      {selectedRequestId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Signature Request Details</h2>
+              <button
+                onClick={() => setSelectedRequestId(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {detailLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2Icon className="h-8 w-8 animate-spin text-blue-600" />
+                </div>
+              )}
+
+              {detailError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <p className="text-sm text-red-700">{detailError}</p>
+                </div>
+              )}
+
+              {detailData && !detailLoading && (
+                <div className="space-y-6">
+                  {/* Status & Document */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase">Status</p>
+                      <Badge className={`mt-1 ${getStatusColor(detailData.signatureRequest.status)}`}>
+                        {detailData.signatureRequest.status.charAt(0).toUpperCase() + detailData.signatureRequest.status.slice(1)}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase">Document</p>
+                      <p className="mt-1 text-sm text-gray-900">
+                        {detailData.document?.name || detailData.document?.file_name || 'Unknown Document'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Signer Info */}
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase mb-2">Signer</p>
+                    <div className="bg-gray-50 rounded-md p-3">
+                      {(detailData.signatureRequest.signers || []).map((signer: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{signer.name}</span>
+                          <span className="text-sm text-gray-500">({signer.email})</span>
+                          {signer.role && (
+                            <Badge className="bg-gray-100 text-gray-600 text-xs">{signer.role}</Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Timestamps */}
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase mb-2">Timeline</p>
+                    <div className="space-y-2">
+                      {[
+                        { label: 'Created', value: detailData.signatureRequest.createdAt, icon: <PenToolIcon className="h-3 w-3" /> },
+                        { label: 'Sent', value: detailData.signatureRequest.sentAt, icon: <MailIcon className="h-3 w-3" /> },
+                        { label: 'Viewed', value: detailData.signatureRequest.viewedAt, icon: <EyeIcon className="h-3 w-3" /> },
+                        { label: 'Completed', value: detailData.signatureRequest.completedAt, icon: <CheckCircleIcon className="h-3 w-3" /> },
+                        { label: 'Expires', value: detailData.signatureRequest.expiresAt, icon: <ClockIcon className="h-3 w-3" /> },
+                      ].filter(item => item.value).map((item) => (
+                        <div key={item.label} className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-400">{item.icon}</span>
+                          <span className="text-gray-600 w-20">{item.label}:</span>
+                          <span className="text-gray-900">{formatDate(item.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Signing URL (if pending/sent) */}
+                  {detailData.signatureRequest.signingUrl && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Signing Link</p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={detailData.signatureRequest.signingUrl}
+                          className="flex-1 text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(detailData.signatureRequest.signingUrl)
+                          }}
+                        >
+                          Copy
+                        </Button>
+                        <a href={detailData.signatureRequest.signingUrl} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm">
+                            <ExternalLinkIcon className="h-3 w-3" />
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Download signed document */}
+                  {detailData.signatureRequest.status === 'completed' && detailData.signatureRequest.signedDocumentPath && (
+                    <div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/api/signatures/download/${detailData.signatureRequest.id}`, '_blank')}
+                      >
+                        <DownloadIcon className="h-4 w-4 mr-2" />
+                        Download Signed Document
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Consent Info */}
+                  {detailData.signatureRequest.signerConsentGiven && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Consent</p>
+                      <div className="bg-green-50 border border-green-200 rounded-md p-3 text-sm text-green-800">
+                        <CheckCircleIcon className="h-4 w-4 inline mr-1" />
+                        Consent given
+                        {detailData.signatureRequest.signerConsentTimestamp && (
+                          <span> at {formatDate(detailData.signatureRequest.signerConsentTimestamp)}</span>
+                        )}
+                        {detailData.signatureRequest.signerIpAddress && (
+                          <span className="text-green-600 text-xs ml-2">
+                            (IP: {detailData.signatureRequest.signerIpAddress})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audit Log */}
+                  {detailData.auditLog && detailData.auditLog.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Audit Log</p>
+                      <div className="border border-gray-200 rounded-md divide-y divide-gray-100">
+                        {detailData.auditLog.map((event: any, i: number) => (
+                          <div key={i} className="px-3 py-2 text-sm flex items-center justify-between">
+                            <span className="text-gray-900">
+                              {event.event_type.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                            </span>
+                            <span className="text-xs text-gray-500">{formatDate(event.event_timestamp)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end p-6 border-t bg-gray-50">
+              <Button variant="outline" onClick={() => setSelectedRequestId(null)}>
+                Close
               </Button>
             </div>
           </div>

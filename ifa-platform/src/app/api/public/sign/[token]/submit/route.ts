@@ -8,7 +8,7 @@ import { z } from 'zod'
 import { signatureService } from '@/services/SignatureService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { sendEmail } from '@/lib/email/emailService'
+import { sendEmail, sendEmailWithAttachment, type EmailAttachment } from '@/lib/email/emailService'
 import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
 
 export const dynamic = 'force-dynamic'
@@ -34,10 +34,19 @@ function checkSubmitRateLimit(ip: string, limit: number = 3, windowMs: number = 
   return true
 }
 
+const signaturePlacementSchema = z.object({
+  page: z.number().int().min(0),
+  xPercent: z.number().min(0).max(100),
+  yPercent: z.number().min(0).max(100),
+  widthPercent: z.number().min(2).max(80),
+  heightPercent: z.number().min(2).max(50),
+})
+
 const submitSchema = z.object({
-  signatureDataUrl: z.string().min(1),
+  signatureDataUrl: z.string().min(1).max(500_000),
   consentGiven: z.boolean(),
-  consentTimestamp: z.string()
+  consentTimestamp: z.string(),
+  signaturePlacement: signaturePlacementSchema.optional()
 })
 
 export async function POST(
@@ -142,7 +151,8 @@ export async function POST(
       signatureDataUrl: body.signatureDataUrl,
       ipAddress: ip,
       userAgent,
-      consentTimestamp: body.consentTimestamp
+      consentTimestamp: body.consentTimestamp,
+      signaturePlacement: body.signaturePlacement
     })
 
     if (!result.success) {
@@ -159,10 +169,25 @@ export async function POST(
 
     log.info('Signature completed successfully', { requestId: request_data.id })
 
+    // Prepare PDF attachment for emails (5MB raw = ~6.7MB base64 + MIME overhead, under SES 10MB limit)
+    let pdfAttachment: EmailAttachment | undefined
+    if (result.signedPdfBuffer && result.signedPdfBuffer.length < 5 * 1024 * 1024) {
+      const fileName = `${request_data.documentName.replace(/[^a-zA-Z0-9._-]/g, '_')}_signed.pdf`
+      pdfAttachment = {
+        filename: fileName,
+        content: result.signedPdfBuffer.toString('base64')
+      }
+    } else if (result.signedPdfBuffer) {
+      log.warn('Signed PDF too large for email attachment', {
+        requestId: request_data.id,
+        size: result.signedPdfBuffer.length
+      })
+    }
+
     // Send all notifications in parallel, await completion
     const notifResults = await Promise.allSettled([
-      notifySignerConfirmation(request_data),
-      notifyAdvisor(request_data),
+      notifySignerConfirmation(request_data, pdfAttachment),
+      notifyAdvisor(request_data, pdfAttachment),
       createInAppNotification(request_data)
     ])
 
@@ -204,7 +229,14 @@ async function notifyAdvisor(request_data: {
   recipientEmail: string
   advisorName: string
   firmId: string
-}): Promise<void> {
+}, attachment?: EmailAttachment): Promise<void> {
+  log.info('notifyAdvisor: starting', { requestId: request_data.id, firmId: request_data.firmId })
+
+  if (!request_data.firmId) {
+    log.error('notifyAdvisor: firmId is empty, cannot send advisor notification', { requestId: request_data.id })
+    throw new Error('firmId is empty — cannot look up advisor or firm')
+  }
+
   const supabase = getSupabaseServiceClient()
 
   // Get the signature request (separate queries - no FK joins)
@@ -239,7 +271,6 @@ async function notifyAdvisor(request_data: {
     .single()
 
   const firmName = firm?.name || 'Your Firm'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.plannetic.com'
 
   // Build email
   const template = EMAIL_TEMPLATES.signatureCompleted(
@@ -248,11 +279,21 @@ async function notifyAdvisor(request_data: {
     request_data.documentName
   )
 
-  const result = await sendEmail({
-    to: advisor.email,
-    subject: template.subject,
-    html: template.html
-  })
+  let result
+  if (attachment) {
+    result = await sendEmailWithAttachment({
+      to: advisor.email,
+      subject: template.subject,
+      html: template.html,
+      attachments: [attachment]
+    })
+  } else {
+    result = await sendEmail({
+      to: advisor.email,
+      subject: template.subject,
+      html: template.html
+    })
+  }
 
   if (!result.success) {
     throw new Error(`Advisor email failed: ${result.error}`)
@@ -268,6 +309,13 @@ async function createInAppNotification(request_data: {
   clientId: string | null
   firmId: string
 }): Promise<void> {
+  log.info('createInAppNotification: starting', { requestId: request_data.id, firmId: request_data.firmId })
+
+  if (!request_data.firmId) {
+    log.error('createInAppNotification: firmId is empty', { requestId: request_data.id })
+    throw new Error('firmId is empty — cannot create in-app notification')
+  }
+
   const supabase = getSupabaseServiceClient()
 
   // Get the signature request with advisor info
@@ -282,7 +330,7 @@ async function createInAppNotification(request_data: {
   }
 
   // Create notification
-  await supabase
+  const { error: notifError } = await supabase
     .from('notifications')
     .insert({
       user_id: signatureRequest.created_by,
@@ -290,7 +338,7 @@ async function createInAppNotification(request_data: {
       type: 'signature_completed',
       title: 'Document Signed',
       message: `${request_data.recipientName} has signed ${request_data.documentName}`,
-      data: {
+      metadata: {
         signature_request_id: request_data.id,
         client_id: request_data.clientId,
         document_name: request_data.documentName,
@@ -298,6 +346,11 @@ async function createInAppNotification(request_data: {
       },
       read: false
     })
+
+  if (notifError) {
+    log.error('Failed to create in-app notification', { requestId: request_data.id, error: notifError })
+    throw notifError
+  }
 }
 
 async function notifySignerConfirmation(request_data: {
@@ -307,7 +360,14 @@ async function notifySignerConfirmation(request_data: {
   recipientEmail: string
   advisorName: string
   firmId: string
-}): Promise<void> {
+}, attachment?: EmailAttachment): Promise<void> {
+  log.info('notifySignerConfirmation: starting', { requestId: request_data.id, recipientEmail: request_data.recipientEmail, firmId: request_data.firmId })
+
+  if (!request_data.firmId) {
+    log.error('notifySignerConfirmation: firmId is empty, cannot look up firm', { requestId: request_data.id })
+    throw new Error('firmId is empty — cannot look up firm for signer confirmation')
+  }
+
   const supabase = getSupabaseServiceClient()
 
   // Get firm name
@@ -323,14 +383,25 @@ async function notifySignerConfirmation(request_data: {
     signerName: request_data.recipientName,
     documentName: request_data.documentName,
     firmName,
-    advisorName: request_data.advisorName
+    advisorName: request_data.advisorName,
+    hasAttachment: !!attachment
   })
 
-  const result = await sendEmail({
-    to: request_data.recipientEmail,
-    subject: template.subject,
-    html: template.html
-  })
+  let result
+  if (attachment) {
+    result = await sendEmailWithAttachment({
+      to: request_data.recipientEmail,
+      subject: template.subject,
+      html: template.html,
+      attachments: [attachment]
+    })
+  } else {
+    result = await sendEmail({
+      to: request_data.recipientEmail,
+      subject: template.subject,
+      html: template.html
+    })
+  }
 
   if (!result.success) {
     throw new Error(`Signer email failed: ${result.error}`)
