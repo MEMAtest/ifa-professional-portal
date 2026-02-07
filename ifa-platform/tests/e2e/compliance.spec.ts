@@ -7,19 +7,31 @@ import { test, expect, Page } from '@playwright/test';
 
 // Helper to login before tests
 async function login(page: Page) {
+  const email = process.env.E2E_EMAIL || 'demo@plannetic.com';
+  const password = process.env.E2E_PASSWORD || 'demo123';
+
+  // Try to hit a protected route first, so we can no-op when already authenticated.
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+  if (!page.url().includes('/login')) return;
+
   await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await page.waitForTimeout(2000);
+  await page.waitForLoadState('networkidle').catch(() => {});
+
+  // LoginForm disables submit until hydration completes.
+  await page.waitForSelector('form[data-hydrated="true"]', { timeout: 15000 }).catch(() => {});
 
   const emailField = page.getByLabel('Email');
-  const isLoginPage = page.url().includes('/login');
-  const hasEmailField = await emailField.isVisible().catch(() => false);
+  const passwordField = page.getByLabel('Password');
+  const submitButton = page.getByRole('button', { name: /sign in/i });
 
-  if (isLoginPage && hasEmailField) {
-    await emailField.fill('demo@plannetic.com');
-    await page.getByLabel('Password').fill('demo123');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await page.waitForTimeout(4000);
-  }
+  await emailField.fill(email);
+  await passwordField.fill(password);
+
+  await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 15000 }).catch(() => {});
+  await submitButton.click();
+
+  // Allow redirect/cookie set.
+  await page.waitForTimeout(1500);
 }
 
 async function openMobileNavIfNeeded(page: Page) {

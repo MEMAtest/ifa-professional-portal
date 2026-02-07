@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { signatureService } from '@/services/SignatureService'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +22,9 @@ export async function POST(
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) return permissionError
+
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult

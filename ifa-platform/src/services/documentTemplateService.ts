@@ -687,6 +687,13 @@ export class DocumentTemplateService {
     ]
   }
 
+  // =====================================================
+  // ✅ NEW: Public access to default templates (no DB access)
+  // =====================================================
+  getDefaultTemplateByIdOrName(templateIdOrName: string): DocumentTemplate | null {
+    return this.getDefaultTemplateById(templateIdOrName) || this.getDefaultTemplateByName(templateIdOrName)
+  }
+
   // Helper methods
   private mapTemplateFromDatabase(dbTemplate: any): DocumentTemplate {
     return {

@@ -1,12 +1,14 @@
 // Force dynamic rendering to prevent build-time errors
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const maxDuration = 60
 
 // ===================================================================
 // src/app/api/documents/generate/route.ts - Document Generation from Templates
 // ===================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { requireClientAccess } from '@/lib/auth/requireClientAccess'
 import { log } from '@/lib/logging/structured'
 import { notifyDocumentGenerated } from '@/lib/notifications/notificationService'
@@ -14,6 +16,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { parseRequestBody } from '@/app/api/utils'
 import { DocumentTemplateService } from '@/services/documentTemplateService'
 import { DocumentGenerationRouter } from '@/services/DocumentGenerationRouter'
+import { renderHtmlToPdfBuffer } from '@/lib/pdf/renderHtmlToPdf'
 
 interface GenerateDocumentRequest {
   content: string
@@ -49,6 +52,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       )
     }
 
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) return permissionError
+
     const supabase: any = getSupabaseServiceClient()
     const body: GenerateDocumentRequest = await parseRequestBody(request)
 
@@ -82,8 +88,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Generate unique document ID
     const documentId = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const safeTitle = body.title.replace(/[^a-zA-Z0-9]/g, '_')
-    const fileName = `${safeTitle}_${Date.now()}.pdf`
-    const filePath = `firms/${firmId}/documents/${fileName}`
+    const requestedFormat = body.format || 'pdf'
 
     const metadata = {
       templateId: body.templateId,
@@ -112,7 +117,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         templateCategory = (templateRow as any)?.document_categories?.name || null
       } else {
         const templateService = DocumentTemplateService.getInstance()
-        const fallbackTemplate = await templateService.getTemplateById(body.templateId)
+        const fallbackTemplate = templateService.getDefaultTemplateByIdOrName(body.templateId)
         if (fallbackTemplate) {
           templateDocumentType = body.templateId
           templateRequiresSignature = DocumentGenerationRouter.requiresSignature(templateDocumentType)
@@ -134,77 +139,95 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       (isFileReview ? 'Compliance' : DocumentGenerationRouter.getCategory(documentType))
     const type = (metadata as any)?.type || documentType
 
-    const stripHtml = (html: string) => {
-      return html
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<\/(p|div|br|li|tr|h1|h2|h3|h4|h5|h6)>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\n{3,}/g, '\n\n')
-        .replace(/[ \t]{2,}/g, ' ')
-        .trim()
-    }
+    // Signing docs must always be a PDF so the signer sees exactly what they sign.
+    const wantsHtml = requestedFormat === 'html'
+    const outputFormat: 'pdf' | 'html' = wantsHtml && !requiresSignature ? 'html' : 'pdf'
+    const fileName = `${safeTitle}_${Date.now()}.${outputFormat}`
+    const filePath = `firms/${firmId}/documents/${fileName}`
 
-    const plainText = stripHtml(body.content)
-    const { jsPDF } = await import('jspdf')
-    const pdfDoc = new jsPDF({ unit: 'pt', format: 'a4' })
-    const pageWidth = pdfDoc.internal.pageSize.getWidth()
-    const pageHeight = pdfDoc.internal.pageSize.getHeight()
-    const margin = 48
-    const lineHeight = 16
-    const maxWidth = pageWidth - margin * 2
-    const lines = pdfDoc.splitTextToSize(plainText || ' ', maxWidth)
+    let contentBuffer: Buffer
+    let mimeType: string
 
-    let cursorY = margin
-    lines.forEach((line: string) => {
-      if (cursorY + lineHeight > pageHeight - margin) {
-        pdfDoc.addPage()
-        cursorY = margin
-      }
-      pdfDoc.text(line, margin, cursorY)
-      cursorY += lineHeight
-    })
-
-    const buildPdfBuffer = () => {
+    if (outputFormat === 'html') {
+      contentBuffer = Buffer.from(body.content, 'utf8')
+      mimeType = 'text/html'
+    } else {
       try {
-        const nodeBuffer = pdfDoc.output('nodebuffer' as any) as unknown
-        if (nodeBuffer && Buffer.isBuffer(nodeBuffer)) {
-          return nodeBuffer as Buffer
-        }
-        if (nodeBuffer instanceof Uint8Array) {
-          return Buffer.from(nodeBuffer)
-        }
-      } catch {
-        // Fall back to arraybuffer output
-      }
+        contentBuffer = await renderHtmlToPdfBuffer(body.content, {
+          title: body.title,
+          format: 'A4',
+          // Signing docs should not execute any scripts during render.
+          javaScriptEnabled: !requiresSignature
+        })
+        mimeType = 'application/pdf'
+      } catch (pdfError) {
+        log.error('HTML->PDF rendering failed', {
+          error: pdfError instanceof Error ? pdfError.message : String(pdfError),
+          templateId: body.templateId,
+          firmId,
+          clientId: body.clientId
+        })
 
-      const pdfArrayBuffer = pdfDoc.output('arraybuffer') as ArrayBuffer
-      let buffer = Buffer.from(pdfArrayBuffer)
-      if (buffer.length === 0) {
+        // For signing documents, do not silently downgrade to a low-quality output.
+        if (requiresSignature) {
+          return NextResponse.json(
+            { success: false, error: 'Failed to generate PDF for signing' },
+            { status: 500 }
+          )
+        }
+
+        // Non-signing docs: fall back to a plain-text PDF so the route still behaves
+        // consistently even if chromium is unavailable in the runtime.
+        const stripHtml = (html: string) => {
+          return html
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<\/(p|div|br|li|tr|h1|h2|h3|h4|h5|h6)>/gi, '\n')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/[ \t]{2,}/g, ' ')
+            .trim()
+        }
+
+        const plainText = stripHtml(body.content)
+        const { jsPDF } = await import('jspdf')
+        const pdfDoc = new jsPDF({ unit: 'pt', format: 'a4' })
+        const pageWidth = pdfDoc.internal.pageSize.getWidth()
+        const pageHeight = pdfDoc.internal.pageSize.getHeight()
+        const margin = 48
+        const lineHeight = 16
+        const maxWidth = pageWidth - margin * 2
+        const lines = pdfDoc.splitTextToSize(plainText || ' ', maxWidth)
+
+        let cursorY = margin
+        lines.forEach((line: string) => {
+          if (cursorY + lineHeight > pageHeight - margin) {
+            pdfDoc.addPage()
+            cursorY = margin
+          }
+          pdfDoc.text(line, margin, cursorY)
+          cursorY += lineHeight
+        })
+
         try {
-          const dataUri = pdfDoc.output('datauristring') as string
-          const base64 = dataUri.split(',')[1] || ''
-          buffer = Buffer.from(base64, 'base64')
+          const nodeBuffer = pdfDoc.output('nodebuffer' as any) as unknown
+          contentBuffer = Buffer.isBuffer(nodeBuffer)
+            ? (nodeBuffer as Buffer)
+            : Buffer.from(pdfDoc.output('arraybuffer') as ArrayBuffer)
         } catch {
-          // Ignore, we'll return empty buffer and error upstream
+          contentBuffer = Buffer.from(pdfDoc.output('arraybuffer') as ArrayBuffer)
         }
+        if (contentBuffer.length === 0) {
+          pdfDoc.text(' ', margin, margin)
+          contentBuffer = Buffer.from(pdfDoc.output('arraybuffer') as ArrayBuffer)
+        }
+        mimeType = 'application/pdf'
       }
-      return buffer
     }
-
-    let pdfBuffer = buildPdfBuffer()
-    if (pdfBuffer.length === 0) {
-      // Ensure we don't store an empty PDF
-      pdfDoc.text(' ', margin, margin)
-      pdfBuffer = buildPdfBuffer()
-    }
-
-    // Upload PDF content to storage so previews work reliably
-    const contentBuffer = pdfBuffer
     const { error: uploadError } = await supabase.storage
       .from('documents')
       .upload(filePath, contentBuffer, {
-        contentType: 'application/pdf',
+        contentType: mimeType,
         upsert: false,
         cacheControl: '3600'
       })
@@ -231,8 +254,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         file_name: fileName,
         file_path: filePath,
         storage_path: urlData?.publicUrl || filePath,
-        file_type: 'pdf',
-        mime_type: 'application/pdf',
+        file_type: outputFormat,
+        mime_type: mimeType,
         file_size: contentBuffer.length,
         type,
         document_type: documentType,
@@ -311,7 +334,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         success: false,
-        error: ''
+        error: 'Document generation failed'
       },
       { status: 500 }
     )

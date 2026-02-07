@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 // ================================================================
 // FILE: /api/documents/templates/all/route.ts
@@ -8,9 +9,10 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { DocumentTemplateService } from '@/services/documentTemplateService'
 import { DocumentGenerationRouter } from '@/services/DocumentGenerationRouter'
+import { ensurePlanneticSigningTemplatesInstalled } from '@/lib/documents/standardTemplates/installPlanneticSigningTemplates'
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +20,10 @@ export async function GET(request: NextRequest) {
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    // Listing and provisioning firm templates is a configuration capability, not a client-facing read.
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) return permissionError
+
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
@@ -26,15 +32,26 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServiceClient()
 
-    // Fetch all active templates
-    const { data: templates, error } = await supabase
-      .from('document_templates')
-      .select('*')
-      .eq('is_active', true)
-      .eq('firm_id', firmId)
-      .order('assessment_type')
-      .order('is_default', { ascending: false })
-      .order('name')
+    const includeInactive = request.nextUrl.searchParams.get('include_inactive') === 'true'
+
+    const buildQuery = () => {
+      // Fetch firm templates (active by default)
+      let query = supabase
+        .from('document_templates')
+        .select('*')
+        .eq('firm_id', firmId)
+        .order('assessment_type')
+        .order('is_default', { ascending: false })
+        .order('name')
+
+      if (!includeInactive) {
+        query = query.eq('is_active', true)
+      }
+
+      return query
+    }
+
+    const { data: templates, error } = await buildQuery()
 
     if (error) {
       log.error('Error fetching all templates:', error)
@@ -45,6 +62,35 @@ export async function GET(request: NextRequest) {
     }
 
     const hydratedTemplates = templates || []
+
+    // Ensure Plannetic signing standard templates exist for this firm.
+    // Insert missing only; never overwrite existing firm customisations.
+    try {
+      const installResult = await ensurePlanneticSigningTemplatesInstalled({
+        supabase,
+        firmId,
+        userId: auth.context.userId
+      })
+
+      if (installResult.installed > 0) {
+        const { data: refreshed, error: refreshError } = await buildQuery()
+        if (refreshError) {
+          log.error('Error refetching templates after install:', refreshError)
+          return NextResponse.json({ error: 'Failed to fetch templates' }, { status: 500 })
+        }
+
+        return NextResponse.json({
+          success: true,
+          templates: refreshed || [],
+          count: (refreshed || []).length,
+          installed_standard_templates: installResult.installed
+        })
+      }
+    } catch (installError) {
+      log.error('Standard template install failed:', installError)
+      // Fall through to returning whatever we already have, or defaults below.
+    }
+
     if (hydratedTemplates.length > 0) {
       return NextResponse.json({
         success: true,

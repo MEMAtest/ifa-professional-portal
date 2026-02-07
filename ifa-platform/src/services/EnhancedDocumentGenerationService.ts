@@ -147,7 +147,8 @@ export class EnhancedDocumentGenerationService {
       // 3. Get appropriate template
       const template = await this.getTemplateForAssessment(
         params.assessmentType,
-        params.templateId
+        params.templateId,
+        clientData.firm_id || undefined
       )
 
       if (!template) {
@@ -289,7 +290,8 @@ export class EnhancedDocumentGenerationService {
       // 3. Get combined report template
       const template = await this.getCombinedReportTemplate(
         params.reportType || 'annual_review',
-        params.templateId
+        params.templateId,
+        clientData.firm_id || undefined
       )
 
       if (!template) {
@@ -496,33 +498,75 @@ export class EnhancedDocumentGenerationService {
 
   private async getTemplateForAssessment(
     assessmentType: string,
-    templateId?: string
+    templateId?: string,
+    firmId?: string
   ): Promise<Record<string, any> | null> {
     if (!this.supabase) {
       throw new Error("Cannot perform action: Supabase client is not available.")
     }
 
-    if (templateId) {
-      return await this.templateService.getTemplateById(templateId)
+    const mapRow = (row: any) => ({
+      id: row.id,
+      name: row.name,
+      content: row.template_content || row.html_template || '',
+      requires_signature: row.requires_signature ?? null
+    })
+
+    // If we don't have a firm context (should not happen in production), fall back safely.
+    if (!firmId) {
+      return getDefaultHtmlTemplate(assessmentType)
     }
 
-    // Get default template for assessment type - use 'any' cast for now
-    const { data, error } = await (this.supabase as any)
+    if (templateId) {
+      // Firm-scoped lookup by id; do not fall back to cross-tenant records.
+      const { data } = await (this.supabase as any)
+        .from('document_templates')
+        .select('*')
+        .eq('id', templateId)
+        .eq('firm_id', firmId)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (data) return mapRow(data)
+
+      // If the caller passed a non-UUID "template id" (e.g. default name),
+      // allow falling back to in-code defaults (no DB reads).
+      const fallback = this.templateService.getDefaultTemplateByIdOrName(templateId)
+      if (fallback) {
+        return {
+          id: fallback.id,
+          name: fallback.name,
+          content: fallback.content || fallback.template_content || ''
+        }
+      }
+
+      return null
+    }
+
+    // Default template for assessment type (firm-scoped)
+    const { data } = await (this.supabase as any)
       .from('document_templates')
       .select('*')
       .eq('assessment_type', assessmentType)
       .eq('is_default', true)
       .eq('is_active', true)
+      .eq('firm_id', firmId)
       .maybeSingle()
 
-    if (error || !data) {
-      // Fallback to template service defaults
-      const defaults = this.templateService.getDefaultTemplates()
-      const found = defaults.find((t: any) => t.documentType === `${assessmentType}_report`)
-      return found || getDefaultHtmlTemplate(assessmentType)
+    if (data) return mapRow(data)
+
+    // Fallback to in-code defaults
+    const defaults = this.templateService.getDefaultTemplates()
+    const found = defaults.find((t: any) => t.documentType === `${assessmentType}_report`)
+    if (found?.content) {
+      return {
+        id: found.documentType || `default_${assessmentType}`,
+        name: found.name || `Default ${assessmentType} Template`,
+        content: found.content
+      }
     }
 
-    return data
+    return getDefaultHtmlTemplate(assessmentType)
   }
 
   private async saveDocument(params: DocumentSaveParams): Promise<any> {
@@ -839,14 +883,45 @@ export class EnhancedDocumentGenerationService {
 
   private async getCombinedReportTemplate(
     reportType: string,
-    templateId?: string
+    templateId?: string,
+    firmId?: string
   ): Promise<Record<string, any> | null> {
     if (!this.supabase) {
       throw new Error("Cannot perform action: Supabase client is not available.")
     }
 
+    const mapRow = (row: any) => ({
+      id: row.id,
+      name: row.name,
+      content: row.template_content || row.html_template || '',
+      requires_signature: row.requires_signature ?? null
+    })
+
+    if (!firmId) {
+      return getDefaultHtmlTemplate('combined')
+    }
+
     if (templateId) {
-      return await this.templateService.getTemplateById(templateId)
+      const { data } = await (this.supabase as any)
+        .from('document_templates')
+        .select('*')
+        .eq('id', templateId)
+        .eq('firm_id', firmId)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (data) return mapRow(data)
+
+      const fallback = this.templateService.getDefaultTemplateByIdOrName(templateId)
+      if (fallback) {
+        return {
+          id: fallback.id,
+          name: fallback.name,
+          content: fallback.content || fallback.template_content || ''
+        }
+      }
+
+      return null
     }
 
     const { data } = await (this.supabase as any)
@@ -855,9 +930,12 @@ export class EnhancedDocumentGenerationService {
       .eq('assessment_type', 'combined')
       .eq('is_default', true)
       .eq('is_active', true)
+      .eq('firm_id', firmId)
       .maybeSingle()
 
-    return data || getDefaultHtmlTemplate('combined')
+    if (data) return mapRow(data)
+
+    return getDefaultHtmlTemplate('combined')
   }
 }
 

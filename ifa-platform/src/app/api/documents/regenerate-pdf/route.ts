@@ -5,6 +5,7 @@ import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/api
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { parseRequestBody } from '@/app/api/utils'
 import { log } from '@/lib/logging/structured'
+import { renderHtmlToPdfBuffer } from '@/lib/pdf/renderHtmlToPdf'
 
 type RegenerateRequest = {
   documentId?: string
@@ -206,8 +207,17 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        const plainText = stripHtml(html)
-        const pdfBuffer = await buildPdfBuffer(plainText)
+        let pdfBuffer: Buffer
+        try {
+          pdfBuffer = await renderHtmlToPdfBuffer(html, {
+            title: String(doc.name || doc.file_name || 'Document'),
+            format: 'A4'
+          })
+        } catch (error) {
+          const plainText = stripHtml(html)
+          pdfBuffer = await buildPdfBuffer(plainText)
+        }
+
         if (!pdfBuffer.length) {
           failures.push({ id: doc.id, error: 'Generated PDF was empty' })
           continue

@@ -14,6 +14,7 @@ import { parseRequestBody } from '@/app/api/utils'
 import { signatureService } from '@/services/SignatureService'
 import { sendEmail } from '@/lib/email/emailService'
 import { EMAIL_TEMPLATES } from '@/lib/email/emailTemplates'
+import { renderHtmlToPdfBuffer } from '@/lib/pdf/renderHtmlToPdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -265,8 +266,19 @@ const getPdfBufferForDocument = async (
   }
 
   if (html) {
-    const plainText = stripHtml(html)
-    const pdfBuffer = await buildPdfBuffer(plainText)
+    let pdfBuffer: Buffer
+    try {
+      pdfBuffer = await renderHtmlToPdfBuffer(html, {
+        title: String(document.name || document.file_name || 'Document'),
+        format: 'A4',
+        javaScriptEnabled: false
+      })
+    } catch (error) {
+      // Last-resort fallback if chromium rendering is unavailable.
+      const plainText = stripHtml(html)
+      pdfBuffer = await buildPdfBuffer(plainText)
+    }
+
     if (!pdfBuffer.length) return null
 
     const rawName = String(document.file_name || document.name || 'document')
@@ -346,9 +358,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logger.debug('CREATE SIGNATURE: Request body', { documentId: body.documentId, clientId: body.clientId, signerCount: body.signers?.length })
-
     const { documentId, clientId, templateId, signers, options = {} } = body
+    logger.info('CREATE SIGNATURE: Params', { documentId, clientId, firmId, signerCount: signers?.length })
 
     // Validate required fields
     if (!signers || signers.length === 0) {
@@ -409,12 +420,33 @@ export async function POST(request: NextRequest) {
 
     let document: Record<string, any> | null = null
     if (documentId) {
+      logger.info('CREATE SIGNATURE: Looking up document', { documentId, firmId })
       const { data: documentData, error: documentError } = await supabase
         .from('documents')
-        .select('id, client_id, firm_id, name, file_name, file_path, storage_path, file_size, file_type, mime_type, metadata, html_content')
+        .select('id, client_id, firm_id, name, file_name, file_path, storage_path, file_size, file_type, mime_type, metadata')
         .eq('id', documentId)
         .eq('firm_id', firmId)
         .maybeSingle()
+
+      if (documentError) {
+        logger.error('CREATE SIGNATURE: Document query error', { documentId, firmId, error: documentError })
+      }
+
+      if (!documentData && !documentError) {
+        // Diagnostic: check if document exists with a different firm_id
+        const { data: anyDoc } = await supabase
+          .from('documents')
+          .select('id, firm_id')
+          .eq('id', documentId)
+          .maybeSingle()
+        if (anyDoc) {
+          logger.warn('CREATE SIGNATURE: Document exists with different firm_id', {
+            documentId, expectedFirmId: firmId, actualFirmId: anyDoc.firm_id
+          })
+        } else {
+          logger.warn('CREATE SIGNATURE: Document not found in any firm', { documentId })
+        }
+      }
 
       if (documentError || !documentData) {
         return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })

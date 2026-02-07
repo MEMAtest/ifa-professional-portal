@@ -8,9 +8,10 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { getAuthContext, requireFirmId } from '@/lib/auth/apiAuth'
+import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 import { DocumentTemplateService } from '@/services/documentTemplateService'
+import { populateTemplate } from '@/services/document-generation/template-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +19,9 @@ export async function POST(request: NextRequest) {
     if (!auth.success || !auth.context) {
       return auth.response || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const permissionError = requirePermission(auth.context, 'documents:write')
+    if (permissionError) return permissionError
+
     const firmResult = requireFirmId(auth.context)
     if (!('firmId' in firmResult)) {
       return firmResult
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
       template = dbTemplate
     } else {
       const templateService = DocumentTemplateService.getInstance()
-      template = await templateService.getTemplateById(templateId)
+      template = templateService.getDefaultTemplateByIdOrName(templateId)
     }
 
     if (!template) {
@@ -59,17 +63,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Simple template population for preview
-    let content = template.template_content ?? template.content ?? ''
-    Object.entries(variables).forEach(([key, value]) => {
-      const safeValue = String(value ?? '')
-      const curlyRegex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g')
-      const bracketRegex = new RegExp(`\\[${key}\\]`, 'g')
-      const dollarRegex = new RegExp(`\\$\\{${key}\\}`, 'g')
-      content = content.replace(curlyRegex, safeValue)
-      content = content.replace(bracketRegex, safeValue)
-      content = content.replace(dollarRegex, safeValue)
-    })
+    const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+    // Preview should support:
+    // - `{{KEY}}` placeholders
+    // - conditionals like `{{#if KEY}}...{{/if}}`
+    // - legacy placeholders `[KEY]` and `${KEY}`
+    let content = String(template.template_content ?? template.content ?? '')
+
+    const variableRecord: Record<string, any> = {}
+    if (variables && typeof variables === 'object') {
+      for (const [key, value] of Object.entries(variables as Record<string, unknown>)) {
+        // Keep keys conservative to avoid regex injection and to match our template syntax.
+        if (!/^[A-Za-z0-9_]+$/.test(key)) continue
+        variableRecord[key] = value !== null && value !== undefined ? String(value) : ''
+      }
+    }
+
+    for (const [key, safeValue] of Object.entries(variableRecord)) {
+      const escapedKey = escapeRegExp(key)
+      content = content.replace(new RegExp(`\\[${escapedKey}\\]`, 'g'), () => safeValue)
+      content = content.replace(new RegExp(`\\$\\{\\s*${escapedKey}\\s*\\}`, 'g'), () => safeValue)
+    }
+
+    content = populateTemplate(content, variableRecord)
 
     return NextResponse.json({
       success: true,

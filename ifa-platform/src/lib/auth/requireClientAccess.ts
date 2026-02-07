@@ -20,7 +20,9 @@ export async function requireClientAccess({ supabase, clientId, ctx, select = '*
 
   const { data: client, error: clientError } = await supabase
     .from('clients')
-    .select(select)
+    // Supabase's typed select() cannot infer result types from a dynamic string.
+    // We treat this as runtime-validated and cast for ergonomic consumption.
+    .select(select as any)
     .eq('id', clientId)
     .maybeSingle()
 
@@ -50,5 +52,5 @@ export async function requireClientAccess({ supabase, clientId, ctx, select = '*
     }
   }
 
-  return { ok: true as const, client }
+  return { ok: true as const, client: client as any }
 }

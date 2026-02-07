@@ -60,6 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_signature_audit_log_timestamp
 ALTER TABLE signature_audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Select policy - users can view audit logs for their firm's signature requests
+DROP POLICY IF EXISTS "Users can view audit logs for their firm's signature requests" ON signature_audit_log;
 CREATE POLICY "Users can view audit logs for their firm's signature requests"
   ON signature_audit_log
   FOR SELECT
