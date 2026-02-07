@@ -169,9 +169,10 @@ export async function POST(request: NextRequest) {
     const supabase: any = getSupabaseServiceClient()
     const supabaseService: any = getSupabaseServiceClient()
 
+    // Note: head:true returns 204 even for missing tables, so use a normal select
     const { error: inviteTableError } = await supabase
       .from('user_invitations' as any)
-      .select('id', { count: 'exact', head: true })
+      .select('id')
       .limit(1)
 
     const hasInvitationsTable = !inviteTableError
@@ -219,7 +220,6 @@ export async function POST(request: NextRequest) {
         .from('profiles')
         .select('*', { count: 'exact', head: true })
         .eq('firm_id', firmIdResult.firmId)
-        .neq('status', 'deactivated')
 
       if ((activeUsers ?? 0) >= maxSeats) {
         return NextResponse.json(
@@ -316,7 +316,7 @@ export async function POST(request: NextRequest) {
           .from('profiles')
           .select('*', { count: 'exact', head: true })
           .eq('firm_id', firmIdResult.firmId)
-          .neq('status', 'deactivated'),
+          .not('role', 'eq', 'deactivated'),
         supabase
           .from('user_invitations')
           .select('*', { count: 'exact', head: true })
