@@ -254,8 +254,12 @@ export const EMAIL_TEMPLATES = {
     documentName: string
     firmName: string
     advisorName: string
+    hasAttachment?: boolean
   }) => {
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const attachmentNote = data.hasAttachment
+      ? 'A copy of the signed document is attached to this email for your records.'
+      : `A copy of the signed document has been securely stored. If you need a copy, please contact ${esc(data.advisorName)} at ${esc(data.firmName)}.`
     return {
       subject: `Signed: ${data.documentName}`,
       html: `
@@ -288,7 +292,7 @@ export const EMAIL_TEMPLATES = {
               </table>
             </div>
             <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0;">
-              A copy of the signed document has been securely stored. If you need a copy, please contact ${esc(data.advisorName)} at ${esc(data.firmName)}.
+              ${attachmentNote}
             </p>
           </div>
           <div style="background: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
@@ -404,6 +408,59 @@ export const EMAIL_TEMPLATES = {
         <div style="text-align: center; margin: 30px 0;">
           <a href="${data.link}" style="background: #3b82f6; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
             Complete Assessment
+          </a>
+        </div>
+
+        <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e; font-size: 14px;">
+            <strong>⏰ Please note:</strong> This link will expire on ${data.expiryDate}
+          </p>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+
+        <p style="color: #6b7280; font-size: 12px;">
+          If the button doesn't work, copy and paste this link into your browser:<br>
+          <a href="${data.link}" style="color: #3b82f6; word-break: break-all;">${data.link}</a>
+        </p>
+
+        <p style="color: #6b7280; font-size: 12px;">
+          If you have any questions, please contact your advisor directly.
+        </p>
+      </div>
+    `
+  }),
+
+  // Fact Find invitation email (client-completable, token-based)
+  factFindInvite: (data: any) => ({
+    subject: `${data.advisorName} has requested you complete a Fact Find`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #1e40af; margin: 0;">Fact Find Request</h1>
+        </div>
+
+        <p style="color: #374151; font-size: 16px;">Dear ${data.clientName},</p>
+
+        <p style="color: #374151; font-size: 16px;">
+          Your financial advisor <strong>${data.advisorName}</strong> has requested you complete a
+          <strong>Fact Find</strong> form.
+        </p>
+
+        ${data.customMessage ? `
+          <div style="background: #f3f4f6; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #374151; font-style: italic;">"${data.customMessage}"</p>
+            <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">- ${data.advisorName}</p>
+          </div>
+        ` : ''}
+
+        <p style="color: #374151; font-size: 16px;">
+          This information helps us understand your circumstances and objectives, so we can prepare your suitability assessment accurately.
+        </p>
+
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${data.link}" style="background: #3b82f6; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+            Complete Fact Find
           </a>
         </div>
 
@@ -793,6 +850,101 @@ export const EMAIL_TEMPLATES = {
             </p>
             <p style="color: #cbd5e1; font-size: 12px; margin: 0;">
               Plannetic Ltd &middot; Turning Plans into Performance
+            </p>
+          </div>
+
+        </div>
+      `
+    }
+  },
+
+  // Assessment results email to client (with PDF attachment)
+  assessmentResultsClient: (data: {
+    clientName: string
+    assessmentType: string
+    score: number
+    category: string
+    completedDate: string
+    advisorName: string
+    firmName: string
+  }) => {
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const scoreColor = data.score >= 70 ? '#059669' : data.score >= 40 ? '#d97706' : '#dc2626'
+
+    return {
+      subject: `Your ${esc(data.assessmentType)} Assessment Results - ${esc(data.firmName)}`,
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 640px; margin: 0 auto; background-color: #ffffff;">
+
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 32px; text-align: center;">
+            <div style="width: 56px; height: 56px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 12px auto; line-height: 56px;">
+              <span style="font-size: 28px; color: #ffffff;">&#10003;</span>
+            </div>
+            <h1 style="color: #ffffff; font-size: 22px; margin: 0; font-weight: 600;">
+              Assessment Complete
+            </h1>
+            <p style="color: #a7f3d0; font-size: 14px; margin: 8px 0 0 0;">
+              Your ${esc(data.assessmentType)} results are ready
+            </p>
+          </div>
+
+          <!-- Main content -->
+          <div style="padding: 40px 32px;">
+            <p style="color: #374151; font-size: 16px; margin: 0 0 20px 0;">
+              Dear ${esc(data.clientName)},
+            </p>
+
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+              Thank you for completing your <strong>${esc(data.assessmentType)}</strong> assessment.
+              Below is a summary of your results.
+            </p>
+
+            <!-- Results card -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 24px 0;">
+              <h3 style="margin: 0 0 16px 0; font-size: 16px; color: #0f172a; font-weight: 600;">Your Results</h3>
+              <table cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                <tr>
+                  <td style="padding: 10px 0; color: #64748b; font-size: 14px; border-bottom: 1px solid #e2e8f0;">Assessment:</td>
+                  <td style="padding: 10px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600; border-bottom: 1px solid #e2e8f0;">${esc(data.assessmentType)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; color: #64748b; font-size: 14px; border-bottom: 1px solid #e2e8f0;">Score:</td>
+                  <td style="padding: 10px 0; text-align: right; font-size: 14px; font-weight: 600; border-bottom: 1px solid #e2e8f0;">
+                    <span style="color: ${scoreColor};">${data.score}/100</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; color: #64748b; font-size: 14px; border-bottom: 1px solid #e2e8f0;">Category:</td>
+                  <td style="padding: 10px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600; border-bottom: 1px solid #e2e8f0;">${esc(data.category)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; color: #64748b; font-size: 14px;">Completed:</td>
+                  <td style="padding: 10px 0; text-align: right; color: #0f172a; font-size: 14px; font-weight: 600;">${esc(data.completedDate)}</td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- PDF note -->
+            <div style="background: #f0f9ff; border-left: 4px solid #0d9488; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 24px 0;">
+              <p style="margin: 0; color: #334155; font-size: 14px;">
+                <strong>A PDF copy of your assessment results is attached</strong> to this email for your records.
+              </p>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0;">
+              Your advisor <strong>${esc(data.advisorName)}</strong> will review these results and may be in touch
+              to discuss next steps. If you have any questions, please don't hesitate to contact them directly.
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f8fafc; padding: 24px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
+            <p style="color: #64748b; font-size: 13px; margin: 0 0 8px 0;">
+              ${esc(data.firmName)}
+            </p>
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+              This email was sent via Plannetic's secure assessment platform.
             </p>
           </div>
 

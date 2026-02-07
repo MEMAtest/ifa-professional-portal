@@ -115,14 +115,14 @@ export async function GET(
         .maybeSingle(),
       supabase
         .from('cfl_assessments')
-        .select('created_at, total_score, capacity_rating, is_current')
+        .select('created_at, total_score, capacity_category, is_current')
         .eq('client_id', clientId)
         .eq('is_current', true)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
       supabase
-        .from('investor_persona_assessments')
+        .from('persona_assessments')
         .select('created_at, persona_type, is_current')
         .eq('client_id', clientId)
         .eq('is_current', true)
@@ -144,7 +144,7 @@ export async function GET(
           completed: !!cflResult.data,
           date: cflResult.data?.created_at,
           score: cflResult.data?.total_score,
-          rating: cflResult.data?.capacity_rating
+          rating: cflResult.data?.capacity_category
         },
         investorPersona: {
           completed: !!personaResult.data,
