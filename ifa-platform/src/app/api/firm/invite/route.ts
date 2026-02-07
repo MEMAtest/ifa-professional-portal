@@ -182,49 +182,22 @@ export async function POST(request: NextRequest) {
 
     // ========================================
     // CHECK FOR EXISTING USER
-    // Uses paginated API to handle firms with >1000 users
+    // Check profiles table (more reliable than auth.admin.listUsers which can fail)
     // ========================================
     const normalizedEmail = body.email.toLowerCase()
-    let emailExists = false
-    let page = 1
-    const perPage = 1000
 
-    // Iterate through all users with pagination
-    while (!emailExists) {
-      const { data: usersPage, error: listError } = await supabaseService.auth.admin.listUsers({
-        page,
-        perPage,
-      })
+    const { data: existingProfile, error: profileCheckError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
 
-      if (listError) {
-        log.error('[Invite API] Error checking existing users:', listError)
-        // Don't fail silently - return error to prevent duplicate invites
-        return NextResponse.json({ error: 'Failed to validate email' }, { status: 500 })
-      }
-
-      if (!usersPage?.users || usersPage.users.length === 0) {
-        break // No more users to check
-      }
-
-      emailExists = usersPage.users.some(
-        (u: any) => u.email?.toLowerCase() === normalizedEmail
-      )
-
-      // If we got fewer users than perPage, we've reached the end
-      if (usersPage.users.length < perPage) {
-        break
-      }
-
-      page++
-
-      // Safety limit to prevent infinite loops (100,000 users max)
-      if (page > 100) {
-        log.warn('[Invite API] Hit pagination safety limit')
-        break
-      }
+    if (profileCheckError) {
+      log.error('[Invite API] Error checking existing users:', profileCheckError)
+      return NextResponse.json({ error: 'Failed to validate email' }, { status: 500 })
     }
 
-    if (emailExists) {
+    if (existingProfile) {
       return NextResponse.json(
         { error: 'A user with this email already exists' },
         { status: 400 }
