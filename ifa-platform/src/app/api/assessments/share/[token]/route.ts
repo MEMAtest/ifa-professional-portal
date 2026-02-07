@@ -474,70 +474,76 @@ export async function POST(
       const completedDate = new Date().toLocaleDateString('en-GB', { dateStyle: 'long' })
 
       if (clientEmail) {
-        // Generate simple PDF summary with jsPDF
-        const jsPDFModule = await import('jspdf')
-        const jsPDF = jsPDFModule.default
-        const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-        const pw = doc.internal.pageSize.getWidth()
+        // Generate PDF summary with pdf-lib (pure JS, works in serverless)
+        const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib')
+        const pdfDoc = await PDFDocument.create()
+        const page = pdfDoc.addPage([595, 842]) // A4
+        const pw = 595
         const margin = 40
         const cw = pw - margin * 2
-        let y = margin
+        const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
+        const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-        // Header
-        doc.setFillColor('#0f172a')
-        doc.rect(0, 0, pw, 70, 'F')
-        doc.setTextColor('#ffffff')
-        doc.setFontSize(18)
-        doc.setFont('helvetica', 'bold')
-        doc.text(`${assessmentLabel} Results`, margin, 35)
-        doc.setFontSize(11)
-        doc.setFont('helvetica', 'normal')
-        doc.text(`Prepared for ${clientName}`, margin, 52)
-        doc.text(completedDate, pw - margin, 52, { align: 'right' })
+        // Header bar
+        page.drawRectangle({ x: 0, y: 842 - 70, width: pw, height: 70, color: rgb(15/255, 23/255, 42/255) })
+        page.drawText(`${assessmentLabel} Results`, { x: margin, y: 842 - 40, size: 18, font: helveticaBold, color: rgb(1, 1, 1) })
+        page.drawText(`Prepared for ${clientName}`, { x: margin, y: 842 - 58, size: 11, font: helvetica, color: rgb(1, 1, 1) })
+        const dateWidth = helvetica.widthOfTextAtSize(completedDate, 11)
+        page.drawText(completedDate, { x: pw - margin - dateWidth, y: 842 - 58, size: 11, font: helvetica, color: rgb(1, 1, 1) })
 
-        y = 95
+        let y = 842 - 95
 
-        // Results card
-        doc.setFillColor('#f0fdf4')
-        doc.roundedRect(margin, y, cw, 80, 6, 6, 'F')
-        doc.setFontSize(10)
-        doc.setTextColor('#6b7280')
-        doc.text('Score:', margin + 15, y + 25)
-        doc.text('Category:', margin + 15, y + 50)
-        doc.text('Assessment:', margin + cw / 2, y + 25)
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor('#0f172a')
-        doc.text(`${totalScore}/100`, margin + 80, y + 25)
-        doc.text(category, margin + 100, y + 50)
-        doc.setFontSize(10)
-        doc.text(assessmentLabel, margin + cw / 2 + 90, y + 25)
-        y += 110
+        // Results card background
+        page.drawRectangle({ x: margin, y: y - 80, width: cw, height: 80, color: rgb(240/255, 253/255, 244/255) })
+
+        // Labels
+        const labelColor = rgb(107/255, 114/255, 128/255)
+        const valueColor = rgb(15/255, 23/255, 42/255)
+        page.drawText('Score:', { x: margin + 15, y: y - 25, size: 10, font: helvetica, color: labelColor })
+        page.drawText('Category:', { x: margin + 15, y: y - 50, size: 10, font: helvetica, color: labelColor })
+        page.drawText('Assessment:', { x: margin + cw / 2, y: y - 25, size: 10, font: helvetica, color: labelColor })
+
+        // Values
+        page.drawText(`${totalScore}/100`, { x: margin + 80, y: y - 25, size: 14, font: helveticaBold, color: valueColor })
+        page.drawText(category, { x: margin + 100, y: y - 50, size: 14, font: helveticaBold, color: valueColor })
+        page.drawText(assessmentLabel, { x: margin + cw / 2 + 90, y: y - 25, size: 10, font: helveticaBold, color: valueColor })
+        y -= 110
 
         // Summary section
-        doc.setFont('helvetica', 'normal')
-        doc.setTextColor('#374151')
-        doc.setFontSize(12)
-        doc.text('Summary', margin, y)
-        y += 20
-        doc.setFontSize(10)
-        const summaryText = summary?.description ||
+        page.drawText('Summary', { x: margin, y, size: 12, font: helveticaBold, color: rgb(55/255, 65/255, 81/255) })
+        y -= 20
+        const summaryText = String(summary?.description ||
           `This assessment was completed on ${completedDate} via a secure shared link. ` +
-          `The results indicate a ${category} profile with a score of ${totalScore} out of 100.`
-        const lines = doc.splitTextToSize(summaryText, cw)
-        doc.text(lines, margin, y)
-        y += lines.length * 14 + 30
+          `The results indicate a ${category} profile with a score of ${totalScore} out of 100.`)
+        // Simple word-wrap
+        const maxLineWidth = cw
+        const words = summaryText.split(' ')
+        let currentLine = ''
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word
+          if (helvetica.widthOfTextAtSize(testLine, 10) > maxLineWidth && currentLine) {
+            page.drawText(currentLine, { x: margin, y, size: 10, font: helvetica, color: rgb(55/255, 65/255, 81/255) })
+            y -= 14
+            currentLine = word
+          } else {
+            currentLine = testLine
+          }
+        }
+        if (currentLine) {
+          page.drawText(currentLine, { x: margin, y, size: 10, font: helvetica, color: rgb(55/255, 65/255, 81/255) })
+          y -= 30
+        }
 
-        // Footer
-        doc.setDrawColor('#e2e8f0')
-        doc.line(margin, y, pw - margin, y)
-        doc.setFontSize(8)
-        doc.setTextColor('#9ca3af')
-        doc.text(`${firmName} - Confidential`, margin, y + 15)
-        doc.text(`Generated ${completedDate}`, pw - margin, y + 15, { align: 'right' })
+        // Footer line
+        page.drawLine({ start: { x: margin, y }, end: { x: pw - margin, y }, thickness: 0.5, color: rgb(226/255, 232/255, 240/255) })
+        const footerColor = rgb(156/255, 163/255, 175/255)
+        page.drawText(`${firmName} - Confidential`, { x: margin, y: y - 15, size: 8, font: helvetica, color: footerColor })
+        const genText = `Generated ${completedDate}`
+        const genWidth = helvetica.widthOfTextAtSize(genText, 8)
+        page.drawText(genText, { x: pw - margin - genWidth, y: y - 15, size: 8, font: helvetica, color: footerColor })
 
-        const pdfBuffer = doc.output('arraybuffer')
-        const pdfBase64 = Buffer.from(pdfBuffer).toString('base64')
+        const pdfBytes = await pdfDoc.save()
+        const pdfBase64 = Buffer.from(pdfBytes).toString('base64')
 
         const template = EMAIL_TEMPLATES.assessmentResultsClient({
           clientName,
@@ -562,7 +568,11 @@ export async function POST(
         logger.info('Client results email with PDF sent', { clientEmail, shareId: share.id })
       }
     } catch (clientEmailError) {
-      logger.warn('Failed to send client results email', { error: getErrorMessage(clientEmailError) })
+      logger.error('Failed to send client results email', clientEmailError, {
+        shareId: share.id,
+        clientEmail: share.client_email,
+        detail: getErrorMessage(clientEmailError)
+      })
     }
 
     // Create in-app notification for advisor (high priority)
