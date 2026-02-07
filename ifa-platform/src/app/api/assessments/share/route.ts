@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     // Get advisor info for email
     const { data: advisor } = await supabase
-      .from('users')
+      .from('profiles')
       .select('full_name, email')
       .eq('id', userId)
       .single()

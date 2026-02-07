@@ -41,20 +41,20 @@ export function ClientDetailHeader(props: {
             {client.vulnerabilityAssessment?.is_vulnerable && <Badge variant="destructive">Vulnerable</Badge>}
             {/* Assessment completion badges */}
             {completedAssessments?.atr && (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                 ATR
               </Badge>
             )}
             {completedAssessments?.cfl && (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                 CFL
               </Badge>
             )}
             {completedAssessments?.investorPersona && (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                <CheckCircle2 className="h-3 w-3 mr-1" />
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                 Persona
               </Badge>
             )}
