@@ -6,7 +6,7 @@
 import { createHash } from 'crypto'
 import { log } from '@/lib/logging/structured'
 import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
-import { PDFStampingService } from './PDFStampingService'
+import { PDFStampingService, type StampOptions } from './PDFStampingService'
 
 export interface SigningTokenResult {
   success: boolean
@@ -39,17 +39,28 @@ export interface SignatureRequestData {
   originalDocumentHash: string | null
 }
 
+export interface SignaturePlacement {
+  page: number
+  xPercent: number
+  yPercent: number
+  widthPercent: number
+  heightPercent: number
+}
+
 export interface ProcessSignatureOptions {
   signatureDataUrl: string
   ipAddress: string
   userAgent: string
   consentTimestamp: string
+  signaturePlacement?: SignaturePlacement
 }
 
 export interface ProcessSignatureResult {
   success: boolean
   signedDocumentPath?: string
   signedDocumentHash?: string
+  signedPdfBuffer?: Buffer
+  savedDocumentId?: string
   error?: string
 }
 
@@ -321,29 +332,35 @@ export class SignatureService {
         return { success: false, error: 'Invalid signature data' }
       }
 
-      // Stamp signature onto PDF
-      const stampedPdf = await this.pdfStampingService.stampSignature(pdfBuffer, signatureBuffer, {
+      // Build stamp options with optional placement
+      const stampOptions: StampOptions = {
         signerName: request.recipient_name,
         signerEmail: request.recipient_email,
         signedAt: new Date().toISOString()
-      })
+      }
+
+      if (options.signaturePlacement) {
+        const p = options.signaturePlacement
+        // Convert screen y (top-down, 0=top) to PDF y (bottom-up, 0=bottom)
+        const pdfY = Math.max(0, 100 - p.yPercent - p.heightPercent)
+        stampOptions.signaturePosition = {
+          page: p.page,
+          x: p.xPercent,
+          y: pdfY,
+          width: p.widthPercent,
+          height: p.heightPercent
+        }
+      }
+
+      // Stamp signature onto PDF
+      const stampedPdf = await this.pdfStampingService.stampSignature(pdfBuffer, signatureBuffer, stampOptions)
 
       if (!stampedPdf) {
         return { success: false, error: 'Failed to stamp signature on document' }
       }
 
-      // Add audit certificate
-      const finalPdf = await this.pdfStampingService.addAuditCertificate(stampedPdf, {
-        documentName: document.name || document.file_name || 'Document',
-        signerName: request.recipient_name,
-        signerEmail: request.recipient_email,
-        signedAt: new Date().toISOString(),
-        ipAddress: options.ipAddress,
-        userAgent: options.userAgent,
-        consentTimestamp: options.consentTimestamp,
-        originalHash: request.original_document_hash || this.hashDocument(pdfBuffer),
-        signedHash: '' // Will be computed after
-      })
+      // Use stamped PDF directly (no audit certificate page)
+      const finalPdf = stampedPdf
 
       // Compute hash of signed document
       const signedHash = this.hashDocument(finalPdf)
@@ -413,10 +430,59 @@ export class SignatureService {
         userAgent: options.userAgent
       })
 
+      // Save signed document to Plannetic Drive (documents table)
+      let savedDocumentId: string | undefined
+      if (request.client_id && request.firm_id) {
+        try {
+          const { data: savedDoc, error: saveError } = await supabase
+            .from('documents')
+            .insert({
+              name: `${document.name || document.file_name || 'Document'} (Signed)`,
+              category: 'Contracts & Agreements',
+              type: 'signed_document',
+              firm_id: request.firm_id,
+              client_id: request.client_id,
+              created_by: request.created_by,
+              file_name: signedFileName,
+              file_path: signedPath,
+              storage_path: signedPath,
+              file_size: finalPdf.length,
+              file_type: 'pdf',
+              mime_type: 'application/pdf',
+              requires_signature: false,
+              signature_status: 'completed',
+              signature_request_id: requestId,
+              signed_at: new Date().toISOString(),
+              is_archived: false,
+              description: `Electronically signed by ${request.recipient_name} (${request.recipient_email}). Signature request ID: ${requestId}`,
+              metadata: {
+                signature_request_id: requestId,
+                original_document_id: request.document_id,
+                signer_name: request.recipient_name,
+                signer_email: request.recipient_email,
+                signed_document_hash: signedHash
+              }
+            })
+            .select('id')
+            .single()
+
+          if (saveError) {
+            log.warn('Failed to save signed document to Drive', { error: saveError, requestId })
+          } else if (savedDoc) {
+            savedDocumentId = savedDoc.id
+            log.info('Signed document saved to Drive', { documentId: savedDoc.id, requestId })
+          }
+        } catch (driveError) {
+          log.warn('Failed to save signed document to Drive', { error: driveError, requestId })
+        }
+      }
+
       return {
         success: true,
         signedDocumentPath: signedPath,
-        signedDocumentHash: signedHash
+        signedDocumentHash: signedHash,
+        signedPdfBuffer: finalPdf,
+        savedDocumentId
       }
     } catch (error) {
       log.error('Error processing signature', error instanceof Error ? error : undefined)

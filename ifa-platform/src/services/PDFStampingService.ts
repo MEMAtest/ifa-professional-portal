@@ -77,58 +77,19 @@ export class PDFStampingService {
       }
 
       // Calculate signature dimensions and position
-      const sigWidth = (position.width || 25) / 100 * pageWidth
+      // Defaults: on the "Client Signature" line of the last page
+      // PDF y-axis: 0 = bottom, 100 = top
+      const sigWidth = (position.width || 30) / 100 * pageWidth
       const sigHeight = (position.height || 8) / 100 * pageHeight
-      const sigX = (position.x || 60) / 100 * pageWidth
-      const sigY = (position.y || 15) / 100 * pageHeight
+      const sigX = (position.x || 8) / 100 * pageWidth
+      const sigY = (position.y || 52) / 100 * pageHeight
 
-      // Draw signature
+      // Draw signature image only (clean, no extra text or borders)
       page.drawImage(embeddedImage, {
         x: sigX,
         y: sigY,
         width: sigWidth,
         height: sigHeight
-      })
-
-      // Add signature details below the signature
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
-      const fontSize = 8
-      const lineHeight = 10
-
-      const signedDate = new Date(options.signedAt).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short'
-      })
-
-      // Draw signer info
-      page.drawText(`Signed by: ${options.signerName}`, {
-        x: sigX,
-        y: sigY - lineHeight,
-        size: fontSize,
-        font,
-        color: rgb(0.3, 0.3, 0.3)
-      })
-
-      page.drawText(`Date: ${signedDate}`, {
-        x: sigX,
-        y: sigY - lineHeight * 2,
-        size: fontSize,
-        font,
-        color: rgb(0.3, 0.3, 0.3)
-      })
-
-      // Draw signature box border
-      page.drawRectangle({
-        x: sigX - 5,
-        y: sigY - lineHeight * 2.5,
-        width: sigWidth + 10,
-        height: sigHeight + lineHeight * 3,
-        borderColor: rgb(0.7, 0.7, 0.7),
-        borderWidth: 0.5
       })
 
       return Buffer.from(await pdfDoc.save())
