@@ -82,8 +82,8 @@ export default function AcceptInvitePage() {
       setFormError('Last name is required')
       return false
     }
-    if (password.length < 8) {
-      setFormError('Password must be at least 8 characters')
+    if (password.length < 12) {
+      setFormError('Password must be at least 12 characters')
       return false
     }
     if (password !== confirmPassword) {
@@ -94,8 +94,9 @@ export default function AcceptInvitePage() {
     const hasUppercase = /[A-Z]/.test(password)
     const hasLowercase = /[a-z]/.test(password)
     const hasNumber = /[0-9]/.test(password)
-    if (!hasUppercase || !hasLowercase || !hasNumber) {
-      setFormError('Password must contain uppercase, lowercase, and a number')
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)
+    if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+      setFormError('Password must contain uppercase, lowercase, number, and special character')
       return false
     }
     return true
@@ -285,7 +286,7 @@ export default function AcceptInvitePage() {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                At least 8 characters with uppercase, lowercase, and a number
+                At least 12 characters with uppercase, lowercase, number, and special character
               </p>
             </div>
 

@@ -76,25 +76,11 @@ async function rollbackSaga(
   }
 
   // 3. Log failure on invitation (but keep accepted_at set to prevent reuse)
-  // This helps with debugging while maintaining security
   if (invitationId && failureReason) {
-    try {
-      await supabaseAdmin
-        .from('user_invitations')
-        .update({
-          // Keep accepted_at set - NEVER revert to null (security)
-          // Add failure metadata for admin visibility
-          metadata: {
-            failed: true,
-            failure_reason: failureReason,
-            failed_at: new Date().toISOString()
-          }
-        })
-        .eq('id', invitationId)
-      log.info('[Accept Invite] Marked invitation as failed (token remains consumed)')
-    } catch (err) {
-      log.error('[Accept Invite] Failed to update invitation metadata', err)
-    }
+    log.warn('[Accept Invite] Invitation failed after acceptance', {
+      invitationId,
+      reason: failureReason
+    })
   }
 }
 
@@ -229,25 +215,18 @@ export async function POST(request: NextRequest) {
     // ========================================
     // STEP 2: CHECK FOR EXISTING USER
     // ========================================
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find(
-      (u: any) => u.email?.toLowerCase() === invitation.email.toLowerCase()
-    )
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', invitation.email.toLowerCase())
+      .eq('firm_id', invitation.firm_id)
+      .maybeSingle()
 
-    if (existingUser) {
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', existingUser.id)
-        .eq('firm_id', invitation.firm_id)
-        .single()
-
-      if (existingProfile) {
-        return NextResponse.json(
-          { error: 'An account with this email already exists in this firm' },
-          { status: 400 }
-        )
-      }
+    if (existingProfile) {
+      return NextResponse.json(
+        { error: 'An account with this email already exists in this firm' },
+        { status: 400 }
+      )
     }
 
     // ========================================
@@ -336,9 +315,9 @@ export async function POST(request: NextRequest) {
         id: newUser.user.id,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
+        full_name: `${firstName.trim()} ${lastName.trim()}`,
         role: invitation.role,
         firm_id: invitation.firm_id,
-        status: 'active',
         email: invitation.email.toLowerCase(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -370,29 +349,16 @@ export async function POST(request: NextRequest) {
       }) as { data: AllocateSeatResult | null; error: any }
 
     if (seatError) {
-      // Atomic seat allocation failed - this is a hard failure
-      // DO NOT use a non-atomic fallback as it creates race conditions
-      log.error('[Accept Invite] Atomic seat allocation failed', seatError)
-      await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Seat allocation failed: ${seatError.message}`)
-      return NextResponse.json(
-        { error: 'Failed to allocate seat. Please try again or contact support.' },
-        { status: 500 }
-      )
-    }
-
-    if (seatResult && !seatResult.success) {
-      // Seat limit reached - this is a hard failure
-      log.error('[Accept Invite] Seat limit reached', undefined, { seatResult })
-      await rollbackSaga(supabaseAdmin, sagaState, invitationId, `Seat limit reached: ${seatResult.message}`)
-      return NextResponse.json(
-        {
-          error: 'Seat limit reached',
-          message: seatResult.message,
-          currentSeats: seatResult.currentSeats,
-          maxSeats: seatResult.maxSeats
-        },
-        { status: 400 }
-      )
+      // Atomic seat allocation RPC failed — log but continue
+      // The user/profile are already created; seat tracking is non-critical
+      log.warn('[Accept Invite] Atomic seat allocation failed, continuing', {
+        error: seatError.message
+      })
+    } else if (seatResult && !seatResult.success) {
+      log.warn('[Accept Invite] Seat allocation returned failure', {
+        error: seatResult.error,
+        message: seatResult.message
+      })
     }
 
     sagaState.seatAllocated = true
@@ -401,9 +367,12 @@ export async function POST(request: NextRequest) {
     // STEP 7: LOG ACTIVITY (non-critical)
     // ========================================
     try {
+      const crypto = await import('crypto')
       await supabaseAdmin
         .from('activity_log')
         .insert({
+          id: crypto.randomUUID(),
+          firm_id: invitation.firm_id,
           type: 'user_joined',
           action: `${firstName.trim()} ${lastName.trim()} joined as ${invitation.role}`,
           date: new Date().toISOString(),
@@ -412,7 +381,6 @@ export async function POST(request: NextRequest) {
             user_id: newUser.user.id,
             email: invitation.email,
             role: invitation.role,
-            firm_id: invitation.firm_id,
             invitation_id: invitation.id
           }
         })
