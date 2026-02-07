@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+      const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin || '').trim()
       const inviteResponse = await supabaseService.auth.admin.inviteUserByEmail(
         body.email.toLowerCase(),
         {
@@ -420,7 +420,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create invitation' }, { status: 500 })
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin || '').trim()
     // Use plain token in URL (user receives this in email)
     const inviteUrl = `${baseUrl}/auth/accept-invite?token=${plainToken}`
 

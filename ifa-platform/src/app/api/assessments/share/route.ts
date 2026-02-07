@@ -162,7 +162,9 @@ export async function POST(request: NextRequest) {
     logger.info('Assessment share created', { shareId: share.id, clientId, assessmentType })
 
     // Generate the share URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin')
+    // Prefer the request origin so local/dev/staging generates links that match the
+    // environment the advisor is actually using.
+    const baseUrl = (request.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin') || '').trim()
     if (!baseUrl) {
       logger.error('NEXT_PUBLIC_APP_URL not configured')
       return NextResponse.json(
