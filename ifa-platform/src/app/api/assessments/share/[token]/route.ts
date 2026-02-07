@@ -252,7 +252,7 @@ export async function POST(
           .eq('is_current', true)
 
         // Insert new ATR assessment with correct column names
-        const { data: atrData } = await supabase
+        const { data: atrData, error: atrInsertError } = await supabase
           .from('atr_assessments')
           .insert({
             client_id: share.client_id,
@@ -272,6 +272,9 @@ export async function POST(
           })
           .select('id')
           .single()
+        if (atrInsertError) {
+          logger.error('ATR insert failed', { error: atrInsertError.message, code: atrInsertError.code })
+        }
         savedAssessmentId = atrData?.id || null
 
         // Update client risk_profile
@@ -325,7 +328,7 @@ export async function POST(
           .eq('is_current', true)
 
         // Insert new CFL assessment with correct column names
-        const { data: cflData } = await supabase
+        const { data: cflData, error: cflInsertError } = await supabase
           .from('cfl_assessments')
           .insert({
             client_id: share.client_id,
@@ -333,6 +336,8 @@ export async function POST(
             total_score: scores?.totalScore ?? scores?.capacityScore ?? 0,
             capacity_category: scores?.capacityCategory || scores?.capacityRating || summary?.capacityCategory || 'Medium',
             capacity_level: scores?.capacityLevel ?? 5,
+            max_loss_percentage: scores?.maxLossPercentage ?? 0,
+            confidence_level: scores?.confidenceLevel ?? 0,
             version: newVersion,
             is_current: true,
             completed_by: null,
@@ -343,6 +348,9 @@ export async function POST(
           })
           .select('id')
           .single()
+        if (cflInsertError) {
+          logger.error('CFL insert failed', { error: cflInsertError.message, code: cflInsertError.code })
+        }
         savedAssessmentId = cflData?.id || null
 
         // Update client risk_profile
@@ -396,7 +404,7 @@ export async function POST(
           .eq('is_current', true)
 
         // Insert new Persona assessment
-        const { data: personaData } = await supabase
+        const { data: personaData, error: personaInsertError } = await supabase
           .from('persona_assessments')
           .insert({
             client_id: share.client_id,
@@ -415,6 +423,9 @@ export async function POST(
           })
           .select('id')
           .single()
+        if (personaInsertError) {
+          logger.error('Persona insert failed', { error: personaInsertError.message, code: personaInsertError.code })
+        }
         savedAssessmentId = personaData?.id || null
       }
     } catch (saveError) {
