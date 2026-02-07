@@ -1,3 +1,8 @@
+/** Wrap a base64 string at 76 characters per line (RFC 2045) */
+function wrapBase64(base64: string): string {
+  return base64.match(/.{1,76}/g)?.join('\r\n') || base64
+}
+
 export function buildRawMimeMessage(options: {
   from: string
   to: string[]
@@ -23,7 +28,7 @@ export function buildRawMimeMessage(options: {
   lines.push('Content-Type: text/html; charset=UTF-8')
   lines.push('Content-Transfer-Encoding: base64')
   lines.push('')
-  lines.push(Buffer.from(options.html).toString('base64'))
+  lines.push(wrapBase64(Buffer.from(options.html).toString('base64')))
   lines.push('')
 
   if (options.attachments) {
@@ -38,7 +43,7 @@ export function buildRawMimeMessage(options: {
       lines.push('Content-Transfer-Encoding: base64')
       lines.push(`Content-Disposition: attachment; filename="${att.filename}"`)
       lines.push('')
-      lines.push(att.content)
+      lines.push(wrapBase64(att.content))
       lines.push('')
     }
   }
