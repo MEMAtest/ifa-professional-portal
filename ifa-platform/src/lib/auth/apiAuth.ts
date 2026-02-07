@@ -296,6 +296,38 @@ export async function getAuthContext(request: NextRequest): Promise<AuthResult> 
       .single()
 
     if (profileError) {
+      // Profile not found — user may not be provisioned yet
+    }
+
+    // ========================================
+    // DOMAIN RESTRICTION CHECK
+    // If the firm has allowedDomains configured, verify the user's email matches
+    // ========================================
+    const userFirmId = normalizeFirmId(profile?.firm_id)
+    if (userFirmId && user.email) {
+      const emailParts = user.email.toLowerCase().split('@')
+      if (emailParts.length === 2 && emailParts[1]) {
+        const { data: firmForDomain } = await (serviceClient
+          .from('firms') as any)
+          .select('settings')
+          .eq('id', userFirmId)
+          .single()
+
+        const allowedDomains: string[] = (firmForDomain?.settings as any)?.allowedDomains || []
+        if (allowedDomains.length > 0) {
+          const userDomain = emailParts[1]
+          if (!allowedDomains.some((d: string) => d.toLowerCase() === userDomain)) {
+            return {
+              success: false,
+              error: 'Your email domain is not authorized for this firm',
+              response: NextResponse.json(
+                { error: 'Domain restricted', message: 'Your email domain is not authorized to access this firm. Please use your company email.' },
+                { status: 403 }
+              )
+            }
+          }
+        }
+      }
     }
 
     const metadata = (user.user_metadata ?? {}) as Record<string, unknown>

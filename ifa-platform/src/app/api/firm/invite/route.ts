@@ -169,6 +169,24 @@ export async function POST(request: NextRequest) {
     const supabase: any = getSupabaseServiceClient()
     const supabaseService: any = getSupabaseServiceClient()
 
+    // ========================================
+    // DOMAIN RESTRICTION CHECK
+    // ========================================
+    const emailDomain = body.email.toLowerCase().split('@')[1]
+    const { data: firmForDomain } = await supabase
+      .from('firms')
+      .select('settings')
+      .eq('id', firmIdResult.firmId)
+      .single()
+
+    const allowedDomains: string[] = (firmForDomain?.settings as any)?.allowedDomains || []
+    if (allowedDomains.length > 0 && !allowedDomains.some(d => d.toLowerCase() === emailDomain)) {
+      return NextResponse.json(
+        { error: 'Email domain is not permitted for this firm. Please use your company email address.' },
+        { status: 400 }
+      )
+    }
+
     // Note: head:true returns 204 even for missing tables, so use a normal select
     const { error: inviteTableError } = await supabase
       .from('user_invitations' as any)

@@ -281,6 +281,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: error.message }
       }
 
+      // Check domain restriction server-side by calling a lightweight API
+      if (data.user?.email) {
+        try {
+          const checkResp = await fetch('/api/auth/domain-check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: data.user.email })
+          })
+          if (checkResp.status === 403) {
+            const checkData = await checkResp.json()
+            await supabase.auth.signOut()
+            setError(checkData.message || 'Your email domain is not authorized')
+            return { error: checkData.message || 'Your email domain is not authorized' }
+          }
+        } catch {
+          // Non-critical — server-side getAuthContext will enforce anyway
+        }
+      }
+
       log.info('Sign in successful')
       return {}
     } catch (err) {

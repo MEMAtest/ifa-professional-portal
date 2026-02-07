@@ -88,17 +88,18 @@ export async function middleware(request: NextRequest) {
   const isApiRoute = pathname.startsWith('/api/')
 
   // Public routes that don't require authentication
-  const publicRoutes = [
-    '/', // Redirects to login
-    '/marketing', // Marketing landing page (public)
-    '/client/assessment', // Client assessment portal (public access via token)
-    '/sign', // Public e-signature pages (token-based, no auth required)
-    '/login',
-    '/signup',
-    '/auth',
-    '/forgot-password',
-    '/reset-password'
-  ]
+	  const publicRoutes = [
+	    '/', // Redirects to login
+	    '/marketing', // Marketing landing page (public)
+	    '/client/assessment', // Client assessment portal (public access via token)
+	    '/client/fact-find', // Client fact find portal (public access via token)
+	    '/sign', // Public e-signature pages (token-based, no auth required)
+	    '/login',
+	    '/signup',
+	    '/auth',
+	    '/forgot-password',
+	    '/reset-password'
+	  ]
 
   const isPublicRoute = publicRoutes.some(route => {
     // Exact match for root path to avoid matching all routes
@@ -117,6 +118,7 @@ export async function middleware(request: NextRequest) {
   const publicApiRoutes = [
     '/api/auth/accept-invite',
     '/api/auth/verify-invite',
+    '/api/auth/domain-check',
     '/api/stripe/webhook',
     '/api/signatures/webhook',
     '/api/public/sign', // Public e-signature API (token-based, no auth required)
@@ -124,9 +126,10 @@ export async function middleware(request: NextRequest) {
     '/api/readiness'
   ]
 
-  const isPublicApiRoute =
-    publicApiRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
-    pathname.startsWith('/api/assessments/share/')
+	  const isPublicApiRoute =
+	    publicApiRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
+	    pathname.startsWith('/api/assessments/share/') ||
+	    pathname.startsWith('/api/fact-find/share/')
 
   if (isApiRoute && isPublicApiRoute) {
     return finalizeResponse(response)
