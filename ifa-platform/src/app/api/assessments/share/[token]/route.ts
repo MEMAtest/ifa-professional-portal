@@ -462,6 +462,7 @@ export async function POST(
     }
 
     // Send results email to client with PDF attachment
+    let clientPdfStatus: { sent: boolean; error?: string } = { sent: false }
     try {
       const clientEmail = share.client_email || share.metadata?.client_email
       const clientName = share.client_name || 'Client'
@@ -472,6 +473,8 @@ export async function POST(
       const totalScore = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, Math.round(rawScore))) : 0
       const category = String(scores?.riskCategory || scores?.capacityCategory || scores?.capacityRating || scores?.personaType || 'N/A')
       const completedDate = new Date().toLocaleDateString('en-GB', { dateStyle: 'long' })
+
+      logger.info('Starting client PDF email', { clientEmail, shareId: share.id })
 
       if (clientEmail) {
         // Generate PDF summary with pdf-lib (pure JS, works in serverless)
@@ -565,9 +568,13 @@ export async function POST(
             content: pdfBase64
           }]
         })
+        clientPdfStatus = { sent: true }
         logger.info('Client results email with PDF sent', { clientEmail, shareId: share.id })
+      } else {
+        clientPdfStatus = { sent: false, error: 'No client email on share' }
       }
     } catch (clientEmailError) {
+      clientPdfStatus = { sent: false, error: getErrorMessage(clientEmailError) }
       logger.error('Failed to send client results email', clientEmailError, {
         shareId: share.id,
         clientEmail: share.client_email,
@@ -609,7 +616,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Assessment submitted successfully'
+      message: 'Assessment submitted successfully',
+      _debug: { clientPdfStatus }
     })
 
   } catch (error) {
