@@ -8,6 +8,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/serviceClient'
 import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/apiAuth'
 import { parseRequestBody } from '@/app/api/utils'
 import { buildTemplateVariablesPayload, extractTemplateVariableKeys } from '@/lib/documents/templateVariables'
+import { sanitizeTemplateHtml } from '@/lib/documents/templateSanitizer'
 
 type UpdateTemplateRequest = {
   templateId: string
@@ -51,11 +52,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ success: false, error: 'template_content cannot be empty' }, { status: 400 })
     }
 
+    const sanitizedTemplateContent = sanitizeTemplateHtml(templateContent)
+    if (!sanitizedTemplateContent.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'template_content contains no allowed HTML after sanitization' },
+        { status: 400 }
+      )
+    }
+
     const nextName = typeof body.name === 'string' ? body.name.trim() : ''
     const nextDescription =
       body.description === undefined ? undefined : (body.description === null ? null : String(body.description))
 
-    const variableKeys = extractTemplateVariableKeys(templateContent)
+    const variableKeys = extractTemplateVariableKeys(sanitizedTemplateContent)
     const varsPayload = buildTemplateVariablesPayload(variableKeys) as any
 
     const supabase = getSupabaseServiceClient()
@@ -92,7 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .update({
         ...(nextName ? { name: nextName } : {}),
         ...(nextDescription !== undefined ? { description: nextDescription } : {}),
-        template_content: templateContent,
+        template_content: sanitizedTemplateContent,
         ...(body.requires_signature !== undefined ? { requires_signature: body.requires_signature } : {}),
         ...(body.is_active !== undefined ? { is_active: body.is_active } : {}),
         template_variables: varsPayload as any,

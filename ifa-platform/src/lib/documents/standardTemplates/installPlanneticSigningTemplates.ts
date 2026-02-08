@@ -3,6 +3,7 @@ import type { Database, DbInsert } from '@/types/db'
 import { getPlanneticSigningStandardTemplates } from '@/lib/documents/standardTemplates/planneticSigningStandardTemplates'
 import { buildTemplateVariablesPayload, extractTemplateVariableKeys } from '@/lib/documents/templateVariables'
 import { createHash } from 'crypto'
+import { sanitizeTemplateHtml } from '@/lib/documents/templateSanitizer'
 
 type DocumentTemplateInsert = DbInsert<'document_templates'>
 
@@ -80,13 +81,14 @@ export async function ensurePlanneticSigningTemplatesInstalled(args: {
   const toInsert: DocumentTemplateInsert[] = standards
     .filter((t) => missing.includes(t.assessment_type))
     .map((t) => {
-      const variableKeys = extractTemplateVariableKeys(t.template_content)
+      const sanitizedContent = sanitizeTemplateHtml(t.template_content)
+      const variableKeys = extractTemplateVariableKeys(sanitizedContent)
       const varsPayload = buildTemplateVariablesPayload(variableKeys) as any
       varsPayload._standard = {
         pack: PLANNETIC_SIGNING_TEMPLATE_PACK,
         pack_version: PLANNETIC_SIGNING_TEMPLATE_PACK_VERSION,
         key: t.assessment_type,
-        content_hash: sha256(t.template_content),
+        content_hash: sha256(sanitizedContent),
         synced_at: now,
         forked: false
       }
@@ -94,7 +96,7 @@ export async function ensurePlanneticSigningTemplatesInstalled(args: {
         name: t.name,
         description: t.description,
         assessment_type: t.assessment_type,
-        template_content: t.template_content,
+        template_content: sanitizedContent,
         template_variables: varsPayload as any,
         requires_signature: t.requires_signature,
         is_active: true,
@@ -140,6 +142,7 @@ export async function ensurePlanneticSigningTemplatesInstalled(args: {
       const existingRow = existingByKey.get(t.assessment_type)
       if (!existingRow) continue
 
+      const sanitizedStandardContent = sanitizeTemplateHtml(t.template_content)
       const existingContent = String(existingRow?.template_content || '')
       const existingContentHash = sha256(existingContent)
 
@@ -150,7 +153,7 @@ export async function ensurePlanneticSigningTemplatesInstalled(args: {
         meta.pack === PLANNETIC_SIGNING_TEMPLATE_PACK &&
         meta.key === t.assessment_type
 
-      const standardContentHash = sha256(t.template_content)
+      const standardContentHash = sha256(sanitizedStandardContent)
       const lastSyncedHash = isManagedByPack && typeof meta?.content_hash === 'string' ? meta.content_hash : ''
       const forkedFlag = isManagedByPack && meta?.forked === true
       const forkedByContent = isManagedByPack && !!lastSyncedHash && existingContentHash !== lastSyncedHash
@@ -169,7 +172,7 @@ export async function ensurePlanneticSigningTemplatesInstalled(args: {
         continue
       }
 
-      const variableKeys = extractTemplateVariableKeys(t.template_content)
+      const variableKeys = extractTemplateVariableKeys(sanitizedStandardContent)
       const varsPayload = buildTemplateVariablesPayload(variableKeys) as any
       varsPayload._standard = {
         pack: PLANNETIC_SIGNING_TEMPLATE_PACK,
@@ -185,7 +188,7 @@ export async function ensurePlanneticSigningTemplatesInstalled(args: {
         .update({
           name: t.name,
           description: t.description,
-          template_content: t.template_content,
+          template_content: sanitizedStandardContent,
           template_variables: varsPayload as any,
           requires_signature: t.requires_signature,
           // For this pack we always keep one active default per assessment type.

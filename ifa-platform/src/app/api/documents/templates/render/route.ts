@@ -11,6 +11,7 @@ import { buildFirmClientTemplateVariables } from '@/lib/documents/templateContex
 import { populateTemplate } from '@/services/document-generation/template-utils'
 import { findPlanneticSigningStandardTemplate } from '@/lib/documents/standardTemplates/planneticSigningStandardTemplates'
 import { extractTemplateVariableKeys } from '@/lib/documents/templateVariables'
+import { sanitizeTemplateHtml } from '@/lib/documents/templateSanitizer'
 
 interface RenderTemplateRequest {
   templateId: string
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       rendered = rendered.replace(new RegExp(`\\$\\{\\s*${escapedKey}\\s*\\}`, 'g'), () => safeValue)
     }
     rendered = populateTemplate(rendered, variables)
+    rendered = sanitizeTemplateHtml(rendered)
 
     return NextResponse.json({
       success: true,

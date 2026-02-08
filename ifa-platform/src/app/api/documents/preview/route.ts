@@ -12,6 +12,7 @@ import { getAuthContext, requireFirmId, requirePermission } from '@/lib/auth/api
 import { parseRequestBody } from '@/app/api/utils'
 import { DocumentTemplateService } from '@/services/documentTemplateService'
 import { populateTemplate } from '@/services/document-generation/template-utils'
+import { sanitizeTemplateHtml } from '@/lib/documents/templateSanitizer'
 
 export async function POST(request: NextRequest) {
   try {
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
     }
 
     content = populateTemplate(content, variableRecord)
+    content = sanitizeTemplateHtml(content)
 
     return NextResponse.json({
       success: true,
