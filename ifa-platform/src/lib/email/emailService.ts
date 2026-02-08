@@ -118,18 +118,6 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   } catch (error) {
     log.error('Failed to send email', error instanceof Error ? error : undefined)
 
-    // In development, simulate success on error
-    if (process.env.NODE_ENV === 'development') {
-      log.debug('Development mode - Email simulated despite error', {
-        to: Array.isArray(to) ? to : [to],
-        subject
-      })
-      return {
-        success: true,
-        messageId: `dev-${Date.now()}`
-      }
-    }
-
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to send email'
@@ -209,7 +197,14 @@ export async function sendEmailWithAttachment(options: SendEmailWithAttachmentOp
     })
 
     // SESv2 uses Content.Raw.Data for raw MIME messages
+    // Explicitly provide FromEmailAddress and Destination so SES doesn't
+    // need to parse them from the MIME headers (avoids "Invalid From address" errors)
     const command = new SendEmailCommand({
+      FromEmailAddress: fromAddress,
+      Destination: {
+        ToAddresses: toAddresses,
+        ...(ccAddresses.length > 0 && { CcAddresses: ccAddresses })
+      },
       Content: {
         Raw: {
           Data: new TextEncoder().encode(rawMessage)
@@ -230,14 +225,6 @@ export async function sendEmailWithAttachment(options: SendEmailWithAttachmentOp
 
   } catch (error) {
     log.error('Failed to send email with attachment', error instanceof Error ? error : undefined)
-
-    if (process.env.NODE_ENV === 'development') {
-      log.debug('Development mode - Email with attachment simulated despite error', {
-        to: Array.isArray(to) ? to : [to],
-        subject
-      })
-      return { success: true, messageId: `dev-${Date.now()}` }
-    }
 
     return {
       success: false,
