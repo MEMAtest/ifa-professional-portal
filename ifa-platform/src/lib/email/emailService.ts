@@ -196,15 +196,11 @@ export async function sendEmailWithAttachment(options: SendEmailWithAttachmentOp
       attachments
     })
 
-    // SESv2 uses Content.Raw.Data for raw MIME messages
-    // Explicitly provide FromEmailAddress and Destination so SES doesn't
-    // need to parse them from the MIME headers (avoids "Invalid From address" errors)
+    // SESv2 Content.Raw: SES sends the MIME message as-is.
+    // Do NOT include FromEmailAddress/Destination — that causes SES to
+    // double-wrap the message (our MIME headers become body text).
+    // The From/To/Subject are already in the MIME headers with proper RFC 5322 quoting.
     const command = new SendEmailCommand({
-      FromEmailAddress: fromAddress,
-      Destination: {
-        ToAddresses: toAddresses,
-        ...(ccAddresses.length > 0 && { CcAddresses: ccAddresses })
-      },
       Content: {
         Raw: {
           Data: new TextEncoder().encode(rawMessage)

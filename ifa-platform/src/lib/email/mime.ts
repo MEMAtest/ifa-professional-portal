@@ -14,7 +14,11 @@ export function buildRawMimeMessage(options: {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`
   const lines: string[] = []
 
-  lines.push(`From: ${options.from}`)
+  // RFC 5322: quote display name so SES can reliably parse the From address
+  const fromHeader = options.from.includes('<')
+    ? options.from.replace(/^(.+?)\s*</, (_, name) => `"${name.replace(/"/g, '\\"')}" <`)
+    : options.from
+  lines.push(`From: ${fromHeader}`)
   lines.push(`To: ${options.to.join(', ')}`)
   if (options.cc && options.cc.length > 0) {
     lines.push(`Cc: ${options.cc.join(', ')}`)
