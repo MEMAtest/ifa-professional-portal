@@ -4,6 +4,7 @@
  */
 
 import { SendEmailCommand } from '@aws-sdk/client-sesv2'
+import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { getSESClient } from './sesClient'
 import { buildRawMimeMessage } from './mime'
 import { getFirmBranding, wrapWithBranding, applyBrandColors, getBrandedSender } from './brandingHelper'
@@ -166,14 +167,12 @@ export async function sendEmailWithAttachment(options: SendEmailWithAttachmentOp
       }
     }
 
-    let client
-    try {
-      client = getSESClient()
-    } catch (sesInitError) {
-      log.warn('SES not configured, email service unavailable', {
-        error: sesInitError instanceof Error ? sesInitError.message : String(sesInitError)
-      })
+    // Check credentials are available
+    const region = (process.env.AWS_SES_REGION || 'eu-west-2').trim()
+    const accessKeyId = (process.env.AWS_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '').trim()
+    const secretAccessKey = (process.env.AWS_SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim()
 
+    if (!accessKeyId || !secretAccessKey) {
       if (process.env.NODE_ENV === 'development') {
         log.debug('Development mode - Email with attachment simulated', {
           to: toAddresses,
@@ -182,7 +181,6 @@ export async function sendEmailWithAttachment(options: SendEmailWithAttachmentOp
         })
         return { success: true, messageId: `dev-${Date.now()}` }
       }
-
       return { success: false, error: 'Email service not configured' }
     }
 
@@ -196,19 +194,23 @@ export async function sendEmailWithAttachment(options: SendEmailWithAttachmentOp
       attachments
     })
 
-    // SESv2 Content.Raw: SES sends the MIME message as-is.
-    // Do NOT include FromEmailAddress/Destination — that causes SES to
-    // double-wrap the message (our MIME headers become body text).
-    // The From/To/Subject are already in the MIME headers with proper RFC 5322 quoting.
-    const command = new SendEmailCommand({
-      Content: {
-        Raw: {
-          Data: new TextEncoder().encode(rawMessage)
-        }
+    // Use SES v1 SendRawEmailCommand which reliably handles raw MIME
+    // (SESv2 SendEmailCommand Content.Raw has issues with From address parsing
+    // and double-wrapping the message)
+    const sesV1 = new SESClient({
+      region,
+      credentials: { accessKeyId, secretAccessKey }
+    })
+
+    const rawCommand = new SendRawEmailCommand({
+      Source: fromAddress,
+      Destinations: [...toAddresses, ...ccAddresses],
+      RawMessage: {
+        Data: new TextEncoder().encode(rawMessage)
       }
     })
 
-    const result = await client.send(command)
+    const result = await sesV1.send(rawCommand)
 
     log.info('Email with attachment sent successfully', {
       to: toAddresses,
