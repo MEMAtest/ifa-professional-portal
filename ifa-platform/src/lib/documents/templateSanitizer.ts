@@ -27,75 +27,75 @@ const DEFAULT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions['allowedAttributes'] = {
 
 // For document templates we want professional styling but must prevent CSS-driven
 // external requests (e.g. `url(https://...)`) and legacy script-like constructs.
-const STYLE_VALUE_SAFE = /^(?!.*(?:url\s*\(|@import|expression\s*\(|behaviou?r\s*:|-moz-binding\s*:)).*$/i
+const INLINE_STYLE_VALUE_FORBIDDEN = /(?:url\s*\(|@import|expression\s*\(|javascript\s*:)/i
 
-const ALLOWED_STYLE_PROPERTIES = [
-  'align-items',
-  'background',
-  'background-color',
-  'border',
-  'border-bottom',
-  'border-collapse',
-  'border-color',
-  'border-left',
-  'border-radius',
-  'border-right',
-  'border-spacing',
-  'border-style',
-  'border-top',
-  'border-width',
-  'box-shadow',
-  'color',
-  'column-gap',
-  'display',
-  'flex',
-  'flex-direction',
-  'flex-wrap',
-  'font-family',
-  'font-size',
-  'font-style',
-  'font-weight',
-  'gap',
-  'grid-column',
-  'grid-row',
-  'grid-template-columns',
-  'grid-template-rows',
-  'height',
-  'justify-content',
-  'letter-spacing',
-  'line-height',
-  'margin',
-  'margin-bottom',
-  'margin-left',
-  'margin-right',
-  'margin-top',
-  'max-height',
-  'max-width',
-  'min-height',
-  'min-width',
-  'object-fit',
-  'opacity',
-  'overflow',
-  'padding',
-  'padding-bottom',
-  'padding-left',
-  'padding-right',
-  'padding-top',
-  'page-break-after',
-  'page-break-before',
-  'page-break-inside',
-  'row-gap',
-  'text-align',
-  'text-decoration',
-  'text-shadow',
-  'text-transform',
-  'vertical-align',
-  'white-space',
-  'width'
-]
+const BANNED_STYLE_PROPERTIES = new Set(['behavior', 'behaviour', '-moz-binding'])
 
-const DEFAULT_ALLOWED_STYLES: sanitizeHtml.IOptions['allowedStyles'] = {
-  '*': Object.fromEntries(ALLOWED_STYLE_PROPERTIES.map((p) => [p, [STYLE_VALUE_SAFE]]))
+function splitStyleDeclarations(input: string): string[] {
+  const out: string[] = []
+  let buf = ''
+  let inSingleQuote = false
+  let inDoubleQuote = false
+  let parenDepth = 0
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i]
+
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote
+      buf += ch
+      continue
+    }
+    if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote
+      buf += ch
+      continue
+    }
+
+    if (!inSingleQuote && !inDoubleQuote) {
+      if (ch === '(') parenDepth += 1
+      if (ch === ')' && parenDepth > 0) parenDepth -= 1
+
+      if (ch === ';' && parenDepth === 0) {
+        out.push(buf)
+        buf = ''
+        continue
+      }
+    }
+
+    buf += ch
+  }
+
+  if (buf) out.push(buf)
+  return out
+}
+
+function scrubInlineStyleText(input: string): string {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+
+  const withoutComments = raw.replace(/\/\*[\s\S]*?\*\//g, '')
+  const declarations = splitStyleDeclarations(withoutComments)
+
+  const kept: string[] = []
+  for (const decl of declarations) {
+    const trimmed = decl.trim()
+    if (!trimmed) continue
+
+    const colonIdx = trimmed.indexOf(':')
+    if (colonIdx <= 0) continue
+
+    const prop = trimmed.slice(0, colonIdx).trim()
+    const value = trimmed.slice(colonIdx + 1).trim()
+
+    if (!prop || !value) continue
+    if (BANNED_STYLE_PROPERTIES.has(prop.toLowerCase())) continue
+    if (INLINE_STYLE_VALUE_FORBIDDEN.test(value)) continue
+
+    kept.push(`${prop}:${value}`)
+  }
+
+  return kept.join(';')
 }
 
 function scrubStyleTagText(input: string): string {
@@ -139,10 +139,21 @@ export function sanitizeTemplateHtml(input: string): string {
     allowProtocolRelative: false,
     disallowedTagsMode: 'discard',
     allowVulnerableTags: true,
-    parseStyleAttributes: true,
-    allowedStyles: DEFAULT_ALLOWED_STYLES,
+    parseStyleAttributes: false,
     transformTags: {
-      a: (tagName, attribs) => ({ tagName, attribs: ensureRelNoopener(attribs) })
+      a: (tagName, attribs) => ({ tagName, attribs: ensureRelNoopener(attribs) }),
+      '*': (tagName, attribs) => {
+        const next = { ...attribs }
+        if (typeof next.style === 'string' && next.style.trim()) {
+          const cleaned = scrubInlineStyleText(next.style)
+          if (cleaned) {
+            next.style = cleaned
+          } else {
+            delete next.style
+          }
+        }
+        return { tagName, attribs: next }
+      }
     }
   })
 }

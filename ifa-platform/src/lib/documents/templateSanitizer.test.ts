@@ -44,5 +44,14 @@ describe('templateSanitizer', () => {
     expect(out).toContain('{{CLIENT_NAME}}')
     expect(out).toContain('{{#if FIRM_EMAIL}}')
   })
-})
 
+  it('is not overly strict about inline style properties (keeps most declarations)', () => {
+    const input =
+      '<p style="text-indent: 24pt; mso-margin-top-alt:auto; color: red;">x</p>'
+
+    const out = sanitizeTemplateHtml(input)
+    expect(out).toContain('text-indent:24pt')
+    expect(out).toContain('mso-margin-top-alt:auto')
+    expect(out).toContain('color:red')
+  })
+})
