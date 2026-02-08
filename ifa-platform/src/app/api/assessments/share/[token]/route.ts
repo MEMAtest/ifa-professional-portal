@@ -558,7 +558,7 @@ export async function POST(
           firmName
         })
 
-        await sendEmailWithAttachment({
+        const emailResult = await sendEmailWithAttachment({
           to: clientEmail,
           subject: template.subject,
           html: template.html,
@@ -568,8 +568,8 @@ export async function POST(
             content: pdfBase64
           }]
         })
-        clientPdfStatus = { sent: true }
-        logger.info('Client results email with PDF sent', { clientEmail, shareId: share.id })
+        clientPdfStatus = { sent: emailResult.success, error: emailResult.error, messageId: emailResult.messageId } as any
+        logger.info('Client results email with PDF sent', { clientEmail, shareId: share.id, result: emailResult })
       } else {
         clientPdfStatus = { sent: false, error: 'No client email on share' }
       }
